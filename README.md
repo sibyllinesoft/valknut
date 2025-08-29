@@ -1,6 +1,9 @@
-# Valknut
+<div align="center">
+  <img src="logo.webp" alt="Valknut Logo" width="200">
 
-**Static code analysis library for ranking refactorability**
+  
+  **Static code analysis library for ranking refactorability**
+</div>
 
 Valknut builds a deterministic, static-only pipeline that scores and ranks code by "refactorability," generates LLM-ready **Refactor Briefs**, and exposes the whole system via a FastAPI **MCP** server for agent integration.
 
