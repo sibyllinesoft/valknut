@@ -6,8 +6,6 @@ Valknut builds a deterministic, static-only pipeline that scores and ranks code 
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Performance](https://img.shields.io/badge/Performance-130k_features/sec-brightgreen)](BENCHMARK_RESULTS.md)
-[![Benchmark](https://img.shields.io/badge/Benchmark-0.024s_analysis-blue)](BENCHMARK_RESULTS.md)
 
 ## Quick Start
 
@@ -83,8 +81,8 @@ for brief in result.topk_briefs():
 - **⚡ Deterministic**: No runtime profiling or private data required
 - **🎯 LLM-Ready**: Generates structured refactor briefs for AI consumption
 - **🔄 Clone Detection**: Integrated with `sibylline-echo` for near-miss duplication
-- **🚀 High Performance**: 130,000+ features/second processing capacity
-- **🎯 Production Ready**: Sub-second analysis times, zero-error processing
+- **🚀 High Performance**: Fast analysis with efficient processing
+- **🎯 Production Ready**: Reliable analysis suitable for CI/CD integration
 
 ## Architecture
 
@@ -133,7 +131,7 @@ for brief in result.topk_briefs():
 | **Duplication** | Simple text matching | ML-powered semantic clone detection |
 | **Dependencies** | Import analysis only | Graph centrality, cycle detection |
 | **Output** | List of violations | Prioritized refactor candidates |
-| **Performance** | Fast syntax checking | **130k+ features/second** analysis |
+| **Performance** | Fast syntax checking | Comprehensive multi-dimensional analysis |
 
 ### 🔥 Valknut's Killer Features
 
@@ -145,7 +143,7 @@ for brief in result.topk_briefs():
 
 **🎯 AI-Powered Clone Detection**: Beyond copy-paste detection - finds semantically similar code patterns that should be unified.
 
-**⚡ Production-Ready Performance**: Analyzes 353 entities in 24ms while running full graph analysis and ML inference.
+**⚡ Production-Ready Performance**: Fast, efficient analysis suitable for continuous integration workflows.
 
 ## Configuration
 
@@ -544,9 +542,9 @@ cache_ttl: 86400  # 24 hour cache
 ```
 
 **Expected Response Times**
-- **Small projects** (< 100 files): 2-5 seconds
-- **Medium projects** (100-1000 files): 5-15 seconds  
-- **Large projects** (1000+ files): 15-60 seconds
+- **Small projects** (< 100 files): A few seconds
+- **Medium projects** (100-1000 files): Under 15 seconds  
+- **Large projects** (1000+ files): Under 1 minute
 
 ### Available Tools
 
@@ -736,44 +734,11 @@ def execute(self, command: Command) -> None:
 - Use polymorphism for command types
 - Eliminate duplicate argument handling
 
-## Performance Characteristics
+## Performance
 
-Valknut has been benchmarked with excellent results:
-
-- **130,290 features/second** peak throughput
-- **0.024 seconds** for analyzing 353 code entities  
-- **Zero errors** across all test configurations
-- **Linear scaling** with codebase size
-
-### Real Analysis Results
-
-Here's what Valknut found when analyzing a sample code-smell dataset (command-line shell project):
-
-```
-🏆 Top 5 Refactor Candidates:
-  1. UtilFuncs.py::TestFunction (Score: 0.488)
-     Issues: High cognitive complexity (0.80), deep nesting (0.72)
-     
-  2. Shell.py::Shell.shellInput (Score: 0.472) 
-     Issues: Complex nesting (0.65), high cognitive load (0.64)
-     
-  3. main.py::Interface.execute (Score: 0.472)
-     Issues: Deep nesting (0.65), complex decision logic (0.60)
-     
-  4. Shell.py::Shell.parseCmd (Score: 0.467)
-     Issues: High cognitive complexity (0.62), nested conditionals (0.58)
-     
-  5. EncodingApi.py::EncodingManager (Score: 0.460)
-     Issues: Complex nesting (0.62), multiple parameters (0.53)
-```
-
-**Key Insights:**
-- **Cognitive complexity** is the primary driver of high scores (0.60-0.80 range)
-- **Deep nesting** correlates strongly with refactoring need (0.58-0.65 range)  
-- **Parameter complexity** indicates functions doing too much (0.53+ range)
-- **Real variance** in scores demonstrates the new Bayesian normalization working correctly
-
-**Note**: Previous versions showed uniform 0.5 scores due to a normalization bug with flat features. The current Bayesian normalization approach provides informative fallbacks that generate realistic score distributions even with limited sample variance.
+- **High-throughput analysis**: 130k+ features/second processing
+- **Sub-second analysis**: Typical codebases analyzed in under 1 second
+- **Linear scaling**: Performance scales predictably with codebase size
 
 ## Interpreting Valknut Scores
 
