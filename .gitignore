@@ -1,0 +1,143 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+out/
+cache/
+*.jsonl
+*.sarif
+rr.yml
+config.yml
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Development artifacts
+test_*.py
+benchmark_*.py
+comprehensive_*.py
+debug_*.py
+diagnose_*.py
+simple_benchmark.py
+standalone_*.py
+run_*.py
+
+# Result/output files
+*_results.json
+*_results.md
+*_results/
+benchmark_results/
+real_world_results/
+scribe_analysis.json
+*.sarif
+*.xml
+
+# Configuration examples
+example_*.yml
+example_*.json
+scribe.config.json
+
+# Analysis output
+analysis_results.json
+report.jsonl
+summary.md
+topk.*.jsonl
+
+# Coverage and profiling
+.coverage.*
+prof/
+profile/
+
+# Cache directories
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.valknut_cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# Refactoring tools
+.refactor_rank_cache/
+.scribeignore
+
+# Serena MCP
+.serena/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
