@@ -1,0 +1,616 @@
+//! Rust language adapter with tree-sitter integration.
+
+use std::collections::HashMap;
+use tree_sitter::{Language, Node, Parser, Tree};
+
+use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
+use crate::core::errors::{Result, ValknutError};
+use crate::core::featureset::CodeEntity;
+
+extern "C" {
+    fn tree_sitter_rust() -> Language;
+}
+
+/// Rust-specific parsing and analysis
+pub struct RustAdapter {
+    /// Tree-sitter parser for Rust
+    parser: Parser,
+    
+    /// Language instance
+    language: Language,
+}
+
+impl RustAdapter {
+    /// Create a new Rust adapter
+    pub fn new() -> Result<Self> {
+        let language = unsafe { tree_sitter_rust() };
+        let mut parser = Parser::new();
+        parser.set_language(language)
+            .map_err(|e| ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e)))?;
+        
+        Ok(Self { parser, language })
+    }
+    
+    /// Parse Rust source code and extract entities
+    pub fn parse_source(&mut self, source_code: &str, file_path: &str) -> Result<ParseIndex> {
+        let tree = self.parser.parse(source_code, None)
+            .ok_or_else(|| ValknutError::parse("rust", "Failed to parse Rust source code"))?;
+        
+        let mut index = ParseIndex::new();
+        let mut entity_id_counter = 0;
+        
+        // Walk the tree and extract entities
+        self.extract_entities_recursive(
+            tree.root_node(), 
+            source_code, 
+            file_path, 
+            None, 
+            &mut index, 
+            &mut entity_id_counter
+        )?;
+        
+        Ok(index)
+    }
+    
+    /// Extract entities from Rust code and convert to CodeEntity format
+    pub fn extract_code_entities(&mut self, source_code: &str, file_path: &str) -> Result<Vec<CodeEntity>> {
+        let parse_index = self.parse_source(source_code, file_path)?;
+        let mut code_entities = Vec::new();
+        
+        for entity in parse_index.entities.values() {
+            let code_entity = self.convert_to_code_entity(entity, source_code)?;
+            code_entities.push(code_entity);
+        }
+        
+        Ok(code_entities)
+    }
+    
+    /// Recursively extract entities from the AST
+    fn extract_entities_recursive(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        // Check if this node represents an entity we care about
+        if let Some(entity) = self.node_to_entity(node, source_code, file_path, parent_id.clone(), entity_id_counter)? {
+            let entity_id = entity.id.clone();
+            index.add_entity(entity);
+            
+            // Process child nodes with this entity as parent
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.extract_entities_recursive(
+                    child, 
+                    source_code, 
+                    file_path, 
+                    Some(entity_id.clone()), 
+                    index, 
+                    entity_id_counter
+                )?;
+            }
+        } else {
+            // Process child nodes with current parent
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.extract_entities_recursive(
+                    child, 
+                    source_code, 
+                    file_path, 
+                    parent_id.clone(), 
+                    index, 
+                    entity_id_counter
+                )?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
+    fn node_to_entity(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        entity_id_counter: &mut usize,
+    ) -> Result<Option<ParsedEntity>> {
+        let entity_kind = match node.kind() {
+            "function_item" => EntityKind::Function,
+            "impl_item" => return Ok(None), // Skip impl blocks themselves
+            "struct_item" => EntityKind::Struct,
+            "enum_item" => EntityKind::Enum,
+            "trait_item" => EntityKind::Interface, // Treat traits as interfaces
+            "mod_item" => EntityKind::Module,
+            "const_item" => EntityKind::Constant,
+            "static_item" => EntityKind::Constant,
+            "function_signature_item" => EntityKind::Function, // Trait methods
+            _ => return Ok(None),
+        };
+        
+        let name = self.extract_name(&node, source_code)?
+            .ok_or_else(|| ValknutError::parse("rust", "Could not extract entity name"))?;
+        
+        *entity_id_counter += 1;
+        let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
+        
+        let location = SourceLocation {
+            file_path: file_path.to_string(),
+            start_line: node.start_position().row + 1,
+            end_line: node.end_position().row + 1,
+            start_column: node.start_position().column + 1,
+            end_column: node.end_position().column + 1,
+        };
+        
+        let mut metadata = HashMap::new();
+        
+        // Add Rust-specific metadata
+        metadata.insert("node_kind".to_string(), serde_json::Value::String(node.kind().to_string()));
+        metadata.insert("byte_range".to_string(), serde_json::json!([node.start_byte(), node.end_byte()]));
+        
+        // Extract additional metadata based on entity type
+        match entity_kind {
+            EntityKind::Function => {
+                self.extract_function_metadata(&node, source_code, &mut metadata)?;
+            }
+            EntityKind::Struct => {
+                self.extract_struct_metadata(&node, source_code, &mut metadata)?;
+            }
+            EntityKind::Enum => {
+                self.extract_enum_metadata(&node, source_code, &mut metadata)?;
+            }
+            EntityKind::Interface => { // trait
+                self.extract_trait_metadata(&node, source_code, &mut metadata)?;
+            }
+            EntityKind::Module => {
+                self.extract_module_metadata(&node, source_code, &mut metadata)?;
+            }
+            _ => {}
+        }
+        
+        let entity = ParsedEntity {
+            id: entity_id,
+            kind: entity_kind,
+            name,
+            parent: parent_id,
+            children: Vec::new(), // Will be populated later
+            location,
+            metadata,
+        };
+        
+        Ok(Some(entity))
+    }
+    
+    /// Extract the name of an entity from its AST node
+    fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
+        let mut cursor = node.walk();
+        
+        match node.kind() {
+            "function_item" | "struct_item" | "enum_item" | "trait_item" | "mod_item" 
+            | "const_item" | "static_item" | "function_signature_item" => {
+                // Look for the identifier child
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "identifier" {
+                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+                    } else if child.kind() == "type_identifier" {
+                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+                    }
+                }
+            }
+            _ => {}
+        }
+        
+        Ok(None)
+    }
+    
+    /// Extract function-specific metadata
+    fn extract_function_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut cursor = node.walk();
+        let mut parameters = Vec::new();
+        let mut is_async = false;
+        let mut is_unsafe = false;
+        let mut is_const = false;
+        let mut return_type = None;
+        let mut visibility = "private".to_string();
+        
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "parameters" => {
+                    // Extract parameter information
+                    let mut param_cursor = child.walk();
+                    for param_child in child.children(&mut param_cursor) {
+                        if param_child.kind() == "parameter" {
+                            let mut inner_cursor = param_child.walk();
+                            for inner_child in param_child.children(&mut inner_cursor) {
+                                if inner_child.kind() == "identifier" {
+                                    let param_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    parameters.push(param_name);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                "async" => {
+                    is_async = true;
+                }
+                "unsafe" => {
+                    is_unsafe = true;
+                }
+                "const" => {
+                    is_const = true;
+                }
+                "visibility_modifier" => {
+                    let vis_text = child.utf8_text(source_code.as_bytes())?;
+                    visibility = vis_text.to_string();
+                }
+                _ => {
+                    // Check for return type in function signature
+                    if child.kind().contains("type") {
+                        return_type = Some(child.utf8_text(source_code.as_bytes())?.to_string());
+                    }
+                }
+            }
+        }
+        
+        metadata.insert("parameters".to_string(), serde_json::json!(parameters));
+        metadata.insert("is_async".to_string(), serde_json::Value::Bool(is_async));
+        metadata.insert("is_unsafe".to_string(), serde_json::Value::Bool(is_unsafe));
+        metadata.insert("is_const".to_string(), serde_json::Value::Bool(is_const));
+        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        if let Some(ret_type) = return_type {
+            metadata.insert("return_type".to_string(), serde_json::Value::String(ret_type));
+        }
+        
+        Ok(())
+    }
+    
+    /// Extract struct-specific metadata
+    fn extract_struct_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut cursor = node.walk();
+        let mut fields = Vec::new();
+        let mut visibility = "private".to_string();
+        let mut generic_params = Vec::new();
+        
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "field_declaration_list" => {
+                    let mut field_cursor = child.walk();
+                    for field_child in child.children(&mut field_cursor) {
+                        if field_child.kind() == "field_declaration" {
+                            let mut inner_cursor = field_child.walk();
+                            for inner_child in field_child.children(&mut inner_cursor) {
+                                if inner_child.kind() == "field_identifier" {
+                                    let field_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    fields.push(field_name);
+                                }
+                            }
+                        }
+                    }
+                }
+                "visibility_modifier" => {
+                    let vis_text = child.utf8_text(source_code.as_bytes())?;
+                    visibility = vis_text.to_string();
+                }
+                "type_parameters" => {
+                    let mut param_cursor = child.walk();
+                    for param_child in child.children(&mut param_cursor) {
+                        if param_child.kind() == "type_identifier" {
+                            let param_name = param_child.utf8_text(source_code.as_bytes())?;
+                            generic_params.push(param_name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        metadata.insert("fields".to_string(), serde_json::json!(fields));
+        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        if !generic_params.is_empty() {
+            metadata.insert("generic_parameters".to_string(), serde_json::json!(generic_params));
+        }
+        
+        Ok(())
+    }
+    
+    /// Extract enum-specific metadata
+    fn extract_enum_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut cursor = node.walk();
+        let mut variants = Vec::new();
+        let mut visibility = "private".to_string();
+        
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "enum_variant_list" => {
+                    let mut variant_cursor = child.walk();
+                    for variant_child in child.children(&mut variant_cursor) {
+                        if variant_child.kind() == "enum_variant" {
+                            let mut inner_cursor = variant_child.walk();
+                            for inner_child in variant_child.children(&mut inner_cursor) {
+                                if inner_child.kind() == "identifier" {
+                                    let variant_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    variants.push(variant_name);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                "visibility_modifier" => {
+                    let vis_text = child.utf8_text(source_code.as_bytes())?;
+                    visibility = vis_text.to_string();
+                }
+                _ => {}
+            }
+        }
+        
+        metadata.insert("variants".to_string(), serde_json::json!(variants));
+        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        
+        Ok(())
+    }
+    
+    /// Extract trait-specific metadata
+    fn extract_trait_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut cursor = node.walk();
+        let mut methods = Vec::new();
+        let mut visibility = "private".to_string();
+        let mut supertrait_bounds = Vec::new();
+        
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "declaration_list" => {
+                    let mut method_cursor = child.walk();
+                    for method_child in child.children(&mut method_cursor) {
+                        if method_child.kind() == "function_signature_item" {
+                            let method_name = self.extract_name(&method_child, source_code)?;
+                            if let Some(name) = method_name {
+                                methods.push(name);
+                            }
+                        }
+                    }
+                }
+                "visibility_modifier" => {
+                    let vis_text = child.utf8_text(source_code.as_bytes())?;
+                    visibility = vis_text.to_string();
+                }
+                "trait_bounds" => {
+                    let mut bounds_cursor = child.walk();
+                    for bounds_child in child.children(&mut bounds_cursor) {
+                        if bounds_child.kind() == "type_identifier" {
+                            let bound_name = bounds_child.utf8_text(source_code.as_bytes())?;
+                            supertrait_bounds.push(bound_name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        metadata.insert("methods".to_string(), serde_json::json!(methods));
+        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        if !supertrait_bounds.is_empty() {
+            metadata.insert("supertrait_bounds".to_string(), serde_json::json!(supertrait_bounds));
+        }
+        
+        Ok(())
+    }
+    
+    /// Extract module-specific metadata
+    fn extract_module_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut cursor = node.walk();
+        let mut visibility = "private".to_string();
+        let mut is_inline = false;
+        
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "visibility_modifier" => {
+                    let vis_text = child.utf8_text(source_code.as_bytes())?;
+                    visibility = vis_text.to_string();
+                }
+                "declaration_list" => {
+                    is_inline = true; // Has a body, so it's an inline module
+                }
+                _ => {}
+            }
+        }
+        
+        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        metadata.insert("is_inline".to_string(), serde_json::Value::Bool(is_inline));
+        
+        Ok(())
+    }
+    
+    /// Convert ParsedEntity to CodeEntity format
+    fn convert_to_code_entity(&self, entity: &ParsedEntity, source_code: &str) -> Result<CodeEntity> {
+        let source_lines: Vec<&str> = source_code.lines().collect();
+        let entity_source = if entity.location.start_line <= source_lines.len() && entity.location.end_line <= source_lines.len() {
+            source_lines[(entity.location.start_line - 1)..entity.location.end_line].join("\n")
+        } else {
+            String::new()
+        };
+        
+        let mut code_entity = CodeEntity::new(
+            entity.id.clone(),
+            format!("{:?}", entity.kind),
+            entity.name.clone(),
+            entity.location.file_path.clone(),
+        )
+        .with_line_range(entity.location.start_line, entity.location.end_line)
+        .with_source_code(entity_source);
+        
+        // Add metadata from parsed entity
+        for (key, value) in &entity.metadata {
+            code_entity.add_property(key.clone(), value.clone());
+        }
+        
+        Ok(code_entity)
+    }
+}
+
+impl Default for RustAdapter {
+    fn default() -> Self {
+        Self::new().expect("Failed to create Rust adapter")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_rust_adapter_creation() {
+        let adapter = RustAdapter::new();
+        assert!(adapter.is_ok());
+    }
+    
+    #[test]
+    fn test_function_parsing() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+pub fn calculate(x: i32, y: i32) -> i32 {
+    x + y
+}
+
+async unsafe fn complex_function() -> Result<(), Error> {
+    Ok(())
+}
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        assert_eq!(entities.len(), 2);
+        
+        let calc_func = entities.iter().find(|e| e.name == "calculate").unwrap();
+        assert_eq!(calc_func.entity_type, "Function");
+        assert_eq!(calc_func.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        
+        let complex_func = entities.iter().find(|e| e.name == "complex_function").unwrap();
+        assert_eq!(complex_func.properties.get("is_async"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(complex_func.properties.get("is_unsafe"), Some(&serde_json::Value::Bool(true)));
+    }
+    
+    #[test]
+    fn test_struct_parsing() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+pub struct User {
+    id: u64,
+    name: String,
+    email: Option<String>,
+}
+
+struct Point<T> {
+    x: T,
+    y: T,
+}
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        
+        let struct_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Struct").collect();
+        assert_eq!(struct_entities.len(), 2);
+        
+        let user_struct = struct_entities.iter().find(|e| e.name == "User").unwrap();
+        assert_eq!(user_struct.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        
+        let point_struct = struct_entities.iter().find(|e| e.name == "Point").unwrap();
+        let generic_params = point_struct.properties.get("generic_parameters");
+        assert!(generic_params.is_some());
+    }
+    
+    #[test]
+    fn test_enum_parsing() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+#[derive(Debug, Clone)]
+pub enum Status {
+    Active,
+    Inactive,
+    Pending(String),
+    Expired { reason: String },
+}
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        assert_eq!(entities.len(), 1);
+        
+        let enum_entity = &entities[0];
+        assert_eq!(enum_entity.entity_type, "Enum");
+        assert_eq!(enum_entity.name, "Status");
+        assert_eq!(enum_entity.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        
+        let variants = enum_entity.properties.get("variants");
+        assert!(variants.is_some());
+    }
+    
+    #[test]
+    fn test_trait_parsing() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+pub trait Display: Debug + Clone {
+    fn fmt(&self) -> String;
+    fn print(&self) {
+        println!("{}", self.fmt());
+    }
+}
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        assert_eq!(entities.len(), 1);
+        
+        let trait_entity = &entities[0];
+        assert_eq!(trait_entity.entity_type, "Interface");
+        assert_eq!(trait_entity.name, "Display");
+        assert_eq!(trait_entity.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        
+        let methods = trait_entity.properties.get("methods");
+        assert!(methods.is_some());
+    }
+    
+    #[test]
+    fn test_module_parsing() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+pub mod utils;
+
+mod internal {
+    pub fn helper() -> i32 {
+        42
+    }
+}
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        
+        let module_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Module").collect();
+        assert!(module_entities.len() >= 2); // utils and internal modules
+        
+        let internal_mod = module_entities.iter().find(|e| e.name == "internal").unwrap();
+        assert_eq!(internal_mod.properties.get("is_inline"), Some(&serde_json::Value::Bool(true)));
+    }
+    
+    #[test]
+    fn test_const_and_static() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source_code = r#"
+const PI: f64 = 3.14159;
+static GLOBAL_COUNT: AtomicUsize = AtomicUsize::new(0);
+"#;
+        
+        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+        
+        let const_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Constant").collect();
+        assert_eq!(const_entities.len(), 2);
+        
+        let pi_const = const_entities.iter().find(|e| e.name == "PI").unwrap();
+        assert_eq!(pi_const.entity_type, "Constant");
+        
+        let global_static = const_entities.iter().find(|e| e.name == "GLOBAL_COUNT").unwrap();
+        assert_eq!(global_static.entity_type, "Constant");
+    }
+}

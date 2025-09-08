@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{tool_name}} Analysis Report</title>
+    <link rel="stylesheet" href="{{theme_css_url}}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>{{tool_name}} Analysis Report</h1>
+                <div class="meta">
+                    Generated on {{generated_at}} | Version {{version}}
+                </div>
+            </div>
+        </header>
+        
+        <section class="summary">
+            <div class="summary-card">
+                <div class="value">{{summary.total_files}}</div>
+                <div class="label">Files Analyzed</div>
+            </div>
+            <div class="summary-card">
+                <div class="value">{{summary.total_issues}}</div>
+                <div class="label">Issues Found</div>
+            </div>
+            <div class="summary-card">
+                <div class="value">{{summary.complexity_score}}</div>
+                <div class="label">Avg Complexity</div>
+            </div>
+            <div class="summary-card">
+                <div class="value">{{summary.maintainability_index}}</div>
+                <div class="label">Maintainability</div>
+            </div>
+        </section>
+        
+        {{#if results.semantic_analysis}}
+        <section class="results-section">
+            <h2>Semantic Analysis</h2>
+            <div class="semantic-results">
+                {{#each results.semantic_analysis}}
+                <div class="semantic-item">
+                    <h3>{{this.name}}</h3>
+                    <div class="semantic-details">
+                        <span class="semantic-score">Score: {{this.score}}</span>
+                        {{#if this.suggestions}}
+                        <div class="suggestions">
+                            {{#each this.suggestions}}
+                            <div class="suggestion">{{this}}</div>
+                            {{/each}}
+                        </div>
+                        {{/if}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </section>
+        {{/if}}
+        
+        <section class="results-section">
+            <h2>File Analysis</h2>
+            <div class="file-list">
+                {{#each results.files}}
+                <div class="file-item" data-file-path="{{this.path}}" data-line="{{this.line}}">
+                    <div class="file-header">
+                        <div class="file-path">{{this.path}}</div>
+                        <div class="file-badge">
+                            {{#if this.issues_count}}
+                            <span class="badge error">{{this.issues_count}} issues</span>
+                            {{else}}
+                            <span class="badge success">Clean</span>
+                            {{/if}}
+                        </div>
+                    </div>
+                    <div class="file-details">
+                        <span>Size: {{this.size}} bytes</span>
+                        {{#if this.complexity}}
+                        <span>Complexity: {{this.complexity}}</span>
+                        {{/if}}
+                        {{#if this.language}}
+                        <span>Language: {{this.language}}</span>
+                        {{/if}}
+                    </div>
+                    {{#if this.issues}}
+                    <div class="issues-preview">
+                        {{#each this.issues}}
+                        <div class="issue-item" data-line="{{this.line}}">
+                            <span class="issue-type {{this.severity}}">{{this.type}}</span>
+                            <span class="issue-message">{{this.message}}</span>
+                            {{#if this.line}}
+                            <span class="issue-location">Line {{this.line}}</span>
+                            {{/if}}
+                        </div>
+                        {{/each}}
+                    </div>
+                    {{/if}}
+                </div>
+                {{/each}}
+            </div>
+        </section>
+        
+        {{#if results.metrics}}
+        <section class="results-section">
+            <h2>Code Metrics</h2>
+            <div class="metrics-grid">
+                {{#each results.metrics}}
+                <div class="metric-card">
+                    <div class="metric-name">{{this.name}}</div>
+                    <div class="metric-value">{{this.value}}</div>
+                    {{#if this.description}}
+                    <div class="metric-description">{{this.description}}</div>
+                    {{/if}}
+                </div>
+                {{/each}}
+            </div>
+        </section>
+        {{/if}}
+        
+        <details class="raw-data">
+            <summary>Raw Data</summary>
+            <pre><code>{{json results}}</code></pre>
+        </details>
+    </div>
+    
+    <script>
+        // VS Code extension integration
+        const vscode = acquireVsCodeApi();
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // File item click handlers
+            const fileItems = document.querySelectorAll('.file-item');
+            fileItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    const filePath = this.dataset.filePath;
+                    const line = this.dataset.line || 1;
+                    
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'openFile',
+                            filePath: filePath,
+                            line: parseInt(line)
+                        });
+                    }
+                });
+            });
+            
+            // Issue item click handlers
+            const issueItems = document.querySelectorAll('.issue-item');
+            issueItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const filePath = item.closest('.file-item').dataset.filePath;
+                    const line = item.dataset.line || 1;
+                    
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'openFile',
+                            filePath: filePath,
+                            line: parseInt(line)
+                        });
+                    }
+                });
+            });
+            
+            // Theme switcher
+            const themeButtons = document.querySelectorAll('[data-theme]');
+            themeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const theme = this.dataset.theme;
+                    document.documentElement.setAttribute('data-theme', theme);
+                    localStorage.setItem('valknut-theme', theme);
+                });
+            });
+            
+            // Load saved theme
+            const savedTheme = localStorage.getItem('valknut-theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+{
+    "name": "valknut",
+    "displayName": "Valknut Code Analysis",
+    "description": "VS Code extension for viewing and navigating Valknut code analysis reports",
+    "version": "0.1.0",
+    "publisher": "valknut",
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": [
+        "Other",
+        "Linters"
+    ],
+    "keywords": [
+        "code analysis",
+        "refactoring", 
+        "code quality",
+        "static analysis"
+    ],
+    "activationEvents": [
+        "onLanguage:json",
+        "onCommand:valknut.openReport",
+        "onCommand:valknut.analyzeWorkspace",
+        "onWebviewPanel:valknutReport"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "valknut.openReport",
+                "title": "Open Valknut Report",
+                "category": "Valknut"
+            },
+            {
+                "command": "valknut.analyzeWorkspace",
+                "title": "Analyze Current Workspace",
+                "category": "Valknut"
+            },
+            {
+                "command": "valknut.refreshReport",
+                "title": "Refresh Report",
+                "category": "Valknut"
+            },
+            {
+                "command": "valknut.exportReport",
+                "title": "Export Report",
+                "category": "Valknut"
+            }
+        ],
+        "menus": {
+            "explorer/context": [
+                {
+                    "command": "valknut.analyzeWorkspace",
+                    "group": "valknut",
+                    "when": "explorerResourceIsFolder"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "valknut.openReport",
+                    "group": "valknut",
+                    "when": "resourceExtname == .json"
+                }
+            ]
+        },
+        "views": {
+            "explorer": [
+                {
+                    "id": "valknutReports",
+                    "name": "Valknut Reports",
+                    "when": "valknut.hasReports"
+                }
+            ]
+        },
+        "viewsContainers": {
+            "panel": [
+                {
+                    "id": "valknut-panel",
+                    "title": "Valknut",
+                    "icon": "$(search-view-icon)"
+                }
+            ]
+        },
+        "webviews": [
+            {
+                "viewType": "valknutReport",
+                "displayName": "Valknut Report"
+            }
+        ],
+        "configuration": {
+            "title": "Valknut",
+            "properties": {
+                "valknut.reportPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to Valknut reports directory"
+                },
+                "valknut.autoRefresh": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically refresh reports when files change"
+                },
+                "valknut.theme": {
+                    "type": "string",
+                    "default": "default",
+                    "enum": ["default", "dracula", "high-contrast"],
+                    "description": "Report theme"
+                },
+                "valknut.executablePath": {
+                    "type": "string",
+                    "default": "valknut",
+                    "description": "Path to Valknut executable"
+                },
+                "valknut.showLineNumbers": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show line numbers in reports"
+                },
+                "valknut.maxFilePreview": {
+                    "type": "number",
+                    "default": 50,
+                    "description": "Maximum number of files to preview in reports"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.74.0",
+        "@types/node": "16.x",
+        "@typescript-eslint/eslint-plugin": "^5.45.0",
+        "@typescript-eslint/parser": "^5.45.0",
+        "eslint": "^8.28.0",
+        "typescript": "^4.9.4"
+    }
+}

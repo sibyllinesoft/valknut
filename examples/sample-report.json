@@ -1,0 +1,354 @@
+{
+  "tool_name": "Valknut",
+  "version": "0.1.0",
+  "generated_at": "2024-01-15T10:30:00.000Z",
+  "project": {
+    "name": "Sample Project",
+    "path": "/path/to/project",
+    "language": "Rust"
+  },
+  "summary": {
+    "total_files": 8,
+    "total_lines": 1247,
+    "total_issues": 12,
+    "complexity_score": 4.2,
+    "maintainability_index": 78.5,
+    "technical_debt_ratio": 15.3
+  },
+  "files": [
+    {
+      "path": "src/main.rs",
+      "size": 2048,
+      "lines": 89,
+      "language": "rust",
+      "complexity": 3.2,
+      "maintainability_index": 82.1,
+      "issues_count": 2,
+      "issues": [
+        {
+          "type": "complexity",
+          "severity": "warning",
+          "message": "Function 'process_data' has high cyclomatic complexity (12)",
+          "line": 45,
+          "column": 5,
+          "rule": "cyclomatic_complexity",
+          "suggestion": "Consider breaking this function into smaller functions"
+        },
+        {
+          "type": "naming",
+          "severity": "info",
+          "message": "Variable name 'tmp' is not descriptive",
+          "line": 67,
+          "column": 9,
+          "rule": "descriptive_names",
+          "suggestion": "Use a more descriptive variable name"
+        }
+      ]
+    },
+    {
+      "path": "src/lib.rs",
+      "size": 1536,
+      "lines": 67,
+      "language": "rust",
+      "complexity": 2.1,
+      "maintainability_index": 89.3,
+      "issues_count": 0,
+      "issues": []
+    },
+    {
+      "path": "src/core/processor.rs",
+      "size": 4096,
+      "lines": 156,
+      "language": "rust",
+      "complexity": 5.8,
+      "maintainability_index": 65.4,
+      "issues_count": 4,
+      "issues": [
+        {
+          "type": "complexity",
+          "severity": "error",
+          "message": "Function 'handle_request' is too complex (complexity: 18)",
+          "line": 23,
+          "column": 1,
+          "rule": "function_complexity",
+          "suggestion": "Refactor this function to reduce complexity"
+        },
+        {
+          "type": "duplication",
+          "severity": "warning",
+          "message": "Duplicate code block detected",
+          "line": 89,
+          "column": 5,
+          "rule": "code_duplication",
+          "suggestion": "Extract common code into a helper function"
+        },
+        {
+          "type": "performance",
+          "severity": "info",
+          "message": "Consider using iterator instead of manual loop",
+          "line": 134,
+          "column": 9,
+          "rule": "idiomatic_rust",
+          "suggestion": "Use .iter().map() for better performance"
+        },
+        {
+          "type": "safety",
+          "severity": "warning",
+          "message": "Unsafe block without justification comment",
+          "line": 98,
+          "column": 5,
+          "rule": "unsafe_justification",
+          "suggestion": "Add a comment explaining why unsafe code is necessary"
+        }
+      ]
+    },
+    {
+      "path": "src/utils/helpers.rs",
+      "size": 1024,
+      "lines": 45,
+      "language": "rust",
+      "complexity": 1.8,
+      "maintainability_index": 91.2,
+      "issues_count": 1,
+      "issues": [
+        {
+          "type": "documentation",
+          "severity": "info",
+          "message": "Public function missing documentation",
+          "line": 12,
+          "column": 1,
+          "rule": "missing_docs",
+          "suggestion": "Add documentation for public functions"
+        }
+      ]
+    },
+    {
+      "path": "src/config.rs",
+      "size": 768,
+      "lines": 34,
+      "language": "rust",
+      "complexity": 1.2,
+      "maintainability_index": 94.1,
+      "issues_count": 0,
+      "issues": []
+    },
+    {
+      "path": "tests/integration_tests.rs",
+      "size": 2560,
+      "lines": 112,
+      "language": "rust",
+      "complexity": 2.9,
+      "maintainability_index": 76.8,
+      "issues_count": 3,
+      "issues": [
+        {
+          "type": "testing",
+          "severity": "warning",
+          "message": "Test function too long (45 lines)",
+          "line": 67,
+          "column": 1,
+          "rule": "test_length",
+          "suggestion": "Break large test into smaller, focused tests"
+        },
+        {
+          "type": "assertion",
+          "severity": "info",
+          "message": "Consider using more specific assertion",
+          "line": 89,
+          "column": 9,
+          "rule": "assertion_specificity",
+          "suggestion": "Use assert_eq! instead of assert!"
+        },
+        {
+          "type": "setup",
+          "severity": "info",
+          "message": "Duplicate test setup code",
+          "line": 23,
+          "column": 5,
+          "rule": "test_duplication",
+          "suggestion": "Extract common setup into helper function"
+        }
+      ]
+    },
+    {
+      "path": "benches/performance.rs",
+      "size": 512,
+      "lines": 28,
+      "language": "rust",
+      "complexity": 1.5,
+      "maintainability_index": 88.7,
+      "issues_count": 1,
+      "issues": [
+        {
+          "type": "performance",
+          "severity": "info",
+          "message": "Benchmark could be more comprehensive",
+          "line": 15,
+          "column": 1,
+          "rule": "benchmark_coverage",
+          "suggestion": "Add more benchmark scenarios"
+        }
+      ]
+    },
+    {
+      "path": "examples/usage.rs",
+      "size": 1280,
+      "lines": 58,
+      "language": "rust",
+      "complexity": 2.3,
+      "maintainability_index": 85.6,
+      "issues_count": 1,
+      "issues": [
+        {
+          "type": "error_handling",
+          "severity": "warning",
+          "message": "Error not properly handled",
+          "line": 34,
+          "column": 18,
+          "rule": "error_handling",
+          "suggestion": "Use proper error handling instead of unwrap()"
+        }
+      ]
+    }
+  ],
+  "semantic_analysis": [
+    {
+      "name": "Code Organization",
+      "score": 8.2,
+      "description": "Overall code structure and organization",
+      "suggestions": [
+        "Consider extracting more modules for better separation of concerns",
+        "Group related functionality into cohesive modules"
+      ]
+    },
+    {
+      "name": "Error Handling",
+      "score": 7.5,
+      "description": "Quality of error handling throughout the codebase",
+      "suggestions": [
+        "Replace unwrap() calls with proper error handling",
+        "Consider using custom error types for better error reporting"
+      ]
+    },
+    {
+      "name": "Performance Patterns",
+      "score": 8.8,
+      "description": "Use of efficient algorithms and data structures",
+      "suggestions": [
+        "Good use of iterators and zero-cost abstractions",
+        "Consider using more advanced parallel processing where applicable"
+      ]
+    },
+    {
+      "name": "Documentation Quality",
+      "score": 6.9,
+      "description": "Code documentation and comments",
+      "suggestions": [
+        "Add more comprehensive documentation for public APIs",
+        "Include usage examples in documentation"
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Lines of Code",
+      "value": 1247,
+      "description": "Total lines of code analyzed"
+    },
+    {
+      "name": "Cyclomatic Complexity",
+      "value": 4.2,
+      "description": "Average cyclomatic complexity per function"
+    },
+    {
+      "name": "Maintainability Index",
+      "value": 78.5,
+      "description": "Composite maintainability score (0-100, higher is better)"
+    },
+    {
+      "name": "Technical Debt Ratio",
+      "value": 15.3,
+      "description": "Percentage of time spent on technical debt vs new features"
+    },
+    {
+      "name": "Test Coverage",
+      "value": 87.2,
+      "description": "Percentage of code covered by tests"
+    },
+    {
+      "name": "Dependencies",
+      "value": 23,
+      "description": "Number of external dependencies"
+    }
+  ],
+  "issue_summary": {
+    "by_severity": {
+      "error": 1,
+      "warning": 6,
+      "info": 5
+    },
+    "by_type": {
+      "complexity": 2,
+      "naming": 1,
+      "duplication": 1,
+      "performance": 2,
+      "safety": 1,
+      "documentation": 1,
+      "testing": 1,
+      "assertion": 1,
+      "setup": 1,
+      "error_handling": 1
+    },
+    "by_file": {
+      "src/main.rs": 2,
+      "src/core/processor.rs": 4,
+      "src/utils/helpers.rs": 1,
+      "tests/integration_tests.rs": 3,
+      "benches/performance.rs": 1,
+      "examples/usage.rs": 1
+    }
+  },
+  "recommendations": [
+    {
+      "priority": "high",
+      "category": "complexity",
+      "title": "Reduce function complexity in processor.rs",
+      "description": "The handle_request function has very high complexity and should be refactored",
+      "files_affected": ["src/core/processor.rs"],
+      "effort_estimate": "medium"
+    },
+    {
+      "priority": "medium", 
+      "category": "error_handling",
+      "title": "Improve error handling patterns",
+      "description": "Replace unwrap() calls with proper error handling throughout the codebase",
+      "files_affected": ["src/main.rs", "examples/usage.rs"],
+      "effort_estimate": "low"
+    },
+    {
+      "priority": "low",
+      "category": "documentation",
+      "title": "Add missing documentation",
+      "description": "Several public functions are missing documentation",
+      "files_affected": ["src/utils/helpers.rs"],
+      "effort_estimate": "low"
+    }
+  ],
+  "trends": {
+    "complexity_over_time": [
+      {"date": "2024-01-01", "value": 3.8},
+      {"date": "2024-01-08", "value": 4.1},
+      {"date": "2024-01-15", "value": 4.2}
+    ],
+    "issues_over_time": [
+      {"date": "2024-01-01", "value": 8},
+      {"date": "2024-01-08", "value": 11},
+      {"date": "2024-01-15", "value": 12}
+    ],
+    "maintainability_over_time": [
+      {"date": "2024-01-01", "value": 82.1},
+      {"date": "2024-01-08", "value": 79.8},
+      {"date": "2024-01-15", "value": 78.5}
+    ]
+  }
+}

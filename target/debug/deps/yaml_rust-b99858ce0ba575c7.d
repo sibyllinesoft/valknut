@@ -1,0 +1,11 @@
+/media/nathan/Seagate Hub/Projects/valknut/target/debug/deps/yaml_rust-b99858ce0ba575c7.d: /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/lib.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/emitter.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/parser.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/scanner.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/yaml.rs
+
+/media/nathan/Seagate Hub/Projects/valknut/target/debug/deps/libyaml_rust-b99858ce0ba575c7.rlib: /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/lib.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/emitter.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/parser.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/scanner.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/yaml.rs
+
+/media/nathan/Seagate Hub/Projects/valknut/target/debug/deps/libyaml_rust-b99858ce0ba575c7.rmeta: /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/lib.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/emitter.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/parser.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/scanner.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/yaml.rs
+
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/lib.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/emitter.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/parser.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/scanner.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/yaml-rust-0.4.5/src/yaml.rs:

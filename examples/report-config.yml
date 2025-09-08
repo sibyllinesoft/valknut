@@ -1,0 +1,188 @@
+# Example Valknut configuration for HTML report generation
+# This shows how to configure the new template and theme system
+
+# Analysis configuration
+analysis:
+  # Enable semantic analysis for richer reports
+  enable_semantic_analysis: true
+  # Include complexity metrics
+  calculate_complexity: true
+  # Detect code smells
+  detect_smells: true
+
+# I/O and reporting configuration
+io:
+  # Output directory for reports
+  report_dir: "./reports"
+  
+  # Default report format (json, html, yaml, csv)
+  report_format: html
+  
+  # Enable caching for faster subsequent runs
+  enable_caching: true
+  cache_dir: ".valknut-cache"
+
+# Template system configuration
+templates:
+  # Directory containing custom templates
+  templates_dir: "./templates"
+  
+  # Default template to use (without .hbs extension)
+  default_template: "report"
+  
+  # Theme configuration
+  theme:
+    # Theme name (corresponds to CSS file in themes/ directory)
+    name: "dracula"
+    # Custom theme CSS file path (optional)
+    custom_css: "./themes/my-custom-theme.css"
+  
+  # Template variables (available in all templates)
+  variables:
+    company_name: "My Company"
+    project_name: "My Project"
+    environment: "development"
+
+# HTML-specific settings
+html:
+  # Include interactive JavaScript
+  include_js: true
+  # Embed CSS inline (vs external file)
+  inline_css: false
+  # Include source code previews
+  include_code_preview: true
+  # Maximum lines to preview per file
+  max_preview_lines: 50
+
+# VS Code extension integration
+vscode:
+  # Enable VS Code message passing
+  enable_vscode_integration: true
+  # Auto-open in VS Code after generation
+  auto_open: false
+
+# Theme customization example
+themes:
+  # Custom theme definition
+  custom:
+    primary_color: "#ff6b9d"
+    secondary_color: "#4ecdc4"
+    background_color: "#1a1a2e"
+    text_color: "#eee"
+    success_color: "#00d4aa"
+    warning_color: "#ffb74d"
+    error_color: "#ff5722"
+  
+  # Override existing theme
+  dracula_custom:
+    base_theme: "dracula"
+    # Override specific colors
+    primary_color: "#ff79c6"
+
+# Report content configuration
+content:
+  # Sections to include in reports
+  include_sections:
+    - summary
+    - file_analysis
+    - issues
+    - metrics
+    - semantic_analysis
+    - raw_data
+  
+  # Summary metrics to calculate
+  summary_metrics:
+    - total_files
+    - total_lines
+    - total_issues
+    - complexity_average
+    - maintainability_index
+    - technical_debt_ratio
+  
+  # Issue filtering
+  issues:
+    # Minimum severity to include (info, warning, error, critical)
+    min_severity: "info"
+    # Maximum number of issues per file to display
+    max_per_file: 20
+    # Group similar issues
+    group_similar: true
+
+# Performance settings
+performance:
+  # Enable parallel processing
+  parallel: true
+  # Number of worker threads (0 = auto-detect)
+  threads: 0
+  # Memory limit in MB
+  memory_limit: 1024
+
+# Export options
+export:
+  # Generate multiple formats simultaneously
+  formats: ["html", "json"]
+  
+  # HTML export options
+  html:
+    # Bundle everything in single file
+    standalone: false
+    # Compress output
+    minify: true
+  
+  # JSON export options  
+  json:
+    # Pretty-print JSON
+    pretty: true
+    # Include raw analysis data
+    include_raw: true
+
+# Integration settings
+integrations:
+  # Git integration
+  git:
+    # Include git blame information
+    include_blame: true
+    # Include commit history for files
+    include_history: false
+    # Number of commits to analyze
+    max_commits: 100
+  
+  # CI/CD integration
+  ci:
+    # Fail build on critical issues
+    fail_on_critical: false
+    # Generate artifacts for CI
+    generate_artifacts: true
+    # Artifact formats
+    artifact_formats: ["html", "json"]
+
+# Advanced template options
+advanced_templates:
+  # Custom Handlebars helpers
+  helpers:
+    # Format file sizes
+    format_size: true
+    # Format dates
+    format_date: true
+    # Syntax highlighting
+    highlight_code: true
+  
+  # Template inheritance
+  inheritance:
+    # Base template for all reports
+    base_template: "base.hbs"
+    # Section templates
+    sections:
+      header: "header.hbs"
+      footer: "footer.hbs"
+      file_list: "file-list.hbs"
+      issue_list: "issue-list.hbs"
+
+# Development settings (only used in debug builds)
+development:
+  # Enable debug logging
+  debug_templates: false
+  # Watch template files for changes
+  watch_templates: false
+  # Include template compilation time
+  include_timing: false

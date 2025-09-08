@@ -1,0 +1,69 @@
+# Custom valknut configuration with echo clone detection disabled
+# This configuration removes the problematic echo integration that causes hangs
+
+briefs:
+  callee_depth: 2
+  include_detected_refactors: true
+  include_signatures: true
+  max_tokens_per_item: 8000
+cache_dir: .valknut_cache
+cache_ttl: 86400
+clone:
+  min_total_loc: 60
+detectors:
+  echo:
+    enabled: false  # DISABLED to prevent hanging during analysis
+    min_similarity: 0.85
+    min_tokens: 30
+  semgrep:
+    enabled: false
+    rule_packs:
+    - python.lang.best-practice
+    rules_path: null
+impact_packs:
+  centrality_samples: 64
+  enable_chokepoint_packs: true
+  enable_cycle_packs: true
+  max_packs: 20
+  non_overlap: true
+languages:
+- python
+- typescript
+- javascript
+- rust
+normalize:
+  clip_bounds:
+  - 0.0
+  - 1.0
+  confidence_reporting: true
+  scheme: robust_bayesian
+  use_bayesian_fallbacks: true
+ranking:
+  granularity: auto
+  top_k: 100
+roots:
+- exclude:
+  - '**/node_modules/**'
+  - '**/dist/**'
+  - '**/.venv/**'
+  - '**/venv/**'
+  - '**/target/**'
+  - '**/__pycache__/**'
+  - '**/.git/**'
+  - '**/build/**'
+  include:
+  - '**/*'
+  path: ./
+server:
+  auth: none
+  bearer_token: null
+  host: localhost
+  port: 8140
+version: 1
+weights:
+  centrality: 0.15
+  clone_mass: 0.2  # This will be zero since echo is disabled
+  complexity: 0.25
+  cycles: 0.15
+  smell_prior: 0.1
+  type_friction: 0.15

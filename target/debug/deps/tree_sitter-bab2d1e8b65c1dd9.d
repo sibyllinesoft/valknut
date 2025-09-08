@@ -1,0 +1,9 @@
+/media/nathan/Seagate Hub/Projects/valknut/target/debug/deps/tree_sitter-bab2d1e8b65c1dd9.d: /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/lib.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/ffi.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/util.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/./bindings.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/../include/tree_sitter/parser.h
+
+/media/nathan/Seagate Hub/Projects/valknut/target/debug/deps/libtree_sitter-bab2d1e8b65c1dd9.rmeta: /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/lib.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/ffi.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/util.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/./bindings.rs /home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/../include/tree_sitter/parser.h
+
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/lib.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/ffi.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/util.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/./bindings.rs:
+/home/nathan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-0.20.10/binding_rust/../include/tree_sitter/parser.h:
