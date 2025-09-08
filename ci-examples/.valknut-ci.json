@@ -1,0 +1,110 @@
+{
+  "version": "0.1.0",
+  "description": "Valknut CI/CD Configuration - Optimized for automated quality gates",
+  
+  "analysis": {
+    "enable_scoring": true,
+    "enable_graph_analysis": false,
+    "enable_lsh_analysis": false,
+    "enable_refactoring_analysis": true,
+    "enable_structure_analysis": true,
+    "enable_names_analysis": false,
+    "enable_coverage_analysis": false,
+    "max_files": 1000,
+    "exclude_patterns": [
+      "*/node_modules/*",
+      "*/venv/*",
+      "*/target/*",
+      "*/__pycache__/*",
+      "*.min.js",
+      "*/dist/*",
+      "*/build/*",
+      "*/test/*",
+      "*/tests/*"
+    ]
+  },
+  
+  "scoring": {
+    "normalization_scheme": "Standard",
+    "use_bayesian_fallbacks": false,
+    "confidence_reporting": false,
+    "weights": {
+      "complexity": 1.0,
+      "structure": 0.8,
+      "refactoring": 0.9
+    }
+  },
+  
+  "structure": {
+    "structure": {
+      "enable_branch_packs": true,
+      "enable_file_split_packs": true,
+      "top_packs": 5
+    },
+    "fsdir": {
+      "max_files_per_dir": 30,
+      "max_subdirs_per_dir": 15,
+      "max_dir_loc": 3000
+    },
+    "fsfile": {
+      "huge_loc": 1000,
+      "huge_bytes": 150000
+    }
+  },
+  
+  "languages": {
+    "python": {
+      "enabled": true,
+      "file_extensions": [".py"],
+      "max_file_size_mb": 5,
+      "complexity_threshold": 12.0
+    },
+    "javascript": {
+      "enabled": true,
+      "file_extensions": [".js", ".jsx"],
+      "max_file_size_mb": 3,
+      "complexity_threshold": 10.0
+    },
+    "typescript": {
+      "enabled": true,
+      "file_extensions": [".ts", ".tsx"],
+      "max_file_size_mb": 3,
+      "complexity_threshold": 10.0
+    },
+    "rust": {
+      "enabled": true,
+      "file_extensions": [".rs"],
+      "max_file_size_mb": 8,
+      "complexity_threshold": 15.0
+    },
+    "go": {
+      "enabled": true,
+      "file_extensions": [".go"],
+      "max_file_size_mb": 5,
+      "complexity_threshold": 12.0
+    }
+  },
+  
+  "io": {
+    "enable_caching": false,
+    "output_dir": "out",
+    "default_format": "json"
+  },
+  
+  "performance": {
+    "file_timeout_seconds": 20,
+    "total_timeout_seconds": 300,
+    "batch_size": 50
+  },
+  
+  "quality_gates": {
+    "enabled": true,
+    "max_complexity": 70.0,
+    "min_health": 65.0,
+    "max_debt": 25.0,
+    "min_maintainability": 25.0,
+    "max_issues": 30,
+    "max_critical": 0,
+    "max_high_priority": 3
+  }
+}

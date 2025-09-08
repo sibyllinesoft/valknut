@@ -23,7 +23,6 @@ use crate::core::featureset::FeatureVector;
 use crate::detectors::complexity::{ComplexityAnalyzer, ComplexityAnalysisResult, ComplexityConfig};
 use crate::detectors::structure::{StructureExtractor, StructureConfig};
 use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringAnalysisResult, RefactoringConfig};
-use crate::detectors::names_simple::{SimpleNameAnalyzer, NamingAnalysisResult, NamesConfig};
 
 /// Comprehensive analysis result containing all analysis types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,8 +43,6 @@ pub struct ComprehensiveAnalysisResult {
     pub complexity: ComplexityAnalysisResults,
     /// Refactoring analysis results
     pub refactoring: RefactoringAnalysisResults,
-    /// Naming analysis results
-    pub naming: NamingAnalysisResults,
     /// Impact analysis results  
     pub impact: ImpactAnalysisResults,
     /// Overall health metrics
@@ -61,8 +58,6 @@ pub struct AnalysisConfig {
     pub enable_complexity_analysis: bool,
     /// Enable refactoring analysis
     pub enable_refactoring_analysis: bool,
-    /// Enable naming analysis
-    pub enable_naming_analysis: bool,
     /// Enable impact analysis
     pub enable_impact_analysis: bool,
     /// File extensions to include
@@ -79,7 +74,6 @@ impl Default for AnalysisConfig {
             enable_structure_analysis: true,
             enable_complexity_analysis: true,
             enable_refactoring_analysis: true,
-            enable_naming_analysis: true,
             enable_impact_analysis: true,
             file_extensions: vec![
                 "py".to_string(),
@@ -166,16 +160,6 @@ pub struct RefactoringAnalysisResults {
     pub opportunities_count: usize,
 }
 
-/// Naming analysis results
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NamingAnalysisResults {
-    /// Enabled flag
-    pub enabled: bool,
-    /// Detailed naming results
-    pub detailed_results: Vec<NamingAnalysisResult>,
-    /// Naming issues count
-    pub issues_count: usize,
-}
 
 /// Impact analysis results
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,6 +191,83 @@ pub struct HealthMetrics {
     pub structure_quality_score: f64,
 }
 
+/// Quality gate configuration for CI/CD integration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityGateConfig {
+    /// Whether quality gates are enabled
+    pub enabled: bool,
+    /// Maximum allowed complexity score (0-100, lower is better)
+    pub max_complexity: f64,
+    /// Minimum required health score (0-100, higher is better)
+    pub min_health: f64,
+    /// Maximum allowed technical debt ratio (0-100, lower is better)
+    pub max_debt: f64,
+    /// Minimum required maintainability index (0-100, higher is better)
+    pub min_maintainability: f64,
+    /// Maximum allowed total issues count
+    pub max_issues: usize,
+    /// Maximum allowed critical issues count
+    pub max_critical: usize,
+    /// Maximum allowed high-priority issues count
+    pub max_high_priority: usize,
+}
+
+impl Default for QualityGateConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_complexity: 75.0,
+            min_health: 60.0,
+            max_debt: 30.0,
+            min_maintainability: 20.0,
+            max_issues: 50,
+            max_critical: 0,
+            max_high_priority: 5,
+        }
+    }
+}
+
+/// Quality gate violation details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityGateViolation {
+    /// Metric name that failed
+    pub metric: String,
+    /// Current value of the metric
+    pub current_value: f64,
+    /// Threshold that was exceeded
+    pub threshold: f64,
+    /// Description of the violation
+    pub description: String,
+    /// Severity level of the violation
+    pub severity: ViolationSeverity,
+}
+
+/// Quality gate violation severity levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ViolationSeverity {
+    /// Critical violation - blocks release
+    Blocker,
+    /// Critical issue - should block release  
+    Critical,
+    /// High priority issue - should be addressed
+    High,
+    /// Warning level issue - should be monitored
+    Warning,
+}
+
+/// Quality gate evaluation result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityGateResult {
+    /// Whether all quality gates passed
+    pub passed: bool,
+    /// List of violations found
+    pub violations: Vec<QualityGateViolation>,
+    /// Overall quality score
+    pub overall_score: f64,
+    /// Quality gate configuration used
+    pub config: QualityGateConfig,
+}
+
 impl From<ValknutConfig> for AnalysisConfig {
     fn from(_valknut_config: ValknutConfig) -> Self {
         Self::default()
@@ -222,7 +283,6 @@ pub struct AnalysisPipeline {
     complexity_analyzer: ComplexityAnalyzer,
     structure_extractor: StructureExtractor,
     refactoring_analyzer: RefactoringAnalyzer,
-    name_analyzer: SimpleNameAnalyzer,
 }
 
 impl AnalysisPipeline {
@@ -231,14 +291,12 @@ impl AnalysisPipeline {
         let complexity_config = ComplexityConfig::default();
         let structure_config = StructureConfig::default();
         let refactoring_config = RefactoringConfig::default();
-        let names_config = NamesConfig::default();
 
         Self {
             config,
             complexity_analyzer: ComplexityAnalyzer::new(complexity_config),
             structure_extractor: StructureExtractor::with_config(structure_config),
             refactoring_analyzer: RefactoringAnalyzer::new(refactoring_config),
-            name_analyzer: SimpleNameAnalyzer::new(names_config),
         }
     }
 
@@ -321,16 +379,7 @@ impl AnalysisPipeline {
             callback("Analyzing function naming...", 65.0);
         }
 
-        // Stage 5: Naming analysis
-        let naming_results = if self.config.enable_naming_analysis {
-            self.run_naming_analysis(&files).await?
-        } else {
-            NamingAnalysisResults {
-                enabled: false,
-                detailed_results: Vec::new(),
-                issues_count: 0,
-            }
-        };
+        // Naming analysis removed
 
         if let Some(ref callback) = progress_callback {
             callback("Analyzing dependencies and impact...", 80.0);
@@ -354,7 +403,7 @@ impl AnalysisPipeline {
         }
 
         // Stage 7: Calculate summary and health metrics
-        let summary = self.calculate_summary(&files, &structure_results, &complexity_results, &refactoring_results, &naming_results, &impact_results);
+        let summary = self.calculate_summary(&files, &structure_results, &complexity_results, &refactoring_results, &impact_results);
         let health_metrics = self.calculate_health_metrics(&complexity_results, &structure_results, &impact_results);
 
         if let Some(ref callback) = progress_callback {
@@ -376,7 +425,6 @@ impl AnalysisPipeline {
             structure: structure_results,
             complexity: complexity_results,
             refactoring: refactoring_results,
-            naming: naming_results,
             impact: impact_results,
             health_metrics,
         })
@@ -527,20 +575,6 @@ impl AnalysisPipeline {
         })
     }
 
-    /// Run naming analysis
-    async fn run_naming_analysis(&self, files: &[PathBuf]) -> Result<NamingAnalysisResults> {
-        debug!("Running naming analysis on {} files", files.len());
-        
-        let file_refs: Vec<&Path> = files.iter().map(|p| p.as_path()).collect();
-        let detailed_results = self.name_analyzer.analyze_files(&file_refs).await?;
-        let issues_count = detailed_results.len();
-
-        Ok(NamingAnalysisResults {
-            enabled: true,
-            detailed_results,
-            issues_count,
-        })
-    }
 
     /// Run impact analysis (placeholder for now)
     async fn run_impact_analysis(&self, _files: &[PathBuf]) -> Result<ImpactAnalysisResults> {
@@ -556,6 +590,158 @@ impl AnalysisPipeline {
         })
     }
 
+    /// Evaluate quality gates against analysis results
+    pub fn evaluate_quality_gates(
+        &self,
+        config: &QualityGateConfig,
+        results: &ComprehensiveAnalysisResult,
+    ) -> QualityGateResult {
+        if !config.enabled {
+            return QualityGateResult {
+                passed: true,
+                violations: Vec::new(),
+                overall_score: results.health_metrics.overall_health_score,
+                config: config.clone(),
+            };
+        }
+
+        let mut violations = Vec::new();
+        
+        // Check complexity score
+        if results.health_metrics.complexity_score > config.max_complexity {
+            violations.push(QualityGateViolation {
+                metric: "Complexity Score".to_string(),
+                current_value: results.health_metrics.complexity_score,
+                threshold: config.max_complexity,
+                description: format!(
+                    "Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
+                    results.health_metrics.complexity_score, config.max_complexity
+                ),
+                severity: if results.health_metrics.complexity_score > config.max_complexity + 10.0 {
+                    ViolationSeverity::Critical
+                } else {
+                    ViolationSeverity::High
+                },
+            });
+        }
+
+        // Check health score
+        if results.health_metrics.overall_health_score < config.min_health {
+            violations.push(QualityGateViolation {
+                metric: "Overall Health Score".to_string(),
+                current_value: results.health_metrics.overall_health_score,
+                threshold: config.min_health,
+                description: format!(
+                    "Health score ({:.1}) is below minimum required ({:.1})", 
+                    results.health_metrics.overall_health_score, config.min_health
+                ),
+                severity: if results.health_metrics.overall_health_score < config.min_health - 20.0 {
+                    ViolationSeverity::Blocker
+                } else {
+                    ViolationSeverity::Critical
+                },
+            });
+        }
+
+        // Check technical debt ratio
+        if results.health_metrics.technical_debt_ratio > config.max_debt {
+            violations.push(QualityGateViolation {
+                metric: "Technical Debt Ratio".to_string(),
+                current_value: results.health_metrics.technical_debt_ratio,
+                threshold: config.max_debt,
+                description: format!(
+                    "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
+                    results.health_metrics.technical_debt_ratio, config.max_debt
+                ),
+                severity: if results.health_metrics.technical_debt_ratio > config.max_debt + 20.0 {
+                    ViolationSeverity::Critical
+                } else {
+                    ViolationSeverity::High
+                },
+            });
+        }
+
+        // Check maintainability score
+        if results.health_metrics.maintainability_score < config.min_maintainability {
+            violations.push(QualityGateViolation {
+                metric: "Maintainability Score".to_string(),
+                current_value: results.health_metrics.maintainability_score,
+                threshold: config.min_maintainability,
+                description: format!(
+                    "Maintainability score ({:.1}) is below minimum required ({:.1})", 
+                    results.health_metrics.maintainability_score, config.min_maintainability
+                ),
+                severity: if results.health_metrics.maintainability_score < config.min_maintainability - 10.0 {
+                    ViolationSeverity::Critical
+                } else {
+                    ViolationSeverity::High
+                },
+            });
+        }
+
+        // Check total issues count
+        let total_issues = results.summary.total_issues;
+        if total_issues > config.max_issues {
+            violations.push(QualityGateViolation {
+                metric: "Total Issues Count".to_string(),
+                current_value: total_issues as f64,
+                threshold: config.max_issues as f64,
+                description: format!(
+                    "Total issues ({}) exceeds maximum allowed ({})", 
+                    total_issues, config.max_issues
+                ),
+                severity: if total_issues > config.max_issues * 2 {
+                    ViolationSeverity::Critical
+                } else {
+                    ViolationSeverity::High
+                },
+            });
+        }
+
+        // Check critical issues count
+        let critical_issues = results.summary.critical_issues;
+        if critical_issues > config.max_critical {
+            violations.push(QualityGateViolation {
+                metric: "Critical Issues Count".to_string(),
+                current_value: critical_issues as f64,
+                threshold: config.max_critical as f64,
+                description: format!(
+                    "Critical issues ({}) exceeds maximum allowed ({})", 
+                    critical_issues, config.max_critical
+                ),
+                severity: ViolationSeverity::Blocker,
+            });
+        }
+
+        // Check high-priority issues count  
+        let high_priority_issues = results.summary.high_priority_issues;
+        if high_priority_issues > config.max_high_priority {
+            violations.push(QualityGateViolation {
+                metric: "High Priority Issues Count".to_string(),
+                current_value: high_priority_issues as f64,
+                threshold: config.max_high_priority as f64,
+                description: format!(
+                    "High priority issues ({}) exceeds maximum allowed ({})", 
+                    high_priority_issues, config.max_high_priority
+                ),
+                severity: if high_priority_issues > config.max_high_priority * 2 {
+                    ViolationSeverity::Critical
+                } else {
+                    ViolationSeverity::High
+                },
+            });
+        }
+
+        let passed = violations.is_empty();
+        
+        QualityGateResult {
+            passed,
+            violations,
+            overall_score: results.health_metrics.overall_health_score,
+            config: config.clone(),
+        }
+    }
+
     /// Calculate analysis summary
     fn calculate_summary(
         &self,
@@ -563,7 +749,6 @@ impl AnalysisPipeline {
         structure: &StructureAnalysisResults,
         complexity: &ComplexityAnalysisResults,
         refactoring: &RefactoringAnalysisResults,
-        naming: &NamingAnalysisResults,
         impact: &ImpactAnalysisResults,
     ) -> AnalysisSummary {
         let total_files = files.len();
@@ -590,7 +775,7 @@ impl AnalysisPipeline {
             }
         }
 
-        let total_issues = structure.issues_count + complexity.issues_count + naming.issues_count + impact.issues_count;
+        let total_issues = structure.issues_count + complexity.issues_count + impact.issues_count;
         
         // Count high-priority and critical issues from complexity analysis
         let mut high_priority_issues = 0;
@@ -780,11 +965,6 @@ impl AnalysisPipeline {
                 enabled: false,
                 detailed_results: Vec::new(),
                 opportunities_count: 0,
-            },
-            naming: NamingAnalysisResults {
-                enabled: false,
-                detailed_results: Vec::new(),
-                issues_count: 0,
             },
             impact: ImpactAnalysisResults {
                 enabled: false,

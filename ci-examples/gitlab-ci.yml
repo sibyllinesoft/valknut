@@ -1,0 +1,108 @@
+# GitLab CI - Code Quality Gate with Valknut
+stages:
+  - quality
+
+variables:
+  VALKNUT_VERSION: "latest"
+  
+quality-gate:
+  stage: quality
+  image: ubuntu:22.04
+  
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl jq
+    - curl -L -o valknut "https://github.com/your-repo/valknut/releases/latest/download/valknut-linux-x86_64"
+    - chmod +x valknut
+    
+  script:
+    - |
+      # Run Valknut analysis with quality gates
+      ./valknut analyze . \
+        --format ci-summary \
+        --quality-gate \
+        --max-issues 5 \
+        --min-health 70 \
+        --max-complexity 80 \
+        --min-maintainability 60 \
+        --quiet
+        
+      # Store exit code for later
+      ANALYSIS_EXIT_CODE=$?
+      
+      # Parse results for GitLab merge request widget
+      if [ -f out/ci_summary.json ]; then
+        echo "Creating quality report for GitLab..."
+        
+        STATUS=$(jq -r '.status' out/ci_summary.json)
+        HEALTH_SCORE=$(jq -r '.metrics.overall_health_score' out/ci_summary.json)
+        TOTAL_ISSUES=$(jq -r '.summary.total_issues' out/ci_summary.json)
+        
+        # Create GitLab-compatible quality report
+        cat > quality_report.json << EOF
+      {
+        "version": "1.0.0",
+        "vulnerabilities": [],
+        "remediations": [],
+        "scan": {
+          "scanner": {
+            "id": "valknut",
+            "name": "Valknut Code Quality Analyzer"
+          },
+          "type": "code_quality",
+          "start_time": "$(date -Iseconds)",
+          "end_time": "$(date -Iseconds)",
+          "status": "${STATUS}"
+        }
+      }
+      EOF
+        
+        echo "Quality Analysis Results:"
+        echo "========================"
+        echo "Status: $STATUS"
+        echo "Health Score: $HEALTH_SCORE"
+        echo "Total Issues: $TOTAL_ISSUES"
+        
+        # Exit with the original analysis exit code
+        exit $ANALYSIS_EXIT_CODE
+      else
+        echo "Error: No analysis results found"
+        exit 1
+      fi
+      
+  artifacts:
+    reports:
+      codequality: quality_report.json
+    paths:
+      - out/
+    expire_in: 1 week
+    when: always
+    
+  only:
+    - merge_requests
+    - main
+
+# Optional: Separate job for detailed analysis on main branch
+detailed-analysis:
+  stage: quality
+  image: ubuntu:22.04
+  
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl
+    - curl -L -o valknut "https://github.com/your-repo/valknut/releases/latest/download/valknut-linux-x86_64"
+    - chmod +x valknut
+    
+  script:
+    - |
+      # Run comprehensive analysis without quality gates
+      ./valknut analyze . \
+        --format html \
+        --out detailed-report \
+        --quiet
+        
+  artifacts:
+    paths:
+      - detailed-report/
+    expire_in: 30 days
+    
+  only:
+    - main

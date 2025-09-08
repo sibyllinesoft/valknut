@@ -1,0 +1,122 @@
+# Azure Pipelines - Code Quality Gate with Valknut
+trigger:
+- main
+
+pr:
+- main
+
+variables:
+  valknutVersion: 'latest'
+
+stages:
+- stage: CodeQuality
+  displayName: 'Code Quality Analysis'
+  
+  jobs:
+  - job: QualityGate
+    displayName: 'Run Quality Gate'
+    pool:
+      vmImage: 'ubuntu-latest'
+      
+    steps:
+    - checkout: self
+      
+    - script: |
+        # Download Valknut binary
+        curl -L -o valknut "https://github.com/your-repo/valknut/releases/latest/download/valknut-linux-x86_64"
+        chmod +x valknut
+      displayName: 'Download Valknut'
+      
+    - script: |
+        # Run quality analysis
+        ./valknut analyze . \
+          --format ci-summary \
+          --quality-gate \
+          --max-issues 5 \
+          --min-health 70 \
+          --max-complexity 80 \
+          --min-maintainability 60 \
+          --quiet
+      displayName: 'Run Code Quality Analysis'
+      continueOnError: true
+      
+    - task: PowerShell@2
+      displayName: 'Process Analysis Results'
+      inputs:
+        targetType: 'inline'
+        script: |
+          if (Test-Path "out/ci_summary.json") {
+            $results = Get-Content "out/ci_summary.json" | ConvertFrom-Json
+            
+            Write-Host "Quality Analysis Results:"
+            Write-Host "========================"
+            Write-Host "Status: $($results.status)"
+            Write-Host "Health Score: $($results.metrics.overall_health_score)"
+            Write-Host "Total Issues: $($results.summary.total_issues)"
+            Write-Host "Critical Issues: $($results.summary.critical_issues)"
+            
+            # Set pipeline variables for use in other tasks
+            Write-Host "##vso[task.setvariable variable=HealthScore]$($results.metrics.overall_health_score)"
+            Write-Host "##vso[task.setvariable variable=TotalIssues]$($results.summary.total_issues)"
+            Write-Host "##vso[task.setvariable variable=QualityStatus]$($results.status)"
+            
+            if ($results.summary.total_issues -gt 0) {
+              Write-Host "Recommendations:"
+              foreach ($rec in $results.quality_gates.recommendations) {
+                Write-Host "- $rec"
+              }
+            }
+            
+            # Create Azure DevOps Test Results
+            $testResults = @{
+              "version" = "1.0"
+              "name" = "Valknut Code Quality"
+              "outcome" = if ($results.status -eq "success") { "Passed" } else { "Failed" }
+              "duration" = "PT5S"
+              "tests" = @(
+                @{
+                  "name" = "Health Score Threshold"
+                  "outcome" = if ([double]$results.metrics.overall_health_score -ge 70) { "Passed" } else { "Failed" }
+                  "duration" = "PT1S"
+                },
+                @{
+                  "name" = "Issue Count Threshold"
+                  "outcome" = if ($results.summary.total_issues -le 5) { "Passed" } else { "Failed" }
+                  "duration" = "PT1S"
+                }
+              )
+            }
+            
+            $testResults | ConvertTo-Json -Depth 10 | Out-File -FilePath "test_results.json"
+          } else {
+            Write-Error "Analysis results not found"
+            exit 1
+          }
+      
+    - task: PublishTestResults@2
+      displayName: 'Publish Quality Gate Results'
+      inputs:
+        testResultsFormat: 'VSTest'
+        testResultsFiles: 'test_results.json'
+        testRunTitle: 'Code Quality Gate'
+      condition: always()
+      
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Analysis Artifacts'
+      inputs:
+        pathToPublish: 'out/'
+        artifactName: 'valknut-analysis'
+      condition: always()
+      
+    # Conditional task to fail the pipeline if quality gates fail
+    - script: |
+        echo "Quality gate check: $(QualityStatus)"
+        if [ "$(QualityStatus)" != "success" ]; then
+          echo "##vso[task.logissue type=error]Quality gates failed!"
+          echo "Health Score: $(HealthScore)"
+          echo "Total Issues: $(TotalIssues)"
+          exit 1
+        fi
+        echo "##vso[task.logissue type=warning]Quality gates passed!"
+      displayName: 'Validate Quality Gates'
+      condition: always()

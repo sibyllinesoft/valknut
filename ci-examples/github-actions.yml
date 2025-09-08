@@ -1,0 +1,90 @@
+# GitHub Actions - Code Quality Gate with Valknut
+name: Code Quality Analysis
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download Valknut
+      run: |
+        # Download the latest Valknut binary
+        curl -L -o valknut https://github.com/your-repo/valknut/releases/latest/download/valknut-linux-x86_64
+        chmod +x valknut
+        
+    - name: Run Code Quality Analysis
+      run: |
+        ./valknut analyze . \
+          --format ci-summary \
+          --quality-gate \
+          --max-issues 5 \
+          --min-health 70 \
+          --max-complexity 80 \
+          --min-maintainability 60 \
+          --quiet
+      continue-on-error: true
+      
+    - name: Upload Analysis Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: valknut-analysis
+        path: |
+          out/ci_summary.json
+          out/report.jsonl
+          
+    - name: Parse Results for PR Comment
+      if: github.event_name == 'pull_request'
+      run: |
+        # Parse the CI summary and create a comment
+        if [ -f out/ci_summary.json ]; then
+          echo "## 🔍 Code Quality Analysis" >> comment.md
+          echo "" >> comment.md
+          
+          STATUS=$(jq -r '.status' out/ci_summary.json)
+          HEALTH_SCORE=$(jq -r '.metrics.overall_health_score' out/ci_summary.json)
+          TOTAL_ISSUES=$(jq -r '.summary.total_issues' out/ci_summary.json)
+          CRITICAL_ISSUES=$(jq -r '.summary.critical_issues' out/ci_summary.json)
+          
+          if [ "$STATUS" = "success" ]; then
+            echo "✅ **Quality Gate: PASSED**" >> comment.md
+          else
+            echo "❌ **Quality Gate: FAILED**" >> comment.md
+          fi
+          
+          echo "" >> comment.md
+          echo "📊 **Metrics:**" >> comment.md
+          echo "- Health Score: ${HEALTH_SCORE}%" >> comment.md
+          echo "- Total Issues: ${TOTAL_ISSUES}" >> comment.md
+          echo "- Critical Issues: ${CRITICAL_ISSUES}" >> comment.md
+          echo "" >> comment.md
+          
+          if [ "$TOTAL_ISSUES" -gt 0 ]; then
+            echo "📋 **Recommendations:**" >> comment.md
+            jq -r '.quality_gates.recommendations[]' out/ci_summary.json | sed 's/^/- /' >> comment.md
+          fi
+        fi
+        
+    - name: Comment PR
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          if (fs.existsSync('comment.md')) {
+            const comment = fs.readFileSync('comment.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }

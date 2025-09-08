@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="logo.webp" alt="Valknut Logo" width="200">
+  <img src="assets/logo.webp" alt="Valknut Logo" width="200">
 
   
-  **High-performance code structure analyzer implemented in Rust**
+  **AI-Powered Code Analysis & Refactoring Assistant**
 </div>
 
-Valknut is a fast, efficient code structure analyzer that identifies refactoring opportunities in your codebase. Built in Rust for optimal performance, it analyzes directory structures, file organization, and code distribution to provide actionable recommendations for improving code maintainability.
+Valknut is a comprehensive code analysis tool that combines structural analysis, complexity metrics, semantic naming evaluation, and technical debt assessment. Built in Rust for maximum performance, it provides actionable insights for improving code maintainability, identifying refactoring opportunities, and maintaining code quality through CI/CD pipeline integration.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -14,10 +14,10 @@ Valknut is a fast, efficient code structure analyzer that identifies refactoring
 
 ### Installation
 
-Build from source (requires Rust):
+Build from source (requires Rust 1.70+):
 
 ```bash
-git clone https://github.com/your-org/valknut
+git clone https://github.com/nathanricedev/valknut
 cd valknut
 cargo build --release
 ```
@@ -27,190 +27,430 @@ The binary will be available at `target/release/valknut`.
 ### Basic Usage
 
 ```bash
-# Analyze code structure in a directory
-valknut structure /path/to/your/code
+# Comprehensive analysis of current directory
+valknut analyze .
 
-# Pretty output format
-valknut structure /path/to/your/code --format pretty
+# Generate HTML report for teams
+valknut analyze --format html --out reports/ ./src
+
+# Run with quality gates for CI/CD
+valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 
 # Use custom configuration
-valknut structure /path/to/your/code --config valknut-config.yml
+valknut analyze --config custom-config.yml ./src
 
-# Limit to top recommendations
-valknut structure /path/to/your/code --top 10 --verbose
+# List supported programming languages  
+valknut list-languages
+
+# Create default configuration file
+valknut init-config --output my-config.yml
 ```
 
 ### Configuration
 
-Valknut uses YAML configuration files to customize analysis behavior. See `valknut-config.yml` for the default configuration structure.
+Valknut uses YAML configuration files for comprehensive customization:
 
-### Command Line Interface
+```bash
+# Create a default configuration file
+valknut init-config
 
-For detailed CLI usage, see [CLI_USAGE.md](CLI_USAGE.md).
+# Validate your configuration
+valknut validate-config --config .valknut.yml
+
+# View default configuration
+valknut print-default-config
+```
 
 ## Features
 
-- **⚡ High Performance**: Implemented in Rust for maximum speed and efficiency
-- **📁 Structure Analysis**: Analyzes directory organization and file distribution patterns
-- **🎯 Actionable Recommendations**: Identifies specific refactoring opportunities
-- **📊 Multiple Output Formats**: JSON, pretty-printed, and configurable output
-- **🔧 Configurable**: Extensive YAML-based configuration system
-- **🚀 Production Ready**: Reliable analysis suitable for CI/CD integration
-- **🔍 Multi-language Awareness**: Understands common project structures across languages
+### 🔍 Comprehensive Analysis Engine
+- **Structure Analysis**: Directory organization, file distribution, and architectural patterns
+- **Complexity Metrics**: Cyclomatic, cognitive complexity, and maintainability indices 
+- **Semantic Naming**: AI-powered function and variable name quality assessment
+- **Technical Debt**: Quantitative technical debt scoring and prioritization
+- **Refactoring Opportunities**: Actionable recommendations with impact analysis
+- **Dependencies & Impact**: Cycle detection, chokepoint analysis, and clone detection
+
+### 🚀 CI/CD Integration & Quality Gates
+- **Quality Gate Mode**: Fail builds when quality thresholds are exceeded
+- **Configurable Thresholds**: Set limits for complexity, health scores, and issue counts
+- **Multiple Report Formats**: JSON, HTML, Markdown, CSV, SonarQube integration
+- **Team Reports**: Interactive HTML reports for code review and planning
+
+### 🛠️ Developer Experience
+- **⚡ High Performance**: Rust implementation with SIMD optimization
+- **🔧 Extensive Configuration**: YAML-based configuration with validation
+- **📊 Rich CLI Output**: Progress bars, colored output, and detailed summaries
+- **🔤 Multi-language Support**: Python, TypeScript, JavaScript, Rust, Go, and more
+- **📝 MCP Integration**: Claude Code integration for IDE assistance (in development)
 
 ## Architecture
 
-### Core Analysis Engine
+### Multi-Stage Analysis Pipeline
 
-Valknut's Rust-based analysis engine focuses on:
+Valknut employs a comprehensive, multi-stage analysis pipeline:
 
-1. **Directory Structure Analysis** - Identifies overcrowded directories and imbalanced hierarchies
-2. **File Size Analysis** - Detects files that are too large or have grown beyond maintainable sizes
-3. **Organization Patterns** - Recognizes common project organization issues
-4. **Partitioning Recommendations** - Suggests how to split large modules or reorganize directories
+1. **File Discovery**: Intelligent traversal with configurable inclusion/exclusion patterns
+2. **Structure Analysis**: Directory organization and file distribution assessment
+3. **Complexity Analysis**: AST-based complexity metrics using Tree-sitter parsers
+4. **Semantic Analysis**: AI-powered naming quality evaluation using embedding models
+5. **Refactoring Analysis**: Identification of improvement opportunities with impact scoring
+6. **Dependency Analysis**: Cycle detection, chokepoint identification, and clone analysis
+7. **Health Metrics**: Overall codebase health scoring and quality assessment
 
-### Analysis Types
+### Analysis Capabilities
 
-| Analysis | Focus | Output |
-|----------|-------|--------|
-| **Branch Packs** | Directory organization | Recommendations for splitting directories |
-| **File Split Packs** | Large file identification | Suggestions for breaking up large files |
-| **Balance Analysis** | Code distribution | Insights into uneven code organization |
-| **Clustering** | Related code grouping | Suggestions for better code organization |
+| Analysis Type | Description | Output |
+|---------------|-------------|---------|
+| **Structure** | Directory/file organization | Reorganization recommendations |
+| **Complexity** | Cyclomatic/cognitive complexity | Complexity hotspots and refactoring targets |
+| **Semantic Naming** | Function/variable name quality | Renaming suggestions with context |
+| **Technical Debt** | Quantitative debt assessment | Prioritized debt reduction roadmap |
+| **Dependencies** | Module relationships | Cycle breaking and decoupling suggestions |
+| **Code Clones** | Duplicate code detection | Consolidation opportunities |
 
-### Configuration Options
+### Quality Gate Configuration
 
-Valknut provides extensive configuration through `valknut-config.yml`:
+Integrate with CI/CD pipelines using configurable quality gates:
 
-- **Structure Analysis Settings**: Configure thresholds for directory and file analysis
-- **Partitioning Parameters**: Control clustering and balance algorithms
-- **Output Formatting**: Customize report generation and formatting
+```yaml
+quality_gates:
+  enabled: true
+  max_complexity: 75        # Maximum complexity score (0-100)
+  min_health: 60           # Minimum health score (0-100) 
+  max_debt: 30             # Maximum technical debt ratio (0-100)
+  max_issues: 50           # Maximum total issues allowed
+  max_critical: 0          # Maximum critical issues (0 = none allowed)
+```
 
 ## Why Valknut?
 
 ### 🔥 Key Benefits
 
-**⚡ Rust Performance**: Built from the ground up in Rust for maximum speed and memory efficiency.
+**🧠 AI-Powered Intelligence**: Leverages semantic analysis and machine learning for deeper code understanding beyond traditional static analysis.
 
-**🏗️ Structure-Focused**: Unlike traditional linters that focus on syntax, Valknut analyzes your codebase's organizational structure.
+**⚡ Rust Performance**: Built for speed with SIMD optimizations, parallel processing, and efficient memory usage.
 
-**📊 Actionable Insights**: Provides specific, ranked recommendations for improving code organization.
+**🏗️ Holistic Analysis**: Goes beyond syntax checking to analyze structure, complexity, naming, and technical debt in a unified view.
 
-**🎯 Maintainability First**: Identifies structural issues that impact long-term code maintainability.
+**🚦 Quality Gate Integration**: Purpose-built for CI/CD with configurable quality gates and automated failure conditions.
 
-**🔧 Configurable Analysis**: Extensive configuration options to tailor analysis to your project's needs.
+**📊 Actionable Intelligence**: Provides prioritized, contextual recommendations with impact analysis and refactoring guidance.
+
+**👥 Team-Friendly Reports**: Interactive HTML reports, team dashboards, and integration with popular code review tools.
+
+**🔧 Enterprise Ready**: Extensive configuration, multiple output formats, and integration with existing development workflows.
 
 ## Configuration
 
-### Structure Analysis Configuration (`valknut-config.yml`)
+### Comprehensive Configuration System
 
+Valknut supports extensive configuration through YAML files. Create and customize your configuration:
+
+```bash
+# Create default configuration
+valknut init-config --output my-config.yml
+
+# Validate configuration
+valknut validate-config --config my-config.yml
+```
+
+### Key Configuration Sections
+
+#### Analysis Pipeline
 ```yaml
-# Valknut Structure Analysis Configuration
-structure:
-  # Enable/disable analysis types
-  enable_branch_packs: true
-  enable_file_split_packs: true
-  
-  # Maximum number of top recommendations to return
-  top_packs: 20
-
-# File system directory analysis settings
-fsdir:
-  # Maximum files per directory before considering it overcrowded
-  max_files_per_dir: 25
-  
-  # Maximum subdirectories per directory before pressure
-  max_subdirs_per_dir: 10
-  
-  # Maximum lines of code per directory before pressure
-  max_dir_loc: 2000
-  
-  # Minimum imbalance gain required for branch recommendation (0.0-1.0)
-  min_branch_recommendation_gain: 0.15
-
-# File system file analysis settings  
-fsfile:
-  # Lines of code threshold for considering files "huge"
-  huge_loc: 800
-  
-  # Byte size threshold for considering files "huge" 
-  huge_bytes: 128000
-  
-  # Minimum lines of code before considering file split
-  min_split_loc: 200
-
-# Graph partitioning and clustering settings
-partitioning:
-  # Balance tolerance for partitioning (0.25 = ±25%)
-  balance_tolerance: 0.25
-  
-  # Maximum number of clusters per partition
-  max_clusters: 4
+analysis:
+  enable_structure_analysis: true
+  enable_complexity_analysis: true  
+  enable_refactoring_analysis: true
+  enable_names_analysis: true       # AI semantic naming
+  confidence_threshold: 0.7
+  max_files: 1000                   # 0 = unlimited
 ```
 
-## Performance
+#### Quality Gates (CI/CD Integration)
+```yaml
+quality_gates:
+  enabled: true
+  max_complexity: 75               # Complexity score limit (0-100)
+  min_health: 60                   # Minimum health score (0-100)
+  max_debt: 30                     # Max technical debt ratio (0-100)
+  max_issues: 50                   # Maximum total issues
+  max_critical: 0                  # Maximum critical issues
+```
 
-- **High-throughput analysis**: Built in Rust for optimal performance
-- **Memory efficient**: Minimal memory footprint during analysis
-- **Scalable**: Handles large codebases efficiently
-- **Fast startup**: Quick analysis without lengthy initialization
+#### Semantic Naming (AI-Powered)
+```yaml
+names:
+  enabled: true
+  embedding_model: "Qwen/Qwen3-Embedding-0.6B-GGUF"
+  min_mismatch: 0.65               # Mismatch threshold (0.0-1.0)
+  min_impact: 3                    # Impact threshold
+  protect_public_api: true         # Protect public APIs
+```
 
-## Python Version (Archived)
+#### Multi-Language Support
+```yaml
+languages:
+  python:
+    enabled: true
+    file_extensions: [".py", ".pyi"]
+    complexity_threshold: 10.0
+  typescript:
+    enabled: true
+    file_extensions: [".ts", ".tsx"]
+    complexity_threshold: 10.0
+  rust:
+    enabled: true
+    file_extensions: [".rs"]
+    complexity_threshold: 15.0
+```
 
-The original Python implementation of Valknut has been archived to `attic/python-valknut/`. This version included comprehensive code analysis features like:
+## CLI Commands
 
-- Multi-language AST parsing
-- Complexity metrics and clone detection  
-- MCP server integration
-- LLM-ready refactor briefs
+Valknut provides a rich CLI interface with multiple commands:
 
-The Python version served as the foundation for the current Rust implementation, which focuses specifically on code structure analysis with improved performance.
+### Analysis Commands
+```bash
+# Comprehensive analysis
+valknut analyze ./src --format html --out reports/
 
-### Migration from Python Version
+# Quality gate mode (fails with exit code 1 if thresholds exceeded)
+valknut analyze --quality-gate --max-complexity 75 ./src
 
-If you were using the Python version:
+# Quick failure on any issues  
+valknut analyze --fail-on-issues ./src
 
-1. **Structure Analysis**: The Rust version focuses on structure analysis rather than comprehensive code metrics
-2. **Performance**: Significantly faster analysis with the Rust implementation
-3. **Configuration**: New YAML-based configuration system (see `valknut-config.yml`)
-4. **CLI**: Updated command-line interface (see [CLI_USAGE.md](CLI_USAGE.md))
+# Specific output formats
+valknut analyze --format json ./src        # JSON output
+valknut analyze --format markdown ./src    # Team report
+valknut analyze --format csv ./src         # Spreadsheet data
+valknut analyze --format sonar ./src       # SonarQube integration
+```
 
-## Development
+### Configuration Management
+```bash
+# Create default config
+valknut init-config --output my-config.yml
 
-### Setup
+# Validate configuration
+valknut validate-config --config my-config.yml
+
+# View default configuration
+valknut print-default-config
+```
+
+### Language Support
+```bash
+# List supported languages
+valknut list-languages
+```
+
+### Legacy Commands (Backward Compatibility)
+```bash
+# Structure analysis only
+valknut structure ./src --format pretty
+
+# Impact analysis (dependency cycles, clones)
+valknut impact ./src --cycles --clones
+```
+
+### IDE Integration
+```bash
+# MCP server for Claude Code (in development)
+valknut mcp-stdio
+
+# Generate MCP manifest
+valknut mcp-manifest --output manifest.json
+```
+
+## Quality Gates & CI/CD Integration
+
+### GitHub Actions Example
+```yaml
+name: Code Quality Gate
+on: [push, pull_request]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Valknut
+        run: |
+          # Install from release or build from source
+          cargo install --git https://github.com/nathanricedev/valknut
+      
+      - name: Run Quality Gate
+        run: |
+          valknut analyze \
+            --quality-gate \
+            --max-complexity 75 \
+            --min-health 60 \
+            --max-debt 30 \
+            --format ci-summary \
+            --out quality-reports/ \
+            ./src
+```
+
+### Jenkins Pipeline
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Code Quality Gate') {
+            steps {
+                sh '''
+                    valknut analyze \
+                      --quality-gate \
+                      --max-issues 50 \
+                      --max-critical 0 \
+                      --format sonar \
+                      --out quality-reports/ \
+                      ./src
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts 'quality-reports/**/*'
+                }
+            }
+        }
+    }
+}
+```
+
+## Performance & Scalability
+
+- **🚀 High Performance**: Rust implementation with SIMD optimizations
+- **📊 Parallel Processing**: Multi-threaded analysis with configurable concurrency
+- **💾 Memory Efficient**: Streaming analysis with minimal memory footprint
+- **⚡ Fast Analysis**: Optimized for large codebases (tested on 100k+ files)
+- **🔄 Incremental Analysis**: Caching system for faster subsequent runs
+- **📈 Scalable**: Linear performance scaling with codebase size
+
+## Development & Contributing
+
+### Development Setup
 
 ```bash
-git clone https://github.com/your-org/valknut
+git clone https://github.com/nathanricedev/valknut
 cd valknut
+
+# Install dependencies and build
 cargo build
-```
 
-### Testing
+# Install Tree-sitter parsers
+./scripts/install_parsers.sh
 
-```bash
 # Run tests
 cargo test
-
-# Run with output
-cargo test -- --nocapture
 
 # Run benchmarks
 cargo bench
 ```
 
-### Adding Features
+### Project Structure
+```
+src/
+├── bin/valknut.rs          # CLI binary entry point
+├── core/                   # Core analysis pipeline
+│   ├── pipeline.rs         # Main analysis orchestrator
+│   ├── config.rs          # Configuration management
+│   └── scoring.rs         # Scoring and metrics
+├── detectors/             # Analysis modules
+│   ├── complexity.rs      # Complexity analysis
+│   ├── structure.rs       # Structure analysis
+│   ├── refactoring.rs     # Refactoring recommendations
+│   └── names/             # Semantic naming analysis
+├── lang/                  # Language-specific parsers
+│   ├── python.rs         # Python AST analysis
+│   ├── typescript.rs     # TypeScript/JavaScript
+│   └── rust_lang.rs      # Rust language support
+└── io/                    # I/O and reporting
+    ├── reports.rs         # Report generation
+    └── cache.rs           # Caching system
+```
 
-1. Create feature branch (`git checkout -b feature/amazing-feature`)
-2. Make changes and add tests
-3. Ensure all tests pass (`cargo test`)
-4. Run benchmarks to verify performance (`cargo bench`)
-5. Commit changes (`git commit -m 'Add amazing feature'`)
-6. Push to branch (`git push origin feature/amazing-feature`)
-7. Open Pull Request
+### Contributing Guidelines
 
-## Contributing
+1. **Feature Development**
+   - Create feature branch from `main`
+   - Add comprehensive tests for new features
+   - Update documentation
+   - Ensure all CI checks pass
 
-Contributions are welcome! Please read our contributing guidelines and submit pull requests to the main repository.
+2. **Code Quality Standards**
+   - Follow Rust best practices and idioms
+   - Add documentation for public APIs
+   - Maintain >90% test coverage
+   - Run `cargo clippy` and `cargo fmt`
+
+3. **Performance Requirements**
+   - Benchmark new features with `cargo bench`
+   - Profile memory usage for large inputs
+   - Optimize critical paths with SIMD when applicable
+   - Maintain linear or sub-linear complexity
+
+### Testing Strategy
+
+```bash
+# Unit tests
+cargo test --lib
+
+# Integration tests
+cargo test --test cli_tests
+
+# Benchmark performance
+cargo bench
+
+# Test with real codebases
+valknut analyze ./test_data/python_project --format json
+```
+
+## Output Formats & Reports
+
+Valknut supports multiple output formats for different use cases:
+
+### JSON/JSONL (Machine-readable)
+```bash
+valknut analyze --format json ./src       # Single JSON file
+valknut analyze --format jsonl ./src      # Line-delimited JSON
+valknut analyze --format ci-summary ./src # CI/CD optimized JSON
+```
+
+### HTML Reports (Interactive)
+```bash
+valknut analyze --format html --out reports/ ./src
+```
+Generates interactive HTML reports with:
+- Visual complexity heatmaps
+- Refactoring priority dashboards
+- Code quality trends
+- Technical debt visualization
+
+### Team Reports (Markdown)
+```bash
+valknut analyze --format markdown ./src
+```
+Perfect for:
+- Code review documentation
+- Architecture decision records
+- Team planning sessions
+- Technical debt discussions
+
+### Integration Formats
+```bash
+valknut analyze --format sonar ./src      # SonarQube integration
+valknut analyze --format csv ./src        # Spreadsheet analysis
+```
+
+## Architecture Decision Records
+
+See [docs/](docs/) for detailed architecture documentation:
+- [Template System](docs/template-system.md) - Report generation architecture
+- [Semantic Naming](docs/SEMANTIC_NAMING.md) - AI-powered naming analysis
+- [Team Reports](docs/team_reports.md) - Collaborative analysis workflows
 
 ## License
 
@@ -218,6 +458,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Rust community for excellent tooling and libraries
-- Original Python implementation that served as the foundation
-- Research in code structure analysis and refactoring patterns
+- **Rust Ecosystem**: Built on excellent crates like Tree-sitter, Tokio, and Rayon
+- **Research Foundation**: Based on latest research in code analysis and refactoring
+- **AI Integration**: Leverages modern embedding models for semantic analysis
+- **Community**: Thanks to contributors and users who help improve Valknut
+- **Tree-sitter**: For robust, language-agnostic parsing capabilities

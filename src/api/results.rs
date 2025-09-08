@@ -479,17 +479,19 @@ impl RefactoringCandidate {
 mod tests {
     use super::*;
     use crate::core::scoring::{ScoringResult, Priority};
-    use crate::core::pipeline::{PipelineResults, PipelineStatistics, MemoryStatistics};
+    // Removed unused imports
     use std::collections::HashMap;
 
     #[test]
     fn test_code_health_calculation() {
-        let summary = ResultSummary {
+        let summary = crate::core::pipeline::ResultSummary {
+            files_analyzed: 10,
+            issues_found: 5,
+            health_score: 0.8,
+            processing_time: 1.5,
             total_entities: 100,
             refactoring_needed: 20,
-            high_priority: 5,
             avg_score: 0.5,
-            success_rate: 1.0,
         };
         
         let health_score = AnalysisResults::calculate_code_health_score(&summary);

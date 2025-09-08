@@ -105,7 +105,6 @@ scribe_analysis.json
 # Configuration examples
 example_*.yml
 example_*.json
-scribe.config.json
 
 # Analysis output
 analysis_results.json

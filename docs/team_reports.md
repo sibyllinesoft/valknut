@@ -1,48 +1,60 @@
 # Team Reports and Integration Guide
 
-Valknut now supports professional report formats designed for team sharing, stakeholder presentations, and integration with popular development tools.
+Valknut provides comprehensive reporting capabilities designed for team collaboration, stakeholder presentations, and integration with development workflows.
 
 ## Overview
 
-The new team reporting system generates structured, visually appealing reports in multiple formats:
+Valknut generates professional reports in multiple formats through its comprehensive analysis pipeline:
 
-- **📄 Markdown Tables** - Structured markdown with visual indicators for team reviews
-- **🌐 Professional HTML** - Interactive reports for presentations and sharing
-- **🔧 SonarQube JSON** - Direct integration with SonarQube for issue tracking
-- **📊 CSV Export** - Data format for spreadsheets and team dashboards
+- **📄 Markdown Reports** - Structured markdown with visual indicators for team reviews and documentation
+- **🌐 Interactive HTML** - Professional responsive reports for presentations and sharing
+- **🔧 SonarQube Integration** - Direct integration with SonarQube for automated quality gates
+- **📊 CSV Export** - Data format for spreadsheets, dashboards, and trend analysis
+- **📋 CI/CD Optimized** - Specialized formats for automated pipeline integration
 
 ## Quick Start
 
 ### Basic Usage
 
 ```bash
-# Generate HTML report for team presentations
-valknut analyze --format html --out team-report my-project/
+# Generate interactive HTML report for team presentations
+valknut analyze --format html --out reports/ ./src
 
-# Create markdown report for code reviews
-valknut analyze --format markdown --out reports/ src/
+# Create markdown report for code reviews and documentation
+valknut analyze --format markdown --out docs/ ./src
 
 # Export SonarQube format for CI/CD integration
-valknut analyze --format sonar --out build/quality/ backend/
+valknut analyze --format sonar --out quality-reports/ ./src
 
-# Generate CSV for spreadsheet analysis
-valknut analyze --format csv --out metrics/ frontend/
+# Generate CSV for spreadsheet analysis and metrics tracking
+valknut analyze --format csv --out metrics/ ./src
+
+# Comprehensive analysis with quality gates
+valknut analyze --quality-gate --format html --out reports/ ./src
 ```
 
 ### Command Line Options
 
 ```bash
-valknut analyze [OPTIONS] PATHS...
+valknut analyze [OPTIONS] <PATHS>...
 
-Options:
-  -c, --config PATH    Configuration file path
-  -o, --out PATH       Output directory (default: out)
-  --format FORMAT      Output format: jsonl|json|markdown|html|sonar|csv
-  --help              Show help message
+Core Options:
+  -c, --config <FILE>     Configuration file path
+  -o, --out <DIR>         Output directory (default: out)  
+  -f, --format <FORMAT>   Output format: jsonl|json|yaml|markdown|html|sonar|csv|ci-summary
+  -q, --quiet             Suppress non-essential output
+
+Quality Gate Options:
+  --quality-gate          Enable quality gate mode (fail on threshold violations)
+  --max-complexity <N>    Maximum complexity score (0-100)
+  --min-health <N>        Minimum health score (0-100)
+  --max-debt <N>          Maximum technical debt ratio (0-100)
+  --max-issues <N>        Maximum total issues count
 
 Examples:
-  valknut analyze --format html --out reports/ src/
-  valknut analyze --format sonar --config quality.yaml api/
+  valknut analyze --format html --out reports/ ./src
+  valknut analyze --quality-gate --max-complexity 75 --format ci-summary ./src
+  valknut analyze --config team-config.yml --format markdown ./src
 ```
 
 ## Report Formats
@@ -56,17 +68,18 @@ Generates structured markdown tables perfect for:
 - **README quality summaries**
 
 **Generated Files:**
-- `team_report.md` - Comprehensive team report with tables and visual indicators
-- `summary.md` - Legacy summary (backward compatibility)
-- `refactoring_guide.md` - Legacy detailed guide (backward compatibility)
+- `analysis-report.md` - Comprehensive analysis report with structured sections
+- `summary.md` - Executive summary for stakeholders
+- Individual language reports for multi-language projects
 
 **Features:**
-- Executive summary with health score
-- Language breakdown with status indicators (✅ ⚠️ ❌)
-- Critical issues table with severity badges
-- Prioritized refactoring recommendations
-- Technical debt metrics with targets
-- Next steps and sprint planning guidance
+- Executive summary with overall health score and key metrics
+- Language breakdown with complexity and health indicators
+- Critical issues table with severity classification and priority
+- Detailed refactoring recommendations with effort estimates
+- Technical debt analysis with actionable insights
+- Quality gate status and threshold compliance
+- Sprint planning guidance and next steps
 
 **Example Output:**
 ```markdown

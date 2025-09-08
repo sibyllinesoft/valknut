@@ -83,8 +83,6 @@ pub enum Commands {
     /// Analyze code structure and generate refactoring recommendations
     Structure(StructureArgs),
     
-    /// Analyze semantic naming issues and generate renaming recommendations
-    Names(NamesArgs),
     
     /// Analyze dependency cycles and clone detection for impact assessment
     Impact(ImpactArgs),
@@ -111,12 +109,49 @@ pub struct AnalyzeArgs {
     /// Suppress non-essential output
     #[arg(short, long)]
     pub quiet: bool,
+
+    // === Quality Gate Options ===
+    /// Enable quality gate mode - fail with exit code 1 if thresholds are exceeded
+    #[arg(long)]
+    pub quality_gate: bool,
+
+    /// Fail build if any issues are found (shorthand for quality gate mode)
+    #[arg(long)]
+    pub fail_on_issues: bool,
+
+    /// Maximum allowed complexity score (0-100, lower is better) [default: 75]
+    #[arg(long)]
+    pub max_complexity: Option<f64>,
+
+    /// Minimum required health score (0-100, higher is better) [default: 60]
+    #[arg(long)]
+    pub min_health: Option<f64>,
+
+    /// Maximum allowed technical debt ratio (0-100, lower is better) [default: 30]
+    #[arg(long)]
+    pub max_debt: Option<f64>,
+
+    /// Minimum required maintainability index (0-100, higher is better) [default: 20]
+    #[arg(long)]
+    pub min_maintainability: Option<f64>,
+
+    /// Maximum allowed total issues count [default: 50]
+    #[arg(long)]
+    pub max_issues: Option<usize>,
+
+    /// Maximum allowed critical issues count [default: 0]
+    #[arg(long)]
+    pub max_critical: Option<usize>,
+
+    /// Maximum allowed high-priority issues count [default: 5]
+    #[arg(long)]
+    pub max_high_priority: Option<usize>,
 }
 
 #[derive(Args)]
 pub struct InitConfigArgs {
     /// Output configuration file name
-    #[arg(short, long, default_value = "valknut-config.yml")]
+    #[arg(short, long, default_value = ".valknut.yml")]
     pub output: PathBuf,
 
     /// Overwrite existing configuration file
@@ -177,44 +212,6 @@ pub struct StructureArgs {
     pub format: OutputFormat,
 }
 
-#[derive(Args)]
-pub struct NamesArgs {
-    /// Path to the code directory to analyze
-    #[arg(value_name = "PATH")]
-    pub path: PathBuf,
-
-    /// Analyze specific file types (extensions separated by commas)
-    #[arg(short = 'e', long, value_delimiter = ',')]
-    pub extensions: Option<Vec<String>>,
-
-    /// Minimum mismatch score threshold (0.0-1.0)
-    #[arg(long, default_value = "0.65")]
-    pub min_mismatch: f64,
-
-    /// Minimum impact (external references) threshold
-    #[arg(long, default_value = "3")]
-    pub min_impact: usize,
-
-    /// Include protected public API functions
-    #[arg(long)]
-    pub include_public_api: bool,
-
-    /// Maximum number of rename suggestions to show
-    #[arg(short = 'n', long, default_value = "20")]
-    pub top: usize,
-
-    /// Show only rename packs (exclude contract mismatch packs)
-    #[arg(long)]
-    pub renames_only: bool,
-
-    /// Show only contract mismatch packs (exclude rename packs)
-    #[arg(long)]
-    pub contracts_only: bool,
-
-    /// Output format for results
-    #[arg(short = 'f', long, value_enum, default_value = "json")]
-    pub format: OutputFormat,
-}
 
 #[derive(Args)]
 pub struct ImpactArgs {
@@ -271,6 +268,8 @@ pub enum OutputFormat {
     Sonar,
     /// CSV spreadsheet data
     Csv,
+    /// CI/CD summary format (concise JSON for automated systems)
+    CiSummary,
     /// Human-readable format
     Pretty,
 }

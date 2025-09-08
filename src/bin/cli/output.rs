@@ -92,6 +92,12 @@ pub async fn generate_outputs(
             tokio::fs::write(&report_file, content).await?;
             println!("📊 CSV report: {}", report_file.display());
         }
+        OutputFormat::CiSummary => {
+            let report_file = out_path.join("ci_summary.json");
+            let content = generate_ci_summary_report(result).await?;
+            tokio::fs::write(&report_file, content).await?;
+            println!("📊 CI Summary: {}", report_file.display());
+        }
         OutputFormat::Pretty => {
             print_comprehensive_results_pretty(result);
         }
@@ -218,6 +224,11 @@ pub fn display_completion_summary(
             println!("   1. Import the CSV data into your project tracking system");
             println!("   2. Prioritize refactoring tasks based on effort estimates");
         }
+        OutputFormat::CiSummary => {
+            println!("   1. Integrate the CI summary JSON with your build pipeline");
+            println!("   2. Set up automated quality gate enforcement");
+            println!("   3. Monitor metrics over time to track code quality trends");
+        }
         _ => {
             println!("   1. Review the generated {} report for detailed findings", format_str);
             println!("   2. Address high-priority issues identified in the analysis");
@@ -314,6 +325,49 @@ pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<S
     Ok(content)
 }
 
+pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::Result<String> {
+    let summary = &result["summary"];
+    let health_metrics = &result["health_metrics"];
+    let complexity = &result["complexity"];
+    
+    let ci_summary = serde_json::json!({
+        "status": if summary["total_issues"].as_u64().unwrap_or(0) == 0 { "success" } else { "issues_found" },
+        "summary": {
+            "total_files": summary["total_files"],
+            "total_issues": summary["total_issues"],
+            "critical_issues": summary["critical_issues"].as_u64().unwrap_or(0),
+            "high_priority_issues": summary["high_priority_issues"].as_u64().unwrap_or(0),
+            "languages": summary["languages"]
+        },
+        "metrics": {
+            "overall_health_score": health_metrics["overall_health_score"].as_f64().unwrap_or(0.0),
+            "complexity_score": health_metrics["complexity_score"].as_f64().unwrap_or(0.0),
+            "maintainability_score": health_metrics["maintainability_score"].as_f64().unwrap_or(0.0),
+            "technical_debt_ratio": health_metrics["technical_debt_ratio"].as_f64().unwrap_or(0.0),
+            "average_cyclomatic_complexity": complexity["average_cyclomatic_complexity"].as_f64().unwrap_or(0.0),
+            "average_cognitive_complexity": complexity["average_cognitive_complexity"].as_f64().unwrap_or(0.0)
+        },
+        "quality_gates": {
+            "health_score_threshold": 60.0,
+            "complexity_threshold": 75.0,
+            "max_issues_threshold": 10,
+            "recommendations": if summary["total_issues"].as_u64().unwrap_or(0) > 0 {
+                vec![
+                    "Address high-priority issues first",
+                    "Focus on reducing complexity in critical files",
+                    "Improve maintainability through refactoring"
+                ]
+            } else {
+                vec!["Code quality is excellent - maintain current standards"]
+            }
+        },
+        "timestamp": result["timestamp"],
+        "analysis_id": result["analysis_id"]
+    });
+    
+    Ok(serde_json::to_string_pretty(&ci_summary)?)
+}
+
 // Human-readable output functions
 pub fn print_human_readable_results(results: &serde_json::Value) {
     println!("{}", "🏗️  Valknut Structure Analysis Results".bright_blue().bold());
@@ -395,6 +449,7 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
         OutputFormat::Html => "html",
         OutputFormat::Sonar => "sonar",
         OutputFormat::Csv => "csv",
+        OutputFormat::CiSummary => "ci-summary",
         OutputFormat::Pretty => "pretty",
     }
 }

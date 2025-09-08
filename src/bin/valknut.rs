@@ -56,9 +56,6 @@ async fn main() -> anyhow::Result<()> {
             let config = cli::load_configuration(None).await?;
             cli::analyze_structure_legacy(args, config).await?;
         }
-        Commands::Names(args) => {
-            cli::analyze_names_legacy(args).await?;
-        }
         Commands::Impact(args) => {
             cli::analyze_impact_legacy(args).await?;
         }

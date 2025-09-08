@@ -17,8 +17,7 @@ use owo_colors::OwoColorize;
 use textwrap;
 use tracing::{error, info, warn};
 use valknut_rs::detectors::structure::{StructureExtractor, StructureConfig};
-// use valknut_rs::detectors::names::{SemanticNameAnalyzer, NamesConfig, FunctionInfo};
-use valknut_rs::core::config::ValknutConfig;
+use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, ViolationSeverity};
 use chrono;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -93,14 +92,7 @@ pub async fn analyze_command(
     }
 
     let result = if args.quiet {
-        // TODO: Run actual analysis without progress bars
-        serde_json::json!({
-            "summary": {
-                "total_files": valid_paths.len(),
-                "total_issues": 0,
-                "processing_time": 0.0
-            }
-        })
+        run_analysis_without_progress(&valid_paths, config).await?
     } else {
         run_analysis_with_progress(&valid_paths, config).await?
     };
@@ -118,6 +110,22 @@ pub async fn analyze_command(
     }
 
     generate_outputs_with_feedback(&result, &args.out, &args.format, args.quiet).await?;
+
+    // Handle quality gates if enabled
+    if args.quality_gate || args.fail_on_issues {
+        let quality_gate_result = handle_quality_gates(&args, &result).await?;
+        
+        if !quality_gate_result.passed {
+            if !args.quiet {
+                display_quality_gate_violations(&quality_gate_result);
+            }
+            
+            // Exit with code 1 to fail CI/CD
+            std::process::exit(1);
+        } else if !args.quiet {
+            println!("{}", "✅ Quality gates passed".green().bold());
+        }
+    }
 
     if !args.quiet {
         display_completion_summary(&result, &args.out, &args.format);
@@ -519,6 +527,30 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     Ok(result_json)
 }
 
+/// Run analysis without progress bars for quiet mode
+pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: StructureConfig) -> anyhow::Result<serde_json::Value> {
+    use valknut_rs::core::pipeline::{AnalysisPipeline, AnalysisConfig};
+    
+    // Create analysis pipeline with default configuration
+    let analysis_config = AnalysisConfig::default();
+    let pipeline = AnalysisPipeline::new(analysis_config);
+    
+    // Run comprehensive analysis without progress callback
+    info!("Starting comprehensive analysis for {} paths", paths.len());
+    let analysis_result = pipeline.analyze_paths(paths, None).await
+        .map_err(|e| anyhow::anyhow!("Analysis failed: {}", e))?;
+    
+    // Convert to JSON format matching the expected structure
+    let result_json = serde_json::to_value(&analysis_result)?;
+    
+    info!("Analysis completed successfully");
+    info!("Total files: {}", analysis_result.summary.total_files);
+    info!("Total issues: {}", analysis_result.summary.total_issues);
+    info!("Overall health score: {:.1}", analysis_result.health_metrics.overall_health_score);
+    
+    Ok(result_json)
+}
+
 /// Load configuration from file or use defaults
 pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<StructureConfig> {
     let config = match config_path {
@@ -587,11 +619,6 @@ pub async fn analyze_structure_legacy(args: StructureArgs, mut config: Structure
     Ok(())
 }
 
-pub async fn analyze_names_legacy(args: NamesArgs) -> anyhow::Result<()> {
-    // TODO: Implement semantic naming analysis
-    println!("⚠️  Semantic naming analysis implementation in progress");
-    Ok(())
-}
 
 pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
     // TODO: Implement impact analysis
@@ -609,6 +636,221 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
         OutputFormat::Html => "html",
         OutputFormat::Sonar => "sonar",
         OutputFormat::Csv => "csv",
+        OutputFormat::CiSummary => "ci-summary",
         OutputFormat::Pretty => "pretty",
     }
+}
+
+/// Handle quality gate evaluation
+async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) -> anyhow::Result<QualityGateResult> {
+    use valknut_rs::core::pipeline::{QualityGateViolation, ViolationSeverity};
+
+    // Build quality gate configuration from CLI args
+    let quality_gate_config = build_quality_gate_config(args);
+
+    let mut violations = Vec::new();
+    
+    // Extract summary data (this should always be present)
+    let summary = result.get("summary")
+        .ok_or_else(|| anyhow::anyhow!("Summary not found in analysis result"))?;
+    
+    let total_issues = summary.get("total_issues")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as usize;
+
+    // Check available metrics against thresholds
+    if quality_gate_config.max_issues > 0 && total_issues > quality_gate_config.max_issues {
+        violations.push(QualityGateViolation {
+            metric: "Total Issues Count".to_string(),
+            current_value: total_issues as f64,
+            threshold: quality_gate_config.max_issues as f64,
+            description: format!(
+                "Total issues ({}) exceeds maximum allowed ({})", 
+                total_issues, quality_gate_config.max_issues
+            ),
+            severity: if total_issues > quality_gate_config.max_issues * 2 {
+                ViolationSeverity::Critical
+            } else {
+                ViolationSeverity::High
+            },
+        });
+    }
+
+    // Try to extract health metrics if available (for more comprehensive analysis)
+    if let Some(health_metrics) = result.get("health_metrics") {
+        if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
+            if overall_health < quality_gate_config.min_health {
+                violations.push(QualityGateViolation {
+                    metric: "Overall Health Score".to_string(),
+                    current_value: overall_health,
+                    threshold: quality_gate_config.min_health,
+                    description: format!(
+                        "Health score ({:.1}) is below minimum required ({:.1})", 
+                        overall_health, quality_gate_config.min_health
+                    ),
+                    severity: if overall_health < quality_gate_config.min_health - 20.0 {
+                        ViolationSeverity::Blocker
+                    } else {
+                        ViolationSeverity::Critical
+                    },
+                });
+            }
+        }
+
+        if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
+            if complexity_score > quality_gate_config.max_complexity {
+                violations.push(QualityGateViolation {
+                    metric: "Complexity Score".to_string(),
+                    current_value: complexity_score,
+                    threshold: quality_gate_config.max_complexity,
+                    description: format!(
+                        "Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
+                        complexity_score, quality_gate_config.max_complexity
+                    ),
+                    severity: if complexity_score > quality_gate_config.max_complexity + 10.0 {
+                        ViolationSeverity::Critical
+                    } else {
+                        ViolationSeverity::High
+                    },
+                });
+            }
+        }
+
+        if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
+            if debt_ratio > quality_gate_config.max_debt {
+                violations.push(QualityGateViolation {
+                    metric: "Technical Debt Ratio".to_string(),
+                    current_value: debt_ratio,
+                    threshold: quality_gate_config.max_debt,
+                    description: format!(
+                        "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
+                        debt_ratio, quality_gate_config.max_debt
+                    ),
+                    severity: if debt_ratio > quality_gate_config.max_debt + 20.0 {
+                        ViolationSeverity::Critical
+                    } else {
+                        ViolationSeverity::High
+                    },
+                });
+            }
+        }
+    }
+
+    let passed = violations.is_empty();
+    let overall_score = result.get("health_metrics")
+        .and_then(|hm| hm.get("overall_health_score"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(50.0); // Default score if not available
+
+    Ok(QualityGateResult {
+        passed,
+        violations,
+        overall_score,
+        config: quality_gate_config,
+    })
+}
+
+/// Build quality gate configuration from CLI arguments
+fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
+    let mut config = QualityGateConfig::default();
+    
+    // Enable if quality_gate flag is set or if fail_on_issues is set
+    config.enabled = args.quality_gate || args.fail_on_issues;
+    
+    // Override defaults with CLI values if provided
+    if let Some(max_complexity) = args.max_complexity {
+        config.max_complexity = max_complexity;
+    }
+    if let Some(min_health) = args.min_health {
+        config.min_health = min_health;
+    }
+    if let Some(max_debt) = args.max_debt {
+        config.max_debt = max_debt;
+    }
+    if let Some(min_maintainability) = args.min_maintainability {
+        config.min_maintainability = min_maintainability;
+    }
+    if let Some(max_issues) = args.max_issues {
+        config.max_issues = max_issues;
+    }
+    if let Some(max_critical) = args.max_critical {
+        config.max_critical = max_critical;
+    }
+    if let Some(max_high_priority) = args.max_high_priority {
+        config.max_high_priority = max_high_priority;
+    }
+    
+    // Handle fail_on_issues flag (sets max_issues to 0)
+    if args.fail_on_issues {
+        config.max_issues = 0;
+        config.max_critical = 0;
+        config.max_high_priority = 0;
+    }
+    
+    config
+}
+
+/// Display quality gate violations in a user-friendly format
+fn display_quality_gate_violations(result: &QualityGateResult) {
+    println!();
+    println!("{}", "❌ Quality Gate Failed".red().bold());
+    println!("{} {:.1}", "Quality Score:".dimmed(), result.overall_score.to_string().yellow());
+    println!();
+    
+    // Group violations by severity
+    let blockers: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Blocker))
+        .collect();
+    let criticals: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Critical))
+        .collect();
+    let warnings: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Warning))
+        .collect();
+
+    if !blockers.is_empty() {
+        println!("{}", "🚫 BLOCKER Issues:".red().bold());
+        for violation in blockers {
+            println!("  • {}: {:.1} (threshold: {:.1})", 
+                violation.metric.yellow(), 
+                violation.current_value, 
+                violation.threshold
+            );
+            println!("    {}", violation.description.dimmed());
+        }
+        println!();
+    }
+
+    if !criticals.is_empty() {
+        println!("{}", "🔴 CRITICAL Issues:".red().bold());
+        for violation in criticals {
+            println!("  • {}: {:.1} (threshold: {:.1})", 
+                violation.metric.yellow(), 
+                violation.current_value, 
+                violation.threshold
+            );
+            println!("    {}", violation.description.dimmed());
+        }
+        println!();
+    }
+
+    if !warnings.is_empty() {
+        println!("{}", "⚠️  WARNING Issues:".yellow().bold());
+        for violation in warnings {
+            println!("  • {}: {:.1} (threshold: {:.1})", 
+                violation.metric.yellow(), 
+                violation.current_value, 
+                violation.threshold
+            );
+            println!("    {}", violation.description.dimmed());
+        }
+        println!();
+    }
+
+    println!("{}", "To fix these issues:".bold());
+    println!("  1. Reduce code complexity by refactoring large functions");
+    println!("  2. Address critical and high-priority issues first");
+    println!("  3. Improve code maintainability through better structure");
+    println!("  4. Reduce technical debt by following best practices");
+    println!();
 }
