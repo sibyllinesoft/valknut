@@ -140,3 +140,15 @@ __pycache__/
 *~
 .vscode/
 .idea/
+
+# Rust
+/target/
+*.rs.bk
+*.pdb
+
+# Homebrew development files
+homebrew-test-formula.rb
+/Formula/valknut.rb
+
+# Setup documentation (keep in repo for reference)
+# HOMEBREW*.md files are intentionally tracked
