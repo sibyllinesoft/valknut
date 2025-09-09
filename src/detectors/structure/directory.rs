@@ -8,6 +8,7 @@ use rayon::prelude::*;
 use dashmap::DashMap;
 
 use crate::core::errors::{Result, ValknutError};
+use crate::core::file_utils::FileReader;
 
 use super::config::{
     StructureConfig, DirectoryMetrics, BranchReorgPack, DirectoryPartition, 
@@ -115,7 +116,7 @@ impl DirectoryAnalyzer {
 
     /// Count lines of code in a file
     fn count_lines_of_code(&self, file_path: &Path) -> Result<usize> {
-        let content = std::fs::read_to_string(file_path)?;
+        let content = FileReader::read_to_string(file_path)?;
         Ok(content.lines().filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//")).count())
     }
 
@@ -890,7 +891,7 @@ impl DirectoryAnalyzer {
 
     /// Extract imports from source file
     fn extract_imports(&self, file_path: &Path) -> Result<Vec<ImportStatement>> {
-        let content = std::fs::read_to_string(file_path)?;
+        let content = FileReader::read_to_string(file_path)?;
         let extension = file_path.extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");

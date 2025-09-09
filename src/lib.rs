@@ -78,6 +78,7 @@ pub mod core {
     pub mod bayesian;
     pub mod featureset;
     pub mod errors;
+    pub mod file_utils;
 }
 
 // Specialized detection algorithms

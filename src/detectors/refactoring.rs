@@ -8,6 +8,7 @@ use tracing::{debug, info, warn};
 
 use crate::core::featureset::{FeatureExtractor, FeatureDefinition, CodeEntity, ExtractionContext};
 use crate::core::errors::{Result, ValknutError};
+use crate::core::file_utils::FileReader;
 
 /// Configuration for refactoring analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,8 +112,7 @@ impl RefactoringAnalyzer {
     async fn analyze_file(&self, file_path: &Path) -> Result<RefactoringAnalysisResult> {
         debug!("Analyzing refactoring opportunities for: {}", file_path.display());
 
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| ValknutError::io(format!("Failed to read file {}: {}", file_path.display(), e), e))?;
+        let content = FileReader::read_to_string(file_path)?;
 
         let mut recommendations = Vec::new();
 

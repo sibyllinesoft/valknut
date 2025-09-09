@@ -13,6 +13,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 use crate::core::errors::{Result, ValknutError};
+use crate::core::file_utils::FileReader;
 
 /// Configuration for complexity analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -279,8 +280,7 @@ impl ComplexityAnalyzer {
         info!("Analyzing complexity for file: {}", file_path.display());
 
         // Read and parse the file
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| ValknutError::io(format!("Failed to read file {}: {}", file_path.display(), e), e))?;
+        let content = FileReader::read_to_string(file_path)?;
 
         // Detect language from file extension
         let language = self.detect_language(file_path)?;

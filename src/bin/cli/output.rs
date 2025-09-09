@@ -255,7 +255,112 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
         content.push_str("✅ **Excellent!** No significant issues found in your codebase.\n");
     } else {
         content.push_str("## Issues Requiring Attention\n\n");
-        // TODO: Add detailed issue breakdown
+        
+        // Add health metrics
+        if let Some(health_metrics) = result.get("health_metrics") {
+            content.push_str("### Health Metrics\n\n");
+            if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
+                let health_emoji = if overall_health >= 80.0 { "🟢" } else if overall_health >= 60.0 { "🟡" } else { "🔴" };
+                content.push_str(&format!("- **Overall Health Score**: {} {:.1}/100\n", health_emoji, overall_health));
+            }
+            if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Complexity Score**: {:.1}/100 (lower is better)\n", complexity_score));
+            }
+            if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Technical Debt Ratio**: {:.1}% (lower is better)\n", debt_ratio));
+            }
+            if let Some(maintainability) = health_metrics.get("maintainability_score").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Maintainability Score**: {:.1}/100\n", maintainability));
+            }
+            content.push_str("\n");
+        }
+
+        // Add complexity analysis results
+        if let Some(complexity) = result.get("complexity") {
+            if let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) {
+                let high_priority_files: Vec<_> = detailed_results.iter()
+                    .filter(|file_result| {
+                        file_result.get("issues")
+                            .and_then(|issues| issues.as_array())
+                            .map(|issues| !issues.is_empty())
+                            .unwrap_or(false)
+                    })
+                    .collect();
+
+                if !high_priority_files.is_empty() {
+                    content.push_str("### High Priority Files\n\n");
+                    content.push_str("Files with complexity issues that should be addressed first:\n\n");
+                    
+                    for (i, file_result) in high_priority_files.iter().take(10).enumerate() {
+                        if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                            content.push_str(&format!("#### {}. `{}`\n\n", i + 1, file_path));
+                            
+                            if let Some(issues) = file_result.get("issues").and_then(|v| v.as_array()) {
+                                for issue in issues.iter().take(5) { // Limit to top 5 issues per file
+                                    if let (Some(description), Some(severity)) = (
+                                        issue.get("description").and_then(|v| v.as_str()),
+                                        issue.get("severity").and_then(|v| v.as_str())
+                                    ) {
+                                        let severity_emoji = match severity {
+                                            "Critical" => "🔴",
+                                            "VeryHigh" => "🟠",
+                                            "High" => "🟡", 
+                                            _ => "⚠️"
+                                        };
+                                        content.push_str(&format!("- {} **{}**: {}\n", severity_emoji, severity, description));
+                                    }
+                                }
+                            }
+                            
+                            if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+                                if !recommendations.is_empty() {
+                                    content.push_str("\n**Recommended Actions:**\n");
+                                    for (j, rec) in recommendations.iter().take(3).enumerate() {
+                                        if let Some(desc) = rec.get("description").and_then(|v| v.as_str()) {
+                                            let effort = rec.get("effort").and_then(|v| v.as_u64()).unwrap_or(1);
+                                            content.push_str(&format!("{}. {} (Effort: {})\n", j + 1, desc, effort));
+                                        }
+                                    }
+                                }
+                            }
+                            content.push_str("\n");
+                        }
+                    }
+                }
+            }
+            
+            // Add summary statistics
+            content.push_str("### Summary Statistics\n\n");
+            if let Some(avg_cyclomatic) = complexity.get("average_cyclomatic_complexity").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Average Cyclomatic Complexity**: {:.1}\n", avg_cyclomatic));
+            }
+            if let Some(avg_cognitive) = complexity.get("average_cognitive_complexity").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Average Cognitive Complexity**: {:.1}\n", avg_cognitive));
+            }
+            if let Some(avg_debt) = complexity.get("average_technical_debt_score").and_then(|v| v.as_f64()) {
+                content.push_str(&format!("- **Average Technical Debt Score**: {:.1}\n", avg_debt));
+            }
+            content.push_str("\n");
+        }
+
+        // Add refactoring opportunities
+        if let Some(refactoring) = result.get("refactoring") {
+            if let Some(opportunities_count) = refactoring.get("opportunities_count").and_then(|v| v.as_u64()) {
+                if opportunities_count > 0 {
+                    content.push_str(&format!("### Refactoring Opportunities\n\n"));
+                    content.push_str(&format!("Found **{}** refactoring opportunities across the codebase.\n\n", opportunities_count));
+                }
+            }
+        }
+
+        content.push_str("## Recommendations\n\n");
+        content.push_str("1. **Start with Critical Issues**: Focus on files with critical and high-severity issues first\n");
+        content.push_str("2. **Reduce Complexity**: Break down large functions and simplify complex conditionals\n");
+        content.push_str("3. **Improve Maintainability**: Address technical debt systematically\n");
+        content.push_str("4. **Regular Monitoring**: Run analysis regularly to track improvements\n\n");
+        
+        content.push_str("---\n\n");
+        content.push_str("*Report generated by [Valknut](https://github.com/nathanricedev/valknut) - AI-Powered Code Analysis*\n");
     }
     
     Ok(content)
@@ -436,6 +541,200 @@ pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
     } else {
         println!("{}", "📈 Recommendation: Address high-priority issues first for maximum impact.".bright_blue());
         println!("   Use detailed analyzers (structure, names, impact) for specific recommendations.");
+    }
+
+    // Display refactoring suggestions prominently
+    display_refactoring_suggestions(results);
+
+    // Display complexity recommendations
+    display_complexity_recommendations(results);
+}
+
+/// Display refactoring suggestions prominently 
+pub fn display_refactoring_suggestions(results: &serde_json::Value) {
+    // Check if refactoring analysis was enabled and has results
+    if let Some(refactoring) = results.get("refactoring") {
+        if let Some(enabled) = refactoring.get("enabled").and_then(|v| v.as_bool()) {
+            if !enabled {
+                return; // Skip if refactoring analysis was disabled
+            }
+        }
+
+        if let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) {
+            if detailed_results.is_empty() {
+                return; // No refactoring opportunities found
+            }
+
+            println!();
+            println!("{}", "🔧 Refactoring Opportunities".bright_magenta().bold());
+            println!("{}", "=============================".dimmed());
+            println!();
+
+            let opportunities_count = refactoring.get("opportunities_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            if opportunities_count > 0 {
+                println!("{} {}", "🎯 Total opportunities found:".bold(), opportunities_count.to_string().bright_yellow());
+                println!();
+            }
+
+            // Group recommendations by file and display top opportunities
+            let mut file_count = 0;
+            for file_result in detailed_results.iter().take(10) { // Show top 10 files
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+                        if recommendations.is_empty() {
+                            continue;
+                        }
+
+                        file_count += 1;
+                        println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
+                        
+                        // Sort recommendations by priority score (highest first)
+                        let mut sorted_recommendations: Vec<_> = recommendations.iter().collect();
+                        sorted_recommendations.sort_by(|a, b| {
+                            let priority_a = a.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let priority_b = b.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            priority_b.partial_cmp(&priority_a).unwrap()
+                        });
+
+                        for (i, recommendation) in sorted_recommendations.iter().take(3).enumerate() { // Top 3 per file
+                            if let (Some(description), Some(refactoring_type), Some(impact), Some(effort)) = (
+                                recommendation.get("description").and_then(|v| v.as_str()),
+                                recommendation.get("refactoring_type").and_then(|v| v.as_str()),
+                                recommendation.get("estimated_impact").and_then(|v| v.as_f64()),
+                                recommendation.get("estimated_effort").and_then(|v| v.as_f64())
+                            ) {
+                                let priority_score = recommendation.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                
+                                // Format refactoring type with emoji
+                                let type_emoji = match refactoring_type {
+                                    "ExtractMethod" => "⚡",
+                                    "ExtractClass" => "📦",
+                                    "ReduceComplexity" => "🎯",
+                                    "EliminateDuplication" => "🔄",
+                                    "ImproveNaming" => "📝",
+                                    "SimplifyConditionals" => "🔀",
+                                    "RemoveDeadCode" => "🧹",
+                                    _ => "🔧"
+                                };
+
+                                // Get location if available
+                                let location_str = if let Some(location) = recommendation.get("location").and_then(|v| v.as_array()) {
+                                    if location.len() >= 2 {
+                                        if let (Some(start), Some(end)) = (location[0].as_u64(), location[1].as_u64()) {
+                                            if start == end {
+                                                format!(" (line {})", start)
+                                            } else {
+                                                format!(" (lines {}-{})", start, end)
+                                            }
+                                        } else {
+                                            String::new()
+                                        }
+                                    } else {
+                                        String::new()
+                                    }
+                                } else {
+                                    String::new()
+                                };
+
+                                println!("   {}. {} {} {}", 
+                                    i + 1, 
+                                    type_emoji, 
+                                    format!("{}: {}", refactoring_type.replace("Extract", "Extract ").replace("Reduce", "Reduce ").replace("Eliminate", "Eliminate ").replace("Improve", "Improve ").replace("Simplify", "Simplify ").replace("Remove", "Remove "), description).yellow(),
+                                    location_str.dimmed()
+                                );
+                                
+                                println!("      {} Impact: {:.1}/10 | Effort: {:.1}/10 | Priority: {:.2}", 
+                                    "📊".dimmed(),
+                                    impact,
+                                    effort,
+                                    priority_score
+                                );
+                            }
+                        }
+                        println!();
+                    }
+                }
+            }
+
+            if file_count == 0 {
+                println!("{}", "✅ No refactoring opportunities found - code quality looks good!".bright_green());
+            } else if detailed_results.len() > 10 {
+                println!("{}", format!("📋 Showing top 10 files with opportunities ({} more files have suggestions)", detailed_results.len() - 10).dimmed());
+            }
+        }
+    }
+}
+
+/// Display complexity-based recommendations
+pub fn display_complexity_recommendations(results: &serde_json::Value) {
+    if let Some(complexity) = results.get("complexity") {
+        if let Some(enabled) = complexity.get("enabled").and_then(|v| v.as_bool()) {
+            if !enabled {
+                return; // Skip if complexity analysis was disabled
+            }
+        }
+
+        if let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) {
+            // Collect files with recommendations
+            let files_with_recommendations: Vec<_> = detailed_results.iter()
+                .filter(|file_result| {
+                    file_result.get("recommendations")
+                        .and_then(|rec| rec.as_array())
+                        .map(|arr| !arr.is_empty())
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            if files_with_recommendations.is_empty() {
+                return; // No complexity recommendations found
+            }
+
+            println!();
+            println!("{}", "🏗️  Complexity Recommendations".bright_red().bold());
+            println!("{}", "===============================".dimmed());
+            println!();
+
+            let mut file_count = 0;
+            for file_result in files_with_recommendations.iter().take(8) { // Show top 8 files
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+                        if recommendations.is_empty() {
+                            continue;
+                        }
+
+                        file_count += 1;
+                        println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
+
+                        for (i, recommendation) in recommendations.iter().take(2).enumerate() { // Top 2 per file
+                            if let Some(description) = recommendation.get("description").and_then(|v| v.as_str()) {
+                                let effort = recommendation.get("effort").and_then(|v| v.as_u64()).unwrap_or(1);
+                                let effort_emoji = match effort {
+                                    1..=3 => "🟢 Low",
+                                    4..=6 => "🟡 Medium", 
+                                    7..=10 => "🔴 High",
+                                    _ => "⚪ Unknown"
+                                };
+
+                                println!("   {}. {} {}", 
+                                    i + 1, 
+                                    "🎯".yellow(),
+                                    description.white()
+                                );
+                                println!("      {} Effort: {}", 
+                                    "📊".dimmed(),
+                                    effort_emoji
+                                );
+                            }
+                        }
+                        println!();
+                    }
+                }
+            }
+
+            if files_with_recommendations.len() > 8 {
+                println!("{}", format!("📋 Showing top 8 files with recommendations ({} more files have suggestions)", files_with_recommendations.len() - 8).dimmed());
+            }
+        }
     }
 }
 

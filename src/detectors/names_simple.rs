@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::core::errors::{Result, ValknutError};
+use crate::core::file_utils::FileReader;
 
 /// Configuration for semantic naming analysis (simplified)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,8 +203,7 @@ impl SimpleNameAnalyzer {
     async fn analyze_file(&self, file_path: &Path) -> Result<Vec<NamingAnalysisResult>> {
         debug!("Analyzing naming for file: {}", file_path.display());
 
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| ValknutError::io(format!("Failed to read file {}: {}", file_path.display(), e), e))?;
+        let content = FileReader::read_to_string(file_path)?;
 
         // Extract functions from the file (simplified regex-based approach)
         let functions = self.extract_functions_simple(&content, file_path)?;

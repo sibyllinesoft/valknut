@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use petgraph::graph::NodeIndex;
 
 use crate::core::errors::Result;
+use crate::core::file_utils::FileReader;
 
 use super::config::{
     StructureConfig, FileSplitPack, SuggestedSplit, SplitValue, SplitEffort,
@@ -27,8 +28,7 @@ impl FileAnalyzer {
 
     /// Count lines of code in a file
     pub fn count_lines_of_code(&self, file_path: &Path) -> Result<usize> {
-        let content = std::fs::read_to_string(file_path)?;
-        Ok(content.lines().filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//")).count())
+        FileReader::count_lines_of_code(file_path)
     }
 
     /// Analyze file for split potential
@@ -86,7 +86,7 @@ impl FileAnalyzer {
     /// Build entity cohesion graph for file
     pub fn build_entity_cohesion_graph(&self, file_path: &Path) -> Result<CohesionGraph> {
         let mut graph = petgraph::Graph::new_undirected();
-        let content = std::fs::read_to_string(file_path)?;
+        let content = FileReader::read_to_string(file_path)?;
         
         // Extract entities based on file type
         let entities = if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
@@ -711,7 +711,7 @@ impl FileAnalyzer {
 
     /// Extract imports from source file
     pub fn extract_imports(&self, file_path: &Path) -> Result<Vec<ImportStatement>> {
-        let content = std::fs::read_to_string(file_path)?;
+        let content = FileReader::read_to_string(file_path)?;
         let extension = file_path.extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");

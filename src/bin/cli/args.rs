@@ -19,11 +19,14 @@ Generate professional reports for teams and integrate with development workflows
 
 Common Usage:
 
-  # Quick analysis of current directory
-  valknut analyze .
+  # Quick analysis of current directory (default)
+  valknut analyze
   
   # Generate team-friendly HTML report
-  valknut analyze --format html --out reports/ ./src
+  valknut analyze --format html ./src
+  
+  # Analyze with custom output directory
+  valknut analyze --out .valknut/reports
   
   # Start MCP server for IDE integration
   valknut mcp-stdio
@@ -90,8 +93,8 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct AnalyzeArgs {
-    /// One or more directories or files to analyze
-    #[arg(required = true)]
+    /// One or more directories or files to analyze (defaults to current directory)
+    #[arg(default_value = ".")]
     pub paths: Vec<PathBuf>,
 
     /// Configuration file path
@@ -99,7 +102,7 @@ pub struct AnalyzeArgs {
     pub config: Option<PathBuf>,
 
     /// Output directory for reports and analysis results
-    #[arg(short, long, default_value = "out")]
+    #[arg(short, long, default_value = ".valknut")]
     pub out: PathBuf,
 
     /// Output format: jsonl (line-delimited JSON), json (single file), markdown (team report), html (interactive report), sonar (SonarQube integration), csv (spreadsheet data)
