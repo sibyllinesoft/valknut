@@ -14,10 +14,17 @@ Valknut is a comprehensive code analysis tool that combines structural analysis,
 
 ### Installation
 
-Build from source (requires Rust 1.70+):
+#### Via Homebrew (macOS)
 
 ```bash
-git clone https://github.com/nathanricedev/valknut
+brew tap sibyllinesoft/valknut
+brew install valknut
+```
+
+#### Build from Source (requires Rust 1.70+)
+
+```bash
+git clone https://github.com/sibyllinesoft/valknut
 cd valknut
 cargo build --release
 ```
@@ -278,8 +285,9 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Valknut
         run: |
-          # Install from release or build from source
-          cargo install --git https://github.com/nathanricedev/valknut
+          # Install via Homebrew
+          brew tap sibyllinesoft/valknut
+          brew install valknut
       
       - name: Run Quality Gate
         run: |
@@ -334,7 +342,7 @@ pipeline {
 ### Development Setup
 
 ```bash
-git clone https://github.com/nathanricedev/valknut
+git clone https://github.com/sibyllinesoft/valknut
 cd valknut
 
 # Install dependencies and build
