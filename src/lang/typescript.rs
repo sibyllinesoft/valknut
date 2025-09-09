@@ -7,6 +7,137 @@ use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_typescript_adapter_creation() {
+        let adapter = TypeScriptAdapter::new();
+        assert!(adapter.is_ok(), "Should create TypeScript adapter successfully");
+    }
+    
+    #[test]
+    fn test_parse_simple_function() {
+        let mut adapter = TypeScriptAdapter::new().unwrap();
+        let source = r#"
+function greet(name: string): string {
+    return `Hello, ${name}!`;
+}
+"#;
+        let result = adapter.parse_source(source, "test.ts");
+        assert!(result.is_ok(), "Should parse simple function");
+        
+        let index = result.unwrap();
+        assert!(index.get_entities_in_file("test.ts").len() >= 1, "Should find at least one entity");
+    }
+    
+    #[test]
+    fn test_parse_interface_and_class() {
+        let mut adapter = TypeScriptAdapter::new().unwrap();
+        let source = r#"
+interface User {
+    name: string;
+    age: number;
+}
+
+class UserService {
+    private users: User[] = [];
+    
+    addUser(user: User): void {
+        this.users.push(user);
+    }
+    
+    getUser(name: string): User | undefined {
+        return this.users.find(u => u.name === name);
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "test.ts");
+        assert!(result.is_ok(), "Should parse interface and class");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("test.ts");
+        assert!(entities.len() >= 2, "Should find at least interface and class entities");
+        
+        let has_interface = entities.iter().any(|e| matches!(e.kind, EntityKind::Interface));
+        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
+        assert!(has_interface || has_class, "Should find interface or class entity");
+    }
+    
+    #[test]
+    fn test_parse_generic_types() {
+        let mut adapter = TypeScriptAdapter::new().unwrap();
+        let source = r#"
+interface Repository<T> {
+    findById(id: number): Promise<T | null>;
+    save(entity: T): Promise<T>;
+}
+
+class InMemoryRepository<T extends { id: number }> implements Repository<T> {
+    private items: T[] = [];
+    
+    async findById(id: number): Promise<T | null> {
+        return this.items.find(item => item.id === id) || null;
+    }
+    
+    async save(entity: T): Promise<T> {
+        this.items.push(entity);
+        return entity;
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "generics.ts");
+        assert!(result.is_ok(), "Should parse generic TypeScript code");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("generics.ts");
+        assert!(entities.len() >= 2, "Should find multiple entities");
+    }
+    
+    #[test]
+    fn test_parse_modules_and_exports() {
+        let mut adapter = TypeScriptAdapter::new().unwrap();
+        let source = r#"
+export interface Config {
+    apiUrl: string;
+    timeout: number;
+}
+
+export class HttpClient {
+    constructor(private config: Config) {}
+    
+    async get<T>(url: string): Promise<T> {
+        // Implementation would go here
+        throw new Error("Not implemented");
+    }
+}
+
+export default function createClient(config: Config): HttpClient {
+    return new HttpClient(config);
+}
+"#;
+        let result = adapter.parse_source(source, "http.ts");
+        assert!(result.is_ok(), "Should parse modules and exports");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("http.ts");
+        assert!(entities.len() >= 2, "Should find multiple exported entities");
+    }
+    
+    #[test]
+    fn test_empty_typescript_file() {
+        let mut adapter = TypeScriptAdapter::new().unwrap();
+        let source = "// TypeScript file with just comments\n/* Block comment */";
+        let result = adapter.parse_source(source, "empty.ts");
+        assert!(result.is_ok(), "Should handle empty TypeScript file");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("empty.ts");
+        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+    }
+}
+
 extern "C" {
     fn tree_sitter_typescript() -> Language;
 }

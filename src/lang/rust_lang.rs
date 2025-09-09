@@ -7,6 +7,138 @@ use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_rust_adapter_creation() {
+        let adapter = RustAdapter::new();
+        assert!(adapter.is_ok(), "Should create Rust adapter successfully");
+    }
+    
+    #[test]
+    fn test_parse_simple_function() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source = r#"
+fn greet(name: &str) -> String {
+    format!("Hello, {}!", name)
+}
+"#;
+        let result = adapter.parse_source(source, "test.rs");
+        assert!(result.is_ok(), "Should parse simple function");
+        
+        let index = result.unwrap();
+        assert!(index.get_entities_in_file("test.rs").len() >= 1, "Should find at least one entity");
+    }
+    
+    #[test]
+    fn test_parse_struct_and_impl() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source = r#"
+struct User {
+    name: String,
+    age: u32,
+}
+
+impl User {
+    fn new(name: String, age: u32) -> Self {
+        Self { name, age }
+    }
+    
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "test.rs");
+        assert!(result.is_ok(), "Should parse struct and impl");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("test.rs");
+        assert!(entities.len() >= 2, "Should find at least struct and impl entities");
+        
+        let has_struct = entities.iter().any(|e| matches!(e.kind, EntityKind::Struct));
+        assert!(has_struct, "Should find a struct entity");
+    }
+    
+    #[test]
+    fn test_parse_traits_and_enums() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source = r#"
+trait Display {
+    fn display(&self) -> String;
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Display for Color {
+    fn display(&self) -> String {
+        match self {
+            Color::Red => "Red".to_string(),
+            Color::Green => "Green".to_string(),
+            Color::Blue => "Blue".to_string(),
+        }
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "traits.rs");
+        assert!(result.is_ok(), "Should parse traits and enums");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("traits.rs");
+        assert!(entities.len() >= 2, "Should find multiple entities");
+        
+        let has_enum = entities.iter().any(|e| matches!(e.kind, EntityKind::Enum));
+        assert!(has_enum, "Should find an enum entity");
+    }
+    
+    #[test]
+    fn test_parse_modules() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source = r#"
+mod network {
+    use std::net::TcpStream;
+    
+    pub fn connect(addr: &str) -> Result<TcpStream, std::io::Error> {
+        TcpStream::connect(addr)
+    }
+}
+
+pub mod utils {
+    pub fn format_string(s: &str) -> String {
+        s.to_uppercase()
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "modules.rs");
+        assert!(result.is_ok(), "Should parse modules");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("modules.rs");
+        assert!(entities.len() >= 2, "Should find multiple entities including modules");
+        
+        let has_module = entities.iter().any(|e| matches!(e.kind, EntityKind::Module));
+        assert!(has_module, "Should find module entities");
+    }
+    
+    #[test]
+    fn test_empty_rust_file() {
+        let mut adapter = RustAdapter::new().unwrap();
+        let source = "// Rust file with just comments\n/* Block comment */";
+        let result = adapter.parse_source(source, "empty.rs");
+        assert!(result.is_ok(), "Should handle empty Rust file");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("empty.rs");
+        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+    }
+}
+
 extern "C" {
     fn tree_sitter_rust() -> Language;
 }

@@ -7,12 +7,12 @@
 //! - Generates rename recommendations and contract mismatch analysis
 //! - Maintains project consistency through lexicon building
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 
 /// Configuration for semantic naming analysis (simplified)
@@ -207,17 +207,21 @@ impl SimpleNameAnalyzer {
 
         // Extract functions from the file (simplified regex-based approach)
         let functions = self.extract_functions_simple(&content, file_path)?;
+        println!("Extracted functions: {:?}", functions);
         let mut results = Vec::new();
 
         for func in functions {
             // Extract behavior signature
             let behavior = self.extract_behavior_signature(&func, &content);
+            println!("Behavior for {}: {:?}", func.name, behavior);
             
             // Check for semantic mismatch
             let mismatch = self.check_semantic_mismatch(&func.name, &behavior);
+            println!("Mismatch for {}: score={}, threshold={}", func.name, mismatch.mismatch_score, self.config.min_mismatch);
             
             // Skip if mismatch score is below threshold
             if mismatch.mismatch_score < self.config.min_mismatch {
+                println!("Skipping {} due to low mismatch score", func.name);
                 continue;
             }
 
@@ -226,9 +230,11 @@ impl SimpleNameAnalyzer {
             
             // Calculate impact score (simplified)
             let impact_score = self.calculate_impact_score(&func, &content);
+            println!("Impact score for {}: {}, threshold: {}", func.name, impact_score, self.config.min_impact);
             
             // Skip if impact is below threshold
             if impact_score < self.config.min_impact as f64 {
+                println!("Skipping {} due to low impact score", func.name);
                 continue;
             }
 
@@ -328,7 +334,12 @@ impl SimpleNameAnalyzer {
             has_network_ops: name_lower.contains("fetch") || name_lower.contains("request") || 
                             name_lower.contains("http") || content.contains("requests.") || content.contains("fetch("),
             has_mutations: name_lower.starts_with("set_") || name_lower.starts_with("update_") || 
-                          name_lower.starts_with("create_") || name_lower.starts_with("delete_"),
+                          name_lower.starts_with("create_") || name_lower.starts_with("delete_") ||
+                          content.contains(".update(") || content.contains(".save(") || 
+                          content.contains(".insert(") || content.contains(".delete(") ||
+                          content.contains(".modify(") || content.contains(".append(") ||
+                          content.contains(".push(") || content.contains(".pop(") ||
+                          content.contains("=") && !content.contains("==") && !content.contains("!="),
         };
 
         // Determine execution pattern
@@ -527,4 +538,298 @@ struct FunctionInfo {
     line: usize,
     is_async: bool,
     visibility: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+    use std::fs;
+
+    #[test]
+    fn test_names_config_default() {
+        let config = NamesConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.min_mismatch, 0.65);
+        assert_eq!(config.min_impact, 3);
+        assert!(config.protect_public_api);
+        assert!(config.abbrev_map.contains_key("usr"));
+        assert!(config.allowed_abbrevs.contains(&"id".to_string()));
+    }
+
+    #[test]
+    fn test_simple_name_analyzer_creation() {
+        let analyzer = SimpleNameAnalyzer::default();
+        assert!(analyzer.config.enabled);
+        
+        let custom_config = NamesConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let analyzer = SimpleNameAnalyzer::new(custom_config);
+        assert!(!analyzer.config.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_disabled() {
+        let config = NamesConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let analyzer = SimpleNameAnalyzer::new(config);
+        
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+        fs::write(&file_path, "def test_function():\n    pass").unwrap();
+        
+        let paths = vec![file_path.as_path()];
+        let results = analyzer.analyze_files(&paths).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_detect_language() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        assert_eq!(analyzer.detect_language(Path::new("test.py")), "python");
+        assert_eq!(analyzer.detect_language(Path::new("test.js")), "javascript");
+        assert_eq!(analyzer.detect_language(Path::new("test.ts")), "typescript");
+        assert_eq!(analyzer.detect_language(Path::new("test.rs")), "rust");
+        assert_eq!(analyzer.detect_language(Path::new("test.go")), "go");
+        assert_eq!(analyzer.detect_language(Path::new("test.txt")), "unknown");
+    }
+
+    #[test]
+    fn test_extract_function_from_line_python() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        // Test Python function
+        let func = analyzer.extract_function_from_line("def test_func():", 1, "python");
+        assert!(func.is_some());
+        let func = func.unwrap();
+        assert_eq!(func.name, "test_func");
+        assert_eq!(func.line, 1);
+        assert!(!func.is_async);
+        
+        // Test async Python function
+        let func = analyzer.extract_function_from_line("async def async_func():", 2, "python");
+        assert!(func.is_some());
+        let func = func.unwrap();
+        assert_eq!(func.name, "async_func");
+        assert!(func.is_async);
+    }
+
+    #[test]
+    fn test_extract_function_from_line_rust() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        // Test Rust function
+        let func = analyzer.extract_function_from_line("fn test_func() {", 1, "rust");
+        assert!(func.is_some());
+        let func = func.unwrap();
+        assert_eq!(func.name, "test_func");
+        assert_eq!(func.visibility, "private");
+        
+        // Test public Rust function
+        let func = analyzer.extract_function_from_line("pub fn public_func() {", 2, "rust");
+        assert!(func.is_some());
+        let func = func.unwrap();
+        assert_eq!(func.name, "public_func");
+        assert_eq!(func.visibility, "public");
+        
+        // Test async Rust function
+        let func = analyzer.extract_function_from_line("pub async fn async_func() {", 3, "rust");
+        assert!(func.is_some());
+        let func = func.unwrap();
+        assert_eq!(func.name, "async_func");
+        assert!(func.is_async);
+    }
+
+    #[test]
+    fn test_extract_behavior_signature() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        let func = FunctionInfo {
+            name: "get_user_data".to_string(),
+            line: 1,
+            is_async: false,
+            visibility: "public".to_string(),
+        };
+        
+        let content = "SELECT * FROM users";
+        let behavior = analyzer.extract_behavior_signature(&func, content);
+        
+        assert!(behavior.side_effects.has_database_ops);
+        assert!(!behavior.side_effects.has_file_ops);
+        assert!(!behavior.side_effects.has_network_ops);
+        assert!(!behavior.side_effects.has_mutations);
+        assert!(matches!(behavior.execution_pattern, ExecutionPattern::Synchronous));
+        assert_eq!(behavior.confidence, 0.8);
+    }
+
+    #[test]
+    fn test_check_semantic_mismatch() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        let behavior = BehaviorSignature {
+            side_effects: SideEffects {
+                has_database_ops: false,
+                has_file_ops: false,
+                has_network_ops: false,
+                has_mutations: true,
+            },
+            return_type: ReturnTypeInfo {
+                optional: false,
+                collection: false,
+                type_category: TypeCategory::Unit,
+            },
+            execution_pattern: ExecutionPattern::Synchronous,
+            confidence: 0.8,
+        };
+        
+        // Test effect mismatch - get_ function that mutates
+        let mismatch = analyzer.check_semantic_mismatch("get_user", &behavior);
+        assert!(!mismatch.mismatch_types.is_empty());
+        assert!(mismatch.mismatch_types.iter().any(|m| matches!(m, MismatchType::EffectMismatch { .. })));
+        assert!(mismatch.mismatch_score > 0.0);
+    }
+
+    #[test]
+    fn test_generate_name_proposals() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        let behavior = BehaviorSignature {
+            side_effects: SideEffects {
+                has_database_ops: true,
+                has_file_ops: false,
+                has_network_ops: false,
+                has_mutations: false,
+            },
+            return_type: ReturnTypeInfo {
+                optional: false,
+                collection: true,
+                type_category: TypeCategory::Collection,
+            },
+            execution_pattern: ExecutionPattern::Asynchronous,
+            confidence: 0.8,
+        };
+        
+        let proposals = analyzer.generate_name_proposals("bad_name", &behavior);
+        assert!(!proposals.is_empty());
+        
+        // Should suggest database-related verbs
+        assert!(proposals.iter().any(|p| p.name.contains("get")));
+    }
+
+    #[test]
+    fn test_calculate_impact_score() {
+        let analyzer = SimpleNameAnalyzer::default();
+        
+        let func = FunctionInfo {
+            name: "test_func".to_string(),
+            line: 1,
+            is_async: false,
+            visibility: "public".to_string(),
+        };
+        
+        let content = "test_func() + test_func() + other_func()";
+        let impact = analyzer.calculate_impact_score(&func, content);
+        
+        // Should be 2 references * 2.0 (public multiplier) = 4.0
+        assert_eq!(impact, 4.0);
+        
+        let private_func = FunctionInfo {
+            name: "test_func".to_string(),
+            line: 1,
+            is_async: false,
+            visibility: "private".to_string(),
+        };
+        
+        let private_impact = analyzer.calculate_impact_score(&private_func, content);
+        // Should be 2 references * 1.0 (private multiplier) = 2.0
+        assert_eq!(private_impact, 2.0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_file_integration() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+        
+        // Create a Python file with a problematic function name
+        let content = r#"
+def get_user_data():
+    # This function actually modifies data
+    user.update({"last_seen": now()})
+    database.save(user)
+    return user
+"#;
+        fs::write(&file_path, content).unwrap();
+        
+        let config = NamesConfig {
+            enabled: true,
+            min_mismatch: 0.1, // Lower threshold for test
+            min_impact: 1, // Lower impact threshold for test
+            ..Default::default()
+        };
+        let analyzer = SimpleNameAnalyzer::new(config);
+        let results = analyzer.analyze_file(&file_path).await.unwrap();
+        
+        // Should detect the mismatch between "get_" and mutation behavior
+        println!("Results found: {:?}", results);
+        assert!(!results.is_empty());
+        let result = &results[0];
+        assert_eq!(result.current_name, "get_user_data");
+        assert!(result.mismatch.mismatch_score >= analyzer.config.min_mismatch);
+    }
+
+    #[test]
+    fn test_mismatch_type_variants() {
+        // Test all MismatchType variants can be created
+        let _effect = MismatchType::EffectMismatch {
+            expected: "read".to_string(),
+            actual: "write".to_string(),
+        };
+        
+        let _cardinality = MismatchType::CardinalityMismatch {
+            expected: "single".to_string(),
+            actual: "collection".to_string(),
+        };
+        
+        let _optionality = MismatchType::OptionalityMismatch {
+            expected: "optional".to_string(),
+            actual: "required".to_string(),
+        };
+        
+        let _async_mismatch = MismatchType::AsyncMismatch {
+            expected: "sync".to_string(),
+            actual: "async".to_string(),
+        };
+        
+        let _operation = MismatchType::OperationMismatch {
+            expected: "read".to_string(),
+            actual: "write".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_type_category_variants() {
+        use TypeCategory::*;
+        
+        // Test all variants
+        let _scalar = Scalar;
+        let _object = Object;
+        let _collection = Collection;
+        let _unit = Unit;
+    }
+
+    #[test]
+    fn test_execution_pattern_variants() {
+        use ExecutionPattern::*;
+        
+        // Test all variants
+        let _sync = Synchronous;
+        let _async = Asynchronous;
+        let _ambiguous = Ambiguous;
+    }
 }

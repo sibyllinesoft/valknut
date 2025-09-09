@@ -5,19 +5,18 @@
 
 use crate::cli::args::*;
 use crate::cli::output::*;
+use std::path::PathBuf;
 use anyhow;
-use console::{Style, Term, style};
+use console::Term;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use serde_json;
 use serde_yaml;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
-use tabled::{Table, Tabled, settings::{Style as TableStyle, Color}};
+use std::path::Path;
+use tabled::{Table, Tabled, settings::Style as TableStyle};
 use owo_colors::OwoColorize;
-use textwrap;
-use tracing::{error, info, warn};
+use tracing::info;
 use valknut_rs::detectors::structure::{StructureExtractor, StructureConfig};
-use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, ViolationSeverity};
+use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult};
 use chrono;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -643,7 +642,7 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
 
 /// Handle quality gate evaluation
 async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) -> anyhow::Result<QualityGateResult> {
-    use valknut_rs::core::pipeline::{QualityGateViolation, ViolationSeverity};
+    use valknut_rs::core::pipeline::{QualityGateViolation};
 
     // Build quality gate configuration from CLI args
     let quality_gate_config = build_quality_gate_config(args);
@@ -659,78 +658,86 @@ async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) ->
         .unwrap_or(0) as usize;
 
     // Check available metrics against thresholds
-    if quality_gate_config.max_issues > 0 && total_issues > quality_gate_config.max_issues {
+    if quality_gate_config.max_critical_issues > 0 && total_issues > quality_gate_config.max_critical_issues {
         violations.push(QualityGateViolation {
-            metric: "Total Issues Count".to_string(),
+            rule_name: "Total Issues Count".to_string(),
             current_value: total_issues as f64,
-            threshold: quality_gate_config.max_issues as f64,
+            threshold: quality_gate_config.max_critical_issues as f64,
             description: format!(
                 "Total issues ({}) exceeds maximum allowed ({})", 
-                total_issues, quality_gate_config.max_issues
+                total_issues, quality_gate_config.max_critical_issues
             ),
-            severity: if total_issues > quality_gate_config.max_issues * 2 {
-                ViolationSeverity::Critical
+            severity: if total_issues > quality_gate_config.max_critical_issues * 2 {
+                "Critical".to_string()
             } else {
-                ViolationSeverity::High
+                "High".to_string()
             },
+            affected_files: Vec::new(),
+            recommended_actions: vec!["Review and address high-priority issues".to_string()],
         });
     }
 
     // Try to extract health metrics if available (for more comprehensive analysis)
     if let Some(health_metrics) = result.get("health_metrics") {
         if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
-            if overall_health < quality_gate_config.min_health {
+            if overall_health < quality_gate_config.min_maintainability_score {
                 violations.push(QualityGateViolation {
-                    metric: "Overall Health Score".to_string(),
+                    rule_name: "Overall Health Score".to_string(),
                     current_value: overall_health,
-                    threshold: quality_gate_config.min_health,
+                    threshold: quality_gate_config.min_maintainability_score,
                     description: format!(
                         "Health score ({:.1}) is below minimum required ({:.1})", 
-                        overall_health, quality_gate_config.min_health
+                        overall_health, quality_gate_config.min_maintainability_score
                     ),
-                    severity: if overall_health < quality_gate_config.min_health - 20.0 {
-                        ViolationSeverity::Blocker
+                    severity: if overall_health < quality_gate_config.min_maintainability_score - 20.0 {
+                        "Blocker".to_string()
                     } else {
-                        ViolationSeverity::Critical
+                        "Critical".to_string()
                     },
+                    affected_files: Vec::new(),
+                    recommended_actions: vec!["Improve code structure and reduce technical debt".to_string()],
                 });
             }
         }
 
         if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
-            if complexity_score > quality_gate_config.max_complexity {
+            if complexity_score > quality_gate_config.max_complexity_score {
                 violations.push(QualityGateViolation {
-                    metric: "Complexity Score".to_string(),
+                    rule_name: "Complexity Score".to_string(),
                     current_value: complexity_score,
-                    threshold: quality_gate_config.max_complexity,
+                    threshold: quality_gate_config.max_complexity_score,
                     description: format!(
                         "Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
-                        complexity_score, quality_gate_config.max_complexity
+                        complexity_score, quality_gate_config.max_complexity_score
                     ),
-                    severity: if complexity_score > quality_gate_config.max_complexity + 10.0 {
-                        ViolationSeverity::Critical
+                    severity: if complexity_score > quality_gate_config.max_complexity_score + 10.0 {
+                        "Critical".to_string()
                     } else {
-                        ViolationSeverity::High
+                        "High".to_string()
                     },
+                    affected_files: Vec::new(),
+                    recommended_actions: vec!["Simplify complex functions and reduce nesting".to_string()],
                 });
             }
         }
 
         if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
-            if debt_ratio > quality_gate_config.max_debt {
+            if debt_ratio > quality_gate_config.max_technical_debt_ratio {
                 violations.push(QualityGateViolation {
-                    metric: "Technical Debt Ratio".to_string(),
+                    rule_name: "Technical Debt Ratio".to_string(),
                     current_value: debt_ratio,
-                    threshold: quality_gate_config.max_debt,
+                    threshold: quality_gate_config.max_technical_debt_ratio,
                     description: format!(
                         "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
-                        debt_ratio, quality_gate_config.max_debt
+                        debt_ratio, quality_gate_config.max_technical_debt_ratio
                     ),
-                    severity: if debt_ratio > quality_gate_config.max_debt + 20.0 {
-                        ViolationSeverity::Critical
+                    severity: if debt_ratio > quality_gate_config.max_technical_debt_ratio + 20.0 {
+                        "Critical".to_string()
                     } else {
-                        ViolationSeverity::High
+                        "High".to_string()
                     },
+                    affected_files: Vec::new(),
+                    recommended_actions: vec!["Refactor code to reduce technical debt".to_string()],
                 });
             }
         }
@@ -746,7 +753,6 @@ async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) ->
         passed,
         violations,
         overall_score,
-        config: quality_gate_config,
     })
 }
 
@@ -759,32 +765,31 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     
     // Override defaults with CLI values if provided
     if let Some(max_complexity) = args.max_complexity {
-        config.max_complexity = max_complexity;
+        config.max_complexity_score = max_complexity;
     }
     if let Some(min_health) = args.min_health {
-        config.min_health = min_health;
+        config.min_maintainability_score = min_health;
     }
     if let Some(max_debt) = args.max_debt {
-        config.max_debt = max_debt;
+        config.max_technical_debt_ratio = max_debt;
     }
     if let Some(min_maintainability) = args.min_maintainability {
-        config.min_maintainability = min_maintainability;
+        config.min_maintainability_score = min_maintainability;
     }
     if let Some(max_issues) = args.max_issues {
-        config.max_issues = max_issues;
+        config.max_critical_issues = max_issues;
     }
     if let Some(max_critical) = args.max_critical {
-        config.max_critical = max_critical;
+        config.max_critical_issues = max_critical;
     }
     if let Some(max_high_priority) = args.max_high_priority {
-        config.max_high_priority = max_high_priority;
+        config.max_high_priority_issues = max_high_priority;
     }
     
     // Handle fail_on_issues flag (sets max_issues to 0)
     if args.fail_on_issues {
-        config.max_issues = 0;
-        config.max_critical = 0;
-        config.max_high_priority = 0;
+        config.max_critical_issues = 0;
+        config.max_high_priority_issues = 0;
     }
     
     config
@@ -799,20 +804,20 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
     
     // Group violations by severity
     let blockers: Vec<_> = result.violations.iter()
-        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Blocker))
+        .filter(|v| v.severity == "Blocker")
         .collect();
     let criticals: Vec<_> = result.violations.iter()
-        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Critical))
+        .filter(|v| v.severity == "Critical")
         .collect();
     let warnings: Vec<_> = result.violations.iter()
-        .filter(|v| matches!(v.severity, valknut_rs::core::pipeline::ViolationSeverity::Warning))
+        .filter(|v| v.severity == "Warning" || v.severity == "High")
         .collect();
 
     if !blockers.is_empty() {
         println!("{}", "🚫 BLOCKER Issues:".red().bold());
         for violation in blockers {
             println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.metric.yellow(), 
+                violation.rule_name.yellow(), 
                 violation.current_value, 
                 violation.threshold
             );
@@ -825,7 +830,7 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
         println!("{}", "🔴 CRITICAL Issues:".red().bold());
         for violation in criticals {
             println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.metric.yellow(), 
+                violation.rule_name.yellow(), 
                 violation.current_value, 
                 violation.threshold
             );
@@ -838,7 +843,7 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
         println!("{}", "⚠️  WARNING Issues:".yellow().bold());
         for violation in warnings {
             println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.metric.yellow(), 
+                violation.rule_name.yellow(), 
                 violation.current_value, 
                 violation.threshold
             );
@@ -853,4 +858,553 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
     println!("  3. Improve code maintainability through better structure");
     println!("  4. Reduce technical debt by following best practices");
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::{TempDir, NamedTempFile};
+    use std::fs;
+    use valknut_rs::core::pipeline::{QualityGateViolation};
+
+    #[test]
+    fn test_print_header() {
+        // Test that print_header doesn't panic
+        print_header();
+    }
+
+    #[test]
+    fn test_format_to_string() {
+        assert_eq!(format_to_string(&OutputFormat::Json), "json");
+        assert_eq!(format_to_string(&OutputFormat::Yaml), "yaml");
+        assert_eq!(format_to_string(&OutputFormat::Markdown), "markdown");
+        assert_eq!(format_to_string(&OutputFormat::Html), "html");
+        assert_eq!(format_to_string(&OutputFormat::Jsonl), "jsonl");
+        assert_eq!(format_to_string(&OutputFormat::Sonar), "sonar");
+        assert_eq!(format_to_string(&OutputFormat::Csv), "csv");
+        assert_eq!(format_to_string(&OutputFormat::CiSummary), "ci-summary");
+        assert_eq!(format_to_string(&OutputFormat::Pretty), "pretty");
+    }
+
+    #[test]
+    fn test_display_config_summary() {
+        let config = StructureConfig::default();
+        // Test that display_config_summary doesn't panic
+        display_config_summary(&config);
+    }
+
+    #[tokio::test]
+    async fn test_load_configuration_default() {
+        let result = load_configuration(None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_load_configuration_yaml_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config = StructureConfig::default();
+        let yaml_content = serde_yaml::to_string(&config).unwrap();
+        fs::write(temp_file.path(), yaml_content).unwrap();
+
+        let result = load_configuration(Some(temp_file.path())).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_load_configuration_json_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("config.json");
+        let config = StructureConfig::default();
+        let json_content = serde_json::to_string(&config).unwrap();
+        fs::write(&json_path, json_content).unwrap();
+
+        let result = load_configuration(Some(&json_path)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_load_configuration_invalid_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        fs::write(temp_file.path(), "invalid: yaml: content:").unwrap();
+
+        let result = load_configuration(Some(temp_file.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_print_default_config() {
+        let result = print_default_config().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_init_config_new_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("test_config.yml");
+        
+        let args = InitConfigArgs {
+            output: config_path.clone(),
+            force: false,
+        };
+
+        let result = init_config(args).await;
+        assert!(result.is_ok());
+        assert!(config_path.exists());
+        
+        // Verify file contains valid YAML
+        let content = fs::read_to_string(&config_path).unwrap();
+        let parsed: serde_yaml::Result<StructureConfig> = serde_yaml::from_str(&content);
+        assert!(parsed.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_init_config_force_overwrite() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("existing_config.yml");
+        
+        // Create existing file
+        fs::write(&config_path, "existing content").unwrap();
+        
+        let args = InitConfigArgs {
+            output: config_path.clone(),
+            force: true,
+        };
+
+        let result = init_config(args).await;
+        assert!(result.is_ok());
+        
+        // Verify file was overwritten with valid YAML
+        let content = fs::read_to_string(&config_path).unwrap();
+        assert_ne!(content, "existing content");
+        let parsed: serde_yaml::Result<StructureConfig> = serde_yaml::from_str(&content);
+        assert!(parsed.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_config_valid_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config = StructureConfig::default();
+        let yaml_content = serde_yaml::to_string(&config).unwrap();
+        fs::write(temp_file.path(), yaml_content).unwrap();
+
+        let args = ValidateConfigArgs {
+            config: temp_file.path().to_path_buf(),
+            verbose: false,
+        };
+
+        let result = validate_config(args).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_config_verbose() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config = StructureConfig::default();
+        let yaml_content = serde_yaml::to_string(&config).unwrap();
+        fs::write(temp_file.path(), yaml_content).unwrap();
+
+        let args = ValidateConfigArgs {
+            config: temp_file.path().to_path_buf(),
+            verbose: true,
+        };
+
+        let result = validate_config(args).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_stdio_command() {
+        let args = McpStdioArgs {
+            config: None,
+        };
+        
+        let result = mcp_stdio_command(args, false, SurveyVerbosity::Low).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_stdio_command_with_config() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config = StructureConfig::default();
+        let yaml_content = serde_yaml::to_string(&config).unwrap();
+        fs::write(temp_file.path(), yaml_content).unwrap();
+
+        let args = McpStdioArgs {
+            config: Some(temp_file.path().to_path_buf()),
+        };
+        
+        let result = mcp_stdio_command(args, true, SurveyVerbosity::High).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_manifest_command_stdout() {
+        let args = McpManifestArgs {
+            output: None,
+        };
+        
+        let result = mcp_manifest_command(args).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_manifest_command_file_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let manifest_path = temp_dir.path().join("manifest.json");
+        
+        let args = McpManifestArgs {
+            output: Some(manifest_path.clone()),
+        };
+        
+        let result = mcp_manifest_command(args).await;
+        assert!(result.is_ok());
+        assert!(manifest_path.exists());
+        
+        // Verify file contains valid JSON
+        let content = fs::read_to_string(&manifest_path).unwrap();
+        let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&content);
+        assert!(parsed.is_ok());
+        
+        let manifest = parsed.unwrap();
+        assert_eq!(manifest["name"], "valknut");
+        assert!(manifest["capabilities"]["tools"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_list_languages() {
+        let result = list_languages().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_structure_legacy() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let args = StructureArgs {
+            path: temp_dir.path().to_path_buf(),
+            extensions: None,
+            format: OutputFormat::Json,
+            top: Some(5),
+            branch_only: false,
+            file_split_only: false,
+        };
+        
+        let config = StructureConfig::default();
+        
+        let result = analyze_structure_legacy(args, config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_structure_legacy_branch_only() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let args = StructureArgs {
+            path: temp_dir.path().to_path_buf(),
+            extensions: None,
+            format: OutputFormat::Yaml,
+            top: None,
+            branch_only: true,
+            file_split_only: false,
+        };
+        
+        let config = StructureConfig::default();
+        
+        let result = analyze_structure_legacy(args, config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_structure_legacy_file_split_only() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let args = StructureArgs {
+            path: temp_dir.path().to_path_buf(),
+            extensions: None,
+            format: OutputFormat::Pretty,
+            top: None,
+            branch_only: false,
+            file_split_only: true,
+        };
+        
+        let config = StructureConfig::default();
+        
+        let result = analyze_structure_legacy(args, config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_impact_legacy() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let args = ImpactArgs {
+            path: temp_dir.path().to_path_buf(),
+            extensions: None,
+            cycles: true,
+            clones: false,
+            chokepoints: false,
+            min_similarity: 0.85,
+            min_total_loc: 60,
+            top: 10,
+            format: OutputFormat::Json,
+        };
+        
+        let result = analyze_impact_legacy(args).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_quality_gate_config_defaults() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: false,
+            fail_on_issues: false,
+            max_complexity: None,
+            min_health: None,
+            max_debt: None,
+            min_maintainability: None,
+            max_issues: None,
+            max_critical: None,
+            max_high_priority: None,
+        };
+        
+        let config = build_quality_gate_config(&args);
+        assert!(!config.enabled);
+    }
+
+    #[test]
+    fn test_build_quality_gate_config_quality_gate_enabled() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: true,
+            fail_on_issues: false,
+            max_complexity: Some(75.0),
+            min_health: Some(60.0),
+            max_debt: Some(30.0),
+            min_maintainability: Some(65.0),
+            max_issues: Some(10),
+            max_critical: Some(5),
+            max_high_priority: Some(15),
+        };
+        
+        let config = build_quality_gate_config(&args);
+        assert!(config.enabled);
+        assert_eq!(config.max_complexity_score, 75.0);
+        assert_eq!(config.min_maintainability_score, 65.0);
+        assert_eq!(config.max_technical_debt_ratio, 30.0);
+        assert_eq!(config.max_critical_issues, 5);
+        assert_eq!(config.max_high_priority_issues, 15);
+    }
+
+    #[test]
+    fn test_build_quality_gate_config_fail_on_issues() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: false,
+            fail_on_issues: true,
+            max_complexity: None,
+            min_health: None,
+            max_debt: None,
+            min_maintainability: None,
+            max_issues: None,
+            max_critical: None,
+            max_high_priority: None,
+        };
+        
+        let config = build_quality_gate_config(&args);
+        assert!(config.enabled);
+        assert_eq!(config.max_critical_issues, 0);
+        assert_eq!(config.max_high_priority_issues, 0);
+    }
+
+    #[test]
+    fn test_display_quality_gate_violations_with_violations() {
+        let violations = vec![
+            QualityGateViolation {
+                rule_name: "Test Rule".to_string(),
+                current_value: 85.0,
+                threshold: 70.0,
+                description: "Test violation".to_string(),
+                severity: "Critical".to_string(),
+                affected_files: vec![],
+                recommended_actions: vec!["Fix the issue".to_string()],
+            },
+            QualityGateViolation {
+                rule_name: "Warning Rule".to_string(),
+                current_value: 25.0,
+                threshold: 20.0,
+                description: "Warning violation".to_string(),
+                severity: "Warning".to_string(),
+                affected_files: vec![],
+                recommended_actions: vec!["Consider fixing".to_string()],
+            },
+        ];
+        
+        let result = QualityGateResult {
+            passed: false,
+            violations,
+            overall_score: 65.0,
+        };
+        
+        // Test that display_quality_gate_violations doesn't panic
+        display_quality_gate_violations(&result);
+    }
+
+    #[test]
+    fn test_display_quality_gate_violations_no_violations() {
+        let result = QualityGateResult {
+            passed: true,
+            violations: vec![],
+            overall_score: 85.0,
+        };
+        
+        // Test that display_quality_gate_violations doesn't panic
+        display_quality_gate_violations(&result);
+    }
+
+    #[test]
+    fn test_display_quality_gate_violations_blocker_severity() {
+        let violations = vec![
+            QualityGateViolation {
+                rule_name: "Blocker Rule".to_string(),
+                current_value: 95.0,
+                threshold: 70.0,
+                description: "Blocker violation".to_string(),
+                severity: "Blocker".to_string(),
+                affected_files: vec!["test.rs".to_string().into()],
+                recommended_actions: vec!["Immediate fix required".to_string()],
+            },
+        ];
+        
+        let result = QualityGateResult {
+            passed: false,
+            violations,
+            overall_score: 30.0,
+        };
+        
+        // Test that display_quality_gate_violations doesn't panic with blocker
+        display_quality_gate_violations(&result);
+    }
+
+    // Mock test for handle_quality_gates since it requires complex analysis result structure
+    #[tokio::test] 
+    async fn test_handle_quality_gates_basic() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: true,
+            fail_on_issues: false,
+            max_complexity: None,
+            min_health: None,
+            max_debt: None,
+            min_maintainability: None,
+            max_issues: None,
+            max_critical: None,
+            max_high_priority: None,
+        };
+
+        // Create a minimal analysis result
+        let analysis_result = serde_json::json!({
+            "summary": {
+                "total_issues": 5,
+                "total_files": 10
+            },
+            "health_metrics": {
+                "overall_health_score": 75.0,
+                "complexity_score": 65.0,
+                "technical_debt_ratio": 15.0
+            }
+        });
+
+        let result = handle_quality_gates(&args, &analysis_result).await;
+        assert!(result.is_ok());
+        
+        let quality_result = result.unwrap();
+        assert!(quality_result.passed); // Should pass with default thresholds
+    }
+
+    #[tokio::test] 
+    async fn test_handle_quality_gates_violations() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: true,
+            fail_on_issues: false,
+            max_complexity: Some(50.0), // Set low threshold to trigger violation
+            min_health: Some(80.0), // Set high threshold to trigger violation
+            max_debt: None,
+            min_maintainability: None,
+            max_issues: Some(3), // Set low threshold to trigger violation
+            max_critical: None,
+            max_high_priority: None,
+        };
+
+        // Create analysis result that will violate quality gates
+        let analysis_result = serde_json::json!({
+            "summary": {
+                "total_issues": 5, // Exceeds max_issues of 3
+                "total_files": 10
+            },
+            "health_metrics": {
+                "overall_health_score": 75.0, // Below min_health of 80
+                "complexity_score": 65.0, // Exceeds max_complexity of 50
+                "technical_debt_ratio": 15.0
+            }
+        });
+
+        let result = handle_quality_gates(&args, &analysis_result).await;
+        assert!(result.is_ok());
+        
+        let quality_result = result.unwrap();
+        assert!(!quality_result.passed); // Should fail due to violations
+        assert!(quality_result.violations.len() > 0);
+    }
+
+    #[tokio::test] 
+    async fn test_handle_quality_gates_missing_summary() {
+        let args = AnalyzeArgs {
+            paths: vec![PathBuf::from("test")],
+            out: PathBuf::from("output"),
+            format: OutputFormat::Json,
+            config: None,
+            quiet: false,
+            quality_gate: true,
+            fail_on_issues: false,
+            max_complexity: None,
+            min_health: None,
+            max_debt: None,
+            min_maintainability: None,
+            max_issues: None,
+            max_critical: None,
+            max_high_priority: None,
+        };
+
+        // Create analysis result without summary
+        let analysis_result = serde_json::json!({
+            "health_metrics": {
+                "overall_health_score": 75.0
+            }
+        });
+
+        let result = handle_quality_gates(&args, &analysis_result).await;
+        assert!(result.is_err()); // Should fail due to missing summary
+    }
 }

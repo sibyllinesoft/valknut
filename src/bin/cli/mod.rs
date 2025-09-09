@@ -12,4 +12,3 @@ pub mod output;
 // Re-export commonly used items for convenience
 pub use args::*;
 pub use commands::*;
-pub use output::*;

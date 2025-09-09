@@ -10,6 +10,153 @@ use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_python_adapter_creation() {
+        let adapter = PythonAdapter::new();
+        assert!(adapter.is_ok(), "Should create Python adapter successfully");
+    }
+    
+    #[test]
+    fn test_parse_simple_function() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+def hello_world():
+    return "Hello, World!"
+"#;
+        let result = adapter.parse_source(source, "test.py");
+        assert!(result.is_ok(), "Should parse simple function");
+        
+        let index = result.unwrap();
+        assert!(index.get_entities_in_file("test.py").len() >= 1, "Should find at least one entity");
+    }
+    
+    #[test]
+    fn test_parse_simple_class() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+class MyClass:
+    def __init__(self):
+        self.value = 0
+    
+    def get_value(self):
+        return self.value
+"#;
+        let result = adapter.parse_source(source, "test.py");
+        assert!(result.is_ok(), "Should parse simple class");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("test.py");
+        assert!(entities.len() >= 1, "Should find at least one entity");
+        
+        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
+        assert!(has_class, "Should find a class entity");
+    }
+    
+    #[test]
+    fn test_parse_complex_python() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+import os
+import sys
+
+class DataProcessor:
+    """A sample data processor class."""
+    
+    def __init__(self, name: str):
+        self.name = name
+        self.data = []
+    
+    @property
+    def size(self) -> int:
+        return len(self.data)
+    
+    def add_data(self, item):
+        self.data.append(item)
+
+def process_file(filename: str) -> bool:
+    """Process a file and return success status."""
+    try:
+        with open(filename, 'r') as f:
+            content = f.read()
+        return True
+    except FileNotFoundError:
+        return False
+
+if __name__ == "__main__":
+    processor = DataProcessor("test")
+    success = process_file("data.txt")
+"#;
+        let result = adapter.parse_source(source, "complex.py");
+        assert!(result.is_ok(), "Should parse complex Python code");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("complex.py");
+        assert!(entities.len() >= 2, "Should find multiple entities");
+        
+        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
+        let has_function = entities.iter().any(|e| matches!(e.kind, EntityKind::Function));
+        assert!(has_class && has_function, "Should find both class and function entities");
+    }
+    
+    #[test]
+    fn test_extract_entity_name() {
+        let adapter = PythonAdapter::new().unwrap();
+        let source = "def test_function(): pass";
+        let tree = adapter.parser.parse(source, None).unwrap();
+        let function_node = tree.root_node().child(0).unwrap(); // Should be function_definition
+        
+        let result = adapter.extract_entity_name(&function_node, source);
+        assert!(result.is_ok());
+        
+        if let Ok(Some(name)) = result {
+            assert_eq!(name, "test_function");
+        }
+    }
+    
+    #[test]
+    fn test_convert_to_code_entity() {
+        let adapter = PythonAdapter::new().unwrap();
+        let entity = ParsedEntity {
+            id: "test-id".to_string(),
+            name: "test_func".to_string(),
+            kind: EntityKind::Function,
+            location: SourceLocation {
+                file_path: "test.py".to_string(),
+                start_line: 1,
+                end_line: 2,
+                start_column: 0,
+                end_column: 10,
+            },
+            parent_id: None,
+            metadata: HashMap::new(),
+        };
+        
+        let source = "def test_func(): pass";
+        let result = adapter.convert_to_code_entity(&entity, source);
+        assert!(result.is_ok(), "Should convert to CodeEntity successfully");
+        
+        let code_entity = result.unwrap();
+        assert_eq!(code_entity.name, "test_func");
+        assert_eq!(code_entity.file_path, "test.py");
+    }
+    
+    #[test]
+    fn test_get_entities_empty_file() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = "# Just a comment\n";
+        let result = adapter.parse_source(source, "empty.py");
+        assert!(result.is_ok(), "Should handle empty Python file");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("empty.py");
+        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+    }
+}
+
 extern "C" {
     fn tree_sitter_python() -> Language;
 }

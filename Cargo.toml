@@ -1,8 +1,8 @@
 [package]
 name = "valknut-rs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["Nathan Rice <nathan.alexander.rice@gmail.com>"]
+authors = ["Nathan Rice <nathan@sibylline.dev>"]
 description = "High-performance Rust implementation of valknut code analysis algorithms"
 license = "MIT"
 readme = "README.md"
@@ -119,8 +119,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 mimalloc = { version = "0.1", optional = true }
 jemallocator = { version = "0.5", optional = true }
 
-# Database integration (optional)
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"], optional = true }
+# Database integration (optional) - MySQL removed to avoid RSA vulnerability
+sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"], optional = true, default-features = false }
 
 # Time and UUID utilities
 chrono = { version = "0.4", features = ["serde"] }

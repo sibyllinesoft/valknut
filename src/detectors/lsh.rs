@@ -12,7 +12,7 @@ use ahash::AHasher;
 use rayon::prelude::*;
 
 #[cfg(feature = "simd")]
-use wide::{u64x4, f64x4};
+use wide::u64x4;
 
 use crate::core::featureset::{FeatureExtractor, FeatureDefinition, CodeEntity, ExtractionContext};
 use crate::core::errors::Result;

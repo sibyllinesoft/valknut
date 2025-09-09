@@ -1,7 +1,6 @@
 //! Simple Python language adapter for testing tree-sitter integration.
 
-use std::collections::HashMap;
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::Result;
 use crate::core::featureset::CodeEntity;
 
 /// Simple Python adapter for testing

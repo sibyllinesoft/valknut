@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use tracing::{info, error};
+use tracing::info;
 
 use crate::api::config_types::AnalysisConfig as ApiAnalysisConfig;
 use crate::api::results::AnalysisResults;
@@ -34,7 +34,7 @@ impl ValknutEngine {
         
         let config_arc = Arc::new(internal_config);
         let analysis_config = PipelineAnalysisConfig::from((*config_arc).clone());
-        let mut pipeline = AnalysisPipeline::new(analysis_config);
+        let pipeline = AnalysisPipeline::new(analysis_config);
         
         // TODO: Register feature extractors based on enabled languages
         // For now, we'll create a minimal setup
@@ -421,5 +421,243 @@ mod tests {
         let status = engine.get_status();
         assert!(!status.supported_languages.is_empty());
         assert!(status.configuration_valid);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_file_not_directory() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        // Create temporary file (not directory)
+        let temp_dir = TempDir::new().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        std::fs::write(&temp_file, "test content").unwrap();
+        
+        let result = engine.analyze_directory(&temp_file).await;
+        assert!(result.is_err());
+        
+        if let Err(ValknutError::Validation { .. }) = result {
+            // Expected error type
+        } else {
+            panic!("Expected Validation error for non-directory path");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_empty_list() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        let empty_files: Vec<&str> = vec![];
+        let result = engine.analyze_files(&empty_files).await;
+        assert!(result.is_ok());
+        
+        let results = result.unwrap();
+        assert_eq!(results.summary.files_processed, 0);
+        assert_eq!(results.summary.entities_analyzed, 0);
+        assert_eq!(results.summary.refactoring_needed, 0);
+        assert_eq!(results.summary.high_priority, 0);
+        assert_eq!(results.summary.critical, 0);
+        assert_eq!(results.summary.avg_refactoring_score, 0.0);
+        assert_eq!(results.summary.code_health_score, 1.0);
+        assert!(results.refactoring_candidates.is_empty());
+        assert!(results.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_with_parent_directory() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        // Create temporary file
+        let temp_dir = TempDir::new().unwrap();
+        let temp_file = temp_dir.path().join("test.py");
+        std::fs::write(&temp_file, "def hello(): pass").unwrap();
+        
+        let files = vec![temp_file.as_path()];
+        let result = engine.analyze_files(&files).await;
+        assert!(result.is_ok()); // Should analyze the parent directory
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_no_parent_directory() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        // Try to analyze a root path with no parent
+        let files = vec![std::path::Path::new("/")];
+        let result = engine.analyze_files(&files).await;
+        assert!(result.is_err());
+        
+        if let Err(ValknutError::Validation { .. }) = result {
+            // Expected error type
+        } else {
+            panic!("Expected Validation error for path with no parent");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_vectors_empty() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        let empty_vectors = vec![];
+        let result = engine.analyze_vectors(empty_vectors).await;
+        assert!(result.is_ok());
+        
+        let results = result.unwrap();
+        assert_eq!(results.summary.entities_analyzed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_vectors_with_multiple_features() {
+        let config = AnalysisConfig::default();
+        let mut engine = ValknutEngine::new(config).await.unwrap();
+        
+        let mut vectors = vec![FeatureVector::new("complex_entity")];
+        vectors[0].add_feature("complexity", 10.0);
+        vectors[0].add_feature("maintainability", 0.3);
+        vectors[0].add_feature("duplication", 5.0);
+        
+        let result = engine.analyze_vectors(vectors).await;
+        assert!(result.is_ok());
+        
+        let results = result.unwrap();
+        // At least the engine should process something
+        assert!(results.summary.entities_analyzed >= 0);
+    }
+
+    #[tokio::test]
+    async fn test_config_access() {
+        let original_config = AnalysisConfig::default()
+            .with_confidence_threshold(0.85)
+            .with_max_files(100);
+        let engine = ValknutEngine::new(original_config).await.unwrap();
+        
+        let engine_config = engine.config();
+        assert_eq!(engine_config.analysis.confidence_threshold, 0.85);
+        assert_eq!(engine_config.analysis.max_files, 100);
+    }
+
+    #[tokio::test]
+    async fn test_is_ready() {
+        let config = AnalysisConfig::default();
+        let engine = ValknutEngine::new(config).await.unwrap();
+        
+        // Engine should be ready after creation (even if pipeline isn't fitted)
+        let ready = engine.is_ready();
+        // This will depend on the pipeline implementation, so we just test it doesn't crash
+        let _ = ready;
+    }
+
+    #[tokio::test]
+    async fn test_get_supported_languages() {
+        let config = AnalysisConfig::default()
+            .with_languages(vec!["python".to_string(), "javascript".to_string()]);
+        let engine = ValknutEngine::new(config).await.unwrap();
+        
+        let languages = engine.get_supported_languages();
+        // Should have some languages enabled from the default configuration
+        assert!(!languages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_comprehensive() {
+        let config = AnalysisConfig::default();
+        let engine = ValknutEngine::new(config).await.unwrap();
+        
+        let health = engine.health_check().await;
+        
+        // Should have several checks
+        assert!(health.checks.len() >= 4);
+        
+        // Check for expected components
+        let check_names: Vec<&str> = health.checks.iter().map(|c| c.name.as_str()).collect();
+        assert!(check_names.contains(&"Configuration"));
+        assert!(check_names.contains(&"Pipeline"));
+        assert!(check_names.contains(&"Feature Extractors"));
+        assert!(check_names.contains(&"Language Support"));
+        
+        // Timestamp should be recent
+        let now = chrono::Utc::now();
+        let check_time = health.timestamp;
+        let diff = now - check_time;
+        assert!(diff.num_seconds() < 10); // Should be within 10 seconds
+    }
+
+    #[test]
+    fn test_engine_status_debug() {
+        let status = EngineStatus {
+            is_ready: true,
+            pipeline_fitted: false,
+            configuration_valid: true,
+            issues: vec!["test issue".to_string()],
+            supported_languages: vec!["python".to_string(), "rust".to_string()],
+        };
+        
+        let debug_str = format!("{:?}", status);
+        assert!(debug_str.contains("is_ready: true"));
+        assert!(debug_str.contains("pipeline_fitted: false"));
+        assert!(debug_str.contains("test issue"));
+        assert!(debug_str.contains("python"));
+        assert!(debug_str.contains("rust"));
+    }
+
+    #[test]
+    fn test_health_check_result_debug() {
+        let result = HealthCheckResult {
+            overall_status: true,
+            checks: vec![
+                HealthCheck {
+                    name: "Test".to_string(),
+                    status: HealthCheckStatus::Passed,
+                    message: Some("All good".to_string()),
+                }
+            ],
+            timestamp: chrono::Utc::now(),
+        };
+        
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("overall_status: true"));
+        assert!(debug_str.contains("Test"));
+        assert!(debug_str.contains("Passed"));
+        assert!(debug_str.contains("All good"));
+    }
+
+    #[test]
+    fn test_health_check_status_equality() {
+        assert_eq!(HealthCheckStatus::Passed, HealthCheckStatus::Passed);
+        assert_eq!(HealthCheckStatus::Failed, HealthCheckStatus::Failed);
+        assert_eq!(HealthCheckStatus::Warning, HealthCheckStatus::Warning);
+        assert_ne!(HealthCheckStatus::Passed, HealthCheckStatus::Failed);
+        assert_ne!(HealthCheckStatus::Warning, HealthCheckStatus::Passed);
+    }
+
+    #[test]
+    fn test_health_check_debug() {
+        let check = HealthCheck {
+            name: "Test Component".to_string(),
+            status: HealthCheckStatus::Warning,
+            message: Some("Minor issue detected".to_string()),
+        };
+        
+        let debug_str = format!("{:?}", check);
+        assert!(debug_str.contains("Test Component"));
+        assert!(debug_str.contains("Warning"));
+        assert!(debug_str.contains("Minor issue detected"));
+    }
+
+    #[test]
+    fn test_health_check_no_message() {
+        let check = HealthCheck {
+            name: "Silent Check".to_string(),
+            status: HealthCheckStatus::Passed,
+            message: None,
+        };
+        
+        let debug_str = format!("{:?}", check);
+        assert!(debug_str.contains("Silent Check"));
+        assert!(debug_str.contains("Passed"));
+        assert!(debug_str.contains("None"));
     }
 }

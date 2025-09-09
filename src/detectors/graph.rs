@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use petgraph::{Graph, Directed};
 use petgraph::graph::NodeIndex;
 use petgraph::algo::kosaraju_scc;
-use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 use dashmap::DashMap;
 use arc_swap::ArcSwap;

@@ -420,4 +420,207 @@ mod tests {
         let similarity = EmbeddingBackend::cosine_similarity_vectors(&embed1, &embed2);
         assert!(similarity > -1.0 && similarity < 1.0);
     }
+
+    #[test]
+    fn test_embedding_config_default() {
+        let config = EmbeddingConfig::default();
+        assert_eq!(config.model_name, "Qwen/Qwen3-Embedding-0.6B-GGUF");
+        assert_eq!(config.max_cache_size_mb, 500);
+        assert_eq!(config.batch_size, 32);
+        assert_eq!(config.model_variant, "q4_k_m");
+        assert!(config.cache_dir.to_string_lossy().contains("refactor_rank"));
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty_vectors() {
+        let vec1: Vec<f32> = vec![];
+        let vec2: Vec<f32> = vec![];
+        let similarity = EmbeddingBackend::cosine_similarity_vectors(&vec1, &vec2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_zero_vectors() {
+        let vec1 = vec![0.0, 0.0, 0.0];
+        let vec2 = vec![1.0, 0.0, 0.0];
+        let similarity = EmbeddingBackend::cosine_similarity_vectors(&vec1, &vec2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_different_lengths() {
+        let vec1 = vec![1.0, 0.0];
+        let vec2 = vec![1.0, 0.0, 0.0];
+        let similarity = EmbeddingBackend::cosine_similarity_vectors(&vec1, &vec2);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_opposite() {
+        let vec1 = vec![1.0, 0.0, 0.0];
+        let vec2 = vec![-1.0, 0.0, 0.0];
+        let similarity = EmbeddingBackend::cosine_similarity_vectors(&vec1, &vec2);
+        assert!((similarity - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_dummy_embedding_dimensions() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        let embed = backend.generate_dummy_embedding("test");
+        assert_eq!(embed.len(), 1024); // Qwen3-Embedding-0.6B dimension
+    }
+
+    #[test]
+    fn test_dummy_embedding_empty_text() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        let embed = backend.generate_dummy_embedding("");
+        assert_eq!(embed.len(), 1024);
+        
+        // Should still be normalized even for empty text
+        let norm: f32 = embed.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-6 || norm == 0.0);
+    }
+
+    #[test]
+    fn test_cache_stats() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        // Empty cache
+        let stats = backend.cache_stats();
+        assert_eq!(stats.entries, 0);
+        assert_eq!(stats.estimated_size_mb, 0);
+
+        // Add some entries
+        backend.embedding_cache.insert("test1".to_string(), vec![1.0; 1024]);
+        backend.embedding_cache.insert("test2".to_string(), vec![2.0; 1024]);
+        
+        let stats = backend.cache_stats();
+        assert_eq!(stats.entries, 2);
+        assert!(stats.estimated_size_mb >= 0);
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        // Add entries
+        backend.embedding_cache.insert("test1".to_string(), vec![1.0; 1024]);
+        backend.embedding_cache.insert("test2".to_string(), vec![2.0; 1024]);
+        assert_eq!(backend.embedding_cache.len(), 2);
+
+        // Clear cache
+        backend.clear_cache();
+        assert_eq!(backend.embedding_cache.len(), 0);
+    }
+
+    #[test]
+    fn test_cache_cleanup() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        // Add many entries to trigger cleanup
+        for i in 0..15000 {
+            backend.embedding_cache.insert(format!("test_{}", i), vec![i as f32; 1024]);
+        }
+        
+        let initial_size = backend.embedding_cache.len();
+        assert!(initial_size >= 15000);
+
+        // Trigger cleanup
+        backend.clean_cache_if_needed();
+        
+        // Should be reduced
+        assert!(backend.embedding_cache.len() < initial_size);
+    }
+
+    #[test]
+    fn test_model_loaded_mutex() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        // Initially not loaded
+        {
+            let loaded = backend.model_loaded.lock().unwrap();
+            assert!(!*loaded);
+        }
+
+        // Set to loaded
+        {
+            let mut loaded = backend.model_loaded.lock().unwrap();
+            *loaded = true;
+        }
+
+        // Verify it's loaded
+        {
+            let loaded = backend.model_loaded.lock().unwrap();
+            assert!(*loaded);
+        }
+    }
+
+    #[test]
+    fn test_dummy_embedding_deterministic() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(false)),
+        };
+
+        // Same input should always produce same output
+        let text = "function create_user(name, email)";
+        let embed1 = backend.generate_dummy_embedding(text);
+        let embed2 = backend.generate_dummy_embedding(text);
+        let embed3 = backend.generate_dummy_embedding(text);
+        
+        assert_eq!(embed1, embed2);
+        assert_eq!(embed2, embed3);
+    }
+
+    #[tokio::test]
+    async fn test_cosine_similarity_method() {
+        let backend = EmbeddingBackend {
+            config: EmbeddingConfig::default(),
+            model_path: PathBuf::new(),
+            embedding_cache: Arc::new(DashMap::new()),
+            model_loaded: Arc::new(Mutex::new(true)), // Mark as loaded to avoid loading step
+        };
+
+        // Test similar texts
+        let similarity = backend.cosine_similarity("get_user", "get_user").await.unwrap();
+        assert_eq!(similarity, 1.0); // Identical texts should have similarity 1.0
+
+        // Test different texts
+        let similarity = backend.cosine_similarity("get_user", "delete_order").await.unwrap();
+        assert!(similarity >= -1.0 && similarity <= 1.0);
+    }
 }

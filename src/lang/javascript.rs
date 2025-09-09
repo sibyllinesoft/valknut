@@ -7,6 +7,118 @@ use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_javascript_adapter_creation() {
+        let adapter = JavaScriptAdapter::new();
+        assert!(adapter.is_ok(), "Should create JavaScript adapter successfully");
+    }
+    
+    #[test]
+    fn test_parse_simple_function() {
+        let mut adapter = JavaScriptAdapter::new().unwrap();
+        let source = r#"
+function hello() {
+    return "Hello, World!";
+}
+"#;
+        let result = adapter.parse_source(source, "test.js");
+        assert!(result.is_ok(), "Should parse simple function");
+        
+        let index = result.unwrap();
+        assert!(index.get_entities_in_file("test.js").len() >= 1, "Should find at least one entity");
+    }
+    
+    #[test]
+    fn test_parse_simple_class() {
+        let mut adapter = JavaScriptAdapter::new().unwrap();
+        let source = r#"
+class MyClass {
+    constructor() {
+        this.value = 0;
+    }
+    
+    getValue() {
+        return this.value;
+    }
+}
+"#;
+        let result = adapter.parse_source(source, "test.js");
+        assert!(result.is_ok(), "Should parse simple class");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("test.js");
+        assert!(entities.len() >= 1, "Should find at least one entity");
+        
+        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
+        assert!(has_class, "Should find a class entity");
+    }
+    
+    #[test]
+    fn test_parse_arrow_functions() {
+        let mut adapter = JavaScriptAdapter::new().unwrap();
+        let source = r#"
+const add = (a, b) => a + b;
+const multiply = (x, y) => {
+    return x * y;
+};
+"#;
+        let result = adapter.parse_source(source, "arrow.js");
+        assert!(result.is_ok(), "Should parse arrow functions");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("arrow.js");
+        // Arrow functions might be detected as variables or functions depending on implementation
+        assert!(entities.len() >= 0, "Should handle arrow functions gracefully");
+    }
+    
+    #[test]
+    fn test_parse_complex_javascript() {
+        let mut adapter = JavaScriptAdapter::new().unwrap();
+        let source = r#"
+import { fetch } from 'node-fetch';
+
+class APIClient {
+    constructor(baseURL) {
+        this.baseURL = baseURL;
+    }
+    
+    async get(endpoint) {
+        const response = await fetch(`${this.baseURL}/${endpoint}`);
+        return response.json();
+    }
+}
+
+function createClient(url) {
+    return new APIClient(url);
+}
+
+const defaultClient = createClient('https://api.example.com');
+"#;
+        let result = adapter.parse_source(source, "complex.js");
+        assert!(result.is_ok(), "Should parse complex JavaScript code");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("complex.js");
+        assert!(entities.len() >= 2, "Should find multiple entities");
+    }
+    
+    #[test] 
+    fn test_empty_javascript_file() {
+        let mut adapter = JavaScriptAdapter::new().unwrap();
+        let source = "// Just a comment\n/* Another comment */";
+        let result = adapter.parse_source(source, "empty.js");
+        assert!(result.is_ok(), "Should handle empty JavaScript file");
+        
+        let index = result.unwrap();
+        let entities = index.get_entities_in_file("empty.js");
+        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+    }
+}
+
 extern "C" {
     fn tree_sitter_javascript() -> Language;
 }

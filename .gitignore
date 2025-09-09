@@ -101,6 +101,9 @@ real_world_results/
 scribe_analysis.json
 *.sarif
 *.xml
+reports/
+test_output/
+test_structure/
 
 # Configuration examples
 example_*.yml
@@ -108,14 +111,22 @@ example_*.json
 
 # Analysis output
 analysis_results.json
+analysis_results.yaml
 report.jsonl
 summary.md
 topk.*.jsonl
+.valknut/
+valknut_output/
 
 # Coverage and profiling
 .coverage.*
+coverage/
+htmlcov/
 prof/
 profile/
+*.profdata
+*.profraw
+tarpaulin-report.html
 
 # Cache directories
 .cache/

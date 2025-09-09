@@ -102,7 +102,12 @@ impl FileReader {
         let content = Self::read_to_string(file_path)?;
         Ok(content
             .lines()
-            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//"))
+            .filter(|line| {
+                let trimmed = line.trim();
+                !trimmed.is_empty() 
+                    && !trimmed.starts_with("//") 
+                    && !trimmed.starts_with("#")
+            })
             .count())
     }
 
