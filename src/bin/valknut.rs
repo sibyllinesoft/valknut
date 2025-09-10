@@ -9,6 +9,7 @@ use clap::Parser;
 use tracing;
 
 mod cli;
+mod mcp;
 
 use cli::{Cli, Commands};
 

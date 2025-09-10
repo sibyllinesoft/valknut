@@ -9,7 +9,7 @@ analysis:
   enable_refactoring_analysis: true
   enable_structure_analysis: true
   enable_names_analysis: false
-  enable_coverage_analysis: false
+  enable_coverage_analysis: true
   confidence_threshold: 0.7
   max_files: 0  # 0 = unlimited
   exclude_patterns:
@@ -231,6 +231,28 @@ performance:
   total_timeout_seconds: 300
   enable_simd: true
   batch_size: 100
+
+# Coverage analysis configuration
+coverage:
+  enabled: true
+  report_paths:
+    - "coverage.lcov"
+  max_gaps_per_file: 5
+  min_gap_loc: 3
+  snippet_context_lines: 3
+  long_gap_head_tail: 5
+  group_cross_file: false
+  target_repo_gain: 0.10
+  weights:
+    size: 0.40
+    complexity: 0.20
+    fan_in: 0.15
+    exports: 0.10
+    centrality: 0.10
+    docs: 0.05
+  exclude_patterns:
+    - "*/tests/*"
+    - "*/test/*"
 
 # Quality gates (disabled by default - enable for CI/CD)
 quality_gates:

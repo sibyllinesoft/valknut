@@ -282,9 +282,8 @@ pub async fn mcp_stdio_command(
         eprintln!("📊 Survey disabled");
     }
 
-    // TODO: Implement actual MCP stdio server
-    eprintln!("⚠️  MCP stdio server implementation in progress");
-    eprintln!("💡 Use the Python version for now: python -m valknut.cli mcp-stdio");
+    // Run the MCP server
+    crate::mcp::server::run_mcp_server().await?;
     
     Ok(())
 }
