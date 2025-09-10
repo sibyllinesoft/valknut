@@ -150,6 +150,70 @@ For users upgrading from pre-1.0 versions:
 
 For more details on any of these changes, see the [project documentation](README.md) or visit the [GitHub repository](https://github.com/nathanricedev/valknut).
 
+## [1.1.0] - 2024-12-10
+
+### Added
+
+#### 🎯 Coverage Packs - Advanced Test Gap Analysis
+- **LLM-Free Coverage Analysis**: Deterministic, algorithmic approach to test coverage analysis without AI dependencies
+- **Multi-Format Coverage Parser**: Support for 5 major coverage formats:
+  - **Coverage.py XML**: Python coverage reports with line-level granularity
+  - **LCOV**: Linux-based coverage format for C/C++ and other languages
+  - **Cobertura**: Java/Maven ecosystem coverage format
+  - **JaCoCo**: Java code coverage library format
+  - **Istanbul JSON**: JavaScript/TypeScript coverage reports
+- **Intelligent Gap Coalescing**: Merges adjacent uncovered lines (within 3 lines) into logical coverage gaps
+- **Language-Specific Chunking**: Breaks long gaps at function/class boundaries for better context
+- **Impact Scoring System**: Sophisticated scoring formula weighing:
+  - Gap size (40%): Lines of uncovered code
+  - Complexity (20%): Cyclomatic complexity of uncovered regions
+  - Fan-in (15%): Number of callers/importers
+  - Exports (10%): Public API surface impact
+  - Centrality (10%): Module importance in dependency graph
+  - Documentation (5%): Missing documentation penalty
+- **Context-Rich Snippet Previews**: Generates agent-friendly code previews with:
+  - Line numbers and syntax context
+  - Import statements extraction
+  - Head/tail truncation for long gaps
+  - Symbol boundary detection
+
+#### 🔧 Enhanced Configuration
+- **Coverage Analysis Configuration**: New comprehensive coverage section in `.valknut.yml`
+- **Format Auto-Detection**: Automatic coverage format detection based on file structure and content
+- **Flexible Report Discovery**: Configurable patterns for finding coverage reports in project trees
+
+### Improved
+
+#### 📊 Analysis Pipeline
+- **Coverage Integration**: Coverage Packs seamlessly integrated into main analysis pipeline
+- **Error Handling**: Robust error handling for malformed coverage files with detailed diagnostics
+- **Performance Optimization**: Efficient parsing and processing of large coverage reports
+
+#### 🛠️ Developer Experience
+- **Agent-Friendly Output**: Coverage gaps formatted specifically for AI agent consumption
+- **Comprehensive Logging**: Detailed logging of coverage parsing and gap analysis process
+- **Validation Framework**: Built-in validation for coverage file formats and content
+
+### Technical Implementation
+
+#### 🏗️ Architecture
+- **Pure Rust Implementation**: Zero external dependencies for coverage parsing
+- **Modular Design**: Separate parsers for each coverage format with shared interfaces
+- **Async Processing**: Non-blocking coverage file processing with tokio integration
+- **Memory Efficient**: Stream-based parsing for large coverage files
+
+#### 🧪 Quality Assurance  
+- **Comprehensive Test Suite**: Full test coverage for all coverage format parsers
+- **Format Validation**: Extensive validation testing with real-world coverage files
+- **Edge Case Handling**: Robust handling of malformed, incomplete, or unusual coverage reports
+- **Performance Testing**: Benchmarking for large coverage file processing
+
+### Bug Fixes
+- **Coverage.py XML Detection**: Fixed overly strict format detection causing false negatives
+- **Symbol Extraction**: Corrected class name extraction logic for Python files
+- **Error API Consistency**: Fixed ValknutError::io calls to match required parameter signature
+- **Test Compilation**: Added missing PartialEq derivations for SymbolKind enum
+
 ## [Unreleased]
 
 ### Planned Features
