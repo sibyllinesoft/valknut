@@ -1,5 +1,5 @@
 # Valknut Comprehensive Analysis Configuration
-# All features enabled by default except quality gates and semantic naming
+# All features enabled by default except quality gates
 
 # Analysis pipeline configuration
 analysis:
@@ -56,7 +56,7 @@ lsh:
   shingle_size: 3
   similarity_threshold: 0.8
   max_candidates: 100
-  use_semantic_similarity: true
+  use_semantic_similarity: false
 
 # Structure analysis configuration
 structure:
@@ -92,89 +92,13 @@ partitioning:
     - util
     - shared
 
-# Semantic naming analysis (disabled by default)
+# Basic naming analysis (simple pattern-based)
 names:
   enabled: false
-  embedding_model: "Qwen/Qwen3-Embedding-0.6B-GGUF"
-  min_mismatch: 0.65
+  pattern_analysis: true
+  min_confidence: 0.65
   min_impact: 3
   protect_public_api: true
-  abbrev_map:
-    usr: user
-    cfg: config
-    btn: button
-    mgr: manager
-    svc: service
-    impl: implementation
-    util: utility
-    calc: calculate
-    auth: authentication
-    admin: administrator
-    proc: process
-    repo: repository
-    db: database
-  allowed_abbrevs:
-    - id
-    - url
-    - db
-    - io
-    - api
-    - ui
-    - os
-    - fs
-    - http
-    - json
-    - xml
-    - css
-    - js
-    - ts
-  io_libs:
-    python:
-      - requests
-      - aiohttp
-      - sqlalchemy
-      - boto3
-      - os
-      - pathlib
-      - json
-      - sqlite3
-      - psycopg2
-      - pymongo
-    typescript:
-      - "node:fs"
-      - fs
-      - axios
-      - fetch
-      - pg
-      - mongodb
-      - sqlite3
-      - redis
-      - "node:http"
-      - "node:https"
-    rust:
-      - reqwest
-      - "tokio::fs"
-      - sqlx
-      - rusqlite
-      - redis
-      - mongodb
-      - serde_json
-      - tokio
-    javascript:
-      - fs
-      - axios
-      - fetch
-      - mongodb
-      - sqlite3
-      - redis
-      - http
-      - https
-    go:
-      - net/http
-      - database/sql
-      - os
-      - io/ioutil
-      - encoding/json
 
 # Language-specific settings
 languages:

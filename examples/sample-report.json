@@ -211,7 +211,7 @@
       ]
     }
   ],
-  "semantic_analysis": [
+  "quality_analysis": [
     {
       "name": "Code Organization",
       "score": 8.2,

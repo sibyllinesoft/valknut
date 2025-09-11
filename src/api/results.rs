@@ -22,7 +22,7 @@ pub struct AnalysisResults {
     /// Analysis statistics
     pub statistics: AnalysisStatistics,
     
-    /// Semantic naming analysis results (temporarily disabled)
+    /// Code quality analysis results (simple pattern-based analysis)
     // pub naming_results: Option<NamingAnalysisResults>,
     
     /// Any warnings or issues encountered
@@ -1061,7 +1061,7 @@ mod tests {
 }
 
 /*
-/// Semantic naming analysis results for API consumption (temporarily disabled)
+/// Code quality analysis results for API consumption (simple pattern-based analysis)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NamingAnalysisResults {
     /// Function rename recommendations
@@ -1079,7 +1079,7 @@ pub struct NamingAnalysisResults {
 */
 
 /*
-/// Summary statistics for semantic naming analysis (temporarily disabled)
+/// Summary statistics for code quality analysis (simple pattern-based analysis)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NamingSummary {
     /// Total functions analyzed

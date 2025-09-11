@@ -3,8 +3,8 @@
 
 # Analysis configuration
 analysis:
-  # Enable semantic analysis for richer reports
-  enable_semantic_analysis: true
+  # Enable statistical analysis for richer reports
+  enable_statistical_analysis: true
   # Include complexity metrics
   calculate_complexity: true
   # Detect code smells
@@ -87,7 +87,7 @@ content:
     - file_analysis
     - issues
     - metrics
-    - semantic_analysis
+    - statistical_analysis
     - raw_data
   
   # Summary metrics to calculate
