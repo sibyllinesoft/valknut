@@ -288,13 +288,13 @@ body {
     font-family: monospace;
 }
 
-/* Semantic Analysis */
-.semantic-results {
+/* Code Quality Analysis */
+.quality-results {
     display: grid;
     gap: 1.5rem;
 }
 
-.semantic-item {
+.quality-item {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -302,19 +302,19 @@ body {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.semantic-item h3 {
+.quality-item h3 {
     color: var(--primary-color);
     margin-bottom: 1rem;
     font-size: 1.2rem;
 }
 
-.semantic-details {
+.quality-details {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-.semantic-score {
+.quality-score {
     font-weight: 600;
     color: var(--text-primary);
     font-size: 1.1rem;

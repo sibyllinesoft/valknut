@@ -68,7 +68,7 @@ aho-corasick = "1.1"
 unicode-segmentation = "1.10"
 edit-distance = "2.1"
 
-# ML and embedding support (removed candle dependencies due to rand conflicts)
+# Statistical analysis dependencies (ML dependencies removed)
 # candle-core = "0.6"
 # candle-transformers = "0.6" 
 # candle-nn = "0.6"

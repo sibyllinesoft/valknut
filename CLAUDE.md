@@ -1,6 +1,6 @@
 # CLAUDE.md - Agent Efficiency Guide for Valknut
 
-**Purpose**: Enable agents to work efficiently with the valknut Rust codebase - a high-performance code analysis engine that combines statistical analysis, graph algorithms, and AI-powered semantic evaluation.
+**Purpose**: Enable agents to work efficiently with the valknut Rust codebase - a high-performance code analysis engine that combines statistical analysis, graph algorithms, and advanced complexity evaluation.
 
 ## 🎯 Project Quick Context
 
@@ -41,7 +41,7 @@ src/
 │   ├── structure/   # Directory organization, architectural patterns
 │   ├── coverage/    # Code coverage analysis
 │   ├── refactoring/ # Refactoring opportunity detection
-│   └── names_simple/ # Semantic naming evaluation
+│   └── names_simple/ # Code quality pattern evaluation
 │
 ├── lang/          # Language-Specific AST Adapters
 │   ├── common/      # Shared AST utilities
@@ -357,7 +357,7 @@ The project includes MCP (Model Control Protocol) server integration for Claude 
 
 - MCP server will expose analysis capabilities
 - Real-time code analysis for IDE integration  
-- Refactoring recommendations with AI assistance
+- Refactoring recommendations with statistical analysis
 - Integration with `claude-code` CLI workflows
 
 ### External Tool Integration

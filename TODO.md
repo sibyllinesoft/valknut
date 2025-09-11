@@ -1,8 +1,8 @@
-**TL;DR:** Keep it LLM-free. Use static analysis + tiny embedding/rerank models (≤120 MB, CPU-only) and deterministic AST rules to produce **Impact Packs**, **Clone Packs**, **Branch/File-Split Packs**, and **Semantic-Naming Packs**. No code generation; only analyzers and concrete rename/split/reorg plans.
+**TL;DR:** Pure static analysis using deterministic AST rules and statistical algorithms to produce **Impact Packs**, **Clone Packs**, **Branch/File-Split Packs**, and **Code Quality Packs**. No AI/ML dependencies; only analyzers and concrete refactoring plans.
 
 ### Guardrails (non-negotiables)
 
-* **No generative LLMs.** Only: (a) static program facts, (b) deterministic heuristics, (c) small embedding/reranker models.
+* **No AI/ML dependencies.** Only: (a) static program facts, (b) deterministic heuristics, (c) statistical analysis algorithms.
 * **CPU-first:** works on dev laptops/CI; no GPU required.
 * **Offline:** models vendored/cached locally; analysis doesn’t phone home.
 * **Deterministic outputs:** same repo + config ⇒ same packs.
@@ -11,10 +11,9 @@
 
 ## 1) Model choices (small, fast, permissive)
 
-* **Text embeddings:** `intfloat/e5-small-v2` (≈30–40 MB) or `gte-small` as alt. Purpose: name↔behavior cosine only.
-* **Code embeddings (optional):** `codet5p-110m-emb` (≈90–120 MB) if you want a code-aware variant for function bodies; still small.
-* **Reranker (optional):** `bge-reranker-base` distilled → if you need pairwise scoring for synonym consistency; can be skipped.
-  All run via `sentence-transformers` on CPU; batch encode; cache vectors under `~/.refactor_rank/cache/`.
+* **Statistical algorithms:** Pattern matching, frequency analysis, and rule-based heuristics
+* **No external models:** All analysis runs using deterministic algorithms and statistical analysis
+* **Lightweight:** Pure Rust implementation with minimal dependencies
 
 ---
 
@@ -38,12 +37,12 @@
 * **File-Split:** huge file thresholds (LOC/bytes) + community detection over intra-file entity cohesion graph → 2–3 split candidates.
 * Deterministic steps list; import-update counts estimated via xrefs.
 
-### D) **Semantic Naming Analyzer** — mismatch/consistency only (no lint style)
+### D) **Code Quality Analyzer** — pattern-based analysis (no lint style)
 
 * **Behavior signature (static):** side-effects (I/O/DB/net), mutation, async/promise, return kind (scalar/Optional/iter), resource handles.
-* **Cosine check:** `cos(name_gloss, behavior_gloss)` using the tiny model.
+* **Pattern matching:** Rule-based analysis of naming conventions and code patterns.
 * **Rule checks:** effect verbs (`get/is/set/create…`) vs observed effects; cardinality (`user` vs `users`), optionality (`find/try` vs non-Optional), async (`fetchAsync` vs blocking), type roles (`*Map/*Set/*Id/*Count`).
-* **Consistency map:** build project lexicon (top nouns from types/directories/schemas); flag synonym collisions (`user`/`member`/`account`) via embedding clusters + import overlap.
+* **Consistency analysis:** build project lexicon (top nouns from types/directories/schemas); flag naming inconsistencies via frequency analysis.
 * **Packs:**
 
   * **Rename Pack:** top-2 deterministic names (verb+noun+qualifiers) + impact (external callsites) + reason strings.
@@ -106,7 +105,7 @@ If candidate > 40 chars, compress qualifiers (`by_id` → `by_id` stays; drop ex
 ```yaml
 names:
   enabled: true
-  embedding_model: "e5-small-v2"      # tiny; CPU
+  pattern_analysis: true           # rule-based analysis
   min_mismatch: 0.65
   min_impact: 3
   protect_public_api: true
@@ -155,7 +154,7 @@ impact_packs:
   * `users()` returns iterator → `CardinalityMismatch` with `iter_users`.
   * Overcrowded dir → Branch Pack with ≥0.15 imbalance gain.
   * 1.6k-LOC file with 3 cohesion communities → File-Split with 2–3 suggestions.
-* **Perf:** benchmark embedding throughput on CPU; assert cached re-run <30% of cold time.
+* **Perf:** benchmark analysis throughput; assert cached re-run <30% of cold time.
 
 ---
 
@@ -163,5 +162,5 @@ impact_packs:
 
 * **Dry-run rename feasibility:** static xref to list all affected imports/exports; no edits—just a “blast radius” report.
 * **Barrel/alias helpers:** language-specific alias plans (TS barrels, Python re-exports) to soften public renames.
-* **Vocab policy mode:** optional allow/deny head verbs/nouns enforced across project (purely semantic, not lint style).
+* **Vocab policy mode:** optional allow/deny head verbs/nouns enforced across project (pattern-based, not lint style).
 

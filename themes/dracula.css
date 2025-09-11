@@ -376,13 +376,13 @@ body {
     font-weight: 600;
 }
 
-/* Semantic Analysis */
-.semantic-results {
+/* Code Quality Analysis */
+.quality-results {
     display: grid;
     gap: 1.5rem;
 }
 
-.semantic-item {
+.quality-item {
     background: linear-gradient(135deg, var(--surface-color), rgba(68, 71, 90, 0.9));
     border: 1px solid var(--border-color);
     border-radius: 16px;
@@ -393,7 +393,7 @@ body {
     overflow: hidden;
 }
 
-.semantic-item::before {
+.quality-item::before {
     content: '';
     position: absolute;
     top: 0;
@@ -405,23 +405,23 @@ body {
     transition: opacity 0.3s;
 }
 
-.semantic-item:hover {
+.quality-item:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 32px rgba(80, 250, 123, 0.2);
 }
 
-.semantic-item:hover::before {
+.quality-item:hover::before {
     opacity: 1;
 }
 
-.semantic-item h3 {
+.quality-item h3 {
     color: var(--accent-green);
     margin-bottom: 1rem;
     font-size: 1.3rem;
     font-weight: 700;
 }
 
-.semantic-score {
+.quality-score {
     font-weight: 700;
     color: var(--accent-cyan);
     font-size: 1.1rem;

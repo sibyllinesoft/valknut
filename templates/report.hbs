@@ -36,15 +36,15 @@
             </div>
         </section>
         
-        {{#if results.semantic_analysis}}
+        {{#if results.quality_analysis}}
         <section class="results-section">
-            <h2>Semantic Analysis</h2>
-            <div class="semantic-results">
-                {{#each results.semantic_analysis}}
-                <div class="semantic-item">
+            <h2>Code Quality Analysis</h2>
+            <div class="quality-results">
+                {{#each results.quality_analysis}}
+                <div class="quality-item">
                     <h3>{{this.name}}</h3>
-                    <div class="semantic-details">
-                        <span class="semantic-score">Score: {{this.score}}</span>
+                    <div class="quality-details">
+                        <span class="quality-score">Score: {{this.score}}</span>
                         {{#if this.suggestions}}
                         <div class="suggestions">
                             {{#each this.suggestions}}

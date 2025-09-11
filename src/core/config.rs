@@ -40,7 +40,7 @@ pub struct ValknutConfig {
     /// Structure analysis configuration
     pub structure: StructureConfig,
     
-    /// Semantic naming analysis configuration (temporarily disabled)
+    /// Code quality analysis configuration (simple pattern-based analysis)
     // pub names: NamesConfig,
     /// Placeholder to maintain serialization compatibility
     #[serde(skip)]
@@ -158,7 +158,7 @@ pub struct AnalysisConfig {
     /// Enable structure analysis
     pub enable_structure_analysis: bool,
     
-    /// Enable semantic naming analysis
+    /// Enable code quality analysis
     pub enable_names_analysis: bool,
     
     /// Minimum confidence threshold for results
@@ -425,7 +425,7 @@ pub struct LshConfig {
     /// Maximum candidates to consider per query
     pub max_candidates: usize,
     
-    /// Use semantic embeddings for similarity
+    /// Use advanced similarity algorithms
     pub use_semantic_similarity: bool,
 }
 
@@ -437,7 +437,7 @@ impl Default for LshConfig {
             shingle_size: 3,
             similarity_threshold: 0.7,
             max_candidates: 100,
-            use_semantic_similarity: false,
+            use_semantic_similarity: false,  // Keep name for backward compatibility
         }
     }
 }

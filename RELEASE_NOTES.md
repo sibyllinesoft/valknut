@@ -7,7 +7,7 @@
 
 ## 🎉 Executive Summary
 
-Valknut v1.0.0 marks the first stable release of our high-performance Rust-based code analysis tool. After extensive development and testing, Valknut now provides production-ready code analysis capabilities with AI-powered insights, comprehensive reporting, and seamless CI/CD integration.
+Valknut v1.0.0 marks the first stable release of our high-performance Rust-based code analysis tool. After extensive development and testing, Valknut now provides production-ready code analysis capabilities with statistical analysis, comprehensive reporting, and seamless CI/CD integration.
 
 This milestone release establishes Valknut as a comprehensive solution for code quality assessment, technical debt analysis, and automated refactoring guidance across multiple programming languages.
 
@@ -21,10 +21,10 @@ This milestone release establishes Valknut as a comprehensive solution for code 
 - **Dependency Analysis**: Graph-based dependency cycle detection and centrality metrics
 - **Code Similarity Detection**: MinHash-based LSH for duplicate code identification
 
-### AI-Powered Features
-- **Semantic Naming Analysis**: AI-driven evaluation of identifier quality and consistency
-- **Refactoring Recommendations**: Machine learning-powered suggestions for code improvements
-- **Quality Scoring**: Intelligent health scoring based on multiple code quality dimensions
+### Advanced Analysis Features
+- **Code Quality Analysis**: Statistical evaluation of identifier quality and consistency
+- **Refactoring Recommendations**: Pattern-based suggestions for code improvements
+- **Quality Scoring**: Comprehensive health scoring based on multiple code quality dimensions
 - **Contextual Insights**: Pattern recognition for common anti-patterns and code smells
 
 ### Comprehensive Reporting
@@ -155,7 +155,7 @@ No features are deprecated in this initial stable release. Future deprecations w
 ## 🤝 Community & Ecosystem
 
 ### Integration Ecosystem
-- **Claude Code Integration**: MCP server for AI-powered development workflows
+- **Claude Code Integration**: MCP server for enhanced development workflows
 - **Editor Support**: VS Code extension available
 - **CI/CD Templates**: Ready-to-use templates for major CI/CD platforms
 - **SonarQube Integration**: Export format compatible with SonarQube quality gates
@@ -212,7 +212,7 @@ valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 analysis:
   max_complexity: 75
   min_health_score: 60
-  enable_semantic_naming: true
+  enable_quality_analysis: true
   
 output:
   format: ["json", "html"]
@@ -228,7 +228,7 @@ quality_gates:
 ### Roadmap for v1.1.0
 - **Enhanced Language Support**: Java and C# analysis
 - **Performance Optimizations**: 2x faster analysis for large codebases
-- **Advanced Refactoring**: AI-powered code transformation suggestions
+- **Advanced Refactoring**: Statistical code transformation suggestions
 - **Team Dashboard**: Web-based collaborative analysis platform
 
 ### Long-term Vision
@@ -261,7 +261,7 @@ quality_gates:
 ### Added
 - Complete Rust-based code analysis engine
 - Multi-language support (Python, TypeScript, JavaScript, Rust, Go)
-- AI-powered semantic naming analysis
+- Pattern-based code quality analysis
 - Comprehensive reporting system (JSON, HTML, Markdown, CSV, SonarQube)
 - CI/CD integration with quality gates
 - Configuration system with YAML support

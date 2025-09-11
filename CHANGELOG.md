@@ -22,7 +22,7 @@ This marks the first stable release of Valknut, a high-performance Rust code ana
 #### 🔍 Analysis Capabilities
 - **Structure Analysis**: Directory organization assessment with architectural pattern recognition
 - **Complexity Analysis**: Cyclomatic and cognitive complexity metrics with configurable thresholds
-- **Semantic Naming Analysis**: AI-powered function and variable name quality evaluation using embedding models
+- **Code Quality Analysis**: Pattern-based function and variable name quality evaluation using statistical algorithms
 - **Refactoring Analysis**: Automated detection of code smells and refactoring opportunities
 - **Technical Debt Assessment**: Quantitative technical debt scoring and prioritization
 - **Dependency Analysis**: Module relationship mapping, cycle detection, and chokepoint identification
@@ -190,7 +190,7 @@ For more details on any of these changes, see the [project documentation](README
 - **Performance Optimization**: Efficient parsing and processing of large coverage reports
 
 #### 🛠️ Developer Experience
-- **Agent-Friendly Output**: Coverage gaps formatted specifically for AI agent consumption
+- **Agent-Friendly Output**: Coverage gaps formatted for development tool integration
 - **Comprehensive Logging**: Detailed logging of coverage parsing and gap analysis process
 - **Validation Framework**: Built-in validation for coverage file formats and content
 
@@ -219,7 +219,7 @@ For more details on any of these changes, see the [project documentation](README
 ### Planned Features
 - **MCP Integration**: Claude Code integration for IDE assistance
 - **Language Expansion**: Additional language support (Java, C#, C++)
-- **Machine Learning Models**: Enhanced AI-powered analysis capabilities
+- **Statistical Analysis**: Enhanced pattern-based analysis capabilities
 - **Cloud Integration**: SaaS offering with team collaboration features
 - **IDE Plugins**: VS Code, IntelliJ, and other IDE integrations
 

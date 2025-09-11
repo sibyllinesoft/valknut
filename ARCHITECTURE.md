@@ -19,7 +19,7 @@ Valknut is a high-performance code analysis tool implemented in Rust that provid
 
 - **Structure Analysis**: Directory organization and file distribution assessment
 - **Complexity Analysis**: AST-based complexity metrics using Tree-sitter parsers
-- **Semantic Naming**: AI-powered function and variable name quality evaluation
+- **Code Quality Analysis**: Statistical pattern evaluation and naming convention assessment
 - **Technical Debt Assessment**: Quantitative debt scoring and prioritization
 - **Refactoring Recommendations**: Actionable improvement suggestions with impact analysis
 - **Quality Gates**: CI/CD integration with configurable failure conditions
@@ -110,8 +110,8 @@ impl AnalysisPipeline {
 - Cyclomatic and cognitive complexity
 - Maintainability index calculation
 
-#### Semantic Naming Analyzer (`detectors/names/`)
-- AI-powered name quality assessment
+#### Code Quality Analyzer (`detectors/names_simple/`)
+- Statistical pattern-based quality assessment
 - Function and variable naming evaluation
 - Renaming suggestions with context
 
@@ -210,21 +210,21 @@ async fn run_complexity_analysis(&self, files: &[PathBuf]) -> Result<ComplexityA
 - **Technical Debt Score**: Quantified maintainability assessment
 - **Maintainability Index**: Composite maintainability score
 
-### 4. Semantic Analysis Phase
+### 4. Quality Analysis Phase
 
 ```rust
-async fn run_semantic_analysis(&self, files: &[PathBuf]) -> Result<SemanticAnalysisResults> {
+async fn run_quality_analysis(&self, files: &[PathBuf]) -> Result<QualityAnalysisResults> {
     // 1. Extract function and variable names
-    // 2. Analyze naming quality using embedding models
+    // 2. Analyze naming quality using statistical patterns
     // 3. Detect naming inconsistencies
-    // 4. Generate renaming suggestions
+    // 4. Generate improvement suggestions
 }
 ```
 
-**AI Integration:**
-- **Embedding Models**: Qwen3-Embedding-0.6B for semantic understanding
-- **Mismatch Detection**: Contextual name quality assessment
-- **Suggestion Generation**: Contextual renaming recommendations
+**Statistical Analysis:**
+- **Pattern Recognition**: Advanced algorithms for code quality assessment
+- **Inconsistency Detection**: Statistical name quality assessment
+- **Suggestion Generation**: Pattern-based improvement recommendations
 - **API Protection**: Preserve public API naming conventions
 
 ### 5. Refactoring Analysis Phase

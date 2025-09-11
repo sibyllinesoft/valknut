@@ -1,10 +1,10 @@
 <div align="center">
   <img src="assets/logo.webp" alt="Valknut Logo" width="200">
 
-  **AI-Powered Code Analysis That Actually Understands Your Code**
+  **High-Performance Code Analysis for Modern Development Teams**
 </div>
 
-Valknut goes beyond traditional static analysis by using AI to understand the semantic meaning of your code. While other tools count lines and check syntax, Valknut analyzes naming quality, identifies architectural debt, and provides actionable refactoring recommendations with quantified impact. Built in Rust for production speed and integrated with CI/CD for automated quality gates.
+Valknut provides comprehensive code analysis through advanced statistical algorithms and graph-based analysis. While other tools count lines and check syntax, Valknut analyzes code complexity, identifies architectural debt, and provides actionable refactoring recommendations with quantified impact. Built in Rust for production speed and integrated with CI/CD for automated quality gates.
 
 **Stop guessing what needs refactoring. Get data-driven insights that improve code maintainability.**
 
@@ -20,6 +20,12 @@ Valknut goes beyond traditional static analysis by using AI to understand the se
 ```bash
 brew tap sibyllinesoft/valknut
 brew install valknut
+```
+
+#### Via Cargo (recommended)
+
+```bash
+cargo install valknut-rs
 ```
 
 #### Build from Source (requires Rust 1.70+)
@@ -47,8 +53,8 @@ valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 
 ## What Makes Valknut Different
 
-### AI-Powered Semantic Analysis
-Traditional tools analyze syntax. Valknut analyzes **meaning**. It uses AI embeddings to evaluate whether function names match their actual behavior, identifying misleading identifiers that confuse developers and cause bugs.
+### Statistical Code Analysis
+Traditional tools analyze syntax. Valknut analyzes **patterns and complexity**. It uses advanced statistical algorithms to evaluate code structure, identify complexity hotspots, and detect architectural anti-patterns that impact maintainability.
 
 ### Production-Ready Performance
 Built in Rust with SIMD optimizations, Valknut analyzes large codebases in seconds, not minutes. Designed for enterprise-scale projects with 100k+ files while maintaining sub-linear memory usage.
@@ -59,8 +65,8 @@ Get concrete metrics on technical debt with prioritized recommendations. Know ex
 ### Zero-Configuration CI/CD Integration
 Drop into any CI/CD pipeline with quality gates that fail builds when code quality degrades. No complex setup required.
 
-### Multi-Language Intelligence
-Deep semantic analysis for Python, TypeScript, JavaScript, Rust, Go, and more. Each language parser understands idiomatic patterns and provides language-specific insights.
+### Multi-Language Support
+Comprehensive structural analysis for Python, TypeScript, JavaScript, Rust, Go, and more. Each language parser understands syntactic patterns and provides language-specific complexity insights.
 
 ## Core Capabilities
 
@@ -68,7 +74,7 @@ Deep semantic analysis for Python, TypeScript, JavaScript, Rust, Go, and more. E
 
 **Complexity Intelligence**: Goes beyond cyclomatic complexity to measure cognitive load and refactoring priority
 
-**Semantic Naming Analysis**: AI-powered evaluation of naming quality with context-aware suggestions
+**Code Quality Analysis**: Statistical evaluation of code patterns and structural complexity
 
 **Refactoring Recommendations**: Actionable insights with quantified impact scoring and effort estimation  
 
@@ -119,14 +125,14 @@ languages:
     file_extensions: [".ts", ".tsx"]
 ```
 
-### AI Semantic Analysis
+### Advanced Options
 
 ```yaml
-names:
+analysis:
   enabled: true
-  embedding_model: "Qwen/Qwen3-Embedding-0.6B-GGUF"
-  min_mismatch: 0.65       # Sensitivity threshold
-  protect_public_api: true # Avoid suggesting changes to public APIs
+  complexity_threshold: 10.0
+  min_confidence: 0.65     # Analysis confidence threshold
+  include_test_files: true # Include test files in analysis
 ```
 
 ## CI/CD Integration
@@ -143,14 +149,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Valknut
-<<<<<<< HEAD
         run: |
-          # Install via Homebrew
-          brew tap sibyllinesoft/valknut
-          brew install valknut
-=======
-        run: cargo install --git https://github.com/nathanricedev/valknut
->>>>>>> 7fe34d3 (feat: Release v1.1.0 - Add comprehensive Coverage Packs functionality)
+          # Install from crates.io
+          cargo install valknut-rs
       
       - name: Run Quality Gate
         run: |
@@ -276,7 +277,7 @@ cargo run -- analyze ./test_data/sample_python --format json
 Valknut uses a modular pipeline architecture:
 - **Core Pipeline**: Orchestrates multi-stage analysis with caching
 - **Language Parsers**: Tree-sitter based AST analysis for each supported language
-- **AI Integration**: Embedding models for semantic naming analysis
+- **Statistical Analysis**: Advanced algorithms for code complexity evaluation
 - **Report Generation**: Templated output in multiple formats
 - **Quality Gates**: Configurable thresholds for CI/CD integration
 
@@ -293,7 +294,7 @@ See [docs/](docs/) for detailed architecture documentation and design decisions.
 
 ## Supported Languages
 
-Currently supported languages with full semantic analysis:
+Currently supported languages with full structural analysis:
 - **Python** - Comprehensive AST analysis with async/await pattern detection
 - **TypeScript/JavaScript** - Modern ES features, React patterns, Node.js idioms
 - **Rust** - Ownership analysis, zero-cost abstraction patterns

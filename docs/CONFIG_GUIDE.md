@@ -93,15 +93,15 @@ Control directory organization and file analysis:
 }
 ```
 
-### Semantic Naming (Optional)
-AI-powered function name analysis:
+### Code Quality Analysis (Optional)
+Pattern-based code quality analysis:
 
 ```json
 {
   "names": {
     "enabled": false,
-    "embedding_model": "Qwen/Qwen3-Embedding-0.6B-GGUF",
-    "min_mismatch": 0.65,
+    "pattern_analysis": true,
+    "min_confidence": 0.65,
     "min_impact": 3,
     "protect_public_api": true
   }
@@ -152,11 +152,11 @@ The configuration includes built-in presets for common use cases:
 }
 ```
 
-### Semantic Analysis
+### Statistical Analysis
 ```json
 {
   "_presets": {
-    "semantic_analysis": {
+    "statistical_analysis": {
       "names": {
         "enabled": true
       },
