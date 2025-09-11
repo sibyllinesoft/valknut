@@ -159,3 +159,59 @@ pub fn create_refactoring_suggestions_schema() -> serde_json::Value {
         "required": ["entity_id"]
     })
 }
+
+/// Create tool schema for validate_quality_gates
+pub fn create_validate_quality_gates_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Path to the code directory or file to validate"
+            },
+            "max_complexity": {
+                "type": "number",
+                "minimum": 1.0,
+                "maximum": 100.0,
+                "description": "Maximum allowed complexity score (optional)"
+            },
+            "min_health": {
+                "type": "number", 
+                "minimum": 0.0,
+                "maximum": 100.0,
+                "description": "Minimum required health score (optional)"
+            },
+            "max_debt": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 100.0,
+                "description": "Maximum allowed technical debt ratio (optional)"
+            },
+            "max_issues": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Maximum allowed number of issues (optional)"
+            }
+        },
+        "required": ["path"]
+    })
+}
+
+/// Create tool schema for analyze_file_quality
+pub fn create_analyze_file_quality_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the specific file to analyze"
+            },
+            "include_suggestions": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to include refactoring suggestions in the report"
+            }
+        },
+        "required": ["file_path"]
+    })
+}
