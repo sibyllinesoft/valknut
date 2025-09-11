@@ -262,11 +262,23 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
 }
 
 /// Run MCP server over stdio for IDE integration
+/// 
+/// This command starts a full JSON-RPC 2.0 MCP (Model Context Protocol) server
+/// that exposes valknut's code analysis capabilities over stdin/stdout.
+/// 
+/// Available MCP tools:
+/// - analyze_code: Analyze code for refactoring opportunities and quality metrics
+/// - get_refactoring_suggestions: Get specific refactoring suggestions for a code entity
+/// 
+/// The server follows the MCP specification and can be used with Claude Code
+/// and other MCP-compatible clients.
 pub async fn mcp_stdio_command(
     args: McpStdioArgs,
     survey: bool,
     survey_verbosity: SurveyVerbosity
 ) -> anyhow::Result<()> {
+    use crate::mcp::server::run_mcp_server;
+    
     eprintln!("📡 Starting MCP stdio server for IDE integration...");
     
     // Load configuration
@@ -282,8 +294,13 @@ pub async fn mcp_stdio_command(
         eprintln!("📊 Survey disabled");
     }
 
-    // Run the MCP server
-    crate::mcp::server::run_mcp_server().await?;
+    // Initialize and run MCP server
+    eprintln!("🚀 MCP JSON-RPC 2.0 server ready for requests");
+    
+    if let Err(e) = run_mcp_server(VERSION).await {
+        eprintln!("❌ MCP server error: {}", e);
+        return Err(anyhow::anyhow!("MCP server failed: {}", e));
+    }
     
     Ok(())
 }
