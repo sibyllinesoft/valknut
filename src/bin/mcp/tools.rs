@@ -3,10 +3,12 @@
 use std::path::Path;
 use serde_json;
 use tracing::{info, error};
+use chrono;
 
 use valknut_rs::api::{engine::ValknutEngine, config_types::AnalysisConfig, results::AnalysisResults};
 use valknut_rs::io::reports::ReportGenerator;
 use valknut_rs::core::config::ReportFormat;
+use valknut_rs::core::scoring::Priority;
 
 use crate::mcp::protocol::{ToolResult, ContentItem, error_codes};
 // use crate::cli::config::StructureConfig;
@@ -25,6 +27,32 @@ pub struct RefactoringSuggestionsParams {
     pub entity_id: String,
     #[serde(default = "default_max_suggestions")]
     pub max_suggestions: usize,
+}
+
+/// Parameters for validate_quality_gates tool
+#[derive(serde::Deserialize)]
+pub struct ValidateQualityGatesParams {
+    pub path: String,
+    #[serde(default)]
+    pub max_complexity: Option<f64>,
+    #[serde(default)]
+    pub min_health: Option<f64>,
+    #[serde(default)]
+    pub max_debt: Option<f64>,
+    #[serde(default)]
+    pub max_issues: Option<usize>,
+}
+
+/// Parameters for analyze_file_quality tool
+#[derive(serde::Deserialize)]
+pub struct AnalyzeFileQualityParams {
+    pub file_path: String,
+    #[serde(default = "default_include_suggestions")]
+    pub include_suggestions: bool,
+}
+
+fn default_include_suggestions() -> bool {
+    true
 }
 
 fn default_format() -> String {
@@ -280,6 +308,259 @@ fn extract_suggested_actions(candidate: &valknut_rs::api::results::RefactoringCa
     }
     
     actions
+}
+
+/// Execute the validate_quality_gates tool
+pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) -> Result<ToolResult, (i32, String)> {
+    info!("Executing validate_quality_gates tool for path: {}", params.path);
+    
+    // Validate path exists
+    let path = Path::new(&params.path);
+    if !path.exists() {
+        return Err((error_codes::INVALID_PARAMS, 
+                   format!("Path does not exist: {}", params.path)));
+    }
+
+    // Create analysis configuration
+    let analysis_config = AnalysisConfig::default()
+        .with_confidence_threshold(0.75)
+        .with_max_files(5000);
+
+    // Initialize the analysis engine
+    let mut engine = match ValknutEngine::new(analysis_config).await {
+        Ok(engine) => engine,
+        Err(e) => {
+            error!("Failed to initialize analysis engine: {}", e);
+            return Err((error_codes::ANALYSIS_ERROR, 
+                       format!("Failed to initialize analysis engine: {}", e)));
+        }
+    };
+
+    // Run analysis
+    let results = match engine.analyze_directory(&path).await {
+        Ok(results) => results,
+        Err(e) => {
+            error!("Analysis failed: {}", e);
+            return Err((error_codes::ANALYSIS_ERROR, 
+                       format!("Analysis failed: {}", e)));
+        }
+    };
+
+    // Evaluate quality gates
+    let quality_result = evaluate_quality_gates(&results, &params);
+    let formatted_result = match serde_json::to_string_pretty(&quality_result) {
+        Ok(json) => json,
+        Err(e) => {
+            error!("Failed to serialize quality gate results: {}", e);
+            return Err((error_codes::INTERNAL_ERROR,
+                       format!("Failed to serialize quality gate results: {}", e)));
+        }
+    };
+
+    Ok(ToolResult {
+        content: vec![ContentItem {
+            content_type: "text".to_string(),
+            text: formatted_result,
+        }],
+    })
+}
+
+/// Execute the analyze_file_quality tool
+pub async fn execute_analyze_file_quality(params: AnalyzeFileQualityParams) -> Result<ToolResult, (i32, String)> {
+    info!("Executing analyze_file_quality tool for file: {}", params.file_path);
+    
+    // Validate file exists
+    let file_path = Path::new(&params.file_path);
+    if !file_path.exists() {
+        return Err((error_codes::INVALID_PARAMS, 
+                   format!("File does not exist: {}", params.file_path)));
+    }
+
+    if !file_path.is_file() {
+        return Err((error_codes::INVALID_PARAMS, 
+                   format!("Path is not a file: {}", params.file_path)));
+    }
+
+    // Create targeted analysis configuration
+    let analysis_config = AnalysisConfig::default()
+        .with_confidence_threshold(0.5)
+        .with_max_files(1); // Only analyze this one file
+
+    // Initialize the analysis engine
+    let mut engine = match ValknutEngine::new(analysis_config).await {
+        Ok(engine) => engine,
+        Err(e) => {
+            error!("Failed to initialize analysis engine: {}", e);
+            return Err((error_codes::ANALYSIS_ERROR, 
+                       format!("Failed to initialize analysis engine: {}", e)));
+        }
+    };
+
+    // Run analysis on the file's parent directory but focus on this file
+    let parent_dir = file_path.parent().unwrap_or(file_path);
+    let results = match engine.analyze_directory(parent_dir).await {
+        Ok(results) => results,
+        Err(e) => {
+            error!("Analysis failed: {}", e);
+            return Err((error_codes::ANALYSIS_ERROR, 
+                       format!("Analysis failed: {}", e)));
+        }
+    };
+
+    // Filter results for just this file
+    let file_quality_report = create_file_quality_report(&results, &params.file_path, params.include_suggestions);
+    let formatted_report = match serde_json::to_string_pretty(&file_quality_report) {
+        Ok(json) => json,
+        Err(e) => {
+            error!("Failed to serialize file quality report: {}", e);
+            return Err((error_codes::INTERNAL_ERROR,
+                       format!("Failed to serialize file quality report: {}", e)));
+        }
+    };
+
+    Ok(ToolResult {
+        content: vec![ContentItem {
+            content_type: "text".to_string(),
+            text: formatted_report,
+        }],
+    })
+}
+
+/// Evaluate quality gates against analysis results
+fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGatesParams) -> serde_json::Value {
+    let mut violations = Vec::new();
+    let mut passed = true;
+
+    // Check health score threshold  
+    if let Some(min_health) = params.min_health {
+        if results.summary.code_health_score < min_health {
+            violations.push(serde_json::json!({
+                "rule": "Min Health Score",
+                "current": results.summary.code_health_score,
+                "threshold": min_health,
+                "status": "FAILED", 
+                "message": format!("Health score ({:.1}) is below minimum required ({:.1})", 
+                                 results.summary.code_health_score, min_health)
+            }));
+            passed = false;
+        }
+    }
+
+    // Check refactoring score as complexity proxy
+    if let Some(max_complexity) = params.max_complexity {
+        if results.summary.avg_refactoring_score > max_complexity / 100.0 {
+            violations.push(serde_json::json!({
+                "rule": "Max Complexity",
+                "current": results.summary.avg_refactoring_score * 100.0,
+                "threshold": max_complexity,
+                "status": "FAILED",
+                "message": format!("Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
+                                 results.summary.avg_refactoring_score * 100.0, max_complexity)
+            }));
+            passed = false;
+        }
+    }
+
+    // Check issues count threshold (use refactoring_needed + critical + high_priority as proxy)
+    if let Some(max_issues) = params.max_issues {
+        let total_issues = results.summary.critical + results.summary.high_priority;
+        if total_issues > max_issues {
+            violations.push(serde_json::json!({
+                "rule": "Max Issues",
+                "current": total_issues,
+                "threshold": max_issues,
+                "status": "FAILED",
+                "message": format!("Total issues ({}) exceeds maximum allowed ({})", 
+                                 total_issues, max_issues)
+            }));
+            passed = false;
+        }
+    }
+
+    // Use refactoring score as tech debt proxy
+    if let Some(max_debt) = params.max_debt {
+        let debt_score = results.summary.avg_refactoring_score * 100.0;
+        if debt_score > max_debt {
+            violations.push(serde_json::json!({
+                "rule": "Max Technical Debt",
+                "current": debt_score,
+                "threshold": max_debt,
+                "status": "FAILED",
+                "message": format!("Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
+                                 debt_score, max_debt)
+            }));
+            passed = false;
+        }
+    }
+
+    let total_issues = results.summary.critical + results.summary.high_priority;
+    
+    serde_json::json!({
+        "quality_gates_passed": passed,
+        "overall_health_score": results.summary.code_health_score,
+        "complexity_score": results.summary.avg_refactoring_score * 100.0,
+        "technical_debt_ratio": results.summary.avg_refactoring_score * 100.0,
+        "total_issues": total_issues,
+        "violations": violations,
+        "summary": {
+            "total_files": results.summary.files_processed,
+            "files_with_issues": total_issues,
+            "refactoring_needed": results.summary.refactoring_needed
+        }
+    })
+}
+
+/// Create file-specific quality report
+fn create_file_quality_report(results: &AnalysisResults, file_path: &str, include_suggestions: bool) -> serde_json::Value {
+    // Find refactoring candidates for this file
+    let file_candidates: Vec<_> = results.refactoring_candidates.iter()
+        .filter(|candidate| candidate.file_path.contains(file_path))
+        .collect();
+
+    // Calculate average scores for this file
+    let avg_score = if !file_candidates.is_empty() {
+        file_candidates.iter().map(|c| c.score).sum::<f64>() / file_candidates.len() as f64
+    } else {
+        0.0
+    };
+
+    let avg_confidence = if !file_candidates.is_empty() {
+        file_candidates.iter().map(|c| c.confidence).sum::<f64>() / file_candidates.len() as f64
+    } else {
+        1.0
+    };
+
+    let mut report = serde_json::json!({
+        "file_path": file_path,
+        "analysis_timestamp": chrono::Utc::now().to_rfc3339(),
+        "file_exists": Path::new(file_path).exists(),
+        "quality_metrics": {
+            "refactoring_score": avg_score,
+            "confidence": avg_confidence,
+            "priority_issues": file_candidates.iter().filter(|c| matches!(c.priority, Priority::High | Priority::Critical)).count(),
+            "total_issues": file_candidates.iter().map(|c| c.issues.len()).sum::<usize>()
+        },
+        "refactoring_opportunities_count": file_candidates.len()
+    });
+
+    if include_suggestions && !file_candidates.is_empty() {
+        let suggestions: Vec<serde_json::Value> = file_candidates.iter().map(|candidate| {
+            serde_json::json!({
+                "entity_name": candidate.name,
+                "entity_id": candidate.entity_id,
+                "priority": candidate.priority,
+                "confidence": candidate.confidence,
+                "refactoring_score": candidate.score,
+                "suggested_actions": extract_suggested_actions(candidate),
+                "line_range": candidate.line_range,
+                "issues": candidate.issues
+            })
+        }).collect();
+        
+        report["refactoring_suggestions"] = serde_json::Value::Array(suggestions);
+    }
+
+    report
 }
 
 /// Create a simple markdown report manually

@@ -339,6 +339,33 @@ pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
                         },
                         "required": ["entity_id"]
                     }
+                },
+                {
+                    "name": "validate_quality_gates",
+                    "description": "Validate code against quality gate thresholds for CI/CD integration", 
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "Path to code directory or file"},
+                            "max_complexity": {"type": "number", "description": "Maximum allowed complexity score"},
+                            "min_health": {"type": "number", "description": "Minimum required health score"},
+                            "max_debt": {"type": "number", "description": "Maximum allowed technical debt ratio"},
+                            "max_issues": {"type": "integer", "description": "Maximum allowed number of issues"}
+                        },
+                        "required": ["path"]
+                    }
+                },
+                {
+                    "name": "analyze_file_quality", 
+                    "description": "Analyze quality metrics and issues for a specific file",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "file_path": {"type": "string", "description": "Path to the specific file to analyze"},
+                            "include_suggestions": {"type": "boolean", "description": "Whether to include refactoring suggestions"}
+                        },
+                        "required": ["file_path"]
+                    }
                 }
             ]
         },

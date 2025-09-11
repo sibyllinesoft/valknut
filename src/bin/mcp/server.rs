@@ -7,10 +7,11 @@ use serde_json;
 use crate::mcp::protocol::{
     JsonRpcRequest, JsonRpcResponse, McpInitResult, McpCapabilities, McpTool, McpServerInfo,
     ToolCallParams, error_codes, create_analyze_code_schema, create_refactoring_suggestions_schema,
+    create_validate_quality_gates_schema, create_analyze_file_quality_schema,
 };
 use crate::mcp::tools::{
-    execute_analyze_code, execute_refactoring_suggestions, 
-    AnalyzeCodeParams, RefactoringSuggestionsParams
+    execute_analyze_code, execute_refactoring_suggestions, execute_validate_quality_gates, execute_analyze_file_quality,
+    AnalyzeCodeParams, RefactoringSuggestionsParams, ValidateQualityGatesParams, AnalyzeFileQualityParams
 };
 
 /// MCP server that handles JSON-RPC 2.0 communication over stdin/stdout
@@ -144,6 +145,16 @@ impl McpServer {
                         description: "Get specific refactoring suggestions for a code entity".to_string(),
                         input_schema: create_refactoring_suggestions_schema(),
                     },
+                    McpTool {
+                        name: "validate_quality_gates".to_string(),
+                        description: "Validate code against quality gate thresholds for CI/CD integration".to_string(),
+                        input_schema: create_validate_quality_gates_schema(),
+                    },
+                    McpTool {
+                        name: "analyze_file_quality".to_string(),
+                        description: "Analyze quality metrics and issues for a specific file".to_string(),
+                        input_schema: create_analyze_file_quality_schema(),
+                    },
                 ],
             },
             server_info: self.server_info.clone(),
@@ -164,6 +175,16 @@ impl McpServer {
                 name: "get_refactoring_suggestions".to_string(),
                 description: "Get specific refactoring suggestions for a code entity".to_string(),
                 input_schema: create_refactoring_suggestions_schema(),
+            },
+            McpTool {
+                name: "validate_quality_gates".to_string(),
+                description: "Validate code against quality gate thresholds for CI/CD integration".to_string(),
+                input_schema: create_validate_quality_gates_schema(),
+            },
+            McpTool {
+                name: "analyze_file_quality".to_string(),
+                description: "Analyze quality metrics and issues for a specific file".to_string(),
+                input_schema: create_analyze_file_quality_schema(),
             },
         ];
 
@@ -236,6 +257,44 @@ impl McpServer {
                 };
                 
                 match execute_refactoring_suggestions(params).await {
+                    Ok(result) => result,
+                    Err((code, message)) => {
+                        return JsonRpcResponse::error(id, code, message);
+                    }
+                }
+            }
+            "validate_quality_gates" => {
+                let params: ValidateQualityGatesParams = match serde_json::from_value(tool_params.arguments) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        return JsonRpcResponse::error(
+                            id,
+                            error_codes::INVALID_PARAMS,
+                            format!("Invalid validate_quality_gates parameters: {}", e)
+                        );
+                    }
+                };
+                
+                match execute_validate_quality_gates(params).await {
+                    Ok(result) => result,
+                    Err((code, message)) => {
+                        return JsonRpcResponse::error(id, code, message);
+                    }
+                }
+            }
+            "analyze_file_quality" => {
+                let params: AnalyzeFileQualityParams = match serde_json::from_value(tool_params.arguments) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        return JsonRpcResponse::error(
+                            id,
+                            error_codes::INVALID_PARAMS,
+                            format!("Invalid analyze_file_quality parameters: {}", e)
+                        );
+                    }
+                };
+                
+                match execute_analyze_file_quality(params).await {
                     Ok(result) => result,
                     Err((code, message)) => {
                         return JsonRpcResponse::error(id, code, message);

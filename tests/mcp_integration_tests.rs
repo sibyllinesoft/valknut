@@ -284,7 +284,7 @@ fn test_mcp_manifest_generation() {
     assert!(capabilities["tools"].is_array());
     
     let tools = capabilities["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 2);
+    assert_eq!(tools.len(), 4);
     
     // Validate analyze_code tool
     let analyze_tool = &tools[0];
