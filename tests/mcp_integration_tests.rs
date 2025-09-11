@@ -344,12 +344,11 @@ fn test_mcp_stdio_server_stub() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-stdio"]);
     
-    // Currently just a stub - should succeed but warn about incomplete implementation
+    // Should start successfully and show proper status messages
     cmd.assert()
         .success()
         .stderr(predicate::str::contains("📡 Starting MCP stdio server for IDE integration"))
-        .stderr(predicate::str::contains("⚠️  MCP stdio server implementation in progress"))
-        .stderr(predicate::str::contains("💡 Use the Python version for now"));
+        .stderr(predicate::str::contains("🚀 MCP JSON-RPC 2.0 server ready for requests"));
 }
 
 #[test]
@@ -357,13 +356,33 @@ fn test_mcp_stdio_server_with_config() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("test-config.yml");
     
-    // Create a basic config file
+    // Create a complete valid config file
     std::fs::write(&config_path, r#"
 structure:
   enable_branch_packs: true
+  enable_file_split_packs: true
   top_packs: 3
 fsdir:
   max_files_per_dir: 15
+  max_subdirs_per_dir: 10
+  max_dir_loc: 1000
+  min_branch_recommendation_gain: 0.15
+  min_files_for_split: 5
+  target_loc_per_subdir: 1000
+fsfile:
+  huge_loc: 800
+  huge_bytes: 128000
+  min_split_loc: 200
+  min_entities_per_split: 3
+partitioning:
+  balance_tolerance: 0.25
+  max_clusters: 4
+  min_clusters: 2
+  naming_fallbacks:
+  - core
+  - io
+  - api
+  - util
 "#).unwrap();
     
     let mut cmd = valknut_cmd();
@@ -371,8 +390,7 @@ fsdir:
     
     cmd.assert()
         .success()
-        .stderr(predicate::str::contains("📡 Starting MCP stdio server"))
-        .stderr(predicate::str::contains("⚠️  MCP stdio server implementation in progress"));
+        .stderr(predicate::str::contains("📡 Starting MCP stdio server"));
 }
 
 #[test]
@@ -463,20 +481,28 @@ fn test_analyze_code_tool_integration() {
     
     let test_project = create_test_project();
     let project_path = test_project.path();
+    let output_dir = project_path.join(".valknut");
+    std::fs::create_dir_all(&output_dir).unwrap();
     
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
         "--format", "json",
+        "--out", output_dir.to_str().unwrap(),
         "--quiet"
     ]);
     
-    let result = cmd.assert().success();
-    let output = std::str::from_utf8(&result.get_output().stdout).unwrap();
+    cmd.assert().success();
+    
+    // Read the analysis results from the output file
+    let results_file = project_path.join(".valknut").join("analysis_results.json");
+    assert!(results_file.exists(), "Analysis results file should be created");
+    
+    let output = std::fs::read_to_string(&results_file).expect("Should be able to read results file");
     
     // Parse the analysis results
-    let analysis: Value = serde_json::from_str(output).expect("Invalid JSON analysis output");
+    let analysis: Value = serde_json::from_str(&output).expect("Invalid JSON analysis output");
     
     // Validate that analysis was performed
     assert!(analysis.is_object());
@@ -545,20 +571,30 @@ fn test_analysis_without_pre_existing_results() {
         std::fs::remove_dir_all(&cache_dir).unwrap();
     }
     
+    let valknut_dir = project_path.join(".valknut");
+    if valknut_dir.exists() {
+        std::fs::remove_dir_all(&valknut_dir).unwrap();
+    }
+    std::fs::create_dir_all(&valknut_dir).unwrap();
+    
     // Run analysis on fresh directory
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
         "--format", "json",
+        "--out", valknut_dir.to_str().unwrap(),
         "--quiet"
     ]);
     
-    let result = cmd.assert().success();
-    let output = std::str::from_utf8(&result.get_output().stdout).unwrap();
+    cmd.assert().success();
     
-    // Should succeed and provide analysis
-    let analysis: Value = serde_json::from_str(output).expect("Should produce valid analysis");
+    // Should succeed and provide analysis in output file
+    let results_file = project_path.join(".valknut").join("analysis_results.json");
+    assert!(results_file.exists(), "Analysis results file should be created");
+    
+    let output = std::fs::read_to_string(&results_file).expect("Should be able to read results file");
+    let analysis: Value = serde_json::from_str(&output).expect("Should produce valid analysis");
     assert!(analysis.is_object());
 }
 
