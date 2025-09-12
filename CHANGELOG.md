@@ -5,6 +5,42 @@ All notable changes to valknut-rs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2024-12-11
+
+### 🚀 Enhanced MCP Server for Claude Code Integration
+
+This release makes the MCP (Model Control Protocol) server production-ready for Claude Code integration with comprehensive analysis tools and robust error handling.
+
+### Added
+
+#### 🛠️ MCP Server Enhancements
+- **4 Complete MCP Tools**: Full-featured analysis capabilities via MCP protocol
+  - `analyze_code`: Comprehensive code analysis with multi-language support and multiple output formats
+  - `get_refactoring_suggestions`: Entity-specific refactoring recommendations with confidence scoring
+  - `validate_quality_gates`: CI/CD quality gate validation with configurable thresholds
+  - `analyze_file_quality`: File-level quality metrics and targeted refactoring suggestions
+
+#### 🔧 Technical Improvements
+- **Enhanced Error Handling**: Comprehensive error codes and descriptive error messages for all MCP operations
+- **JSON Schema Validation**: Complete parameter validation for all MCP tool calls
+- **Quality Gate Integration**: Configurable complexity, health score, and technical debt thresholds for CI/CD pipelines
+- **Production Logging**: Structured logging with appropriate log levels for debugging and monitoring
+
+#### 🧪 Testing & Quality
+- **Updated Integration Tests**: All 16 MCP integration tests passing with enhanced test coverage
+- **Manifest Validation**: Complete MCP manifest generation with proper JSON Schema definitions
+- **Protocol Compliance**: Full JSON-RPC 2.0 protocol implementation with proper error handling
+
+### Changed
+- **MCP Tool Count**: Expanded from 2 to 4 comprehensive analysis tools
+- **CLI Manifest Command**: Enhanced `valknut mcp-manifest` to include all 4 tools with complete schemas
+- **Test Suite**: Updated integration tests to validate new tool functionality
+
+### Fixed
+- **API Compatibility**: Fixed MCP tools to properly use the current AnalysisResults API structure
+- **Parameter Validation**: Corrected all MCP tool parameter handling and validation
+- **Tool Registration**: Ensured all 4 tools are properly registered in both server initialization and manifest generation
+
 ## [1.0.0] - 2024-12-09
 
 ### 🎉 First Stable Release
