@@ -163,3 +163,4 @@ homebrew-test-formula.rb
 
 # Setup documentation (keep in repo for reference)
 # HOMEBREW*.md files are intentionally trackedrelease-artifacts/
+coverage.lcov
