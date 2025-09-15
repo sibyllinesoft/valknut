@@ -147,7 +147,7 @@ pub mod api {
 pub use api::engine::ValknutEngine;
 pub use api::config_types::AnalysisConfig;
 pub use api::results::AnalysisResults;
-pub use core::errors::{ValknutError, Result};
+pub use core::errors::{ValknutError, Result, ValknutResultExt};
 
 #[cfg(test)]
 mod test_coverage_integration;

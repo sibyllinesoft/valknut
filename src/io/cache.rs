@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 // Note: PdgMotif and MotifCategory will be imported when needed
 
 /// Phase 3 Stop-Motifs Cache for automatic boilerplate pattern detection
@@ -240,7 +240,7 @@ impl StopMotifCacheManager {
         // Validate cache age
         let cache_age = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| ValknutError::config(format!("System time error: {}", e)))?
+            .map_generic_err("getting system time")?
             .as_secs()
             - cache.last_updated;
 
@@ -319,7 +319,7 @@ impl StopMotifCacheManager {
         })?;
 
         serde_json::from_str(&content)
-            .map_err(|e| ValknutError::config(format!("Invalid cache format: {}", e)))
+            .map_json_err("cache file content")
     }
 
     /// Save cache to disk atomically
@@ -340,7 +340,7 @@ impl StopMotifCacheManager {
 
         // Write to temporary file first
         let content = serde_json::to_string_pretty(cache)
-            .map_err(|e| ValknutError::config(format!("Failed to serialize cache: {}", e)))?;
+            .map_json_err("cache serialization")?;
 
         fs::write(&temp_path, content).map_err(|e| {
             ValknutError::io(
