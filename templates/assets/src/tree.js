@@ -36,33 +36,38 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         let displayText = data.name;
         let scoreElement = null;
         
-        // Extract complexity score from text
-        const complexityMatch = displayText.match(/^(.+?)score:\s*(\d+(?:\.\d+)?)/);
-        if (complexityMatch) {
-            displayText = complexityMatch[1].replace(/^(⚠️|💡)\s*/, '').replace(/complexity:\s*/i, '').replace(/structure:\s*/i, '').trim();
-            const score = parseFloat(complexityMatch[2]);
-            const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
+        // Clean up text by removing emoji prefixes and category prefixes first
+        displayText = displayText
+            .replace(/^(⚠️|💡|ℹ️)\s*/, '')
+            .replace(/^(complexity|structure):\s*/i, '')
+            .trim();
+        
+        // For issue rows (alert-triangle), check if it's complexity or structure and extract score
+        if (isIssueRow) {
+            const complexityMatch = data.name.match(/score:\s*(\d+(?:\.\d+)?)/);
+            const isComplexityIssue = data.name.toLowerCase().includes('complexity');
+            const isStructureIssue = data.name.toLowerCase().includes('structure');
             
-            scoreElement = React.createElement('div', {
-                key: 'score-badge',
-                style: {
-                    marginLeft: 'auto',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: '500',
-                    backgroundColor: scoreColor + '20',
-                    color: scoreColor,
-                    border: `1px solid ${scoreColor}40`
-                }
-            }, score.toString());
-        } else {
-            // Clean up text by removing emoji prefixes and category prefixes
-            displayText = displayText
-                .replace(/^(⚠️|💡|ℹ️)\s*/, '')
-                .replace(/^(complexity|structure):\s*/i, '')
-                .trim();
+            if (complexityMatch && (isComplexityIssue || isStructureIssue)) {
+                const score = parseFloat(complexityMatch[1]);
+                const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
+                
+                scoreElement = React.createElement('div', {
+                    key: 'score-badge',
+                    style: {
+                        marginLeft: 'auto',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        backgroundColor: scoreColor + '20',
+                        color: scoreColor,
+                        border: `1px solid ${scoreColor}40`
+                    }
+                }, score.toString());
+            }
         }
+        // For suggestion rows (lightbulb), no badges - just clean text
         
         const children = [
             React.createElement('i', {
