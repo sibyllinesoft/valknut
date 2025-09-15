@@ -238,6 +238,59 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         }, priority));
     }
     
+    // Severity count badges for folders and files (aggregate from children)
+    if ((isFolder || isFile) && data.severityCounts) {
+        const counts = data.severityCounts;
+        
+        // Critical issues badge
+        if (counts.critical > 0) {
+            children.push(React.createElement('div', {
+                key: 'critical-count',
+                className: 'tree-badge',
+                style: { 
+                    marginLeft: '0.5rem',
+                    ...getPriorityStyle('critical')
+                }
+            }, `${counts.critical} critical`));
+        }
+        
+        // High issues badge  
+        if (counts.high > 0) {
+            children.push(React.createElement('div', {
+                key: 'high-count',
+                className: 'tree-badge',
+                style: { 
+                    marginLeft: '0.5rem',
+                    ...getPriorityStyle('high')
+                }
+            }, `${counts.high} high`));
+        }
+        
+        // Medium issues badge
+        if (counts.medium > 0) {
+            children.push(React.createElement('div', {
+                key: 'medium-count',
+                className: 'tree-badge',
+                style: { 
+                    marginLeft: '0.5rem',
+                    ...getPriorityStyle('medium')
+                }
+            }, `${counts.medium} medium`));
+        }
+        
+        // Low issues badge
+        if (counts.low > 0) {
+            children.push(React.createElement('div', {
+                key: 'low-count',
+                className: 'tree-badge',
+                style: { 
+                    marginLeft: '0.5rem',
+                    ...getPriorityStyle('low')
+                }
+            }, `${counts.low} low`));
+        }
+    }
+    
     // Complexity score for files
     if (isFile && data.avgScore) {
         children.push(React.createElement('div', {
@@ -575,6 +628,12 @@ const CodeAnalysisTree = ({ data }) => {
                                 suggestionText = `💡 ${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
                             }
                             
+                            // For extract method suggestions, include the method name context
+                            if (suggestion.type?.toLowerCase().includes('extract_method') || 
+                                suggestion.type?.toLowerCase().includes('extract method')) {
+                                suggestionText = `💡 Extract Method for ${cleanName}: ${suggestion.description}`;
+                            }
+                            
                             entityChildren.push({
                                 id: `suggestion:${entityNodeId}:${idx}`,
                                 name: suggestionText,
@@ -599,6 +658,26 @@ const CodeAnalysisTree = ({ data }) => {
                 };
             }));
             
+            // Aggregate severity counts from all entities in this file
+            const fileSeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+            fileGroup.entities.forEach(entity => {
+                // Count issues by severity
+                if (entity.issues && Array.isArray(entity.issues)) {
+                    entity.issues.forEach(issue => {
+                        const severity = getSeverityLevel(issue.priority, issue.severity);
+                        fileSeverityCounts[severity]++;
+                    });
+                }
+                
+                // Count suggestions by severity
+                if (entity.suggestions && Array.isArray(entity.suggestions)) {
+                    entity.suggestions.forEach(suggestion => {
+                        const severity = getSeverityLevel(suggestion.priority, suggestion.impact);
+                        fileSeverityCounts[severity]++;
+                    });
+                }
+            });
+
             const fileNode = {
                 id: fileNodeId,
                 name: String(fileName),
@@ -608,6 +687,7 @@ const CodeAnalysisTree = ({ data }) => {
                 entityCount: typeof fileGroup.entityCount === 'number' ? fileGroup.entityCount : 0,
                 avgScore: typeof fileGroup.avgScore === 'number' ? fileGroup.avgScore : 0,
                 totalIssues: typeof fileGroup.totalIssues === 'number' ? fileGroup.totalIssues : 0,
+                severityCounts: fileSeverityCounts,
                 children: fileChildren
             };
             
@@ -615,6 +695,43 @@ const CodeAnalysisTree = ({ data }) => {
             });
         }
         
+        // Bubble up severity counts from children to parents
+        const bubbleUpSeverityCounts = (nodes) => {
+            return nodes.map(node => {
+                // First, recursively process children
+                const processedChildren = bubbleUpSeverityCounts(node.children || []);
+                
+                // If this is a folder, aggregate severity counts from all children
+                if (node.type === 'folder') {
+                    const folderSeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+                    
+                    const aggregateFromChild = (child) => {
+                        if (child.severityCounts) {
+                            folderSeverityCounts.critical += child.severityCounts.critical || 0;
+                            folderSeverityCounts.high += child.severityCounts.high || 0;
+                            folderSeverityCounts.medium += child.severityCounts.medium || 0;
+                            folderSeverityCounts.low += child.severityCounts.low || 0;
+                        }
+                        // Recursively aggregate from grandchildren
+                        (child.children || []).forEach(aggregateFromChild);
+                    };
+                    
+                    processedChildren.forEach(aggregateFromChild);
+                    
+                    return {
+                        ...node,
+                        severityCounts: folderSeverityCounts,
+                        children: processedChildren
+                    };
+                }
+                
+                return {
+                    ...node,
+                    children: processedChildren
+                };
+            });
+        };
+
         // Sort function: directories first, then by health score/priority
         const sortNodes = (nodes) => {
             return nodes.sort((a, b) => {
@@ -643,7 +760,9 @@ const CodeAnalysisTree = ({ data }) => {
             }));
         };
         
-        const sortedResult = sortNodes(result);
+        // Apply severity count bubbling before sorting
+        const bubblerResult = bubbleUpSeverityCounts(result);
+        const sortedResult = sortNodes(bubblerResult);
         
         return sortedResult;
     }, []);
