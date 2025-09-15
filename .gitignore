@@ -129,6 +129,7 @@ prof/
 profile/
 *.profdata
 *.profraw
+perf.data
 tarpaulin-report.html
 coverage.lcov
 
