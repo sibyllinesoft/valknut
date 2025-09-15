@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 use crate::api::results::AnalysisResults;
 use walkdir::WalkDir;
 
@@ -255,7 +255,7 @@ impl RefactoringOracle {
         
         // Collect all candidate source files with metadata
         for entry in walker {
-            let entry = entry.map_err(|e| ValknutError::internal(format!("Failed to walk directory: {}", e)))?;
+            let entry = entry.map_generic_err("walking project directory")?;
             let path = entry.path();
             
             if path.is_file() {
@@ -541,7 +541,7 @@ impl RefactoringOracle {
             .json(&request)
             .send()
             .await
-            .map_err(|e| ValknutError::internal(format!("Failed to send request to Gemini: {}", e)))?;
+            .map_generic_err("sending request to Gemini API")?;
         
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -551,7 +551,7 @@ impl RefactoringOracle {
         let gemini_response: GeminiResponse = response
             .json()
             .await
-            .map_err(|e| ValknutError::internal(format!("Failed to parse Gemini response: {}", e)))?;
+            .map_generic_err("parsing Gemini API response")?;
         
         let response_text = gemini_response
             .candidates
@@ -566,7 +566,7 @@ impl RefactoringOracle {
             .text;
         
         let oracle_response: RefactoringOracleResponse = serde_json::from_str(&response_text)
-            .map_err(|e| ValknutError::internal(format!("Failed to parse Oracle response JSON: {}", e)))?;
+            .map_json_err("Oracle response")?;
         
         Ok(oracle_response)
     }

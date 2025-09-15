@@ -1,18 +1,18 @@
 //! Report generation for live reachability analysis
-//! 
+//!
 //! Creates JSON, HTML, and Markdown reports for shadow island analysis
 
 use crate::core::errors::{Result, ValknutError};
 use crate::live::{
-    types::{LiveReachReport, Community, CommunityNode, ReportStats, LiveReachScore},
-    graph::CallGraph,
     community::{CommunityDetection, CommunityId},
+    graph::CallGraph,
+    types::{Community, CommunityNode, LiveReachReport, LiveReachScore, ReportStats},
 };
 
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use handlebars::Handlebars;
 use serde_json::json;
+use std::collections::HashMap;
 
 /// Report generation formats
 #[derive(Debug, Clone)]
@@ -32,27 +32,43 @@ impl LiveReachReporter {
     /// Create a new report generator
     pub fn new() -> Self {
         let mut handlebars = Handlebars::new();
-        
+
         // Register helper for percentage calculation
-        handlebars.register_helper("percent", Box::new(|h: &handlebars::Helper, _: &handlebars::Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let numerator = h.param(0).and_then(|v| v.value().as_f64()).unwrap_or(0.0);
-            let denominator = h.param(1).and_then(|v| v.value().as_f64()).unwrap_or(1.0);
-            let percent = if denominator > 0.0 { (numerator / denominator * 100.0).round() } else { 0.0 };
-            out.write(&format!("{:.0}", percent))?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "percent",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &handlebars::Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let numerator = h.param(0).and_then(|v| v.value().as_f64()).unwrap_or(0.0);
+                    let denominator = h.param(1).and_then(|v| v.value().as_f64()).unwrap_or(1.0);
+                    let percent = if denominator > 0.0 {
+                        (numerator / denominator * 100.0).round()
+                    } else {
+                        0.0
+                    };
+                    out.write(&format!("{:.0}", percent))?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register HTML template
-        handlebars.register_template_string("html_report", HTML_TEMPLATE)
+        handlebars
+            .register_template_string("html_report", HTML_TEMPLATE)
             .expect("Failed to register HTML template");
-            
-        // Register Markdown template  
-        handlebars.register_template_string("markdown_report", MARKDOWN_TEMPLATE)
+
+        // Register Markdown template
+        handlebars
+            .register_template_string("markdown_report", MARKDOWN_TEMPLATE)
             .expect("Failed to register Markdown template");
-        
+
         Self { handlebars }
     }
-    
+
     /// Generate complete analysis report
     pub fn generate_report(
         &self,
@@ -64,48 +80,51 @@ impl LiveReachReporter {
         window: (DateTime<Utc>, DateTime<Utc>),
     ) -> Result<LiveReachReport> {
         let graph_stats = graph.get_stats();
-        
+
         // Build communities with shadow island scores
         let mut communities = Vec::new();
-        
+
         for (community_id, community_info) in &detection.communities {
             if community_info.size() < 3 {
                 continue; // Skip very small communities
             }
-            
+
             let shadow_score = shadow_scores.get(community_id).copied().unwrap_or(0.0);
-            
+
             // Build community nodes
-            let nodes: Vec<CommunityNode> = community_info.nodes.iter()
+            let nodes: Vec<CommunityNode> = community_info
+                .nodes
+                .iter()
                 .filter_map(|&node_idx| graph.get_symbol(node_idx))
                 .filter_map(|symbol| {
-                    live_reach_scores.get(symbol).map(|score| {
-                        let stats = graph.get_node_stats(symbol)?;
-                        Some(CommunityNode {
-                            id: symbol.to_string(),
-                            live_reach: score.score,
-                            last_seen: stats.last_seen.map(|dt| dt.format("%Y-%m-%d").to_string()),
-                            seed_reachable: stats.seed_reachable,
+                    live_reach_scores
+                        .get(symbol)
+                        .map(|score| {
+                            let stats = graph.get_node_stats(symbol)?;
+                            Some(CommunityNode {
+                                id: symbol.to_string(),
+                                live_reach: score.score,
+                                last_seen: stats
+                                    .last_seen
+                                    .map(|dt| dt.format("%Y-%m-%d").to_string()),
+                                seed_reachable: stats.seed_reachable,
+                            })
                         })
-                    }).flatten()
+                        .flatten()
                 })
                 .collect();
-            
+
             if nodes.is_empty() {
                 continue; // Skip empty communities
             }
-            
+
             // Generate analysis notes
-            let notes = self.generate_community_notes(
-                community_info, 
-                shadow_score, 
-                &nodes,
-            );
-            
+            let notes = self.generate_community_notes(community_info, shadow_score, &nodes);
+
             // Build top inbound/outbound edges (simplified)
             let top_inbound = Vec::new(); // TODO: Implement cross-community edge analysis
             let top_outbound = Vec::new();
-            
+
             let community = Community {
                 id: format!("c_{}", community_id),
                 size: nodes.len(),
@@ -117,21 +136,26 @@ impl LiveReachReporter {
                 top_outbound,
                 notes,
             };
-            
+
             communities.push(community);
         }
-        
+
         // Sort communities by shadow island score (descending)
-        communities.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        communities.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Calculate overall statistics
         let all_scores: Vec<f64> = live_reach_scores.values().map(|s| s.score).collect();
         let median_live_reach = calculate_median(&all_scores);
-        
-        let shadow_islands = communities.iter()
+
+        let shadow_islands = communities
+            .iter()
             .filter(|c| c.score >= 0.6 && c.size >= 5)
             .count();
-        
+
         let stats = ReportStats {
             total_nodes: graph_stats.total_nodes,
             total_edges: graph_stats.total_edges,
@@ -141,7 +165,7 @@ impl LiveReachReporter {
             shadow_islands,
             median_live_reach,
         };
-        
+
         Ok(LiveReachReport {
             generated_at: Utc::now(),
             svc: service.to_string(),
@@ -150,7 +174,7 @@ impl LiveReachReporter {
             stats,
         })
     }
-    
+
     /// Generate HTML report
     pub fn generate_html_report(&self, report: &LiveReachReport) -> Result<String> {
         let data = json!({
@@ -162,12 +186,12 @@ impl LiveReachReporter {
             "has_shadow_islands": report.stats.shadow_islands > 0,
             "top_islands": report.communities.iter().take(10).collect::<Vec<_>>(),
         });
-        
+
         self.handlebars
             .render("html_report", &data)
             .map_err(|e| ValknutError::validation(format!("Failed to render HTML report: {}", e)))
     }
-    
+
     /// Generate Markdown report
     pub fn generate_markdown_report(&self, report: &LiveReachReport) -> Result<String> {
         let data = json!({
@@ -178,12 +202,14 @@ impl LiveReachReporter {
             "window_end": report.window.1.format("%Y-%m-%d").to_string(),
             "top_islands": report.communities.iter().take(10).collect::<Vec<_>>(),
         });
-        
+
         self.handlebars
             .render("markdown_report", &data)
-            .map_err(|e| ValknutError::validation(format!("Failed to render Markdown report: {}", e)))
+            .map_err(|e| {
+                ValknutError::validation(format!("Failed to render Markdown report: {}", e))
+            })
     }
-    
+
     /// Generate analysis notes for a community
     fn generate_community_notes(
         &self,
@@ -192,19 +218,19 @@ impl LiveReachReporter {
         nodes: &[CommunityNode],
     ) -> Vec<String> {
         let mut notes = Vec::new();
-        
+
         // Shadow island severity
         if shadow_score >= 0.8 {
             notes.push("🔴 Critical shadow island - immediate refactoring recommended".to_string());
         } else if shadow_score >= 0.6 {
             notes.push("🟡 Shadow island detected - consider refactoring".to_string());
         }
-        
+
         // Coupling analysis
         if community_info.cut_ratio() < 0.1 {
             notes.push("🔗 Tightly coupled - few external dependencies".to_string());
         }
-        
+
         // Runtime vs static analysis
         let runtime_fraction = community_info.runtime_internal_fraction();
         if runtime_fraction < 0.2 {
@@ -212,30 +238,32 @@ impl LiveReachReporter {
         } else if runtime_fraction > 0.8 {
             notes.push("⚡ >80% runtime edges - actively used code".to_string());
         }
-        
+
         // Staleness analysis
-        let stale_nodes = nodes.iter()
+        let stale_nodes = nodes
+            .iter()
             .filter(|node| node.last_seen.is_none() || node.live_reach < 0.1)
             .count();
-        
+
         if stale_nodes > nodes.len() / 2 {
             notes.push(format!("🕰️ {} nodes appear stale or unused", stale_nodes));
         }
-        
+
         // Size analysis
         if nodes.len() >= 20 {
             notes.push("📏 Large community - consider breaking into smaller modules".to_string());
         }
-        
+
         // Reachability analysis
-        let unreachable_nodes = nodes.iter()
-            .filter(|node| !node.seed_reachable)
-            .count();
-            
+        let unreachable_nodes = nodes.iter().filter(|node| !node.seed_reachable).count();
+
         if unreachable_nodes > 0 {
-            notes.push(format!("🚫 {} nodes not reachable from entrypoints", unreachable_nodes));
+            notes.push(format!(
+                "🚫 {} nodes not reachable from entrypoints",
+                unreachable_nodes
+            ));
         }
-        
+
         notes
     }
 }
@@ -251,10 +279,10 @@ fn calculate_median(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
     }
-    
+
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    
+
     let len = sorted.len();
     if len % 2 == 0 {
         (sorted[len / 2 - 1] + sorted[len / 2]) / 2.0
@@ -553,26 +581,26 @@ Your codebase shows good live reachability patterns with healthy coupling.
 mod tests {
     use super::*;
     use chrono::Utc;
-    
+
     #[test]
     fn test_median_calculation() {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         assert_eq!(calculate_median(&values), 3.0);
-        
+
         let even_values = vec![1.0, 2.0, 3.0, 4.0];
         assert_eq!(calculate_median(&even_values), 2.5);
-        
+
         let empty_values: Vec<f64> = vec![];
         assert_eq!(calculate_median(&empty_values), 0.0);
-        
+
         let single_value = vec![42.0];
         assert_eq!(calculate_median(&single_value), 42.0);
     }
-    
+
     #[test]
     fn test_report_generation() {
         let reporter = LiveReachReporter::new();
-        
+
         // Create minimal test report
         let report = LiveReachReport {
             generated_at: Utc::now(),
@@ -589,14 +617,14 @@ mod tests {
                 median_live_reach: 0.75,
             },
         };
-        
+
         // Test HTML generation
         let html_result = reporter.generate_html_report(&report);
         assert!(html_result.is_ok());
         let html = html_result.unwrap();
         assert!(html.contains("test-service"));
         assert!(html.contains("100")); // Total nodes
-        
+
         // Test Markdown generation
         let md_result = reporter.generate_markdown_report(&report);
         if let Err(e) = &md_result {
@@ -607,11 +635,11 @@ mod tests {
         assert!(markdown.contains("# Live Reachability Report - test-service"));
         assert!(markdown.contains("| Total Nodes | 100 |"));
     }
-    
+
     #[test]
     fn test_community_notes_generation() {
         let reporter = LiveReachReporter::new();
-        
+
         // Mock community info
         let community_info = crate::live::community::CommunityInfo {
             id: 1,
@@ -622,21 +650,21 @@ mod tests {
             runtime_internal_count: 1,
             static_internal_count: 9, // High static ratio
         };
-        
-        let nodes = vec![
-            CommunityNode {
-                id: "test::node1".to_string(),
-                live_reach: 0.05, // Low live reach
-                last_seen: None, // Stale
-                seed_reachable: false,
-            }
-        ];
-        
+
+        let nodes = vec![CommunityNode {
+            id: "test::node1".to_string(),
+            live_reach: 0.05, // Low live reach
+            last_seen: None,  // Stale
+            seed_reachable: false,
+        }];
+
         let notes = reporter.generate_community_notes(&community_info, 0.85, &nodes);
-        
+
         // Should detect multiple issues
         assert!(!notes.is_empty());
-        assert!(notes.iter().any(|note| note.contains("Critical shadow island")));
+        assert!(notes
+            .iter()
+            .any(|note| note.contains("Critical shadow island")));
         assert!(notes.iter().any(|note| note.contains("Tightly coupled")));
         assert!(notes.iter().any(|note| note.contains("static-only edges")));
         assert!(notes.iter().any(|note| note.contains("not reachable")));

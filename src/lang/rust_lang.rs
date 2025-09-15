@@ -1,23 +1,23 @@
 //! Rust language adapter with tree-sitter integration.
 
+use serde_json::{self, Value};
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
-use serde_json::{self, Value};
 
-use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
+use super::common::{EntityKind, ParseIndex, ParsedEntity, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rust_adapter_creation() {
         let adapter = RustAdapter::new();
         assert!(adapter.is_ok(), "Should create Rust adapter successfully");
     }
-    
+
     #[test]
     fn test_parse_simple_function() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -28,11 +28,14 @@ fn greet(name: &str) -> String {
 "#;
         let result = adapter.parse_source(source, "test.rs");
         assert!(result.is_ok(), "Should parse simple function");
-        
+
         let index = result.unwrap();
-        assert!(index.get_entities_in_file("test.rs").len() >= 1, "Should find at least one entity");
+        assert!(
+            index.get_entities_in_file("test.rs").len() >= 1,
+            "Should find at least one entity"
+        );
     }
-    
+
     #[test]
     fn test_parse_struct_and_impl() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -54,15 +57,20 @@ impl User {
 "#;
         let result = adapter.parse_source(source, "test.rs");
         assert!(result.is_ok(), "Should parse struct and impl");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("test.rs");
-        assert!(entities.len() >= 2, "Should find at least struct and impl entities");
-        
-        let has_struct = entities.iter().any(|e| matches!(e.kind, EntityKind::Struct));
+        assert!(
+            entities.len() >= 2,
+            "Should find at least struct and impl entities"
+        );
+
+        let has_struct = entities
+            .iter()
+            .any(|e| matches!(e.kind, EntityKind::Struct));
         assert!(has_struct, "Should find a struct entity");
     }
-    
+
     #[test]
     fn test_parse_traits_and_enums() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -89,15 +97,15 @@ impl Display for Color {
 "#;
         let result = adapter.parse_source(source, "traits.rs");
         assert!(result.is_ok(), "Should parse traits and enums");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("traits.rs");
         assert!(entities.len() >= 2, "Should find multiple entities");
-        
+
         let has_enum = entities.iter().any(|e| matches!(e.kind, EntityKind::Enum));
         assert!(has_enum, "Should find an enum entity");
     }
-    
+
     #[test]
     fn test_parse_modules() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -118,34 +126,42 @@ pub mod utils {
 "#;
         let result = adapter.parse_source(source, "modules.rs");
         assert!(result.is_ok(), "Should parse modules");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("modules.rs");
-        assert!(entities.len() >= 2, "Should find multiple entities including modules");
-        
-        let has_module = entities.iter().any(|e| matches!(e.kind, EntityKind::Module));
+        assert!(
+            entities.len() >= 2,
+            "Should find multiple entities including modules"
+        );
+
+        let has_module = entities
+            .iter()
+            .any(|e| matches!(e.kind, EntityKind::Module));
         assert!(has_module, "Should find module entities");
     }
-    
+
     #[test]
     fn test_empty_rust_file() {
         let mut adapter = RustAdapter::new().unwrap();
         let source = "// Rust file with just comments\n/* Block comment */";
         let result = adapter.parse_source(source, "empty.rs");
         assert!(result.is_ok(), "Should handle empty Rust file");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("empty.rs");
-        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+        assert_eq!(
+            entities.len(),
+            0,
+            "Should find no entities in comment-only file"
+        );
     }
 }
-
 
 /// Rust-specific parsing and analysis
 pub struct RustAdapter {
     /// Tree-sitter parser for Rust
     parser: Parser,
-    
+
     /// Language instance
     language: Language,
 }
@@ -156,50 +172,62 @@ impl RustAdapter {
         // Simple test to verify tree_sitter_rust access
         let language = match std::panic::catch_unwind(|| tree_sitter_rust::language()) {
             Ok(lang) => lang,
-            Err(_) => return Err(ValknutError::parse("rust", "Failed to access tree_sitter_rust::language()".to_string())),
+            Err(_) => {
+                return Err(ValknutError::parse(
+                    "rust",
+                    "Failed to access tree_sitter_rust::language()".to_string(),
+                ))
+            }
         };
-        
+
         let mut parser = Parser::new();
-        parser.set_language(language)
-            .map_err(|e| ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e)))?;
-        
+        parser.set_language(language).map_err(|e| {
+            ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e))
+        })?;
+
         Ok(Self { parser, language })
     }
-    
+
     /// Parse Rust source code and extract entities
     pub fn parse_source(&mut self, source_code: &str, file_path: &str) -> Result<ParseIndex> {
-        let tree = self.parser.parse(source_code, None)
+        let tree = self
+            .parser
+            .parse(source_code, None)
             .ok_or_else(|| ValknutError::parse("rust", "Failed to parse Rust source code"))?;
-        
+
         let mut index = ParseIndex::new();
         let mut entity_id_counter = 0;
-        
+
         // Walk the tree and extract entities
         self.extract_entities_recursive(
-            tree.root_node(), 
-            source_code, 
-            file_path, 
-            None, 
-            &mut index, 
-            &mut entity_id_counter
+            tree.root_node(),
+            source_code,
+            file_path,
+            None,
+            &mut index,
+            &mut entity_id_counter,
         )?;
-        
+
         Ok(index)
     }
-    
+
     /// Extract entities from Rust code and convert to CodeEntity format
-    pub fn extract_code_entities(&mut self, source_code: &str, file_path: &str) -> Result<Vec<CodeEntity>> {
+    pub fn extract_code_entities(
+        &mut self,
+        source_code: &str,
+        file_path: &str,
+    ) -> Result<Vec<CodeEntity>> {
         let parse_index = self.parse_source(source_code, file_path)?;
         let mut code_entities = Vec::new();
-        
+
         for entity in parse_index.entities.values() {
             let code_entity = self.convert_to_code_entity(entity, source_code)?;
             code_entities.push(code_entity);
         }
-        
+
         Ok(code_entities)
     }
-    
+
     /// Recursively extract entities from the AST
     fn extract_entities_recursive(
         &self,
@@ -211,20 +239,26 @@ impl RustAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<()> {
         // Check if this node represents an entity we care about
-        if let Some(entity) = self.node_to_entity(node, source_code, file_path, parent_id.clone(), entity_id_counter)? {
+        if let Some(entity) = self.node_to_entity(
+            node,
+            source_code,
+            file_path,
+            parent_id.clone(),
+            entity_id_counter,
+        )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-            
+
             // Process child nodes with this entity as parent
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 self.extract_entities_recursive(
-                    child, 
-                    source_code, 
-                    file_path, 
-                    Some(entity_id.clone()), 
-                    index, 
-                    entity_id_counter
+                    child,
+                    source_code,
+                    file_path,
+                    Some(entity_id.clone()),
+                    index,
+                    entity_id_counter,
                 )?;
             }
         } else {
@@ -232,19 +266,19 @@ impl RustAdapter {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 self.extract_entities_recursive(
-                    child, 
-                    source_code, 
-                    file_path, 
-                    parent_id.clone(), 
-                    index, 
-                    entity_id_counter
+                    child,
+                    source_code,
+                    file_path,
+                    parent_id.clone(),
+                    index,
+                    entity_id_counter,
                 )?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
     fn node_to_entity(
         &self,
@@ -266,13 +300,14 @@ impl RustAdapter {
             "function_signature_item" => EntityKind::Function, // Trait methods
             _ => return Ok(None),
         };
-        
-        let name = self.extract_name(&node, source_code)?
+
+        let name = self
+            .extract_name(&node, source_code)?
             .ok_or_else(|| ValknutError::parse("rust", "Could not extract entity name"))?;
-        
+
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
-        
+
         let location = SourceLocation {
             file_path: file_path.to_string(),
             start_line: node.start_position().row + 1,
@@ -280,13 +315,19 @@ impl RustAdapter {
             start_column: node.start_position().column + 1,
             end_column: node.end_position().column + 1,
         };
-        
+
         let mut metadata = HashMap::new();
-        
+
         // Add Rust-specific metadata
-        metadata.insert("node_kind".to_string(), Value::String(node.kind().to_string()));
-        metadata.insert("byte_range".to_string(), serde_json::json!([node.start_byte(), node.end_byte()]));
-        
+        metadata.insert(
+            "node_kind".to_string(),
+            Value::String(node.kind().to_string()),
+        );
+        metadata.insert(
+            "byte_range".to_string(),
+            serde_json::json!([node.start_byte(), node.end_byte()]),
+        );
+
         // Extract additional metadata based on entity type
         match entity_kind {
             EntityKind::Function => {
@@ -298,7 +339,8 @@ impl RustAdapter {
             EntityKind::Enum => {
                 self.extract_enum_metadata(&node, source_code, &mut metadata)?;
             }
-            EntityKind::Interface => { // trait
+            EntityKind::Interface => {
+                // trait
                 self.extract_trait_metadata(&node, source_code, &mut metadata)?;
             }
             EntityKind::Module => {
@@ -306,7 +348,7 @@ impl RustAdapter {
             }
             _ => {}
         }
-        
+
         let entity = ParsedEntity {
             id: entity_id,
             kind: entity_kind,
@@ -316,17 +358,23 @@ impl RustAdapter {
             location,
             metadata,
         };
-        
+
         Ok(Some(entity))
     }
-    
+
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         let mut cursor = node.walk();
-        
+
         match node.kind() {
-            "function_item" | "struct_item" | "enum_item" | "trait_item" | "mod_item" 
-            | "const_item" | "static_item" | "function_signature_item" => {
+            "function_item"
+            | "struct_item"
+            | "enum_item"
+            | "trait_item"
+            | "mod_item"
+            | "const_item"
+            | "static_item"
+            | "function_signature_item" => {
                 // Look for the identifier child
                 for child in node.children(&mut cursor) {
                     if child.kind() == "identifier" {
@@ -338,12 +386,17 @@ impl RustAdapter {
             }
             _ => {}
         }
-        
+
         Ok(None)
     }
-    
+
     /// Extract function-specific metadata
-    fn extract_function_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
+    fn extract_function_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut parameters = Vec::new();
         let mut is_async = false;
@@ -351,7 +404,7 @@ impl RustAdapter {
         let mut is_const = false;
         let mut return_type = None;
         let mut visibility = "private".to_string();
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "parameters" => {
@@ -362,7 +415,8 @@ impl RustAdapter {
                             let mut inner_cursor = param_child.walk();
                             for inner_child in param_child.children(&mut inner_cursor) {
                                 if inner_child.kind() == "identifier" {
-                                    let param_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    let param_name =
+                                        inner_child.utf8_text(source_code.as_bytes())?;
                                     parameters.push(param_name);
                                     break;
                                 }
@@ -391,7 +445,7 @@ impl RustAdapter {
                 }
             }
         }
-        
+
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
         metadata.insert("is_async".to_string(), Value::Bool(is_async));
         metadata.insert("is_unsafe".to_string(), Value::Bool(is_unsafe));
@@ -400,17 +454,22 @@ impl RustAdapter {
         if let Some(ret_type) = return_type {
             metadata.insert("return_type".to_string(), Value::String(ret_type));
         }
-        
+
         Ok(())
     }
-    
+
     /// Extract struct-specific metadata
-    fn extract_struct_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
+    fn extract_struct_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut fields = Vec::new();
         let mut visibility = "private".to_string();
         let mut generic_params = Vec::new();
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "field_declaration_list" => {
@@ -420,7 +479,8 @@ impl RustAdapter {
                             let mut inner_cursor = field_child.walk();
                             for inner_child in field_child.children(&mut inner_cursor) {
                                 if inner_child.kind() == "field_identifier" {
-                                    let field_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    let field_name =
+                                        inner_child.utf8_text(source_code.as_bytes())?;
                                     fields.push(field_name);
                                 }
                             }
@@ -443,22 +503,30 @@ impl RustAdapter {
                 _ => {}
             }
         }
-        
+
         metadata.insert("fields".to_string(), serde_json::json!(fields));
         metadata.insert("visibility".to_string(), Value::String(visibility));
         if !generic_params.is_empty() {
-            metadata.insert("generic_parameters".to_string(), serde_json::json!(generic_params));
+            metadata.insert(
+                "generic_parameters".to_string(),
+                serde_json::json!(generic_params),
+            );
         }
-        
+
         Ok(())
     }
-    
+
     /// Extract enum-specific metadata
-    fn extract_enum_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
+    fn extract_enum_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut variants = Vec::new();
         let mut visibility = "private".to_string();
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "enum_variant_list" => {
@@ -468,7 +536,8 @@ impl RustAdapter {
                             let mut inner_cursor = variant_child.walk();
                             for inner_child in variant_child.children(&mut inner_cursor) {
                                 if inner_child.kind() == "identifier" {
-                                    let variant_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    let variant_name =
+                                        inner_child.utf8_text(source_code.as_bytes())?;
                                     variants.push(variant_name);
                                     break;
                                 }
@@ -483,20 +552,25 @@ impl RustAdapter {
                 _ => {}
             }
         }
-        
+
         metadata.insert("variants".to_string(), serde_json::json!(variants));
         metadata.insert("visibility".to_string(), Value::String(visibility));
-        
+
         Ok(())
     }
-    
+
     /// Extract trait-specific metadata
-    fn extract_trait_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
+    fn extract_trait_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut methods = Vec::new();
         let mut visibility = "private".to_string();
         let mut supertrait_bounds = Vec::new();
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "declaration_list" => {
@@ -526,22 +600,30 @@ impl RustAdapter {
                 _ => {}
             }
         }
-        
+
         metadata.insert("methods".to_string(), serde_json::json!(methods));
         metadata.insert("visibility".to_string(), Value::String(visibility));
         if !supertrait_bounds.is_empty() {
-            metadata.insert("supertrait_bounds".to_string(), serde_json::json!(supertrait_bounds));
+            metadata.insert(
+                "supertrait_bounds".to_string(),
+                serde_json::json!(supertrait_bounds),
+            );
         }
-        
+
         Ok(())
     }
-    
+
     /// Extract module-specific metadata
-    fn extract_module_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
+    fn extract_module_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut visibility = "private".to_string();
         let mut is_inline = false;
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "visibility_modifier" => {
@@ -554,22 +636,28 @@ impl RustAdapter {
                 _ => {}
             }
         }
-        
+
         metadata.insert("visibility".to_string(), Value::String(visibility));
         metadata.insert("is_inline".to_string(), Value::Bool(is_inline));
-        
+
         Ok(())
     }
-    
+
     /// Convert ParsedEntity to CodeEntity format
-    fn convert_to_code_entity(&self, entity: &ParsedEntity, source_code: &str) -> Result<CodeEntity> {
+    fn convert_to_code_entity(
+        &self,
+        entity: &ParsedEntity,
+        source_code: &str,
+    ) -> Result<CodeEntity> {
         let source_lines: Vec<&str> = source_code.lines().collect();
-        let entity_source = if entity.location.start_line <= source_lines.len() && entity.location.end_line <= source_lines.len() {
+        let entity_source = if entity.location.start_line <= source_lines.len()
+            && entity.location.end_line <= source_lines.len()
+        {
             source_lines[(entity.location.start_line - 1)..entity.location.end_line].join("\n")
         } else {
             String::new()
         };
-        
+
         let mut code_entity = CodeEntity::new(
             entity.id.clone(),
             format!("{:?}", entity.kind),
@@ -578,12 +666,12 @@ impl RustAdapter {
         )
         .with_line_range(entity.location.start_line, entity.location.end_line)
         .with_source_code(entity_source);
-        
+
         // Add metadata from parsed entity
         for (key, value) in &entity.metadata {
             code_entity.add_property(key.clone(), value.clone());
         }
-        
+
         Ok(code_entity)
     }
 }
@@ -597,13 +685,13 @@ impl Default for RustAdapter {
 #[cfg(test)]
 mod additional_tests {
     use super::*;
-    
+
     #[test]
     fn test_rust_adapter_creation_additional() {
         let adapter = RustAdapter::new();
         assert!(adapter.is_ok());
     }
-    
+
     #[test]
     fn test_function_parsing() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -616,19 +704,33 @@ async unsafe fn complex_function() -> Result<(), Error> {
     Ok(())
 }
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
         assert_eq!(entities.len(), 2);
-        
+
         let calc_func = entities.iter().find(|e| e.name == "calculate").unwrap();
         assert_eq!(calc_func.entity_type, "Function");
-        assert_eq!(calc_func.properties.get("visibility"), Some(&Value::String("pub".to_string())));
-        
-        let complex_func = entities.iter().find(|e| e.name == "complex_function").unwrap();
-        assert_eq!(complex_func.properties.get("is_async"), Some(&Value::Bool(true)));
-        assert_eq!(complex_func.properties.get("is_unsafe"), Some(&Value::Bool(true)));
+        assert_eq!(
+            calc_func.properties.get("visibility"),
+            Some(&Value::String("pub".to_string()))
+        );
+
+        let complex_func = entities
+            .iter()
+            .find(|e| e.name == "complex_function")
+            .unwrap();
+        assert_eq!(
+            complex_func.properties.get("is_async"),
+            Some(&Value::Bool(true))
+        );
+        assert_eq!(
+            complex_func.properties.get("is_unsafe"),
+            Some(&Value::Bool(true))
+        );
     }
-    
+
     #[test]
     fn test_struct_parsing() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -644,20 +746,28 @@ struct Point<T> {
     y: T,
 }
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
-        
-        let struct_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Struct").collect();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
+
+        let struct_entities: Vec<_> = entities
+            .iter()
+            .filter(|e| e.entity_type == "Struct")
+            .collect();
         assert_eq!(struct_entities.len(), 2);
-        
+
         let user_struct = struct_entities.iter().find(|e| e.name == "User").unwrap();
-        assert_eq!(user_struct.properties.get("visibility"), Some(&Value::String("pub".to_string())));
-        
+        assert_eq!(
+            user_struct.properties.get("visibility"),
+            Some(&Value::String("pub".to_string()))
+        );
+
         let point_struct = struct_entities.iter().find(|e| e.name == "Point").unwrap();
         let generic_params = point_struct.properties.get("generic_parameters");
         assert!(generic_params.is_some());
     }
-    
+
     #[test]
     fn test_enum_parsing() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -670,19 +780,24 @@ pub enum Status {
     Expired { reason: String },
 }
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
         assert_eq!(entities.len(), 1);
-        
+
         let enum_entity = &entities[0];
         assert_eq!(enum_entity.entity_type, "Enum");
         assert_eq!(enum_entity.name, "Status");
-        assert_eq!(enum_entity.properties.get("visibility"), Some(&Value::String("pub".to_string())));
-        
+        assert_eq!(
+            enum_entity.properties.get("visibility"),
+            Some(&Value::String("pub".to_string()))
+        );
+
         let variants = enum_entity.properties.get("variants");
         assert!(variants.is_some());
     }
-    
+
     #[test]
     fn test_trait_parsing() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -694,19 +809,24 @@ pub trait Display: Debug + Clone {
     }
 }
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
         assert_eq!(entities.len(), 1);
-        
+
         let trait_entity = &entities[0];
         assert_eq!(trait_entity.entity_type, "Interface");
         assert_eq!(trait_entity.name, "Display");
-        assert_eq!(trait_entity.properties.get("visibility"), Some(&Value::String("pub".to_string())));
-        
+        assert_eq!(
+            trait_entity.properties.get("visibility"),
+            Some(&Value::String("pub".to_string()))
+        );
+
         let methods = trait_entity.properties.get("methods");
         assert!(methods.is_some());
     }
-    
+
     #[test]
     fn test_module_parsing() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -719,16 +839,27 @@ mod internal {
     }
 }
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
-        
-        let module_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Module").collect();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
+
+        let module_entities: Vec<_> = entities
+            .iter()
+            .filter(|e| e.entity_type == "Module")
+            .collect();
         assert!(module_entities.len() >= 2); // utils and internal modules
-        
-        let internal_mod = module_entities.iter().find(|e| e.name == "internal").unwrap();
-        assert_eq!(internal_mod.properties.get("is_inline"), Some(&Value::Bool(true)));
+
+        let internal_mod = module_entities
+            .iter()
+            .find(|e| e.name == "internal")
+            .unwrap();
+        assert_eq!(
+            internal_mod.properties.get("is_inline"),
+            Some(&Value::Bool(true))
+        );
     }
-    
+
     #[test]
     fn test_const_and_static() {
         let mut adapter = RustAdapter::new().unwrap();
@@ -736,16 +867,24 @@ mod internal {
 const PI: f64 = 3.14159;
 static GLOBAL_COUNT: AtomicUsize = AtomicUsize::new(0);
 "#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.rs").unwrap();
-        
-        let const_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Constant").collect();
+
+        let entities = adapter
+            .extract_code_entities(source_code, "test.rs")
+            .unwrap();
+
+        let const_entities: Vec<_> = entities
+            .iter()
+            .filter(|e| e.entity_type == "Constant")
+            .collect();
         assert_eq!(const_entities.len(), 2);
-        
+
         let pi_const = const_entities.iter().find(|e| e.name == "PI").unwrap();
         assert_eq!(pi_const.entity_type, "Constant");
-        
-        let global_static = const_entities.iter().find(|e| e.name == "GLOBAL_COUNT").unwrap();
+
+        let global_static = const_entities
+            .iter()
+            .find(|e| e.name == "GLOBAL_COUNT")
+            .unwrap();
         assert_eq!(global_static.entity_type, "Constant");
     }
 }

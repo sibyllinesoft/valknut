@@ -1,15 +1,15 @@
 //! Result types and data structures for analysis pipeline outputs.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
+use super::pipeline_config::AnalysisConfig;
 use crate::core::featureset::FeatureVector;
 use crate::core::scoring::ScoringResult;
 use crate::detectors::complexity::ComplexityAnalysisResult;
 use crate::detectors::refactoring::RefactoringAnalysisResult;
-use super::pipeline_config::AnalysisConfig;
 
 /// Comprehensive analysis result containing all analysis types
 #[derive(Debug, Clone, Serialize, Deserialize)]

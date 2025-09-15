@@ -1,7 +1,7 @@
 //! Core data types for live reachability analysis
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Kind of call edge
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -18,36 +18,36 @@ pub enum EdgeKind {
 pub struct CallEdgeEvent {
     /// Unix timestamp
     pub ts: i64,
-    
+
     /// Programming language
     pub lang: String,
-    
+
     /// Service name
     pub svc: String,
-    
+
     /// Version/SHA of the deployment
     pub ver: String,
-    
+
     /// Calling function (fully qualified)
     pub caller: String,
-    
+
     /// Called function (fully qualified)
     pub callee: String,
-    
+
     /// Kind of edge (runtime or static)
     pub kind: EdgeKind,
-    
+
     /// Sampled count/weight
     pub weight: u32,
-    
+
     /// Optional HTTP route (for web services)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route: Option<String>,
-    
+
     /// Optional tenant identifier
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant: Option<String>,
-    
+
     /// Optional host identifier
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
@@ -58,22 +58,22 @@ pub struct CallEdgeEvent {
 pub struct AggregatedEdge {
     /// Calling function symbol ID
     pub caller: String,
-    
+
     /// Called function symbol ID
     pub callee: String,
-    
+
     /// Kind of edge
     pub kind: EdgeKind,
-    
+
     /// Total call count
     pub calls: u64,
-    
+
     /// Number of unique callers (for runtime edges)
     pub callers: u32,
-    
+
     /// First timestamp seen
     pub first_ts: i64,
-    
+
     /// Last timestamp seen
     pub last_ts: i64,
 }
@@ -90,28 +90,32 @@ pub struct SymbolId {
 }
 
 impl SymbolId {
-    pub fn new(lang: impl Into<String>, svc: impl Into<String>, fq_name: impl Into<String>) -> Self {
+    pub fn new(
+        lang: impl Into<String>,
+        svc: impl Into<String>,
+        fq_name: impl Into<String>,
+    ) -> Self {
         Self {
             lang: lang.into(),
             svc: svc.into(),
             fq_name: fq_name.into(),
         }
     }
-    
+
     /// Parse from string format "{lang}:{svc}:{fq_name}"
     pub fn from_string(s: &str) -> Option<Self> {
         let parts: Vec<&str> = s.splitn(3, ':').collect();
         if parts.len() == 3 {
             Some(Self {
                 lang: parts[0].to_string(),
-                svc: parts[1].to_string(), 
+                svc: parts[1].to_string(),
                 fq_name: parts[2].to_string(),
             })
         } else {
             None
         }
     }
-    
+
     /// Convert to string format "{lang}:{svc}:{fq_name}"
     pub fn to_string(&self) -> String {
         format!("{}:{}:{}", self.lang, self.svc, self.fq_name)
@@ -129,16 +133,16 @@ impl std::fmt::Display for SymbolId {
 pub struct NodeStats {
     /// Number of live runtime callers
     pub live_callers: u32,
-    
+
     /// Total weighted runtime calls received
     pub live_calls: u64,
-    
+
     /// Last time this symbol was seen in runtime traces
     pub last_seen: Option<DateTime<Utc>>,
-    
+
     /// First time this symbol was seen in traces
     pub first_seen: Option<DateTime<Utc>>,
-    
+
     /// Whether reachable from entrypoint via static+runtime edges
     pub seed_reachable: bool,
 }
@@ -148,28 +152,28 @@ pub struct NodeStats {
 pub struct Community {
     /// Community identifier
     pub id: String,
-    
+
     /// Number of nodes in community
     pub size: usize,
-    
+
     /// Shadow island score (0.0 to 1.0, higher = more isolated)
     pub score: f64,
-    
+
     /// Ratio of edges crossing community boundary
     pub cut_ratio: f64,
-    
+
     /// Fraction of internal edges that are runtime vs static
     pub runtime_internal: f64,
-    
+
     /// Nodes in this community
     pub nodes: Vec<CommunityNode>,
-    
+
     /// Top inbound edges from other communities
     pub top_inbound: Vec<CrossCommunityEdge>,
-    
+
     /// Top outbound edges to other communities  
     pub top_outbound: Vec<CrossCommunityEdge>,
-    
+
     /// Analysis notes for this community
     pub notes: Vec<String>,
 }
@@ -179,13 +183,13 @@ pub struct Community {
 pub struct CommunityNode {
     /// Symbol identifier
     pub id: String,
-    
+
     /// Live reach score (0.0 to 1.0)
     pub live_reach: f64,
-    
+
     /// Last time seen in runtime traces
     pub last_seen: Option<String>,
-    
+
     /// Whether reachable from known entrypoints
     pub seed_reachable: bool,
 }
@@ -195,10 +199,10 @@ pub struct CommunityNode {
 pub struct CrossCommunityEdge {
     /// Source or target symbol (depending on context)
     pub symbol: String,
-    
+
     /// Runtime call weight
     pub w_runtime: u64,
-    
+
     /// Static call weight
     #[serde(skip_serializing_if = "Option::is_none")]
     pub w_static: Option<u64>,
@@ -209,16 +213,16 @@ pub struct CrossCommunityEdge {
 pub struct LiveReachReport {
     /// When this report was generated
     pub generated_at: DateTime<Utc>,
-    
+
     /// Service analyzed
     pub svc: String,
-    
+
     /// Analysis window (start, end timestamps)
     pub window: (DateTime<Utc>, DateTime<Utc>),
-    
+
     /// Detected communities sorted by shadow island score
     pub communities: Vec<Community>,
-    
+
     /// Overall statistics
     pub stats: ReportStats,
 }
@@ -228,22 +232,22 @@ pub struct LiveReachReport {
 pub struct ReportStats {
     /// Total nodes in call graph
     pub total_nodes: usize,
-    
+
     /// Total edges in call graph
     pub total_edges: usize,
-    
+
     /// Number of runtime edges
     pub runtime_edges: usize,
-    
+
     /// Number of static edges
     pub static_edges: usize,
-    
+
     /// Number of communities detected
     pub communities: usize,
-    
+
     /// Number of shadow islands (score >= threshold)
     pub shadow_islands: usize,
-    
+
     /// Median live reach score across all nodes
     pub median_live_reach: f64,
 }
@@ -253,7 +257,7 @@ pub struct ReportStats {
 pub struct LiveReachScore {
     /// Raw live reach score (0.0 to 1.0)
     pub score: f64,
-    
+
     /// Component scores for debugging
     pub components: LiveReachComponents,
 }
@@ -263,13 +267,13 @@ pub struct LiveReachScore {
 pub struct LiveReachComponents {
     /// Rank-normalized live callers component
     pub callers_component: f64,
-    
+
     /// Rank-normalized live calls component  
     pub calls_component: f64,
-    
+
     /// Seed reachability component (0 or 1)
     pub seed_component: f64,
-    
+
     /// Recency component (based on last_seen)
     pub recency_component: f64,
 }
@@ -279,12 +283,12 @@ impl CallEdgeEvent {
     pub fn caller_symbol(&self) -> SymbolId {
         SymbolId::new(&self.lang, &self.svc, &self.caller)
     }
-    
+
     /// Create symbol ID for callee
     pub fn callee_symbol(&self) -> SymbolId {
         SymbolId::new(&self.lang, &self.svc, &self.callee)
     }
-    
+
     /// Convert timestamp to DateTime
     pub fn timestamp(&self) -> DateTime<Utc> {
         DateTime::from_timestamp(self.ts, 0).unwrap_or_else(Utc::now)
@@ -296,7 +300,7 @@ impl AggregatedEdge {
     pub fn first_timestamp(&self) -> DateTime<Utc> {
         DateTime::from_timestamp(self.first_ts, 0).unwrap_or_else(Utc::now)
     }
-    
+
     /// Last timestamp as DateTime
     pub fn last_timestamp(&self) -> DateTime<Utc> {
         DateTime::from_timestamp(self.last_ts, 0).unwrap_or_else(Utc::now)
@@ -306,48 +310,48 @@ impl AggregatedEdge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_symbol_id_parsing() {
         let symbol = SymbolId::new("python", "api", "users.view:list_users");
         let string_repr = symbol.to_string();
         assert_eq!(string_repr, "python:api:users.view:list_users");
-        
+
         let parsed = SymbolId::from_string(&string_repr).unwrap();
         assert_eq!(parsed.lang, "python");
         assert_eq!(parsed.svc, "api");
         assert_eq!(parsed.fq_name, "users.view:list_users");
         assert_eq!(parsed, symbol);
     }
-    
+
     #[test]
     fn test_symbol_id_invalid_parsing() {
         assert!(SymbolId::from_string("invalid").is_none());
         assert!(SymbolId::from_string("lang:svc").is_none());
-        
+
         // Should handle colons in fq_name
         let symbol = SymbolId::from_string("rust:api:module::struct::method").unwrap();
         assert_eq!(symbol.fq_name, "module::struct::method");
     }
-    
-    #[test] 
+
+    #[test]
     fn test_edge_kind_serialization() {
         let runtime = EdgeKind::Runtime;
         let static_edge = EdgeKind::Static;
-        
+
         let runtime_json = serde_json::to_string(&runtime).unwrap();
         let static_json = serde_json::to_string(&static_edge).unwrap();
-        
+
         assert_eq!(runtime_json, "\"runtime\"");
         assert_eq!(static_json, "\"static\"");
-        
+
         let runtime_parsed: EdgeKind = serde_json::from_str(&runtime_json).unwrap();
         let static_parsed: EdgeKind = serde_json::from_str(&static_json).unwrap();
-        
+
         assert_eq!(runtime_parsed, EdgeKind::Runtime);
         assert_eq!(static_parsed, EdgeKind::Static);
     }
-    
+
     #[test]
     fn test_call_edge_event_serialization() {
         let event = CallEdgeEvent {
@@ -363,10 +367,10 @@ mod tests {
             tenant: None,
             host: Some("api-1".to_string()),
         };
-        
+
         let json = serde_json::to_string(&event).unwrap();
         let parsed: CallEdgeEvent = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(parsed.ts, event.ts);
         assert_eq!(parsed.lang, event.lang);
         assert_eq!(parsed.caller, event.caller);
@@ -375,7 +379,7 @@ mod tests {
         assert_eq!(parsed.route, event.route);
         assert_eq!(parsed.host, event.host);
     }
-    
+
     #[test]
     fn test_symbol_methods() {
         let event = CallEdgeEvent {
@@ -391,17 +395,17 @@ mod tests {
             tenant: None,
             host: None,
         };
-        
+
         let caller_symbol = event.caller_symbol();
         let callee_symbol = event.callee_symbol();
-        
+
         assert_eq!(caller_symbol.lang, "python");
         assert_eq!(caller_symbol.svc, "api");
         assert_eq!(caller_symbol.fq_name, "module.function");
-        
+
         assert_eq!(callee_symbol.fq_name, "other.function");
     }
-    
+
     #[test]
     fn test_aggregated_edge_timestamps() {
         let edge = AggregatedEdge {
@@ -413,10 +417,10 @@ mod tests {
             first_ts: 1699999000,
             last_ts: 1699999999,
         };
-        
+
         let first = edge.first_timestamp();
         let last = edge.last_timestamp();
-        
+
         assert!(first < last);
         assert_eq!(first.timestamp(), 1699999000);
         assert_eq!(last.timestamp(), 1699999999);
@@ -452,13 +456,13 @@ mod tests {
                     live_reach: 0.8,
                     last_seen: None,
                     seed_reachable: false,
-                }
+                },
             ],
             top_inbound: vec![],
             top_outbound: vec![],
             notes: vec!["High isolation detected".to_string()],
         };
-        
+
         assert!(community.score > 0.8); // High shadow island score
         assert_eq!(community.nodes.len(), 2);
         assert_eq!(community.size, 5); // Size can be different from nodes.len()
@@ -471,7 +475,7 @@ mod tests {
             w_runtime: 25,
             w_static: Some(5),
         };
-        
+
         assert_eq!(edge.w_runtime, 25);
         assert_eq!(edge.w_static, Some(5));
         assert!(edge.symbol.contains("module2"));
@@ -488,13 +492,17 @@ mod tests {
                 recency_component: 0.6,
             },
         };
-        
+
         // All scores should be between 0 and 1
         assert!(score.score >= 0.0 && score.score <= 1.0);
-        assert!(score.components.callers_component >= 0.0 && score.components.callers_component <= 1.0);
+        assert!(
+            score.components.callers_component >= 0.0 && score.components.callers_component <= 1.0
+        );
         assert!(score.components.calls_component >= 0.0 && score.components.calls_component <= 1.0);
         assert!(score.components.seed_component >= 0.0 && score.components.seed_component <= 1.0);
-        assert!(score.components.recency_component >= 0.0 && score.components.recency_component <= 1.0);
+        assert!(
+            score.components.recency_component >= 0.0 && score.components.recency_component <= 1.0
+        );
     }
 
     #[test]
@@ -508,7 +516,7 @@ mod tests {
             shadow_islands: 3,
             median_live_reach: 0.45,
         };
-        
+
         // Consistency checks
         assert_eq!(stats.runtime_edges + stats.static_edges, stats.total_edges);
         assert!(stats.shadow_islands <= stats.communities);
@@ -526,11 +534,11 @@ mod tests {
             first_ts: 1699999000,
             last_ts: 1699999999,
         };
-        
+
         assert_eq!(edge.calls, 150);
         assert_eq!(edge.callers, 5);
         assert!(edge.first_ts <= edge.last_ts);
-        
+
         // Test timestamp conversion
         let first = edge.first_timestamp();
         let last = edge.last_timestamp();
@@ -545,19 +553,17 @@ mod tests {
             generated_at: now,
             svc: "api".to_string(),
             window: (now - Duration::days(30), now),
-            communities: vec![
-                Community {
-                    id: "comm_0".to_string(),
-                    size: 10,
-                    score: 0.8,
-                    cut_ratio: 0.2,
-                    runtime_internal: 0.9,
-                    nodes: vec![],
-                    top_inbound: vec![],
-                    top_outbound: vec![],
-                    notes: vec![],
-                }
-            ],
+            communities: vec![Community {
+                id: "comm_0".to_string(),
+                size: 10,
+                score: 0.8,
+                cut_ratio: 0.2,
+                runtime_internal: 0.9,
+                nodes: vec![],
+                top_inbound: vec![],
+                top_outbound: vec![],
+                notes: vec![],
+            }],
             stats: ReportStats {
                 total_nodes: 100,
                 total_edges: 200,
@@ -568,7 +574,7 @@ mod tests {
                 median_live_reach: 0.6,
             },
         };
-        
+
         assert_eq!(report.svc, "api");
         assert_eq!(report.communities.len(), 1);
         assert!(report.window.0 < report.window.1);
@@ -579,7 +585,7 @@ mod tests {
     fn test_node_stats_evolution() {
         use chrono::Duration;
         let mut stats = NodeStats::default();
-        
+
         // Simulate receiving calls over time
         let now = chrono::Utc::now();
         stats.live_callers = 5;
@@ -587,7 +593,7 @@ mod tests {
         stats.first_seen = Some(now - Duration::days(10));
         stats.last_seen = Some(now);
         stats.seed_reachable = true;
-        
+
         assert_eq!(stats.live_callers, 5);
         assert_eq!(stats.live_calls, 100);
         assert!(stats.first_seen.unwrap() < stats.last_seen.unwrap());

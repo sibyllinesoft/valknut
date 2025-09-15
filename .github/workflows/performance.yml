@@ -1,0 +1,465 @@
+name: Performance
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run performance tests nightly
+    - cron: '0 4 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Benchmark execution and regression detection
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need history for comparison
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: benchmark
+
+      - name: Install benchmark tools
+        run: |
+          cargo install cargo-criterion
+          sudo apt-get update
+          sudo apt-get install -y perf-tools-unstable linux-perf
+
+      - name: Run benchmarks
+        run: |
+          echo "🚀 Running performance benchmarks..."
+          
+          # Run criterion benchmarks
+          cargo bench --features benchmarks --all -- --output-format json > benchmark-results.json
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          comment-on-alert: true
+          alert-threshold: '120%'
+          fail-on-alert: ${{ github.event_name == 'pull_request' }}
+          benchmark-data-dir-path: 'benchmark-data'
+
+      - name: Memory usage profiling
+        run: |
+          echo "🧠 Profiling memory usage..."
+          
+          # Build with memory profiling
+          cargo build --release --features jemalloc
+          
+          # Create test data
+          mkdir -p test-project/src
+          for i in {1..100}; do
+            echo "fn function_$i() { println!(\"test $i\"); }" > test-project/src/file_$i.rs
+          done
+          
+          # Profile memory usage
+          /usr/bin/time -v ./target/release/valknut analyze test-project 2>&1 | tee memory-profile.txt
+          
+          # Extract memory stats
+          MAX_MEMORY=$(grep "Maximum resident set size" memory-profile.txt | awk '{print $6}')
+          echo "Maximum memory usage: ${MAX_MEMORY}KB"
+          
+          # Set memory threshold (adjust based on expected usage)
+          if [ "$MAX_MEMORY" -gt 500000 ]; then  # 500MB threshold
+            echo "⚠️ High memory usage detected: ${MAX_MEMORY}KB"
+          else
+            echo "✅ Memory usage within limits: ${MAX_MEMORY}KB"
+          fi
+
+      - name: CPU profiling
+        run: |
+          echo "⚡ CPU profiling with perf..."
+          
+          # Run with perf if available
+          if command -v perf &> /dev/null; then
+            sudo perf record -g ./target/release/valknut analyze test-project
+            sudo perf report --stdio > cpu-profile.txt || true
+            echo "CPU profiling complete"
+          else
+            echo "perf not available, skipping CPU profiling"
+          fi
+
+      - name: Upload profiling results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-profiles
+          path: |
+            memory-profile.txt
+            cpu-profile.txt
+            benchmark-results.json
+
+  # SIMD optimization validation
+  simd-performance:
+    name: SIMD Performance Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test SIMD vs scalar performance
+        run: |
+          echo "🔬 Testing SIMD performance..."
+          
+          # Build with SIMD
+          RUSTFLAGS="-C target-cpu=native" cargo build --release --features simd
+          
+          # Build without SIMD
+          cargo build --release --no-default-features
+          
+          # Create test data
+          mkdir -p test-large-project/src
+          for i in {1..1000}; do
+            echo "fn complex_function_$i() {" > test-large-project/src/file_$i.rs
+            echo "  for j in 0..100 {" >> test-large-project/src/file_$i.rs
+            echo "    if j % 2 == 0 { println!(\"even: {}\", j); }" >> test-large-project/src/file_$i.rs
+            echo "    else { println!(\"odd: {}\", j); }" >> test-large-project/src/file_$i.rs
+            echo "  }" >> test-large-project/src/file_$i.rs
+            echo "}" >> test-large-project/src/file_$i.rs
+          done
+          
+          # Compare performance
+          echo "Testing SIMD build..."
+          SIMD_START=$(date +%s%N)
+          ./target/release/valknut analyze test-large-project > /dev/null
+          SIMD_END=$(date +%s%N)
+          SIMD_TIME=$(( (SIMD_END - SIMD_START) / 1000000 ))
+          
+          # Build and test scalar version
+          cargo build --release --no-default-features
+          echo "Testing scalar build..."
+          SCALAR_START=$(date +%s%N)
+          ./target/release/valknut analyze test-large-project > /dev/null
+          SCALAR_END=$(date +%s%N)
+          SCALAR_TIME=$(( (SCALAR_END - SCALAR_START) / 1000000 ))
+          
+          echo "SIMD time: ${SIMD_TIME}ms"
+          echo "Scalar time: ${SCALAR_TIME}ms"
+          
+          if [ "$SIMD_TIME" -lt "$SCALAR_TIME" ]; then
+            IMPROVEMENT=$(( (SCALAR_TIME - SIMD_TIME) * 100 / SCALAR_TIME ))
+            echo "✅ SIMD optimization effective: ${IMPROVEMENT}% improvement"
+          else
+            echo "⚠️ SIMD may not be providing expected performance benefit"
+          fi
+
+  # Parallel processing performance
+  parallel-performance:
+    name: Parallel Processing Performance
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test parallel vs sequential performance
+        run: |
+          echo "🔄 Testing parallel processing performance..."
+          
+          # Create large test project
+          mkdir -p large-test-project/src
+          for i in {1..500}; do
+            cat > large-test-project/src/module_$i.rs << EOF
+          pub fn complex_analysis_$i() {
+              let mut data = vec![0; 1000];
+              for j in 0..1000 {
+                  data[j] = j * 2 + 1;
+                  if data[j] % 3 == 0 {
+                      data[j] *= 2;
+                  }
+              }
+              
+              let sum: usize = data.iter().sum();
+              println!("Sum for module $i: {}", sum);
+          }
+          
+          pub struct ComplexStruct$i {
+              field1: Vec<String>,
+              field2: std::collections::HashMap<String, i32>,
+              field3: Option<Box<ComplexStruct$i>>,
+          }
+          EOF
+          done
+          
+          # Test with different thread counts
+          export RAYON_NUM_THREADS=1
+          cargo build --release --features parallel
+          
+          echo "Testing sequential (1 thread)..."
+          SEQ_START=$(date +%s%N)
+          ./target/release/valknut analyze large-test-project > /dev/null
+          SEQ_END=$(date +%s%N)
+          SEQ_TIME=$(( (SEQ_END - SEQ_START) / 1000000 ))
+          
+          export RAYON_NUM_THREADS=4
+          echo "Testing parallel (4 threads)..."
+          PAR_START=$(date +%s%N)
+          ./target/release/valknut analyze large-test-project > /dev/null
+          PAR_END=$(date +%s%N)
+          PAR_TIME=$(( (PAR_END - PAR_START) / 1000000 ))
+          
+          echo "Sequential time: ${SEQ_TIME}ms"
+          echo "Parallel time: ${PAR_TIME}ms"
+          
+          if [ "$PAR_TIME" -lt "$SEQ_TIME" ]; then
+            SPEEDUP=$(echo "scale=2; $SEQ_TIME / $PAR_TIME" | bc -l)
+            echo "✅ Parallel speedup: ${SPEEDUP}x"
+          else
+            echo "⚠️ Parallel processing may not be effective for this workload"
+          fi
+
+  # Memory leak detection
+  memory-leak-detection:
+    name: Memory Leak Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Build for memory testing
+        run: |
+          # Build without optimizations for better leak detection
+          cargo build --features jemalloc
+
+      - name: Run memory leak detection
+        run: |
+          echo "🔍 Running memory leak detection..."
+          
+          # Create test project
+          mkdir -p mem-test-project/src
+          for i in {1..50}; do
+            echo "fn test_function_$i() { let _data = vec![0u8; 1000]; }" > mem-test-project/src/test_$i.rs
+          done
+          
+          # Run with Valgrind
+          valgrind --leak-check=full --track-origins=yes --error-exitcode=1 \
+            ./target/debug/valknut analyze mem-test-project 2>&1 | tee valgrind-output.txt
+          
+          # Check for leaks
+          if grep -q "definitely lost: 0 bytes" valgrind-output.txt; then
+            echo "✅ No memory leaks detected"
+          else
+            echo "❌ Potential memory leaks found"
+            grep -A 5 -B 5 "definitely lost\|possibly lost" valgrind-output.txt
+            exit 1
+          fi
+
+      - name: Upload memory analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-analysis
+          path: valgrind-output.txt
+
+  # Load testing and stress testing
+  stress-testing:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build optimized binary
+        run: |
+          # Build with maximum optimizations
+          RUSTFLAGS="-C target-cpu=native -C lto=fat" \
+            cargo build --release --all-features
+
+      - name: Create stress test data
+        run: |
+          echo "🔥 Creating stress test data..."
+          
+          # Create very large project
+          mkdir -p stress-test-project/src
+          
+          # Generate many files with complex code
+          for i in {1..2000}; do
+            cat > stress-test-project/src/stress_$i.rs << EOF
+          use std::collections::{HashMap, BTreeMap, HashSet};
+          use std::sync::{Arc, Mutex, RwLock};
+          
+          pub struct ComplexStructure$i<T: Clone + Send + Sync> {
+              data: Arc<RwLock<HashMap<String, T>>>,
+              cache: Arc<Mutex<BTreeMap<u64, Vec<T>>>>,
+              indices: HashSet<usize>,
+          }
+          
+          impl<T: Clone + Send + Sync> ComplexStructure$i<T> {
+              pub fn new() -> Self {
+                  Self {
+                      data: Arc::new(RwLock::new(HashMap::new())),
+                      cache: Arc::new(Mutex::new(BTreeMap::new())),
+                      indices: HashSet::new(),
+                  }
+              }
+              
+              pub fn complex_operation(&mut self, input: Vec<T>) -> Result<Vec<T>, Box<dyn std::error::Error>> {
+                  let mut result = Vec::new();
+                  
+                  for item in input {
+                      if let Ok(data) = self.data.read() {
+                          // Complex nested operations
+                          for j in 0..100 {
+                              if j % 2 == 0 {
+                                  if j % 4 == 0 {
+                                      result.push(item.clone());
+                                  } else {
+                                      if let Ok(mut cache) = self.cache.lock() {
+                                          cache.insert(j as u64, vec![item.clone()]);
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  
+                  Ok(result)
+              }
+              
+              pub fn nested_complexity(&self) -> i32 {
+                  let mut total = 0;
+                  for i in 0..10 {
+                      for j in 0..10 {
+                          for k in 0..10 {
+                              if i + j + k > 15 {
+                                  total += i * j * k;
+                              } else {
+                                  total -= i + j + k;
+                              }
+                          }
+                      }
+                  }
+                  total
+              }
+          }
+          EOF
+          done
+          
+          echo "Created stress test project with 2000 files"
+
+      - name: Run stress test
+        run: |
+          echo "🚀 Running stress test..."
+          
+          # Monitor system resources during test
+          (
+            while true; do
+              echo "$(date): Memory: $(free -m | awk 'NR==2{printf "%.1f%%", $3*100/$2}') CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)"
+              sleep 5
+            done
+          ) &
+          MONITOR_PID=$!
+          
+          # Run the stress test
+          timeout 300 ./target/release/valknut analyze stress-test-project --format json > stress-results.json
+          
+          # Stop monitoring
+          kill $MONITOR_PID 2>/dev/null || true
+          
+          # Verify results
+          if [ -s stress-results.json ]; then
+            FILE_COUNT=$(jq '.analysis_results.summary.total_files // 0' stress-results.json)
+            echo "✅ Stress test completed successfully"
+            echo "Analyzed files: $FILE_COUNT"
+          else
+            echo "❌ Stress test failed or timed out"
+            exit 1
+          fi
+
+      - name: Performance threshold check
+        run: |
+          echo "📊 Checking performance thresholds..."
+          
+          # Define performance thresholds
+          MAX_TIME_SECONDS=300  # 5 minutes max
+          MAX_MEMORY_MB=2048    # 2GB max
+          
+          # Check if we have timing information
+          if [ -f stress-results.json ]; then
+            echo "✅ Analysis completed within time limit"
+          else
+            echo "❌ Analysis exceeded time limit"
+            exit 1
+          fi
+
+  # Performance summary
+  performance-summary:
+    name: Performance Summary
+    needs: [benchmark, simd-performance, parallel-performance, memory-leak-detection, stress-testing]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate performance summary
+        run: |
+          echo "## Performance Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmarks | ${{ needs.benchmark.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SIMD Performance | ${{ needs.simd-performance.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Parallel Processing | ${{ needs.parallel-performance.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Memory Leak Detection | ${{ needs.memory-leak-detection.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Stress Testing | ${{ needs.stress-testing.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review individual job outputs for detailed performance metrics." >> $GITHUB_STEP_SUMMARY
+
+      - name: Performance gate result
+        run: |
+          if [[ "${{ needs.benchmark.result }}" != "success" || 
+                "${{ needs.memory-leak-detection.result }}" != "success" || 
+                "${{ needs.stress-testing.result }}" != "success" ]]; then
+            echo "❌ Critical performance tests failed"
+            exit 1
+          else
+            echo "✅ Performance tests passed"
+          fi

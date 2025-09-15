@@ -1,0 +1,73 @@
+# Global code ownership
+# Require review for all changes to ensure code quality standards
+
+# Default ownership - all files require review
+* @nathan
+
+# Core engine and API require careful review
+/src/api/ @nathan
+/src/core/ @nathan
+
+# Critical configuration and error handling
+/src/core/config.rs @nathan
+/src/core/errors.rs @nathan
+/src/api/engine.rs @nathan
+
+# Detector algorithms need domain expertise
+/src/detectors/ @nathan
+
+# CLI interface affects user experience
+/src/bin/ @nathan
+
+# Build and deployment configuration
+/Cargo.toml @nathan
+/Cargo.lock @nathan
+/.github/ @nathan
+/Dockerfile @nathan
+/docker-compose.yml @nathan
+
+# Documentation affects user understanding
+/README.md @nathan
+/CHANGELOG.md @nathan
+/docs/ @nathan
+
+# Test infrastructure ensures quality
+/tests/ @nathan
+/benches/ @nathan
+
+# Language support affects accuracy
+/src/lang/ @nathan
+
+# Security-sensitive files
+/.github/workflows/ @nathan
+/deny.toml @nathan
+
+# Performance-critical code
+/src/core/scoring.rs @nathan
+/src/core/featureset.rs @nathan
+/src/detectors/complexity/ @nathan
+
+# Database and persistence layer
+/src/io/persistence/ @nathan
+
+# Archived code - should rarely change
+/attic/ @nathan
+
+# Configuration files that affect behavior
+/.valknut.yml @nathan
+/examples/ @nathan
+
+# License and legal files
+/LICENSE* @nathan
+
+# IDE and editor configurations
+/.vscode/ @nathan
+/.idea/ @nathan
+/rust-analyzer.toml @nathan
+
+# Git configuration
+/.gitignore @nathan
+/.gitattributes @nathan
+
+# Package metadata
+/src/lib.rs @nathan

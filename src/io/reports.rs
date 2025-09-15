@@ -1,15 +1,15 @@
 //! Report generation with template engine support.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::fs;
-use handlebars::{Handlebars, Renderable};
-use serde_json::Value;
-use thiserror::Error;
-use chrono::Utc;
-use crate::core::config::ReportFormat;
 use crate::api::config_types::AnalysisConfig;
 use crate::api::results::AnalysisResults;
+use crate::core::config::ReportFormat;
+use chrono::Utc;
+use handlebars::{Handlebars, Renderable};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ReportError {
@@ -33,185 +33,467 @@ pub struct ReportGenerator {
 impl Default for ReportGenerator {
     fn default() -> Self {
         let mut handlebars = Handlebars::new();
-        
+
         // Register JSON helper
-        handlebars.register_helper("json", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let param = h.param(0).and_then(|v| v.value().as_object()).ok_or_else(|| handlebars::RenderError::new("json helper requires an object parameter"))?;
-            let json_str = serde_json::to_string_pretty(param).map_err(|e| handlebars::RenderError::new(&format!("JSON serialization error: {}", e)))?;
-            out.write(&json_str)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "json",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let param =
+                        h.param(0)
+                            .and_then(|v| v.value().as_object())
+                            .ok_or_else(|| {
+                                handlebars::RenderError::new(
+                                    "json helper requires an object parameter",
+                                )
+                            })?;
+                    let json_str = serde_json::to_string_pretty(param).map_err(|e| {
+                        handlebars::RenderError::new(&format!("JSON serialization error: {}", e))
+                    })?;
+                    out.write(&json_str)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register percentage helper
-        handlebars.register_helper("percentage", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("percentage helper requires a numeric parameter"))?;
-            out.write(&format!("{:.1}", value * 100.0))?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "percentage",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "percentage helper requires a numeric parameter",
+                        )
+                    })?;
+                    out.write(&format!("{:.1}", value * 100.0))?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register multiply helper for template calculations
-        handlebars.register_helper("multiply", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("multiply helper requires a numeric parameter"))?;
-            let multiplier = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("multiply helper requires a second numeric parameter"))?;
-            out.write(&format!("{:.0}", value * multiplier))?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "multiply",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("multiply helper requires a numeric parameter")
+                    })?;
+                    let multiplier =
+                        h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "multiply helper requires a second numeric parameter",
+                            )
+                        })?;
+                    out.write(&format!("{:.0}", value * multiplier))?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register capitalize helper
-        handlebars.register_helper("capitalize", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("capitalize helper requires a string parameter"))?;
-            let capitalized = if let Some(first_char) = value.chars().next() {
-                format!("{}{}", first_char.to_uppercase(), &value[first_char.len_utf8()..])
-            } else {
-                value.to_string()
-            };
-            out.write(&capitalized)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "capitalize",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "capitalize helper requires a string parameter",
+                        )
+                    })?;
+                    let capitalized = if let Some(first_char) = value.chars().next() {
+                        format!(
+                            "{}{}",
+                            first_char.to_uppercase(),
+                            &value[first_char.len_utf8()..]
+                        )
+                    } else {
+                        value.to_string()
+                    };
+                    out.write(&capitalized)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register replace helper
-        handlebars.register_helper("replace", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("replace helper requires a string parameter"))?;
-            let search = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("replace helper requires a search string"))?;
-            let replacement = h.param(2).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("replace helper requires a replacement string"))?;
-            let result = value.replace(search, replacement);
-            out.write(&result)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "replace",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new("replace helper requires a string parameter")
+                    })?;
+                    let search = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new("replace helper requires a search string")
+                    })?;
+                    let replacement =
+                        h.param(2).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "replace helper requires a replacement string",
+                            )
+                        })?;
+                    let result = value.replace(search, replacement);
+                    out.write(&result)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register format helper
-        handlebars.register_helper("format", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("format helper requires a numeric parameter"))?;
-            let format_str = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("0.1");
-            
-            let result = match format_str {
-                "0.1" => format!("{:.1}", value),
-                "0.0" => format!("{:.0}", value),
-                "0.2" => format!("{:.2}", value),
-                _ => format!("{:.1}", value), // default
-            };
-            out.write(&result)?;
-            Ok(())
-        }));
+        handlebars.register_helper(
+            "format",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("format helper requires a numeric parameter")
+                    })?;
+                    let format_str = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("0.1");
+
+                    let result = match format_str {
+                        "0.1" => format!("{:.1}", value),
+                        "0.0" => format!("{:.0}", value),
+                        "0.2" => format!("{:.2}", value),
+                        _ => format!("{:.1}", value), // default
+                    };
+                    out.write(&result)?;
+                    Ok(())
+                },
+            ),
+        );
 
         // Register percentage helper - multiplies by 100 and formats
-        handlebars.register_helper("percentage", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("percentage helper requires a numeric parameter"))?;
-            let decimals = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("0");
-            
-            let percentage = value * 100.0;
-            let result = match decimals {
-                "0" => format!("{:.0}", percentage),
-                "1" => format!("{:.1}", percentage),
-                "2" => format!("{:.2}", percentage),
-                _ => format!("{:.0}", percentage), // default
-            };
-            out.write(&result)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "percentage",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "percentage helper requires a numeric parameter",
+                        )
+                    })?;
+                    let decimals = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("0");
+
+                    let percentage = value * 100.0;
+                    let result = match decimals {
+                        "0" => format!("{:.0}", percentage),
+                        "1" => format!("{:.1}", percentage),
+                        "2" => format!("{:.2}", percentage),
+                        _ => format!("{:.0}", percentage), // default
+                    };
+                    out.write(&result)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register subtract helper
-        handlebars.register_helper("subtract", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("subtract helper requires numeric parameters"))?;
-            let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("subtract helper requires two numeric parameters"))?;
-            let result = a - b;
-            out.write(&format!("{:.0}", result))?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "subtract",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("subtract helper requires numeric parameters")
+                    })?;
+                    let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "subtract helper requires two numeric parameters",
+                        )
+                    })?;
+                    let result = a - b;
+                    out.write(&format!("{:.0}", result))?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register function_name helper to extract just the function name from full entity IDs
-        handlebars.register_helper("function_name", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("function_name helper requires a string parameter"))?;
-            
-            // Extract function name from entity IDs like "src/core/scoring.rs:function:normalize_batch"
-            let function_name = if let Some(last_colon) = value.rfind(':') {
-                &value[last_colon + 1..]
-            } else {
-                value // If no colon found, return the whole string
-            };
-            
-            out.write(function_name)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "function_name",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "function_name helper requires a string parameter",
+                        )
+                    })?;
+
+                    // Extract function name from entity IDs like "src/core/scoring.rs:function:normalize_batch"
+                    let function_name = if let Some(last_colon) = value.rfind(':') {
+                        &value[last_colon + 1..]
+                    } else {
+                        value // If no colon found, return the whole string
+                    };
+
+                    out.write(function_name)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register health_badge_class helper to determine CSS class based on health score
-        handlebars.register_helper("health_badge_class", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("health_badge_class helper requires a numeric parameter"))?;
-            
-            let badge_class = if value >= 75.0 {
-                "tree-badge-High"  // Good health = green
-            } else if value >= 50.0 {
-                "tree-badge-Medium"  // Medium health = yellow
-            } else {
-                "tree-badge-Low"   // Poor health = red
-            };
-            
-            out.write(badge_class)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "health_badge_class",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "health_badge_class helper requires a numeric parameter",
+                        )
+                    })?;
+
+                    let badge_class = if value >= 75.0 {
+                        "tree-badge-High" // Good health = green
+                    } else if value >= 50.0 {
+                        "tree-badge-Medium" // Medium health = yellow
+                    } else {
+                        "tree-badge-Low" // Poor health = red
+                    };
+
+                    out.write(badge_class)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register add helper for arithmetic in templates
-        handlebars.register_helper("add", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("add helper requires numeric parameters"))?;
-            let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("add helper requires two numeric parameters"))?;
-            let result = a + b;
-            out.write(&format!("{:.0}", result))?;
-            Ok(())
-        }));
+        handlebars.register_helper(
+            "add",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("add helper requires numeric parameters")
+                    })?;
+                    let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("add helper requires two numeric parameters")
+                    })?;
+                    let result = a + b;
+                    out.write(&format!("{:.0}", result))?;
+                    Ok(())
+                },
+            ),
+        );
 
         // Register length helper for arrays
-        handlebars.register_helper("length", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let array = h.param(0).and_then(|v| v.value().as_array()).ok_or_else(|| handlebars::RenderError::new("length helper requires an array parameter"))?;
-            out.write(&array.len().to_string())?;
-            Ok(())
-        }));
+        handlebars.register_helper(
+            "length",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let array = h
+                        .param(0)
+                        .and_then(|v| v.value().as_array())
+                        .ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "length helper requires an array parameter",
+                            )
+                        })?;
+                    out.write(&array.len().to_string())?;
+                    Ok(())
+                },
+            ),
+        );
 
         // Register gt helper for numeric comparisons
-        handlebars.register_helper("gt", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("gt helper requires numeric parameters"))?;
-            let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| handlebars::RenderError::new("gt helper requires two numeric parameters"))?;
-            out.write(&(a > b).to_string())?;
-            Ok(())
-        }));
+        handlebars.register_helper(
+            "gt",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let a = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("gt helper requires numeric parameters")
+                    })?;
+                    let b = h.param(1).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                        handlebars::RenderError::new("gt helper requires two numeric parameters")
+                    })?;
+                    out.write(&(a > b).to_string())?;
+                    Ok(())
+                },
+            ),
+        );
 
         // Register has_children helper for checking if array has elements
-        handlebars.register_helper("has_children", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let array = h.param(0).and_then(|v| v.value().as_array()).ok_or_else(|| handlebars::RenderError::new("has_children helper requires an array parameter"))?;
-            out.write(&(array.len() > 0).to_string())?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "has_children",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let array = h
+                        .param(0)
+                        .and_then(|v| v.value().as_array())
+                        .ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "has_children helper requires an array parameter",
+                            )
+                        })?;
+                    out.write(&(array.len() > 0).to_string())?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register basename helper for extracting filename from path
-        handlebars.register_helper("basename", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let path_str = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("basename helper requires a string parameter"))?;
-            let path = std::path::Path::new(path_str);
-            let basename = path.file_name().and_then(|n| n.to_str()).unwrap_or(path_str);
-            out.write(basename)?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "basename",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let path_str =
+                        h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "basename helper requires a string parameter",
+                            )
+                        })?;
+                    let path = std::path::Path::new(path_str);
+                    let basename = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(path_str);
+                    out.write(basename)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register eq helper for equality comparison
-        handlebars.register_helper("eq", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let a = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("eq helper requires string parameters"))?;
-            let b = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("eq helper requires string parameters"))?;
-            out.write(&(a == b).to_string())?;
-            Ok(())
-        }));
-        
+        handlebars.register_helper(
+            "eq",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let a = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new("eq helper requires string parameters")
+                    })?;
+                    let b = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new("eq helper requires string parameters")
+                    })?;
+                    out.write(&(a == b).to_string())?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register starts_with helper for string prefix checking
-        handlebars.register_helper("starts_with", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let string = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("starts_with helper requires string parameters"))?;
-            let prefix = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("starts_with helper requires string parameters"))?;
-            out.write(&string.starts_with(prefix).to_string())?;
-            Ok(())
-        }));
+        handlebars.register_helper(
+            "starts_with",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let string = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "starts_with helper requires string parameters",
+                        )
+                    })?;
+                    let prefix = h.param(1).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                        handlebars::RenderError::new(
+                            "starts_with helper requires string parameters",
+                        )
+                    })?;
+                    out.write(&string.starts_with(prefix).to_string())?;
+                    Ok(())
+                },
+            ),
+        );
 
         // Register is_source_dir helper for filtering actual source directories
-        handlebars.register_helper("is_source_dir", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-            let dir_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| handlebars::RenderError::new("is_source_dir helper requires a string parameter"))?;
-            
-            // Skip obvious garbage directories
-            let is_source = !dir_path.contains(".valknut") &&
+        handlebars.register_helper(
+            "is_source_dir",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let dir_path =
+                        h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                            handlebars::RenderError::new(
+                                "is_source_dir helper requires a string parameter",
+                            )
+                        })?;
+
+                    // Skip obvious garbage directories
+                    let is_source = !dir_path.contains(".valknut") &&
                            !dir_path.contains("test-report") &&
                            !dir_path.contains("final-demo") &&
                            !dir_path.contains("comprehensive-coverage-report") &&
@@ -234,20 +516,25 @@ impl Default for ReportGenerator {
                             dir_path.starts_with("scripts/") ||
                             dir_path == "vscode-extension" ||
                             dir_path.starts_with("vscode-extension/"));
-            
-            out.write(&is_source.to_string())?;
-            Ok(())
-        }));
-        
+
+                    out.write(&is_source.to_string())?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Load default templates (external files instead of embedded)
         let mut generator = Self {
             handlebars,
             templates_dir: None,
             analysis_config: None,
         };
-        
+
         // Always register the default HTML template first
-        if let Err(e) = generator.handlebars.register_template_string("default_html", FALLBACK_HTML_TEMPLATE) {
+        if let Err(e) = generator
+            .handlebars
+            .register_template_string("default_html", FALLBACK_HTML_TEMPLATE)
+        {
             eprintln!("Failed to register fallback HTML template: {}", e);
         }
 
@@ -260,7 +547,7 @@ impl Default for ReportGenerator {
                 }
             }
         }
-        
+
         generator
     }
 }
@@ -269,69 +556,78 @@ impl ReportGenerator {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn with_config(mut self, config: AnalysisConfig) -> Self {
         self.analysis_config = Some(config);
         self
     }
-    
-    pub fn with_templates_dir<P: AsRef<Path>>(mut self, templates_dir: P) -> Result<Self, ReportError> {
+
+    pub fn with_templates_dir<P: AsRef<Path>>(
+        mut self,
+        templates_dir: P,
+    ) -> Result<Self, ReportError> {
         let templates_dir = templates_dir.as_ref().to_path_buf();
-        
+
         if templates_dir.exists() {
             // Load custom templates from directory
             self.load_templates_from_dir(&templates_dir)?;
         }
-        
+
         self.templates_dir = Some(templates_dir);
         Ok(self)
     }
-    
-    fn load_templates_from_dir<P: AsRef<Path>>(&mut self, templates_dir: P) -> Result<(), ReportError> {
+
+    fn load_templates_from_dir<P: AsRef<Path>>(
+        &mut self,
+        templates_dir: P,
+    ) -> Result<(), ReportError> {
         let templates_dir = templates_dir.as_ref();
-        
+
         // Load main templates
         for entry in fs::read_dir(templates_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("hbs") {
-                let template_name = path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| std::io::Error::new(
+                let template_name = path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
+                    std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Invalid template filename"
-                    ))?;
-                
+                        "Invalid template filename",
+                    )
+                })?;
+
                 let template_content = fs::read_to_string(&path)?;
-                self.handlebars.register_template_string(template_name, template_content)?;
+                self.handlebars
+                    .register_template_string(template_name, template_content)?;
             }
         }
-        
+
         // Load partials from partials subdirectory
         let partials_dir = templates_dir.join("partials");
         if partials_dir.exists() && partials_dir.is_dir() {
             for entry in fs::read_dir(&partials_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                
+
                 if path.extension().and_then(|s| s.to_str()) == Some("hbs") {
-                    let partial_name = path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "Invalid partial filename"
-                        ))?;
-                    
+                    let partial_name =
+                        path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Invalid partial filename",
+                            )
+                        })?;
+
                     let partial_content = fs::read_to_string(&path)?;
-                    self.handlebars.register_partial(partial_name, partial_content)?;
+                    self.handlebars
+                        .register_partial(partial_name, partial_content)?;
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn generate_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -345,7 +641,7 @@ impl ReportGenerator {
             ReportFormat::Csv => self.generate_csv_report(results, output_path),
         }
     }
-    
+
     pub fn generate_report_with_oracle<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -355,13 +651,21 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         let oracle_option = Some(oracle_response.clone());
         match format {
-            ReportFormat::Html => self.generate_html_report_with_oracle(results, &oracle_option, output_path),
-            ReportFormat::Json => self.generate_json_report_with_oracle(results, &oracle_option, output_path),
-            ReportFormat::Yaml => self.generate_yaml_report_with_oracle(results, &oracle_option, output_path),
-            ReportFormat::Csv => self.generate_csv_report_with_oracle(results, &oracle_option, output_path),
+            ReportFormat::Html => {
+                self.generate_html_report_with_oracle(results, &oracle_option, output_path)
+            }
+            ReportFormat::Json => {
+                self.generate_json_report_with_oracle(results, &oracle_option, output_path)
+            }
+            ReportFormat::Yaml => {
+                self.generate_yaml_report_with_oracle(results, &oracle_option, output_path)
+            }
+            ReportFormat::Csv => {
+                self.generate_csv_report_with_oracle(results, &oracle_option, output_path)
+            }
         }
     }
-    
+
     fn generate_html_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -369,7 +673,7 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         self.generate_html_report_with_oracle(results, &None, output_path)
     }
-    
+
     fn generate_html_report_with_oracle<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -378,31 +682,31 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         let output_path = output_path.as_ref();
         let output_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
-        
+
         // Copy Sibylline theme CSS to output directory
         self.copy_theme_css_to_output(output_dir)?;
-        
+
         // Copy JavaScript assets for React tree component
         self.copy_js_assets_to_output(output_dir)?;
-        
-        // Copy webpage assets (logo, animation files) to output directory  
+
+        // Copy webpage assets (logo, animation files) to output directory
         self.copy_webpage_assets_to_output(output_dir)?;
-        
+
         let template_data = self.prepare_template_data_with_oracle(results, oracle_response);
-        
+
         // Prefer external template over fallback
         let template_name = if self.handlebars.get_templates().contains_key("report") {
             "report"
         } else {
             "default_html"
         };
-        
+
         let html_content = self.handlebars.render(template_name, &template_data)?;
         fs::write(output_path, html_content)?;
-        
+
         Ok(())
     }
-    
+
     fn generate_json_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -410,7 +714,7 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         self.generate_json_report_with_oracle(results, &None, output_path)
     }
-    
+
     fn generate_json_report_with_oracle<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -429,7 +733,7 @@ impl ReportGenerator {
         fs::write(output_path, json_content)?;
         Ok(())
     }
-    
+
     fn generate_yaml_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -437,7 +741,7 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         self.generate_yaml_report_with_oracle(results, &None, output_path)
     }
-    
+
     fn generate_yaml_report_with_oracle<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -457,7 +761,7 @@ impl ReportGenerator {
         fs::write(output_path, yaml_content)?;
         Ok(())
     }
-    
+
     fn generate_csv_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
@@ -465,7 +769,7 @@ impl ReportGenerator {
     ) -> Result<(), ReportError> {
         self.generate_csv_report_with_oracle(results, &None, output_path)
     }
-    
+
     fn generate_csv_report_with_oracle<P: AsRef<Path>>(
         &self,
         _results: &AnalysisResults,
@@ -477,132 +781,210 @@ impl ReportGenerator {
         fs::write(output_path, "CSV report not yet implemented")?;
         Ok(())
     }
-    
+
     fn prepare_template_data(&self, results: &AnalysisResults) -> Value {
         self.prepare_template_data_with_oracle(results, &None)
     }
-    
+
     fn prepare_template_data_with_oracle(
         &self,
         results: &AnalysisResults,
         oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
     ) -> Value {
         let mut data = HashMap::new();
-        
+
         // Add metadata
-        data.insert("generated_at", serde_json::to_value(Utc::now().to_rfc3339()).unwrap());
+        data.insert(
+            "generated_at",
+            serde_json::to_value(Utc::now().to_rfc3339()).unwrap(),
+        );
         data.insert("tool_name", serde_json::to_value("Valknut").unwrap());
-        data.insert("version", serde_json::to_value(env!("CARGO_PKG_VERSION")).unwrap());
-        
+        data.insert(
+            "version",
+            serde_json::to_value(env!("CARGO_PKG_VERSION")).unwrap(),
+        );
+
         // Add theme CSS reference - Sibylline by default
-        data.insert("theme_css_url", serde_json::to_value("sibylline.css").unwrap());
-        
+        data.insert(
+            "theme_css_url",
+            serde_json::to_value("sibylline.css").unwrap(),
+        );
+
         // Add animation config
-        let enable_animation = self.analysis_config.as_ref()
+        let enable_animation = self
+            .analysis_config
+            .as_ref()
             .map(|config| config.enable_animation)
             .unwrap_or(true);
-        data.insert("enable_animation", serde_json::to_value(enable_animation).unwrap());
-        
+        data.insert(
+            "enable_animation",
+            serde_json::to_value(enable_animation).unwrap(),
+        );
+
         // Add Oracle refactoring plan at the TOP for user requirement
         if let Some(oracle) = oracle_response {
-            data.insert("oracle_refactoring_plan", serde_json::to_value(oracle).unwrap());
+            data.insert(
+                "oracle_refactoring_plan",
+                serde_json::to_value(oracle).unwrap(),
+            );
             data.insert("has_oracle_data", serde_json::to_value(true).unwrap());
         } else {
             data.insert("has_oracle_data", serde_json::to_value(false).unwrap());
         }
-        
+
         // Add analysis results
         data.insert("results", serde_json::to_value(results).unwrap());
-        
+
         // Add refactoring candidates at top level for template access (clean up paths)
         let cleaned_candidates = self.clean_path_prefixes(&results.refactoring_candidates);
-        data.insert("refactoring_candidates", serde_json::to_value(&cleaned_candidates).unwrap());
-        
+        data.insert(
+            "refactoring_candidates",
+            serde_json::to_value(&cleaned_candidates).unwrap(),
+        );
+
         // Add hierarchical refactoring candidates by file (clean paths)
-        let cleaned_candidates_by_file: Vec<_> = results.refactoring_candidates_by_file.iter().map(|group| {
-            let mut cleaned_group = group.clone();
-            if cleaned_group.file_path.starts_with("./") {
-                cleaned_group.file_path = cleaned_group.file_path[2..].to_string();
-            }
-            cleaned_group
-        }).collect();
-        data.insert("refactoring_candidates_by_file", serde_json::to_value(&cleaned_candidates_by_file).unwrap());
-        data.insert("file_count", serde_json::to_value(cleaned_candidates_by_file.len()).unwrap());
-        
+        let cleaned_candidates_by_file: Vec<_> = results
+            .refactoring_candidates_by_file
+            .iter()
+            .map(|group| {
+                let mut cleaned_group = group.clone();
+                if cleaned_group.file_path.starts_with("./") {
+                    cleaned_group.file_path = cleaned_group.file_path[2..].to_string();
+                }
+                cleaned_group
+            })
+            .collect();
+        data.insert(
+            "refactoring_candidates_by_file",
+            serde_json::to_value(&cleaned_candidates_by_file).unwrap(),
+        );
+        data.insert(
+            "file_count",
+            serde_json::to_value(cleaned_candidates_by_file.len()).unwrap(),
+        );
+
         // Add directory health tree for template access (with cleaned paths)
-        let cleaned_directory_health_tree = results.directory_health_tree.as_ref().map(|tree| {
-            self.clean_directory_health_tree_paths(tree)
-        });
-        data.insert("directory_health_tree", serde_json::to_value(&cleaned_directory_health_tree).unwrap());
-        
+        let cleaned_directory_health_tree = results
+            .directory_health_tree
+            .as_ref()
+            .map(|tree| self.clean_directory_health_tree_paths(tree));
+        data.insert(
+            "directory_health_tree",
+            serde_json::to_value(&cleaned_directory_health_tree).unwrap(),
+        );
+
         // Add unified hierarchy combining directory health with refactoring candidates
         if let Some(ref cleaned_tree) = cleaned_directory_health_tree {
-            let unified_hierarchy = self.build_unified_hierarchy(cleaned_tree, &cleaned_candidates_by_file);
-            data.insert("unified_hierarchy", serde_json::to_value(&unified_hierarchy).unwrap());
+            let unified_hierarchy =
+                self.build_unified_hierarchy(cleaned_tree, &cleaned_candidates_by_file);
+            data.insert(
+                "unified_hierarchy",
+                serde_json::to_value(&unified_hierarchy).unwrap(),
+            );
         }
-        
+
         // Add summary statistics
         if let Ok(summary) = serde_json::to_value(self.calculate_summary(results)) {
             data.insert("summary", summary);
         }
-        
+
         // Add directory health tree data (with cleaned paths)
         if let Some(ref cleaned_tree) = cleaned_directory_health_tree {
-            data.insert("directory_tree", serde_json::to_value(cleaned_tree).unwrap());
-            data.insert("tree_visualization", serde_json::to_value(cleaned_tree.to_tree_string()).unwrap());
+            data.insert(
+                "directory_tree",
+                serde_json::to_value(cleaned_tree).unwrap(),
+            );
+            data.insert(
+                "tree_visualization",
+                serde_json::to_value(cleaned_tree.to_tree_string()).unwrap(),
+            );
         }
-        
+
         serde_json::to_value(data).unwrap_or_else(|_| serde_json::Value::Null)
     }
-    
+
     fn calculate_summary(&self, results: &AnalysisResults) -> HashMap<String, Value> {
         let mut summary = HashMap::new();
-        
+
         // Calculate basic statistics for the template
-        summary.insert("files_processed".to_string(), serde_json::to_value(results.files_analyzed()).unwrap());
-        summary.insert("entities_analyzed".to_string(), serde_json::to_value(results.summary.entities_analyzed).unwrap());
-        summary.insert("refactoring_needed".to_string(), serde_json::to_value(results.refactoring_candidates.len()).unwrap());
-        summary.insert("code_health_score".to_string(), serde_json::to_value(results.summary.code_health_score).unwrap());
-        
+        summary.insert(
+            "files_processed".to_string(),
+            serde_json::to_value(results.files_analyzed()).unwrap(),
+        );
+        summary.insert(
+            "entities_analyzed".to_string(),
+            serde_json::to_value(results.summary.entities_analyzed).unwrap(),
+        );
+        summary.insert(
+            "refactoring_needed".to_string(),
+            serde_json::to_value(results.refactoring_candidates.len()).unwrap(),
+        );
+        summary.insert(
+            "code_health_score".to_string(),
+            serde_json::to_value(results.summary.code_health_score).unwrap(),
+        );
+
         // Legacy fields for backwards compatibility
-        summary.insert("total_files".to_string(), serde_json::to_value(results.files_analyzed()).unwrap());
-        summary.insert("total_issues".to_string(), serde_json::to_value(results.refactoring_candidates.len()).unwrap());
-        
+        summary.insert(
+            "total_files".to_string(),
+            serde_json::to_value(results.files_analyzed()).unwrap(),
+        );
+        summary.insert(
+            "total_issues".to_string(),
+            serde_json::to_value(results.refactoring_candidates.len()).unwrap(),
+        );
+
         // Add additional metrics for the new template
-        summary.insert("complexity_score".to_string(), serde_json::to_value(format!("{:.1}", results.summary.avg_refactoring_score * 100.0)).unwrap());
-        summary.insert("maintainability_index".to_string(), serde_json::to_value(format!("{:.1}", results.summary.code_health_score * 100.0)).unwrap());
-        
+        summary.insert(
+            "complexity_score".to_string(),
+            serde_json::to_value(format!(
+                "{:.1}",
+                results.summary.avg_refactoring_score * 100.0
+            ))
+            .unwrap(),
+        );
+        summary.insert(
+            "maintainability_index".to_string(),
+            serde_json::to_value(format!("{:.1}", results.summary.code_health_score * 100.0))
+                .unwrap(),
+        );
+
         summary
     }
-    
+
     /// Build a unified hierarchy combining directory health with refactoring candidates
     fn build_unified_hierarchy(
-        &self, 
+        &self,
         tree: &crate::api::results::DirectoryHealthTree,
-        file_groups: &[crate::api::results::FileRefactoringGroup]
+        file_groups: &[crate::api::results::FileRefactoringGroup],
     ) -> Vec<serde_json::Value> {
         // Sort directories by health score (worst first) for priority-based display
         let mut directories: Vec<_> = tree.directories.iter().collect();
-        directories.sort_by(|a, b| a.1.health_score.partial_cmp(&b.1.health_score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        directories.sort_by(|a, b| {
+            a.1.health_score
+                .partial_cmp(&b.1.health_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Build the hierarchy
         let mut hierarchy = Vec::new();
         let mut processed_paths = std::collections::HashSet::new();
-        
+
         for (dir_path, dir_health) in directories.iter() {
             let path_str = dir_path.to_string_lossy().to_string();
-            
+
             // Skip if this path has already been processed as a child
             if processed_paths.contains(&path_str) {
                 continue;
             }
-            
+
             // Build directory node with health information
-            let dir_name = dir_path.file_name()
+            let dir_name = dir_path
+                .file_name()
                 .unwrap_or_else(|| std::ffi::OsStr::new(&path_str))
                 .to_string_lossy()
                 .to_string();
-            
+
             let mut dir_node = serde_json::json!({
                 "type": "directory",
                 "path": path_str.clone(),
@@ -613,7 +995,7 @@ impl ReportGenerator {
                 "refactoring_needed": dir_health.refactoring_needed,
                 "children": serde_json::json!([])
             });
-            
+
             // Find files that belong to this directory
             let mut children = Vec::new();
             for file_group in file_groups.iter() {
@@ -621,7 +1003,7 @@ impl ReportGenerator {
                     .parent()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_else(|| ".".to_string());
-                
+
                 if file_dir == path_str {
                     let file_node = serde_json::json!({
                         "type": "file",
@@ -635,151 +1017,187 @@ impl ReportGenerator {
                     children.push(file_node);
                 }
             }
-            
+
             // Sort children (files) by priority and score
             children.sort_by(|a, b| {
                 let priority_a = a["priority"].as_str().unwrap_or("Low");
                 let priority_b = b["priority"].as_str().unwrap_or("Low");
                 let score_a = a["avg_score"].as_f64().unwrap_or(0.0);
                 let score_b = b["avg_score"].as_f64().unwrap_or(0.0);
-                
+
                 // Sort by priority first (Critical > High > Medium > Low), then by score
-                priority_b.cmp(priority_a).then(score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal))
+                priority_b.cmp(priority_a).then(
+                    score_b
+                        .partial_cmp(&score_a)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
             });
-            
+
             dir_node["children"] = serde_json::Value::Array(children);
             hierarchy.push(dir_node);
             processed_paths.insert(path_str);
         }
-        
+
         hierarchy
     }
 
     /// Clean path prefixes like "./" from refactoring candidates
-    fn clean_path_prefixes(&self, candidates: &[crate::api::results::RefactoringCandidate]) -> Vec<crate::api::results::RefactoringCandidate> {
-        candidates.iter().cloned().map(|mut candidate| {            
-            // Clean the file_path
-            if candidate.file_path.starts_with("./") {
-                candidate.file_path = candidate.file_path[2..].to_string();
-            }
-            
-            // Clean the entity_id
-            if candidate.entity_id.starts_with("./") {
-                candidate.entity_id = candidate.entity_id[2..].to_string();
-            }
-            
-            // Clean the name field if it also has the prefix
-            if candidate.name.starts_with("./") {
-                candidate.name = candidate.name[2..].to_string();
-            }
-            
-            candidate
-        }).collect()
+    fn clean_path_prefixes(
+        &self,
+        candidates: &[crate::api::results::RefactoringCandidate],
+    ) -> Vec<crate::api::results::RefactoringCandidate> {
+        candidates
+            .iter()
+            .cloned()
+            .map(|mut candidate| {
+                // Clean the file_path
+                if candidate.file_path.starts_with("./") {
+                    candidate.file_path = candidate.file_path[2..].to_string();
+                }
+
+                // Clean the entity_id
+                if candidate.entity_id.starts_with("./") {
+                    candidate.entity_id = candidate.entity_id[2..].to_string();
+                }
+
+                // Clean the name field if it also has the prefix
+                if candidate.name.starts_with("./") {
+                    candidate.name = candidate.name[2..].to_string();
+                }
+
+                candidate
+            })
+            .collect()
     }
-    
-    fn clean_path_prefixes_in_file_groups(&self, file_groups: &[crate::api::results::FileRefactoringGroup]) -> Vec<crate::api::results::FileRefactoringGroup> {
-        file_groups.iter().cloned().map(|mut group| {
-            // Clean the file_path
-            if group.file_path.starts_with("./") {
-                group.file_path = group.file_path[2..].to_string();
-            }
-            
-            // Clean all entities within the group
-            group.entities = self.clean_path_prefixes(&group.entities);
-            
-            group
-        }).collect()
+
+    fn clean_path_prefixes_in_file_groups(
+        &self,
+        file_groups: &[crate::api::results::FileRefactoringGroup],
+    ) -> Vec<crate::api::results::FileRefactoringGroup> {
+        file_groups
+            .iter()
+            .cloned()
+            .map(|mut group| {
+                // Clean the file_path
+                if group.file_path.starts_with("./") {
+                    group.file_path = group.file_path[2..].to_string();
+                }
+
+                // Clean all entities within the group
+                group.entities = self.clean_path_prefixes(&group.entities);
+
+                group
+            })
+            .collect()
     }
-    
+
     /// Clean "./" prefixes from directory health tree paths
-    fn clean_directory_health_tree_paths(&self, tree: &crate::api::results::DirectoryHealthTree) -> crate::api::results::DirectoryHealthTree {
+    fn clean_directory_health_tree_paths(
+        &self,
+        tree: &crate::api::results::DirectoryHealthTree,
+    ) -> crate::api::results::DirectoryHealthTree {
         let mut cleaned_tree = tree.clone();
-        
+
         // Clean root path
         if cleaned_tree.root.path.to_string_lossy().starts_with("./") {
             cleaned_tree.root.path = PathBuf::from(&cleaned_tree.root.path.to_string_lossy()[2..]);
         }
-        
+
         // Clean parent path in root
         if let Some(ref parent) = cleaned_tree.root.parent {
             if parent.to_string_lossy().starts_with("./") {
                 cleaned_tree.root.parent = Some(PathBuf::from(&parent.to_string_lossy()[2..]));
             }
         }
-        
+
         // Clean children paths in root
-        cleaned_tree.root.children = cleaned_tree.root.children.iter().map(|child| {
-            if child.to_string_lossy().starts_with("./") {
-                PathBuf::from(&child.to_string_lossy()[2..])
-            } else {
-                child.clone()
-            }
-        }).collect();
-        
+        cleaned_tree.root.children = cleaned_tree
+            .root
+            .children
+            .iter()
+            .map(|child| {
+                if child.to_string_lossy().starts_with("./") {
+                    PathBuf::from(&child.to_string_lossy()[2..])
+                } else {
+                    child.clone()
+                }
+            })
+            .collect();
+
         // Clean all directory paths and their contents
         let mut cleaned_directories = std::collections::HashMap::new();
         for (path, dir_health) in &cleaned_tree.directories {
             let mut cleaned_dir = dir_health.clone();
-            
+
             // Clean the directory path key
             let cleaned_path = if path.to_string_lossy().starts_with("./") {
                 PathBuf::from(&path.to_string_lossy()[2..])
             } else {
                 path.clone()
             };
-            
+
             // Clean the path field in the DirectoryHealthScore
             if cleaned_dir.path.to_string_lossy().starts_with("./") {
                 cleaned_dir.path = PathBuf::from(&cleaned_dir.path.to_string_lossy()[2..]);
             }
-            
+
             // Clean parent path
             if let Some(ref parent) = cleaned_dir.parent {
                 if parent.to_string_lossy().starts_with("./") {
                     cleaned_dir.parent = Some(PathBuf::from(&parent.to_string_lossy()[2..]));
                 }
             }
-            
+
             // Clean children paths
-            cleaned_dir.children = cleaned_dir.children.iter().map(|child| {
-                if child.to_string_lossy().starts_with("./") {
-                    PathBuf::from(&child.to_string_lossy()[2..])
-                } else {
-                    child.clone()
-                }
-            }).collect();
-            
+            cleaned_dir.children = cleaned_dir
+                .children
+                .iter()
+                .map(|child| {
+                    if child.to_string_lossy().starts_with("./") {
+                        PathBuf::from(&child.to_string_lossy()[2..])
+                    } else {
+                        child.clone()
+                    }
+                })
+                .collect();
+
             cleaned_directories.insert(cleaned_path, cleaned_dir);
         }
         cleaned_tree.directories = cleaned_directories;
-        
+
         // Clean hotspot directory paths in tree statistics
-        cleaned_tree.tree_statistics.hotspot_directories = cleaned_tree.tree_statistics.hotspot_directories.iter().map(|hotspot| {
-            let mut cleaned_hotspot = hotspot.clone();
-            if cleaned_hotspot.path.to_string_lossy().starts_with("./") {
-                cleaned_hotspot.path = PathBuf::from(&cleaned_hotspot.path.to_string_lossy()[2..]);
-            }
-            cleaned_hotspot
-        }).collect();
-        
+        cleaned_tree.tree_statistics.hotspot_directories = cleaned_tree
+            .tree_statistics
+            .hotspot_directories
+            .iter()
+            .map(|hotspot| {
+                let mut cleaned_hotspot = hotspot.clone();
+                if cleaned_hotspot.path.to_string_lossy().starts_with("./") {
+                    cleaned_hotspot.path =
+                        PathBuf::from(&cleaned_hotspot.path.to_string_lossy()[2..]);
+                }
+                cleaned_hotspot
+            })
+            .collect();
+
         cleaned_tree
     }
-    
+
     /// Copy the Sibylline theme CSS to the output directory
     fn copy_theme_css_to_output<P: AsRef<Path>>(&self, output_dir: P) -> Result<(), ReportError> {
         let output_dir = output_dir.as_ref();
-        
+
         // Ensure output directory exists
         if !output_dir.exists() {
             fs::create_dir_all(output_dir)?;
         }
-        
+
         // Try to find Sibylline CSS in themes/ directory
         let possible_theme_paths = vec![
             Path::new("themes/sibylline.css"),
             Path::new("./themes/sibylline.css"),
         ];
-        
+
         let mut theme_copied = false;
         for theme_path in &possible_theme_paths {
             if theme_path.exists() {
@@ -789,42 +1207,42 @@ impl ReportGenerator {
                 break;
             }
         }
-        
+
         // If no external theme found, create a minimal fallback CSS
         if !theme_copied {
             let fallback_css = MINIMAL_SIBYLLINE_CSS;
             let dest_path = output_dir.join("sibylline.css");
             fs::write(dest_path, fallback_css)?;
         }
-        
+
         Ok(())
     }
 
     /// Copy JavaScript assets for React tree component to the output directory
     fn copy_js_assets_to_output<P: AsRef<Path>>(&self, output_dir: P) -> Result<(), ReportError> {
         let output_dir = output_dir.as_ref();
-        
+
         // Ensure output directory exists
         if !output_dir.exists() {
             fs::create_dir_all(output_dir)?;
         }
-        
+
         // JavaScript files to copy
         let js_files = vec![
             ("react.min.js", "react.min.js"),
             ("react-dom.min.js", "react-dom.min.js"),
             ("react-tree-bundle.min.js", "react-tree-bundle.min.js"),
         ];
-        
+
         // Try to find JavaScript assets in templates/assets/ directory
         let possible_base_paths = vec![
             Path::new("templates/assets"),
             Path::new("./templates/assets"),
         ];
-        
+
         for (src_filename, dest_filename) in &js_files {
             let mut asset_copied = false;
-            
+
             for base_path in &possible_base_paths {
                 let asset_path = base_path.join(src_filename);
                 if asset_path.exists() {
@@ -834,29 +1252,35 @@ impl ReportGenerator {
                     break;
                 }
             }
-            
+
             if !asset_copied {
-                eprintln!("Warning: JavaScript asset {} not found, React tree component may not work", src_filename);
+                eprintln!(
+                    "Warning: JavaScript asset {} not found, React tree component may not work",
+                    src_filename
+                );
             }
         }
-        
+
         Ok(())
     }
 
-    fn copy_webpage_assets_to_output<P: AsRef<Path>>(&self, output_dir: P) -> Result<(), ReportError> {
+    fn copy_webpage_assets_to_output<P: AsRef<Path>>(
+        &self,
+        output_dir: P,
+    ) -> Result<(), ReportError> {
         let output_dir = output_dir.as_ref();
-        
+
         // Ensure output directory exists
         if !output_dir.exists() {
             fs::create_dir_all(output_dir)?;
         }
-        
+
         // Create webpage_files subdirectory in output
         let webpage_files_dir = output_dir.join("webpage_files");
         if !webpage_files_dir.exists() {
             fs::create_dir_all(&webpage_files_dir)?;
         }
-        
+
         // Try to find and copy webpage assets
         let possible_asset_sources = vec![
             ("webpage_files/valknut-large.webp", "webpage_files"),
@@ -865,20 +1289,20 @@ impl ReportGenerator {
             ("webpage_files/three.min.js", "webpage_files"),
             ("webpage_files/trefoil-animation.js", "webpage_files"),
         ];
-        
+
         for (source_path, dest_subdir) in &possible_asset_sources {
             let source = Path::new(source_path);
             if source.exists() {
-                let dest_dir = if dest_subdir.is_empty() { 
-                    output_dir.to_path_buf() 
-                } else { 
-                    output_dir.join(dest_subdir) 
+                let dest_dir = if dest_subdir.is_empty() {
+                    output_dir.to_path_buf()
+                } else {
+                    output_dir.join(dest_subdir)
                 };
-                
+
                 if !dest_dir.exists() {
                     fs::create_dir_all(&dest_dir)?;
                 }
-                
+
                 if let Some(filename) = source.file_name() {
                     let dest_path = dest_dir.join(filename);
                     if let Err(e) = fs::copy(source, &dest_path) {
@@ -888,12 +1312,12 @@ impl ReportGenerator {
                 }
             }
         }
-        
+
         // If logo doesn't exist, try to find alternatives
-        let logo_exists = webpage_files_dir.join("valknut-large.webp").exists() ||
-                         webpage_files_dir.join("logo.webp").exists() ||
-                         webpage_files_dir.join("logo.svg").exists();
-        
+        let logo_exists = webpage_files_dir.join("valknut-large.webp").exists()
+            || webpage_files_dir.join("logo.webp").exists()
+            || webpage_files_dir.join("logo.svg").exists();
+
         if !logo_exists {
             // Create a simple SVG fallback logo
             let fallback_logo = r#"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -905,7 +1329,7 @@ impl ReportGenerator {
                 eprintln!("Warning: Failed to create fallback logo: {}", e);
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1537,15 +1961,18 @@ body {
 mod tests {
     use super::*;
     use crate::api::results::*;
-    use tempfile::TempDir;
-    use std::fs;
-    use crate::api::results::{AnalysisResults, AnalysisSummary, AnalysisStatistics, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion, FeatureContribution, MemoryStats};
-    use crate::core::scoring::{ScoringResult, Priority};
+    use crate::api::results::{
+        AnalysisResults, AnalysisStatistics, AnalysisSummary, FeatureContribution, MemoryStats,
+        RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
+    };
     use crate::core::featureset::FeatureVector;
-    
+    use crate::core::scoring::{Priority, ScoringResult};
+    use std::fs;
+    use tempfile::TempDir;
+
     fn create_test_results() -> AnalysisResults {
         use std::time::Duration;
-        
+
         AnalysisResults {
             summary: AnalysisSummary {
                 files_processed: 3,
@@ -1556,41 +1983,35 @@ mod tests {
                 avg_refactoring_score: 0.65,
                 code_health_score: 0.75,
             },
-            refactoring_candidates: vec![
-                RefactoringCandidate {
-                    entity_id: "test_entity_1".to_string(),
-                    name: "complex_function".to_string(),
-                    file_path: "src/test.rs".to_string(),
-                    line_range: Some((10, 50)),
-                    priority: Priority::High,
-                    score: 0.85,
-                    confidence: 0.9,
-                    issues: vec![
-                        RefactoringIssue {
-                            category: "complexity".to_string(),
-                            description: "High cyclomatic complexity".to_string(),
-                            severity: 2.1,
-                            contributing_features: vec![
-                                FeatureContribution {
-                                    feature_name: "cyclomatic_complexity".to_string(),
-                                    value: 15.0,
-                                    normalized_value: 0.8,
-                                    contribution: 1.2,
-                                },
-                            ],
-                        },
-                    ],
-                    suggestions: vec![
-                        RefactoringSuggestion {
-                            refactoring_type: "extract_method".to_string(),
-                            description: "Break down large method".to_string(),
-                            priority: 0.9,
-                            effort: 0.6,
-                            impact: 0.8,
-                        },
-                    ],
-                },
-            ],
+            refactoring_candidates: vec![RefactoringCandidate {
+                entity_id: "test_entity_1".to_string(),
+                name: "complex_function".to_string(),
+                file_path: "src/test.rs".to_string(),
+                line_range: Some((10, 50)),
+                priority: Priority::High,
+                score: 0.85,
+                confidence: 0.9,
+                issues: vec![RefactoringIssue {
+                    category: "complexity".to_string(),
+                    description: "High cyclomatic complexity".to_string(),
+                    severity: 2.1,
+                    contributing_features: vec![FeatureContribution {
+                        feature_name: "cyclomatic_complexity".to_string(),
+                        value: 15.0,
+                        normalized_value: 0.8,
+                        contribution: 1.2,
+                    }],
+                }],
+                suggestions: vec![RefactoringSuggestion {
+                    refactoring_type: "extract_method".to_string(),
+                    description: "Break down large method".to_string(),
+                    priority: 0.9,
+                    effort: 0.6,
+                    impact: 0.8,
+                }],
+                issue_count: 1,
+                suggestion_count: 1,
+            }],
             refactoring_candidates_by_file: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_millis(1500),
@@ -1608,89 +2029,91 @@ mod tests {
             directory_health_tree: None,
             clone_analysis: None,
             warnings: vec!["Test warning".to_string()],
-            coverage_packs: vec![
-                crate::detectors::coverage::CoveragePack {
-                    kind: "coverage".to_string(),
-                    pack_id: "cov:src/test.rs".to_string(),
-                    path: std::path::PathBuf::from("src/test.rs"),
-                    file_info: crate::detectors::coverage::FileInfo {
-                        loc: 200,
-                        coverage_before: 0.65,
-                        coverage_after_if_filled: 0.90,
-                    },
-                    gaps: vec![
-                        crate::detectors::coverage::CoverageGap {
-                            path: std::path::PathBuf::from("src/test.rs"),
-                            span: crate::detectors::coverage::UncoveredSpan {
-                                path: std::path::PathBuf::from("src/test.rs"),
-                                start: 25,
-                                end: 35,
-                                hits: Some(0),
-                            },
-                            file_loc: 200,
-                            language: "rust".to_string(),
-                            score: 0.85,
-                            features: crate::detectors::coverage::GapFeatures {
-                                gap_loc: 10,
-                                cyclomatic_in_gap: 3.0,
-                                cognitive_in_gap: 4.0,
-                                fan_in_gap: 2,
-                                exports_touched: true,
-                                dependency_centrality_file: 0.7,
-                                interface_surface: 3,
-                                docstring_or_comment_present: false,
-                                exception_density_in_gap: 0.1,
-                            },
-                            symbols: vec![
-                                crate::detectors::coverage::GapSymbol {
-                                    kind: crate::detectors::coverage::SymbolKind::Function,
-                                    name: "uncovered_function".to_string(),
-                                    signature: "fn uncovered_function(x: i32) -> Result<String>".to_string(),
-                                    line_start: 25,
-                                    line_end: 35,
-                                },
-                            ],
-                            preview: crate::detectors::coverage::SnippetPreview {
-                                language: "rust".to_string(),
-                                pre: vec!["    // Previous context".to_string()],
-                                head: vec!["    fn uncovered_function(x: i32) -> Result<String> {".to_string()],
-                                tail: vec!["    }".to_string()],
-                                post: vec!["    // Following context".to_string()],
-                                markers: crate::detectors::coverage::GapMarkers {
-                                    start_line: 25,
-                                    end_line: 35,
-                                },
-                                imports: vec!["use std::result::Result;".to_string()],
-                            },
-                        },
-                    ],
-                    value: crate::detectors::coverage::PackValue {
-                        file_cov_gain: 0.25,
-                        repo_cov_gain_est: 0.05,
-                    },
-                    effort: crate::detectors::coverage::PackEffort {
-                        tests_to_write_est: 3,
-                        mocks_est: 1,
-                    },
+            coverage_packs: vec![crate::detectors::coverage::CoveragePack {
+                kind: "coverage".to_string(),
+                pack_id: "cov:src/test.rs".to_string(),
+                path: std::path::PathBuf::from("src/test.rs"),
+                file_info: crate::detectors::coverage::FileInfo {
+                    loc: 200,
+                    coverage_before: 0.65,
+                    coverage_after_if_filled: 0.90,
                 },
-            ],
+                gaps: vec![crate::detectors::coverage::CoverageGap {
+                    path: std::path::PathBuf::from("src/test.rs"),
+                    span: crate::detectors::coverage::UncoveredSpan {
+                        path: std::path::PathBuf::from("src/test.rs"),
+                        start: 25,
+                        end: 35,
+                        hits: Some(0),
+                    },
+                    file_loc: 200,
+                    language: "rust".to_string(),
+                    score: 0.85,
+                    features: crate::detectors::coverage::GapFeatures {
+                        gap_loc: 10,
+                        cyclomatic_in_gap: 3.0,
+                        cognitive_in_gap: 4.0,
+                        fan_in_gap: 2,
+                        exports_touched: true,
+                        dependency_centrality_file: 0.7,
+                        interface_surface: 3,
+                        docstring_or_comment_present: false,
+                        exception_density_in_gap: 0.1,
+                    },
+                    symbols: vec![crate::detectors::coverage::GapSymbol {
+                        kind: crate::detectors::coverage::SymbolKind::Function,
+                        name: "uncovered_function".to_string(),
+                        signature: "fn uncovered_function(x: i32) -> Result<String>".to_string(),
+                        line_start: 25,
+                        line_end: 35,
+                    }],
+                    preview: crate::detectors::coverage::SnippetPreview {
+                        language: "rust".to_string(),
+                        pre: vec!["    // Previous context".to_string()],
+                        head: vec![
+                            "    fn uncovered_function(x: i32) -> Result<String> {".to_string()
+                        ],
+                        tail: vec!["    }".to_string()],
+                        post: vec!["    // Following context".to_string()],
+                        markers: crate::detectors::coverage::GapMarkers {
+                            start_line: 25,
+                            end_line: 35,
+                        },
+                        imports: vec!["use std::result::Result;".to_string()],
+                    },
+                }],
+                value: crate::detectors::coverage::PackValue {
+                    file_cov_gain: 0.25,
+                    repo_cov_gain_est: 0.05,
+                },
+                effort: crate::detectors::coverage::PackEffort {
+                    tests_to_write_est: 3,
+                    mocks_est: 1,
+                },
+            }],
         }
     }
-    
+
     #[test]
     fn test_report_generator_new() {
         let generator = ReportGenerator::new();
-        assert!(generator.handlebars.get_templates().contains_key("default_html"));
+        assert!(generator
+            .handlebars
+            .get_templates()
+            .contains_key("default_html"));
         assert!(generator.templates_dir.is_none());
     }
-    
+
     #[test]
     fn test_report_generator_default() {
         let generator = ReportGenerator::default();
-        assert!(generator.handlebars.get_templates().contains_key("default_html"));
+        assert!(generator
+            .handlebars
+            .get_templates()
+            .contains_key("default_html"));
         assert!(generator.templates_dir.is_none());
     }
-    
+
     #[test]
     fn test_report_generator_debug() {
         let generator = ReportGenerator::new();
@@ -1699,112 +2122,116 @@ mod tests {
         assert!(debug_str.contains("handlebars"));
         assert!(debug_str.contains("templates_dir"));
     }
-    
+
     #[test]
     fn test_with_templates_dir_nonexistent() {
         let temp_dir = TempDir::new().unwrap();
         let nonexistent_path = temp_dir.path().join("nonexistent");
-        
+
         let generator = ReportGenerator::new()
             .with_templates_dir(&nonexistent_path)
             .unwrap();
-        
+
         assert_eq!(generator.templates_dir, Some(nonexistent_path));
     }
-    
+
     #[test]
     fn test_with_templates_dir_existing() {
         let temp_dir = TempDir::new().unwrap();
         let templates_dir = temp_dir.path().join("templates");
         fs::create_dir_all(&templates_dir).unwrap();
-        
+
         // Create a test template file
         let template_file = templates_dir.join("custom.hbs");
-        fs::write(&template_file, "{{#each items}}<div>{{this}}</div>{{/each}}").unwrap();
-        
+        fs::write(
+            &template_file,
+            "{{#each items}}<div>{{this}}</div>{{/each}}",
+        )
+        .unwrap();
+
         let generator = ReportGenerator::new()
             .with_templates_dir(&templates_dir)
             .unwrap();
-        
+
         assert_eq!(generator.templates_dir, Some(templates_dir));
         assert!(generator.handlebars.get_templates().contains_key("custom"));
     }
-    
+
     #[test]
     fn test_generate_json_report() {
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_report.json");
-        
+
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let result = generator.generate_report(&results, &output_path, ReportFormat::Json);
         assert!(result.is_ok());
-        
+
         let content = fs::read_to_string(&output_path).unwrap();
         assert!(content.contains("\"files_processed\": 3"));
         assert!(content.contains("\"complex_function\""));
         assert!(content.contains("\"Test warning\""));
     }
-    
+
     #[test]
     fn test_generate_yaml_report() {
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_report.yaml");
-        
+
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let result = generator.generate_report(&results, &output_path, ReportFormat::Yaml);
         assert!(result.is_ok());
-        
+
         let content = fs::read_to_string(&output_path).unwrap();
         assert!(content.contains("files_processed: 3"));
         assert!(content.contains("complex_function"));
     }
-    
+
     #[test]
     fn test_generate_csv_report() {
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_report.csv");
-        
+
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let result = generator.generate_report(&results, &output_path, ReportFormat::Csv);
         assert!(result.is_ok());
-        
+
         let content = fs::read_to_string(&output_path).unwrap();
         assert!(content.contains("CSV report not yet implemented"));
     }
-    
+
     #[test]
     fn test_generate_html_report_default_template() {
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_report.html");
-        
+
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let result = generator.generate_report(&results, &output_path, ReportFormat::Html);
         if let Err(ref e) = result {
             panic!("HTML generation failed: {}", e);
         }
         assert!(result.is_ok());
-        
+
         let content = fs::read_to_string(&output_path).unwrap();
         assert!(content.contains("<!DOCTYPE html>"));
         assert!(content.contains("Analysis Report"));
         assert!(content.contains("Valknut"));
         assert!(content.contains("Files Analyzed"));
     }
-    
+
     #[test]
     fn test_generate_html_report_custom_template() {
         let temp_dir = TempDir::new().unwrap();
         let templates_dir = temp_dir.path().join("templates");
         fs::create_dir_all(&templates_dir).unwrap();
-        
+
         // Create a custom report template
         let custom_template = r#"
         <html>
@@ -1816,80 +2243,89 @@ mod tests {
         </body>
         </html>
         "#;
-        
+
         let template_file = templates_dir.join("report.hbs");
         fs::write(&template_file, custom_template).unwrap();
-        
+
         let generator = ReportGenerator::new()
             .with_templates_dir(&templates_dir)
             .unwrap();
-        
+
         let results = create_test_results();
         let output_path = temp_dir.path().join("test_report.html");
-        
+
         let result = generator.generate_report(&results, &output_path, ReportFormat::Html);
         assert!(result.is_ok());
-        
+
         let content = fs::read_to_string(&output_path).unwrap();
         assert!(content.contains("Custom Report"));
         assert!(content.contains("Files processed: 3"));
     }
-    
+
     #[test]
     fn test_prepare_template_data() {
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let template_data = generator.prepare_template_data(&results);
-        
+
         assert!(template_data.is_object());
         let obj = template_data.as_object().unwrap();
-        
+
         assert!(obj.contains_key("generated_at"));
         assert!(obj.contains_key("tool_name"));
         assert!(obj.contains_key("version"));
         assert!(obj.contains_key("results"));
         assert!(obj.contains_key("summary"));
-        
-        assert_eq!(obj["tool_name"], serde_json::Value::String("Valknut".to_string()));
+
+        assert_eq!(
+            obj["tool_name"],
+            serde_json::Value::String("Valknut".to_string())
+        );
     }
-    
+
     #[test]
     fn test_calculate_summary() {
         let generator = ReportGenerator::new();
         let results = create_test_results();
-        
+
         let summary = generator.calculate_summary(&results);
-        
-        assert_eq!(summary.get("total_files").unwrap(), &serde_json::Value::Number(serde_json::Number::from(3)));
-        assert_eq!(summary.get("total_issues").unwrap(), &serde_json::Value::Number(serde_json::Number::from(1)));
+
+        assert_eq!(
+            summary.get("total_files").unwrap(),
+            &serde_json::Value::Number(serde_json::Number::from(3))
+        );
+        assert_eq!(
+            summary.get("total_issues").unwrap(),
+            &serde_json::Value::Number(serde_json::Number::from(1))
+        );
     }
-    
+
     #[test]
     fn test_report_error_display() {
         let io_error = std::io::Error::new(std::io::ErrorKind::InvalidData, "template error");
         let report_error = ReportError::Io(io_error);
-        
+
         let error_string = format!("{}", report_error);
         assert!(error_string.contains("IO error"));
     }
-    
+
     #[test]
     fn test_report_error_debug() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let report_error = ReportError::Io(io_error);
-        
+
         let debug_string = format!("{:?}", report_error);
         assert!(debug_string.contains("Io"));
         assert!(debug_string.contains("NotFound"));
     }
-    
+
     #[test]
     fn test_load_templates_from_dir_invalid_filename() {
         let temp_dir = TempDir::new().unwrap();
         let templates_dir = temp_dir.path().join("templates");
         fs::create_dir_all(&templates_dir).unwrap();
-        
+
         // Create a file with invalid filename (no stem) - try a different approach
         // Since .hbs might be valid on some systems, let's use a filename that definitely has no stem
         let bad_file = templates_dir.join("");
@@ -1906,41 +2342,41 @@ mod tests {
                 // Just test with a normal template loading that should work
                 let good_file = templates_dir.join("good.hbs");
                 fs::write(&good_file, "{{content}}").unwrap();
-                
+
                 let mut generator = ReportGenerator::new();
                 let result = generator.load_templates_from_dir(&templates_dir);
                 assert!(result.is_ok());
             }
         }
     }
-    
+
     #[test]
     fn test_load_templates_from_dir_non_hbs_files() {
         let temp_dir = TempDir::new().unwrap();
         let templates_dir = temp_dir.path().join("templates");
         fs::create_dir_all(&templates_dir).unwrap();
-        
+
         // Create non-.hbs files that should be ignored
         fs::write(templates_dir.join("readme.txt"), "not a template").unwrap();
         fs::write(templates_dir.join("config.json"), "{}").unwrap();
-        
+
         let mut generator = ReportGenerator::new();
         let initial_count = generator.handlebars.get_templates().len();
-        
+
         let result = generator.load_templates_from_dir(&templates_dir);
         assert!(result.is_ok());
-        
+
         // Should have same number of templates (no new ones added)
         assert_eq!(generator.handlebars.get_templates().len(), initial_count);
     }
-    
+
     #[test]
     fn test_clean_directory_health_tree_paths() {
         let generator = ReportGenerator::new();
-        
+
         // Create a test directory health tree with "./" prefixes
         let mut directories = std::collections::HashMap::new();
-        
+
         // Create directory with ./ prefix
         let src_dir = DirectoryHealthScore {
             path: PathBuf::from("./src"),
@@ -1956,7 +2392,7 @@ mod tests {
             parent: Some(PathBuf::from("./")),
             issue_categories: std::collections::HashMap::new(),
         };
-        
+
         let core_dir = DirectoryHealthScore {
             path: PathBuf::from("./src/core"),
             health_score: 0.6,
@@ -1971,10 +2407,10 @@ mod tests {
             parent: Some(PathBuf::from("./src")),
             issue_categories: std::collections::HashMap::new(),
         };
-        
+
         directories.insert(PathBuf::from("./src"), src_dir);
         directories.insert(PathBuf::from("./src/core"), core_dir);
-        
+
         let hotspot_directories = vec![DirectoryHotspot {
             path: PathBuf::from("./src/core"),
             health_score: 0.6,
@@ -1982,7 +2418,7 @@ mod tests {
             primary_issue_category: "complexity".to_string(),
             recommendation: "Reduce complexity".to_string(),
         }];
-        
+
         let tree_statistics = TreeStatistics {
             total_directories: 2,
             max_depth: 2,
@@ -1991,7 +2427,7 @@ mod tests {
             hotspot_directories,
             health_by_depth: std::collections::HashMap::new(),
         };
-        
+
         let root = DirectoryHealthScore {
             path: PathBuf::from("./"),
             health_score: 0.8,
@@ -2006,37 +2442,49 @@ mod tests {
             parent: None,
             issue_categories: std::collections::HashMap::new(),
         };
-        
+
         let original_tree = DirectoryHealthTree {
             root,
             directories,
             tree_statistics,
         };
-        
+
         // Clean the paths
         let cleaned_tree = generator.clean_directory_health_tree_paths(&original_tree);
-        
+
         // Verify that "./" prefixes are removed
         assert_eq!(cleaned_tree.root.path, PathBuf::from(""));
         assert_eq!(cleaned_tree.root.children[0], PathBuf::from("src"));
-        
+
         // Check that directories HashMap keys are cleaned
         assert!(cleaned_tree.directories.contains_key(&PathBuf::from("src")));
-        assert!(cleaned_tree.directories.contains_key(&PathBuf::from("src/core")));
-        assert!(!cleaned_tree.directories.contains_key(&PathBuf::from("./src")));
-        assert!(!cleaned_tree.directories.contains_key(&PathBuf::from("./src/core")));
-        
+        assert!(cleaned_tree
+            .directories
+            .contains_key(&PathBuf::from("src/core")));
+        assert!(!cleaned_tree
+            .directories
+            .contains_key(&PathBuf::from("./src")));
+        assert!(!cleaned_tree
+            .directories
+            .contains_key(&PathBuf::from("./src/core")));
+
         // Check that directory paths are cleaned within DirectoryHealthScore
         let src_dir_cleaned = cleaned_tree.directories.get(&PathBuf::from("src")).unwrap();
         assert_eq!(src_dir_cleaned.path, PathBuf::from("src"));
         assert_eq!(src_dir_cleaned.children[0], PathBuf::from("src/core"));
         assert_eq!(src_dir_cleaned.parent, Some(PathBuf::from("")));
-        
-        let core_dir_cleaned = cleaned_tree.directories.get(&PathBuf::from("src/core")).unwrap();
+
+        let core_dir_cleaned = cleaned_tree
+            .directories
+            .get(&PathBuf::from("src/core"))
+            .unwrap();
         assert_eq!(core_dir_cleaned.path, PathBuf::from("src/core"));
         assert_eq!(core_dir_cleaned.parent, Some(PathBuf::from("src")));
-        
+
         // Check that hotspot directories are cleaned
-        assert_eq!(cleaned_tree.tree_statistics.hotspot_directories[0].path, PathBuf::from("src/core"));
+        assert_eq!(
+            cleaned_tree.tree_statistics.hotspot_directories[0].path,
+            PathBuf::from("src/core")
+        );
     }
 }

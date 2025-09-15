@@ -112,7 +112,7 @@ pub mod error_codes {
     pub const METHOD_NOT_FOUND: i32 = -32601;
     pub const INVALID_PARAMS: i32 = -32602;
     pub const INTERNAL_ERROR: i32 = -32603;
-    
+
     // MCP-specific error codes
     pub const TOOL_NOT_FOUND: i32 = -32001;
     pub const TOOL_EXECUTION_ERROR: i32 = -32002;
@@ -176,7 +176,7 @@ pub fn create_validate_quality_gates_schema() -> serde_json::Value {
                 "description": "Maximum allowed complexity score (optional)"
             },
             "min_health": {
-                "type": "number", 
+                "type": "number",
                 "minimum": 0.0,
                 "maximum": 100.0,
                 "description": "Minimum required health score (optional)"

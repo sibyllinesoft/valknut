@@ -1,0 +1,187 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the sections below to help us understand and reproduce the issue.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify these items before submitting
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I have tried the latest version
+          required: true
+        - label: I have read the documentation
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe what happened and what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. Analyze project '...'
+        3. See error
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: Describe the expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Describe what actually happened, including error messages
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Valknut Version
+      description: What version of Valknut are you using?
+      placeholder: "v1.2.0 or commit hash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust Version
+      description: Output of `rustc --version`
+      placeholder: "rustc 1.70.0 (90c541806 2023-05-31)"
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command Used
+      description: The exact command that triggered the bug
+      placeholder: "valknut analyze ./src --format json"
+      render: bash
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error Output
+      description: Full error output or log messages
+      placeholder: Paste the complete error output here
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Relevant configuration file content (.valknut.yml)
+      placeholder: Paste your configuration file or relevant settings
+      render: yaml
+
+  - type: textarea
+    id: project-info
+    attributes:
+      label: Project Information
+      description: Information about the project being analyzed
+      placeholder: |
+        - Language(s): Rust, Python, etc.
+        - Project size: ~1000 files, 50k lines
+        - Special characteristics: large files, complex dependencies, etc.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - Critical (blocks usage entirely)
+        - High (significant impact on functionality)
+        - Medium (workaround available)
+        - Low (minor inconvenience)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Affected Areas
+      description: Which parts of Valknut are affected? (Check all that apply)
+      options:
+        - label: CLI interface
+        - label: Core analysis engine
+        - label: Configuration parsing
+        - label: Output formatting (JSON/HTML/Markdown)
+        - label: Language parsing (Python/Rust/etc.)
+        - label: Performance/memory usage
+        - label: File handling
+        - label: Error handling
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: Is there a workaround for this issue?
+      placeholder: Describe any workaround you've found
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem
+      placeholder: |
+        - Screenshots (if UI-related)
+        - Related issues or PRs
+        - Environment details
+        - Timing information (when did this start happening?)
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        **For maintainers:**
+        - Add appropriate labels (bug, critical, area-specific)
+        - Assign to appropriate milestone if urgent
+        - Link to related issues or PRs
+        - Consider security implications if applicable

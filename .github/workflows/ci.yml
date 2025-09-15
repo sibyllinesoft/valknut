@@ -1,0 +1,327 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run nightly to catch regressions with latest dependencies
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  RUSTFLAGS: "-D warnings"
+  RUSTDOCFLAGS: "-D warnings"
+
+jobs:
+  # Basic validation job - runs first to catch obvious issues quickly
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: check
+          
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check clippy (no warnings allowed)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Check docs
+        run: cargo doc --all-features --no-deps --document-private-items
+
+  # Test matrix across platforms and Rust versions
+  test:
+    name: Test Suite
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta, "1.70"] # MSRV
+        include:
+          # Special configurations
+          - os: ubuntu-latest
+            rust: stable
+            coverage: true
+          - os: ubuntu-latest
+            rust: nightly
+            features: "--all-features"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.os }}-${{ matrix.rust }}
+
+      - name: Install coverage tools (Linux only)
+        if: matrix.coverage
+        run: |
+          cargo install cargo-tarpaulin
+          sudo apt-get update
+          sudo apt-get install -y tree-sitter-cli
+
+      - name: Run tests
+        run: cargo test --verbose ${{ matrix.features }}
+
+      - name: Run tests (no default features)
+        run: cargo test --no-default-features --verbose
+
+      - name: Generate test coverage
+        if: matrix.coverage
+        run: |
+          cargo tarpaulin --verbose --all-features --workspace --timeout 300 \
+            --exclude-files "src/bin/*" "tests/*" "benches/*" \
+            --ignore-panics --ignore-tests \
+            --out xml --output-dir ./coverage/
+
+      - name: Upload coverage to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/cobertura.xml
+          fail_ci_if_error: true
+          flags: unittests
+          name: codecov-${{ matrix.os }}-${{ matrix.rust }}
+
+      - name: Verify coverage threshold
+        if: matrix.coverage
+        run: |
+          # Extract coverage percentage and verify >= 80%
+          COVERAGE=$(grep -o 'line-rate="[0-9.]*"' ./coverage/cobertura.xml | head -1 | grep -o '[0-9.]*')
+          PERCENTAGE=$(echo "$COVERAGE * 100" | bc -l | cut -d. -f1)
+          echo "Coverage: $PERCENTAGE%"
+          if [ "$PERCENTAGE" -lt 80 ]; then
+            echo "❌ Coverage $PERCENTAGE% is below required 80%"
+            exit 1
+          else
+            echo "✅ Coverage $PERCENTAGE% meets requirement"
+          fi
+
+  # Feature combination testing
+  feature-matrix:
+    name: Feature Testing
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - "--no-default-features"
+          - "--features parallel"
+          - "--features simd"
+          - "--features database"
+          - "--features jemalloc"
+          - "--features benchmarks"
+          - "--features property-testing"
+          - "--all-features"
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: features-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build with features
+        run: cargo build --verbose ${{ matrix.features }}
+
+      - name: Test with features
+        run: cargo test --verbose ${{ matrix.features }}
+
+  # Security and dependency auditing
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audit tools
+        run: |
+          cargo install cargo-audit cargo-deny
+
+      - name: Dependency audit
+        run: cargo audit
+
+      - name: License and dependency check
+        run: cargo deny check
+
+      - name: Check for outdated dependencies
+        run: |
+          cargo install cargo-outdated
+          cargo outdated --exit-code 1 || echo "⚠️ Some dependencies are outdated"
+
+  # Performance regression testing
+  bench:
+    name: Benchmark Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: bench
+
+      - name: Run benchmarks
+        run: cargo bench --features benchmarks --all
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: target/criterion/report/index.html
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '200%'
+          fail-on-alert: true
+
+  # Build verification for different targets
+  build-targets:
+    name: Build Targets
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - x86_64-pc-windows-msvc
+          - aarch64-unknown-linux-gnu
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.target }}
+
+      - name: Build for target
+        run: cargo build --target ${{ matrix.target }} --release
+
+  # Integration testing with real-world scenarios
+  integration:
+    name: Integration Tests
+    needs: [test, feature-matrix]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --all-features
+
+      - name: Create test project structure
+        run: |
+          mkdir -p test-project/src test-project/tests
+          echo 'fn main() { println!("test"); }' > test-project/src/main.rs
+          echo 'fn complex_function() { for i in 0..10 { if i % 2 == 0 { println!("{}", i); } } }' > test-project/src/lib.rs
+
+      - name: Run CLI integration tests
+        run: |
+          # Test basic analysis
+          ./target/release/valknut analyze test-project --format json > results.json
+          
+          # Verify output structure
+          jq '.analysis_results' results.json > /dev/null
+          
+          # Test quality gates
+          ./target/release/valknut analyze test-project --quality-gate --max-complexity 75 --min-health 60
+          
+          # Test different output formats
+          ./target/release/valknut analyze test-project --format html > report.html
+          ./target/release/valknut analyze test-project --format markdown > report.md
+
+      - name: Verify output quality
+        run: |
+          # Check that HTML report is valid
+          grep -q "Valknut Analysis Report" report.html
+          
+          # Check JSON structure
+          jq -e '.analysis_results.summary.total_files > 0' results.json
+          
+          echo "✅ Integration tests passed"
+
+  # Final quality gate
+  quality-gate:
+    name: Quality Gate
+    needs: [test, feature-matrix, audit, integration]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Check all jobs status
+        run: |
+          # This job will fail if any required job failed
+          if [[ "${{ needs.test.result }}" != "success" || 
+                "${{ needs.feature-matrix.result }}" != "success" || 
+                "${{ needs.audit.result }}" != "success" || 
+                "${{ needs.integration.result }}" != "success" ]]; then
+            echo "❌ Quality gate failed - one or more required checks failed"
+            exit 1
+          else
+            echo "✅ All quality checks passed"
+          fi
+
+      - name: Quality gate summary
+        run: |
+          echo "## Quality Gate Results ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Feature Matrix: ${{ needs.feature-matrix.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Audit: ${{ needs.audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration: ${{ needs.integration.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage: ≥80% (verified in test job)" >> $GITHUB_STEP_SUMMARY
+          echo "- Code Quality: No clippy warnings" >> $GITHUB_STEP_SUMMARY

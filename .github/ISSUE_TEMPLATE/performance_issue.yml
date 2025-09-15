@@ -1,0 +1,294 @@
+name: ⚡ Performance Issue
+description: Report performance problems or suggest optimizations
+title: "[Performance]: "
+labels: ["performance", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a performance issue! Performance is critical for Valknut's effectiveness on large codebases.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify these items before submitting
+      options:
+        - label: I have searched existing issues for similar performance problems
+          required: true
+        - label: I have tested with the latest version
+          required: true
+        - label: I have tried different configuration options
+          required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue is this?
+      options:
+        - Slow analysis speed
+        - High memory usage
+        - High CPU usage
+        - Slow startup time
+        - Unresponsive during analysis
+        - Memory leaks
+        - Poor scaling with project size
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this performance issue?
+      options:
+        - Critical (makes Valknut unusable)
+        - High (significant impact on productivity)
+        - Medium (noticeable but manageable)
+        - Low (minor performance issue)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem in detail
+      placeholder: |
+        What performance issue are you experiencing?
+        When does it occur? What operations are slow?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the performance issue
+      placeholder: |
+        1. Run command '...'
+        2. Analyze project with X files
+        3. Observe slow performance during Y operation
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: measurements
+    attributes:
+      label: Performance Measurements
+      description: Provide specific performance measurements if available
+      placeholder: |
+        Time measurements:
+        - Expected time: X seconds
+        - Actual time: Y seconds
+        
+        Memory measurements:
+        - Expected memory: X MB
+        - Actual memory: Y MB
+        - Peak memory: Z MB
+        
+        CPU measurements:
+        - CPU usage: X%
+        - Number of cores utilized: Y
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Valknut Version
+      description: What version of Valknut are you using?
+      placeholder: "v1.2.0 or commit hash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware Specifications
+      description: Provide details about your hardware
+      placeholder: |
+        - CPU: Intel i7-9700K, 8 cores, 3.6GHz
+        - RAM: 16GB DDR4
+        - Storage: SSD/HDD
+        - Any relevant hardware limitations
+    validations:
+      required: true
+
+  - type: textarea
+    id: project-details
+    attributes:
+      label: Project Being Analyzed
+      description: Details about the project that shows the performance issue
+      placeholder: |
+        - Language(s): Rust, Python, etc.
+        - Number of files: ~1000
+        - Total lines of code: ~50k
+        - Largest file size: ~2k lines
+        - Directory depth: ~5 levels
+        - Special characteristics: large files, many dependencies, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and Configuration Used
+      description: The exact command and configuration used
+      placeholder: |
+        Command:
+        ```bash
+        valknut analyze ./src --format json --parallel
+        ```
+        
+        Configuration (.valknut.yml):
+        ```yaml
+        analysis:
+          parallel: true
+          max_files: 1000
+        ```
+      render: text
+
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Features/Options Used
+      description: Which features or options were enabled? (Check all that apply)
+      options:
+        - label: Parallel processing (--parallel)
+        - label: SIMD optimizations (compiled with simd feature)
+        - label: Memory optimizations (jemalloc/mimalloc)
+        - label: Database persistence
+        - label: Complex analysis options
+        - label: Multiple output formats
+        - label: Large file processing
+        - label: All features enabled
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Results
+      description: If you've done any profiling, share the results
+      placeholder: |
+        Results from tools like:
+        - perf (Linux)
+        - Instruments (macOS)  
+        - Visual Studio Profiler (Windows)
+        - cargo flamegraph
+        - Any other profiling tools
+      render: text
+
+  - type: textarea
+    id: comparison
+    attributes:
+      label: Performance Comparison
+      description: Compare with other tools or previous versions if possible
+      placeholder: |
+        Comparison with:
+        - Other code analysis tools (if applicable)
+        - Previous versions of Valknut
+        - Different configuration options
+        - Different project sizes
+
+  - type: dropdown
+    id: scaling
+    attributes:
+      label: Scaling Behavior
+      description: How does performance scale with project size?
+      options:
+        - Linear (proportional to project size)
+        - Quadratic (much worse for larger projects)
+        - Exponential (unusable for large projects)
+        - Constant (doesn't scale with size)
+        - Unknown/Untested
+
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: Optimization Attempts
+      description: What have you tried to improve performance? (Check all that apply)
+      options:
+        - label: Different parallel processing settings
+        - label: Reducing analysis scope/features
+        - label: Different memory allocators
+        - label: Excluding large or problematic files
+        - label: Different output formats
+        - label: Updated to latest version
+        - label: Changed system configuration
+        - label: Nothing yet
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current Workaround
+      description: Any workarounds you're using to mitigate the issue
+      placeholder: |
+        - Analyzing smaller subsets of the project
+        - Using different configuration options
+        - Running on more powerful hardware
+        - etc.
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Performance
+      description: What performance would you expect for this use case?
+      placeholder: |
+        Based on:
+        - Project size and complexity
+        - Hardware capabilities
+        - Other similar tools
+        - Previous experience with Valknut
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Any relevant log output or error messages
+      placeholder: |
+        Enable verbose logging with --verbose and paste relevant output.
+        Include any warning messages or performance-related output.
+      render: text
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the performance issue
+      placeholder: |
+        - When did this performance issue start occurring?
+        - Does it happen consistently or intermittently?
+        - Any patterns you've noticed
+        - Related issues or discussions
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        **For maintainers:**
+        - Reproduce the issue if possible
+        - Run performance profiling to identify bottlenecks
+        - Consider if this reveals broader scalability issues
+        - Add appropriate labels (performance, critical if severe)
+        - Benchmark against previous versions if regression suspected

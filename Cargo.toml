@@ -83,7 +83,7 @@ parking_lot = "0.12"
 # SIMD and performance optimization
 wide = "0.7"
 bytemuck = "1.14"
-packed_simd = { version = "0.3", optional = true }
+# packed_simd = { version = "0.3", optional = true }  # Disabled: incompatible with Rust 1.78+
 
 # Lock-free data structures
 dashmap = "5.5"

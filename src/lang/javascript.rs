@@ -3,20 +3,23 @@
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
-use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
+use super::common::{EntityKind, ParseIndex, ParsedEntity, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_javascript_adapter_creation() {
         let adapter = JavaScriptAdapter::new();
-        assert!(adapter.is_ok(), "Should create JavaScript adapter successfully");
+        assert!(
+            adapter.is_ok(),
+            "Should create JavaScript adapter successfully"
+        );
     }
-    
+
     #[test]
     fn test_parse_simple_function() {
         let mut adapter = JavaScriptAdapter::new().unwrap();
@@ -27,11 +30,14 @@ function hello() {
 "#;
         let result = adapter.parse_source(source, "test.js");
         assert!(result.is_ok(), "Should parse simple function");
-        
+
         let index = result.unwrap();
-        assert!(index.get_entities_in_file("test.js").len() >= 1, "Should find at least one entity");
+        assert!(
+            index.get_entities_in_file("test.js").len() >= 1,
+            "Should find at least one entity"
+        );
     }
-    
+
     #[test]
     fn test_parse_simple_class() {
         let mut adapter = JavaScriptAdapter::new().unwrap();
@@ -48,15 +54,15 @@ class MyClass {
 "#;
         let result = adapter.parse_source(source, "test.js");
         assert!(result.is_ok(), "Should parse simple class");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("test.js");
         assert!(entities.len() >= 1, "Should find at least one entity");
-        
+
         let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
         assert!(has_class, "Should find a class entity");
     }
-    
+
     #[test]
     fn test_parse_arrow_functions() {
         let mut adapter = JavaScriptAdapter::new().unwrap();
@@ -68,13 +74,16 @@ const multiply = (x, y) => {
 "#;
         let result = adapter.parse_source(source, "arrow.js");
         assert!(result.is_ok(), "Should parse arrow functions");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("arrow.js");
         // Arrow functions might be detected as variables or functions depending on implementation
-        assert!(entities.len() >= 0, "Should handle arrow functions gracefully");
+        assert!(
+            entities.len() >= 0,
+            "Should handle arrow functions gracefully"
+        );
     }
-    
+
     #[test]
     fn test_parse_complex_javascript() {
         let mut adapter = JavaScriptAdapter::new().unwrap();
@@ -100,31 +109,34 @@ const defaultClient = createClient('https://api.example.com');
 "#;
         let result = adapter.parse_source(source, "complex.js");
         assert!(result.is_ok(), "Should parse complex JavaScript code");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("complex.js");
         assert!(entities.len() >= 2, "Should find multiple entities");
     }
-    
-    #[test] 
+
+    #[test]
     fn test_empty_javascript_file() {
         let mut adapter = JavaScriptAdapter::new().unwrap();
         let source = "// Just a comment\n/* Another comment */";
         let result = adapter.parse_source(source, "empty.js");
         assert!(result.is_ok(), "Should handle empty JavaScript file");
-        
+
         let index = result.unwrap();
         let entities = index.get_entities_in_file("empty.js");
-        assert_eq!(entities.len(), 0, "Should find no entities in comment-only file");
+        assert_eq!(
+            entities.len(),
+            0,
+            "Should find no entities in comment-only file"
+        );
     }
 }
-
 
 /// JavaScript-specific parsing and analysis
 pub struct JavaScriptAdapter {
     /// Tree-sitter parser for JavaScript
     parser: Parser,
-    
+
     /// Language instance
     language: Language,
 }
@@ -134,46 +146,55 @@ impl JavaScriptAdapter {
     pub fn new() -> Result<Self> {
         let language = tree_sitter_javascript::language();
         let mut parser = Parser::new();
-        parser.set_language(language)
-            .map_err(|e| ValknutError::parse("javascript", format!("Failed to set JavaScript language: {:?}", e)))?;
-        
+        parser.set_language(language).map_err(|e| {
+            ValknutError::parse(
+                "javascript",
+                format!("Failed to set JavaScript language: {:?}", e),
+            )
+        })?;
+
         Ok(Self { parser, language })
     }
-    
+
     /// Parse JavaScript source code and extract entities
     pub fn parse_source(&mut self, source_code: &str, file_path: &str) -> Result<ParseIndex> {
-        let tree = self.parser.parse(source_code, None)
-            .ok_or_else(|| ValknutError::parse("javascript", "Failed to parse JavaScript source code"))?;
-        
+        let tree = self.parser.parse(source_code, None).ok_or_else(|| {
+            ValknutError::parse("javascript", "Failed to parse JavaScript source code")
+        })?;
+
         let mut index = ParseIndex::new();
         let mut entity_id_counter = 0;
-        
+
         // Walk the tree and extract entities
         self.extract_entities_recursive(
-            tree.root_node(), 
-            source_code, 
-            file_path, 
-            None, 
-            &mut index, 
-            &mut entity_id_counter
+            tree.root_node(),
+            source_code,
+            file_path,
+            None,
+            &mut index,
+            &mut entity_id_counter,
         )?;
-        
+
         Ok(index)
     }
-    
+
     /// Extract entities from JavaScript code and convert to CodeEntity format
-    pub fn extract_code_entities(&mut self, source_code: &str, file_path: &str) -> Result<Vec<CodeEntity>> {
+    pub fn extract_code_entities(
+        &mut self,
+        source_code: &str,
+        file_path: &str,
+    ) -> Result<Vec<CodeEntity>> {
         let parse_index = self.parse_source(source_code, file_path)?;
         let mut code_entities = Vec::new();
-        
+
         for entity in parse_index.entities.values() {
             let code_entity = self.convert_to_code_entity(entity, source_code)?;
             code_entities.push(code_entity);
         }
-        
+
         Ok(code_entities)
     }
-    
+
     /// Recursively extract entities from the AST
     fn extract_entities_recursive(
         &self,
@@ -185,20 +206,26 @@ impl JavaScriptAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<()> {
         // Check if this node represents an entity we care about
-        if let Some(entity) = self.node_to_entity(node, source_code, file_path, parent_id.clone(), entity_id_counter)? {
+        if let Some(entity) = self.node_to_entity(
+            node,
+            source_code,
+            file_path,
+            parent_id.clone(),
+            entity_id_counter,
+        )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-            
+
             // Process child nodes with this entity as parent
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 self.extract_entities_recursive(
-                    child, 
-                    source_code, 
-                    file_path, 
-                    Some(entity_id.clone()), 
-                    index, 
-                    entity_id_counter
+                    child,
+                    source_code,
+                    file_path,
+                    Some(entity_id.clone()),
+                    index,
+                    entity_id_counter,
                 )?;
             }
         } else {
@@ -206,19 +233,19 @@ impl JavaScriptAdapter {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 self.extract_entities_recursive(
-                    child, 
-                    source_code, 
-                    file_path, 
-                    parent_id.clone(), 
-                    index, 
-                    entity_id_counter
+                    child,
+                    source_code,
+                    file_path,
+                    parent_id.clone(),
+                    index,
+                    entity_id_counter,
                 )?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
     fn node_to_entity(
         &self,
@@ -229,7 +256,9 @@ impl JavaScriptAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<Option<ParsedEntity>> {
         let entity_kind = match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => EntityKind::Function,
+            "function_declaration" | "function_expression" | "arrow_function" => {
+                EntityKind::Function
+            }
             "method_definition" => EntityKind::Method,
             "class_declaration" => EntityKind::Class,
             "variable_declaration" => {
@@ -250,13 +279,14 @@ impl JavaScriptAdapter {
             }
             _ => return Ok(None),
         };
-        
-        let name = self.extract_name(&node, source_code)?
+
+        let name = self
+            .extract_name(&node, source_code)?
             .ok_or_else(|| ValknutError::parse("javascript", "Could not extract entity name"))?;
-        
+
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
-        
+
         let location = SourceLocation {
             file_path: file_path.to_string(),
             start_line: node.start_position().row + 1,
@@ -264,13 +294,19 @@ impl JavaScriptAdapter {
             start_column: node.start_position().column + 1,
             end_column: node.end_position().column + 1,
         };
-        
+
         let mut metadata = HashMap::new();
-        
+
         // Add JavaScript-specific metadata
-        metadata.insert("node_kind".to_string(), serde_json::Value::String(node.kind().to_string()));
-        metadata.insert("byte_range".to_string(), serde_json::json!([node.start_byte(), node.end_byte()]));
-        
+        metadata.insert(
+            "node_kind".to_string(),
+            serde_json::Value::String(node.kind().to_string()),
+        );
+        metadata.insert(
+            "byte_range".to_string(),
+            serde_json::json!([node.start_byte(), node.end_byte()]),
+        );
+
         // Extract additional metadata based on entity type
         match entity_kind {
             EntityKind::Function | EntityKind::Method => {
@@ -281,7 +317,7 @@ impl JavaScriptAdapter {
             }
             _ => {}
         }
-        
+
         let entity = ParsedEntity {
             id: entity_id,
             kind: entity_kind,
@@ -291,14 +327,14 @@ impl JavaScriptAdapter {
             location,
             metadata,
         };
-        
+
         Ok(Some(entity))
     }
-    
+
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         let mut cursor = node.walk();
-        
+
         match node.kind() {
             "function_declaration" | "class_declaration" => {
                 // Look for the identifier child
@@ -327,7 +363,11 @@ impl JavaScriptAdapter {
                         let mut declarator_cursor = child.walk();
                         for declarator_child in child.children(&mut declarator_cursor) {
                             if declarator_child.kind() == "identifier" {
-                                return Ok(Some(declarator_child.utf8_text(source_code.as_bytes())?.to_string()));
+                                return Ok(Some(
+                                    declarator_child
+                                        .utf8_text(source_code.as_bytes())?
+                                        .to_string(),
+                                ));
                             }
                         }
                     }
@@ -335,32 +375,39 @@ impl JavaScriptAdapter {
             }
             _ => {}
         }
-        
+
         Ok(None)
     }
-    
+
     /// Check if a declaration is a const declaration
     fn is_const_declaration(&self, node: &Node, source_code: &str) -> Result<bool> {
         let mut cursor = node.walk();
-        
+
         // Look for 'const' keyword
         for child in node.children(&mut cursor) {
-            if child.kind() == "const" || 
-               (child.kind() == "identifier" && child.utf8_text(source_code.as_bytes())? == "const") {
+            if child.kind() == "const"
+                || (child.kind() == "identifier"
+                    && child.utf8_text(source_code.as_bytes())? == "const")
+            {
                 return Ok(true);
             }
         }
-        
+
         Ok(false)
     }
-    
+
     /// Extract function-specific metadata
-    fn extract_function_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_function_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut parameters = Vec::new();
         let mut is_async = false;
         let mut is_generator = false;
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "formal_parameters" => {
@@ -382,19 +429,27 @@ impl JavaScriptAdapter {
                 _ => {}
             }
         }
-        
+
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
         metadata.insert("is_async".to_string(), serde_json::Value::Bool(is_async));
-        metadata.insert("is_generator".to_string(), serde_json::Value::Bool(is_generator));
-        
+        metadata.insert(
+            "is_generator".to_string(),
+            serde_json::Value::Bool(is_generator),
+        );
+
         Ok(())
     }
-    
+
     /// Extract class-specific metadata
-    fn extract_class_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_class_metadata(
+        &self,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let mut cursor = node.walk();
         let mut extends_class = None;
-        
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "class_heritage" => {
@@ -402,30 +457,40 @@ impl JavaScriptAdapter {
                     let mut heritage_cursor = child.walk();
                     for heritage_child in child.children(&mut heritage_cursor) {
                         if heritage_child.kind() == "identifier" {
-                            extends_class = Some(heritage_child.utf8_text(source_code.as_bytes())?.to_string());
+                            extends_class = Some(
+                                heritage_child
+                                    .utf8_text(source_code.as_bytes())?
+                                    .to_string(),
+                            );
                         }
                     }
                 }
                 _ => {}
             }
         }
-        
+
         if let Some(extends) = extends_class {
             metadata.insert("extends".to_string(), serde_json::Value::String(extends));
         }
-        
+
         Ok(())
     }
-    
+
     /// Convert ParsedEntity to CodeEntity format
-    fn convert_to_code_entity(&self, entity: &ParsedEntity, source_code: &str) -> Result<CodeEntity> {
+    fn convert_to_code_entity(
+        &self,
+        entity: &ParsedEntity,
+        source_code: &str,
+    ) -> Result<CodeEntity> {
         let source_lines: Vec<&str> = source_code.lines().collect();
-        let entity_source = if entity.location.start_line <= source_lines.len() && entity.location.end_line <= source_lines.len() {
+        let entity_source = if entity.location.start_line <= source_lines.len()
+            && entity.location.end_line <= source_lines.len()
+        {
             source_lines[(entity.location.start_line - 1)..entity.location.end_line].join("\n")
         } else {
             String::new()
         };
-        
+
         let mut code_entity = CodeEntity::new(
             entity.id.clone(),
             format!("{:?}", entity.kind),
@@ -434,12 +499,12 @@ impl JavaScriptAdapter {
         )
         .with_line_range(entity.location.start_line, entity.location.end_line)
         .with_source_code(entity_source);
-        
+
         // Add metadata from parsed entity
         for (key, value) in &entity.metadata {
             code_entity.add_property(key.clone(), value.clone());
         }
-        
+
         Ok(code_entity)
     }
 }
@@ -449,4 +514,3 @@ impl Default for JavaScriptAdapter {
         Self::new().expect("Failed to create JavaScript adapter")
     }
 }
-

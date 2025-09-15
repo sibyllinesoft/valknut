@@ -1,0 +1,246 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! Please provide as much detail as possible to help us understand your request.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify these items before submitting
+      options:
+        - label: I have searched existing issues and this feature hasn't been requested
+          required: true
+        - label: I have checked the roadmap to see if this is already planned
+          required: true
+        - label: This feature aligns with Valknut's core purpose (code analysis)
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve?
+      placeholder: |
+        Describe the problem or limitation you're experiencing.
+        What is the current workflow and why is it insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: What would you like to see implemented?
+      placeholder: |
+        Describe your proposed solution in detail.
+        How should this feature work? What should the user experience be?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What type of feature is this?
+      options:
+        - New analysis algorithm/detector
+        - CLI interface enhancement
+        - Output format/reporting
+        - Performance optimization
+        - Language support
+        - Configuration options
+        - API enhancement
+        - Integration (IDE, CI/CD)
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical (blocking current work)
+        - High (would significantly improve workflow)
+        - Medium (nice to have)
+        - Low (minor improvement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific use cases for this feature
+      placeholder: |
+        1. As a developer, I want to... so that...
+        2. When analyzing large codebases, I need to... because...
+        3. For CI/CD integration, it would be helpful to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Provide concrete examples of how this would work
+      placeholder: |
+        Command examples:
+        ```bash
+        valknut analyze --new-feature option ./src
+        ```
+        
+        Configuration examples:
+        ```yaml
+        new_feature:
+          enabled: true
+          option: value
+        ```
+        
+        Expected output:
+        ```json
+        {
+          "new_feature_results": {...}
+        }
+        ```
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What alternatives have you considered?
+      placeholder: |
+        - Alternative approach 1: pros/cons
+        - Alternative approach 2: pros/cons
+        - Why the proposed solution is preferred
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Affected Components
+      description: Which parts of Valknut would this feature involve? (Check all that apply)
+      options:
+        - label: Core analysis engine
+        - label: CLI interface
+        - label: Configuration system
+        - label: Language parsers
+        - label: Output formatters
+        - label: Performance optimizations
+        - label: File handling
+        - label: Error handling
+        - label: Documentation
+        - label: Testing infrastructure
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: What impact would this feature have?
+      placeholder: |
+        Performance impact: (memory, CPU, analysis time)
+        Complexity impact: (code complexity, maintenance burden)
+        User experience impact: (ease of use, workflow changes)
+        Breaking changes: (any compatibility concerns)
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Ideas
+      description: Do you have ideas about how this could be implemented?
+      placeholder: |
+        If you have thoughts on implementation approaches, technical considerations,
+        or specific algorithms/libraries that could be used, please share them here.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Implementation Scope
+      description: What would this feature require? (Check all that apply)
+      options:
+        - label: New dependencies
+        - label: Breaking API changes
+        - label: New configuration options
+        - label: New command-line arguments
+        - label: New output formats
+        - label: Documentation updates
+        - label: Migration guide for users
+        - label: Performance benchmarking
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Success Criteria
+      description: How would we know this feature is successful?
+      placeholder: |
+        - Measurable criteria (performance improvements, user adoption, etc.)
+        - Test cases that should pass
+        - User feedback indicators
+        - Quality metrics
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Estimated Implementation Effort
+      description: How complex do you think this feature would be to implement?
+      options:
+        - Small (few hours to implement)
+        - Medium (few days to implement)
+        - Large (weeks to implement)
+        - Very Large (months to implement)
+        - Unknown
+
+  - type: textarea
+    id: research
+    attributes:
+      label: Related Research/Tools
+      description: Are there similar features in other tools or research papers?
+      placeholder: |
+        - Similar features in other code analysis tools
+        - Academic research or papers
+        - Industry standards or best practices
+        - Open source libraries or algorithms
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be interested in contributing to this feature?
+      options:
+        - label: I would like to implement this feature myself
+        - label: I could help with testing
+        - label: I could help with documentation
+        - label: I could provide domain expertise/feedback
+        - label: I would prefer someone else implements it
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context or information
+      placeholder: |
+        - Links to relevant issues, discussions, or documentation
+        - Screenshots or mockups (if UI-related)
+        - Performance requirements or constraints
+        - Timeline considerations
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        **For maintainers:**
+        - Evaluate against project roadmap and priorities
+        - Consider technical complexity and maintenance burden
+        - Assess alignment with project goals
+        - Add appropriate labels (enhancement, area-specific, priority)
+        - Link to related issues or discussions

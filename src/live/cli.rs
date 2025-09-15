@@ -3,7 +3,7 @@
 //! Implements the live-reach command with various subcommands for
 //! analyzing production call graphs and detecting shadow islands
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 use crate::live::{
     storage::{LiveStorage, AggregationQuery},
     graph::CallGraph,
@@ -458,7 +458,7 @@ impl LiveReachCli {
         
         // Create output directory
         fs::create_dir_all(&args.out).await
-            .map_err(|e| ValknutError::io("Failed to create output directory", e))?;
+            .map_io_err("Failed to create output directory")?;
         
         // Generate and write reports
         let reporter = LiveReachReporter::new();
@@ -592,7 +592,7 @@ impl LiveReachCli {
         
         // Create output directory
         fs::create_dir_all(&args.out).await
-            .map_err(|e| ValknutError::io("Failed to create output directory", e))?;
+            .map_io_err("Failed to create output directory")?;
         
         let reporter = LiveReachReporter::new();
         

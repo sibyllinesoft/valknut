@@ -1,0 +1,61 @@
+# Clippy configuration for Valknut
+# Enforces high-quality Rust code standards
+
+# Error tolerance - we want strict enforcement
+msrv = "1.70.0"  # Minimum Supported Rust Version
+
+# Complexity thresholds
+cognitive-complexity-threshold = 25
+type-complexity-threshold = 100
+too-many-arguments-threshold = 8
+too-many-lines-threshold = 150
+large-type-threshold = 200
+
+# Performance and efficiency settings
+enum-variant-size-threshold = 200
+trivial-copy-size-limit = 128
+pass-by-value-size-limit = 256
+vec-box-size-threshold = 4096
+
+# Error handling standards
+avoid-breaking-exported-api = true
+check-private-items = true
+
+# Documentation requirements  
+missing-docs-in-private-items = false
+documentation-style = "auto"
+
+# Safety and correctness
+disallowed-methods = [
+    # Discourage panicking functions in library code
+    "std::panic::panic_any",
+    "std::process::exit",
+    # Prefer error handling over unwrap in library code
+    "std::option::Option::unwrap",
+    "std::result::Result::unwrap", 
+    "std::result::Result::expect",
+]
+
+disallowed-types = [
+    # Prefer specific error types over generic errors
+    "Box<dyn std::error::Error>",
+    # Discourage stringly-typed APIs
+    "std::collections::HashMap<String, String>",
+]
+
+# Allow certain patterns that are acceptable in our codebase
+allowed-idents-below-min-chars = [
+    "i", "j", "k", "x", "y", "z",  # Loop counters and coordinates
+    "id", "db", "io", "fs", "os",  # Common abbreviations
+    "ast", "lsh", "pdg", "cfg",    # Domain-specific terms
+]
+
+# Single letter variable names (for mathematical operations)
+single-char-lifetime-names = true
+
+# Literal representations
+literal-representation-threshold = 2048
+
+# Collection and iterator preferences
+redundant-field-names = true
+redundant-static-lifetimes = true

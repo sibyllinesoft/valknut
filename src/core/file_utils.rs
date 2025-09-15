@@ -3,12 +3,12 @@
 //! This module provides utilities for reading files with proper UTF-8 handling,
 //! binary file detection, encoding conversion capabilities, and coverage file discovery.
 
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::time::{Duration, SystemTime};
-use tracing::{warn, info, debug};
-use crate::core::errors::{ValknutError, Result};
 use crate::core::config::CoverageConfig;
+use crate::core::errors::{Result, ValknutError};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
+use tracing::{debug, info, warn};
 
 /// Safe file reading with UTF-8 validation and fallback handling
 pub struct FileReader;
@@ -18,9 +18,10 @@ impl FileReader {
     pub fn read_to_string(file_path: &Path) -> Result<String> {
         // First, check if the file is likely to be binary
         if Self::is_likely_binary(file_path)? {
-            return Err(ValknutError::validation(
-                format!("File appears to be binary: {}", file_path.display())
-            ));
+            return Err(ValknutError::validation(format!(
+                "File appears to be binary: {}",
+                file_path.display()
+            )));
         }
 
         // Try to read as UTF-8 first
@@ -32,9 +33,12 @@ impl FileReader {
                     // Try to read as bytes and convert with lossy UTF-8
                     let bytes = fs::read(file_path)
                         .map_err(|err| ValknutError::io("Failed to read file as bytes", err))?;
-                    
+
                     let content = String::from_utf8_lossy(&bytes).to_string();
-                    warn!("File contained invalid UTF-8, converted with lossy encoding: {}", file_path.display());
+                    warn!(
+                        "File contained invalid UTF-8, converted with lossy encoding: {}",
+                        file_path.display()
+                    );
                     Ok(content)
                 } else {
                     Err(ValknutError::io("Failed to read file", e))
@@ -49,20 +53,18 @@ impl FileReader {
         if let Some(extension) = file_path.extension().and_then(|ext| ext.to_str()) {
             let binary_extensions = [
                 // Archives
-                "zip", "tar", "gz", "bz2", "xz", "7z", "rar",
-                // Images
-                "png", "jpg", "jpeg", "gif", "bmp", "svg", "ico", "webp",
-                // Audio/Video
-                "mp3", "mp4", "avi", "wav", "flv", "mov", "wmv", "mkv",
-                // Documents
-                "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-                // Executables
-                "exe", "dll", "so", "dylib", "bin", "deb", "rpm",
-                // Others
+                "zip", "tar", "gz", "bz2", "xz", "7z", "rar", // Images
+                "png", "jpg", "jpeg", "gif", "bmp", "svg", "ico", "webp", // Audio/Video
+                "mp3", "mp4", "avi", "wav", "flv", "mov", "wmv", "mkv", // Documents
+                "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", // Executables
+                "exe", "dll", "so", "dylib", "bin", "deb", "rpm", // Others
                 "sqlite", "db", "woff", "woff2", "ttf", "eot",
             ];
-            
-            if binary_extensions.iter().any(|&ext| extension.eq_ignore_ascii_case(ext)) {
+
+            if binary_extensions
+                .iter()
+                .any(|&ext| extension.eq_ignore_ascii_case(ext))
+            {
                 return Ok(true);
             }
         }
@@ -70,27 +72,28 @@ impl FileReader {
         // For files without clear extensions, sample the first few bytes
         let metadata = fs::metadata(file_path)
             .map_err(|e| ValknutError::io("Failed to read file metadata", e))?;
-        
+
         // Don't process very large files
-        if metadata.len() > 10 * 1024 * 1024 { // 10MB limit
+        if metadata.len() > 10 * 1024 * 1024 {
+            // 10MB limit
             return Ok(true);
         }
 
         // Sample first 1024 bytes to check for binary content
         let sample_size = std::cmp::min(1024, metadata.len() as usize);
         let mut buffer = vec![0u8; sample_size];
-        
+
         use std::io::Read;
         let mut file = fs::File::open(file_path)
             .map_err(|e| ValknutError::io("Failed to open file for sampling", e))?;
-        
+
         file.read_exact(&mut buffer)
             .map_err(|e| ValknutError::io("Failed to read file sample", e))?;
 
         // Check for null bytes (common indicator of binary content)
         let null_bytes = buffer.iter().filter(|&&b| b == 0).count();
         let null_percentage = (null_bytes as f64 / buffer.len() as f64) * 100.0;
-        
+
         // If more than 1% null bytes, likely binary
         Ok(null_percentage > 1.0)
     }
@@ -106,9 +109,7 @@ impl FileReader {
             .lines()
             .filter(|line| {
                 let trimmed = line.trim();
-                !trimmed.is_empty() 
-                    && !trimmed.starts_with("//") 
-                    && !trimmed.starts_with("#")
+                !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with("#")
             })
             .count())
     }
@@ -118,10 +119,35 @@ impl FileReader {
         if let Some(extension) = file_path.extension().and_then(|ext| ext.to_str()) {
             matches!(
                 extension.to_lowercase().as_str(),
-                "py" | "js" | "ts" | "jsx" | "tsx" | "rs" | "go" | "java" 
-                | "cpp" | "c" | "h" | "hpp" | "cs" | "php" | "rb" | "kt" 
-                | "swift" | "scala" | "clj" | "hs" | "ml" | "fs" | "elm"
-                | "dart" | "lua" | "perl" | "r" | "jl" | "nim" | "zig"
+                "py" | "js"
+                    | "ts"
+                    | "jsx"
+                    | "tsx"
+                    | "rs"
+                    | "go"
+                    | "java"
+                    | "cpp"
+                    | "c"
+                    | "h"
+                    | "hpp"
+                    | "cs"
+                    | "php"
+                    | "rb"
+                    | "kt"
+                    | "swift"
+                    | "scala"
+                    | "clj"
+                    | "hs"
+                    | "ml"
+                    | "fs"
+                    | "elm"
+                    | "dart"
+                    | "lua"
+                    | "perl"
+                    | "r"
+                    | "jl"
+                    | "nim"
+                    | "zig"
             )
         } else {
             false
@@ -145,54 +171,58 @@ pub struct CoverageFile {
 /// Coverage file format detection
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoverageFormat {
-    CoveragePyXml,      // coverage.py XML format
-    Lcov,               // LCOV .info format
-    Cobertura,          // Cobertura XML format
-    JaCoCo,             // JaCoCo XML format
-    IstanbulJson,       // Istanbul JSON format
+    CoveragePyXml, // coverage.py XML format
+    Lcov,          // LCOV .info format
+    Cobertura,     // Cobertura XML format
+    JaCoCo,        // JaCoCo XML format
+    IstanbulJson,  // Istanbul JSON format
     Unknown,
 }
 
 impl CoverageFormat {
     /// Detect format from file path and content
     pub fn detect(file_path: &Path) -> Result<Self> {
-        let filename = file_path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-        
+        let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
         // First try to detect by filename
         if filename.contains("coverage") && filename.ends_with(".xml") {
             return Ok(Self::CoveragePyXml);
         }
-        
-        if filename.ends_with("lcov.info") || filename == "lcov.info" || filename.ends_with(".lcov") {
+
+        if filename.ends_with("lcov.info") || filename == "lcov.info" || filename.ends_with(".lcov")
+        {
             return Ok(Self::Lcov);
         }
-        
+
         if filename.contains("cobertura") && filename.ends_with(".xml") {
             return Ok(Self::Cobertura);
         }
-        
+
         if filename.ends_with(".json") {
             return Ok(Self::IstanbulJson);
         }
-        
+
         // If filename detection fails, try content-based detection
         Self::detect_by_content(file_path)
     }
-    
+
     /// Detect format by examining file content
     fn detect_by_content(file_path: &Path) -> Result<Self> {
         if FileReader::is_likely_binary(file_path)? {
             return Ok(Self::Unknown);
         }
-        
+
         // Read first few lines to detect format
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| ValknutError::io("Failed to read coverage file for format detection", e))?;
-        
-        let first_kb = content.chars().take(1024).collect::<String>().to_lowercase();
-        
+        let content = std::fs::read_to_string(file_path).map_err(|e| {
+            ValknutError::io("Failed to read coverage file for format detection", e)
+        })?;
+
+        let first_kb = content
+            .chars()
+            .take(1024)
+            .collect::<String>()
+            .to_lowercase();
+
         if first_kb.contains("<?xml") {
             if first_kb.contains("coverage") && first_kb.contains("branch-rate") {
                 Ok(Self::Cobertura)
@@ -203,7 +233,11 @@ impl CoverageFormat {
             } else {
                 Ok(Self::Unknown)
             }
-        } else if first_kb.starts_with("tn:") || first_kb.contains("\ntn:") || first_kb.starts_with("sf:") || first_kb.contains("\nsf:") {
+        } else if first_kb.starts_with("tn:")
+            || first_kb.contains("\ntn:")
+            || first_kb.starts_with("sf:")
+            || first_kb.contains("\nsf:")
+        {
             Ok(Self::Lcov)
         } else if first_kb.starts_with("{") && first_kb.contains("\"path\"") {
             Ok(Self::IstanbulJson)
@@ -222,28 +256,37 @@ impl CoverageDiscovery {
         root_path: &Path,
         config: &CoverageConfig,
     ) -> Result<Vec<CoverageFile>> {
-        debug!("Coverage discovery called with root_path: {}, coverage_file: {:?}, auto_discover: {}", 
-               root_path.display(), config.coverage_file, config.auto_discover);
-        
+        debug!(
+            "Coverage discovery called with root_path: {}, coverage_file: {:?}, auto_discover: {}",
+            root_path.display(),
+            config.coverage_file,
+            config.auto_discover
+        );
+
         if let Some(ref explicit_file) = config.coverage_file {
             debug!("Using explicit coverage file: {}", explicit_file.display());
             // Use explicitly specified coverage file
             return Self::validate_coverage_file(explicit_file);
         }
-        
+
         if !config.auto_discover {
             return Ok(Vec::new());
         }
-        
-        debug!("Starting coverage file discovery in: {}", root_path.display());
-        
+
+        debug!(
+            "Starting coverage file discovery in: {}",
+            root_path.display()
+        );
+
         let mut discovered_files = Vec::new();
         let max_age = if config.max_age_days > 0 {
-            Some(Duration::from_secs(config.max_age_days as u64 * 24 * 60 * 60))
+            Some(Duration::from_secs(
+                config.max_age_days as u64 * 24 * 60 * 60,
+            ))
         } else {
             None
         };
-        
+
         // Search each configured path
         for search_path in &config.search_paths {
             let full_path = root_path.join(search_path);
@@ -251,31 +294,35 @@ impl CoverageDiscovery {
                 debug!("Search path does not exist: {}", full_path.display());
                 continue;
             }
-            
+
             debug!("Searching for coverage files in: {}", full_path.display());
-            
+
             // Search for files matching patterns
             for pattern in &config.file_patterns {
                 let found_files = Self::find_files_by_pattern(&full_path, pattern, max_age)?;
                 discovered_files.extend(found_files);
             }
         }
-        
+
         // Sort by modification time (most recent first)
         discovered_files.sort_by(|a, b| b.modified.cmp(&a.modified));
-        
+
         // Remove duplicates (same path)
         discovered_files.dedup_by(|a, b| a.path == b.path);
-        
+
         info!("Discovered {} coverage files", discovered_files.len());
         for file in &discovered_files {
-            info!("  Found: {} (format: {:?}, size: {} bytes)", 
-                  file.path.display(), file.format, file.size);
+            info!(
+                "  Found: {} (format: {:?}, size: {} bytes)",
+                file.path.display(),
+                file.format,
+                file.size
+            );
         }
-        
+
         Ok(discovered_files)
     }
-    
+
     /// Find files matching a specific pattern with enhanced discovery
     fn find_files_by_pattern(
         search_path: &Path,
@@ -283,18 +330,20 @@ impl CoverageDiscovery {
         max_age: Option<Duration>,
     ) -> Result<Vec<CoverageFile>> {
         let mut files = Vec::new();
-        
+
         // Handle glob patterns
         if pattern.contains("*") {
             // Use glob matching with multiple strategies
             let glob_patterns = Self::expand_glob_pattern(search_path, pattern);
-            
+
             for glob_pattern in glob_patterns {
                 match glob::glob(&glob_pattern) {
                     Ok(paths) => {
                         for entry in paths {
                             if let Ok(path) = entry {
-                                if let Ok(coverage_file) = Self::validate_coverage_file_with_age(&path, max_age) {
+                                if let Ok(coverage_file) =
+                                    Self::validate_coverage_file_with_age(&path, max_age)
+                                {
                                     if let Some(file) = coverage_file {
                                         files.push(file);
                                     }
@@ -310,24 +359,26 @@ impl CoverageDiscovery {
         } else {
             // Direct file lookup with intelligent fallbacks
             let candidate_paths = Self::expand_direct_pattern(search_path, pattern);
-            
+
             for file_path in candidate_paths {
-                if let Ok(coverage_file) = Self::validate_coverage_file_with_age(&file_path, max_age) {
+                if let Ok(coverage_file) =
+                    Self::validate_coverage_file_with_age(&file_path, max_age)
+                {
                     if let Some(file) = coverage_file {
                         files.push(file);
                     }
                 }
             }
         }
-        
+
         Ok(files)
     }
-    
+
     /// Expand glob pattern into multiple search strategies
     fn expand_glob_pattern(search_path: &Path, pattern: &str) -> Vec<String> {
         let mut patterns = Vec::new();
         let base_path = search_path.display().to_string();
-        
+
         if pattern.starts_with("**/") {
             // Recursive pattern - search in all subdirectories
             patterns.push(format!("{}/{}", base_path, pattern));
@@ -343,17 +394,17 @@ impl CoverageDiscovery {
             // Also search in immediate directory
             patterns.push(format!("{}/{}", base_path, pattern));
         }
-        
+
         patterns
     }
-    
+
     /// Expand direct pattern into intelligent fallback paths
     fn expand_direct_pattern(search_path: &Path, pattern: &str) -> Vec<PathBuf> {
         let mut paths = Vec::new();
-        
+
         // Primary path
         paths.push(search_path.join(pattern));
-        
+
         // Common variations for coverage files
         if pattern == "coverage.xml" {
             paths.push(search_path.join("coverage/coverage.xml"));
@@ -370,10 +421,10 @@ impl CoverageDiscovery {
             paths.push(search_path.join("coverage/coverage.json"));
             paths.push(search_path.join("reports/coverage.json"));
         }
-        
+
         paths
     }
-    
+
     /// Validate a coverage file and return CoverageFile if valid
     fn validate_coverage_file(file_path: &Path) -> Result<Vec<CoverageFile>> {
         match Self::validate_coverage_file_with_age(file_path, None)? {
@@ -381,44 +432,49 @@ impl CoverageDiscovery {
             None => Ok(Vec::new()),
         }
     }
-    
+
     /// Validate a coverage file with age check
     fn validate_coverage_file_with_age(
-        file_path: &Path, 
+        file_path: &Path,
         max_age: Option<Duration>,
     ) -> Result<Option<CoverageFile>> {
         if !file_path.exists() {
             return Ok(None);
         }
-        
+
         let metadata = fs::metadata(file_path)
             .map_err(|e| ValknutError::io("Failed to read file metadata", e))?;
-        
+
         if !metadata.is_file() {
             return Ok(None);
         }
-        
-        let modified = metadata.modified()
+
+        let modified = metadata
+            .modified()
             .map_err(|e| ValknutError::io("Failed to get file modification time", e))?;
-        
+
         // Check age if specified
         if let Some(max_age) = max_age {
             if let Ok(elapsed) = modified.elapsed() {
                 if elapsed > max_age {
-                    debug!("Coverage file too old: {} (age: {:?})", file_path.display(), elapsed);
+                    debug!(
+                        "Coverage file too old: {} (age: {:?})",
+                        file_path.display(),
+                        elapsed
+                    );
                     return Ok(None);
                 }
             }
         }
-        
+
         // Detect format
         let format = CoverageFormat::detect(file_path).unwrap_or(CoverageFormat::Unknown);
-        
+
         if matches!(format, CoverageFormat::Unknown) {
             debug!("Unknown coverage format: {}", file_path.display());
             return Ok(None);
         }
-        
+
         Ok(Some(CoverageFile {
             path: file_path.to_path_buf(),
             format,
@@ -426,12 +482,12 @@ impl CoverageDiscovery {
             size: metadata.len(),
         }))
     }
-    
+
     /// Get the most recent coverage file from discovered files
     pub fn get_most_recent(files: &[CoverageFile]) -> Option<&CoverageFile> {
         files.first() // Already sorted by modification time (most recent first)
     }
-    
+
     /// Filter coverage files by format
     pub fn filter_by_format(files: &[CoverageFile], format: CoverageFormat) -> Vec<&CoverageFile> {
         files.iter().filter(|f| f.format == format).collect()
@@ -476,7 +532,11 @@ mod tests {
     fn test_count_lines_of_code() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.py");
-        fs::write(&file_path, "# Comment\ndef hello():\n    print('hello')\n\n").unwrap();
+        fs::write(
+            &file_path,
+            "# Comment\ndef hello():\n    print('hello')\n\n",
+        )
+        .unwrap();
 
         let loc = FileReader::count_lines_of_code(&file_path).unwrap();
         assert_eq!(loc, 2); // Only non-empty, non-comment lines
