@@ -55,10 +55,19 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
                 
                 if (scoreMatch) {
                     score = parseFloat(scoreMatch[1]);
-                } else if (data.name.includes('very high')) {
-                    // For "very high" descriptions without explicit score, assume high score
-                    // This is a fallback - ideally the entity score should be passed through
-                    score = 15; // Assume very high = 15+
+                } else if (data.entityScore && (isComplexityIssue || isStructureIssue)) {
+                    // Use the actual entity score for complexity and structural issues
+                    score = data.entityScore;
+                    console.log('🔍 DEBUG: Using entity score:', score, 'for issue:', data.name);
+                } else {
+                    // Fallback scores for different issue types
+                    if (isComplexityIssue && data.name.includes('very high')) {
+                        score = 16; // Different fallback for complexity
+                    } else if (isStructureIssue && data.name.includes('very high')) {
+                        score = 18; // Different fallback for structure
+                    } else if (data.name.includes('high')) {
+                        score = 12; // Medium-high fallback
+                    }
                 }
                 
                 if (score !== null) {
@@ -642,6 +651,7 @@ const CodeAnalysisTree = ({ data }) => {
                                 id: `issue:${entityNodeId}:${idx}`,
                                 name: issueText,
                                 type: 'issue-row',
+                                entityScore: entity.score, // Pass through entity score
                                 children: []
                             });
                         });
