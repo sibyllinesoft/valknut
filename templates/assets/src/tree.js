@@ -207,23 +207,7 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         }, `${data.entityCount} entities`));
     }
     
-    // Critical issues for folders
-    if (isFolder && data.criticalIssues) {
-        children.push(React.createElement('div', {
-            key: 'critical',
-            className: 'tree-badge tree-badge-danger',
-            style: { marginLeft: '0.5rem' }
-        }, `${data.criticalIssues} critical`));
-    }
-    
-    // High priority issues for folders
-    if (isFolder && data.highPriorityIssues) {
-        children.push(React.createElement('div', {
-            key: 'high',
-            className: 'tree-badge tree-badge-warning',
-            style: { marginLeft: '0.5rem' }
-        }, `${data.highPriorityIssues} high`));
-    }
+    // Remove old critical/high priority badges - replaced by new severity count badges below
     
     // Priority badge with color coding
     if (data.priority || data.highestPriority) {
