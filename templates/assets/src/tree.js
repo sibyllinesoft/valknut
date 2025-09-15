@@ -13,20 +13,75 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Handle info/issue/suggestion rows
     if (isInfoRow || isIssueRow || isSuggestionRow) {
-        const manualIndent = node.level * 24; // 24px per level
+        const manualIndent = (node.level * 24) + 16; // Extra indent for banner rows
+        let iconName = 'info';
         let iconColor = 'var(--text-secondary)';
         let backgroundColor = 'transparent';
         
         if (isIssueRow) {
+            iconName = 'alert-triangle';
             iconColor = 'var(--danger, #dc3545)';
             backgroundColor = 'rgba(220, 53, 69, 0.05)';
         } else if (isSuggestionRow) {
+            iconName = 'lightbulb';
             iconColor = 'var(--info, #007acc)';
             backgroundColor = 'rgba(0, 123, 255, 0.05)';
         } else if (isInfoRow) {
+            iconName = 'info';
             iconColor = 'var(--success, #28a745)';
             backgroundColor = 'rgba(40, 167, 69, 0.05)';
         }
+        
+        // Parse text and score for complexity/structure issues
+        let displayText = data.name;
+        let scoreElement = null;
+        
+        // Extract complexity score from text
+        const complexityMatch = displayText.match(/^(.+?)score:\s*(\d+(?:\.\d+)?)/);
+        if (complexityMatch) {
+            displayText = complexityMatch[1].replace(/^(⚠️|💡)\s*/, '').replace(/complexity:\s*/i, '').replace(/structure:\s*/i, '').trim();
+            const score = parseFloat(complexityMatch[2]);
+            const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
+            
+            scoreElement = React.createElement('div', {
+                key: 'score-badge',
+                style: {
+                    marginLeft: 'auto',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '500',
+                    backgroundColor: scoreColor + '20',
+                    color: scoreColor,
+                    border: `1px solid ${scoreColor}40`
+                }
+            }, score.toString());
+        } else {
+            // Clean up text by removing emoji prefixes and category prefixes
+            displayText = displayText
+                .replace(/^(⚠️|💡|ℹ️)\s*/, '')
+                .replace(/^(complexity|structure):\s*/i, '')
+                .trim();
+        }
+        
+        const children = [
+            React.createElement('i', {
+                'data-lucide': iconName,
+                key: 'icon',
+                style: { 
+                    width: '14px', 
+                    height: '14px', 
+                    marginRight: '0.5rem',
+                    color: iconColor,
+                    flexShrink: 0
+                }
+            }),
+            React.createElement('span', {
+                key: 'text',
+                style: { flex: 1 }
+            }, displayText),
+            scoreElement
+        ].filter(Boolean);
         
         return React.createElement('div', {
             ref: innerRef,
@@ -43,7 +98,7 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
                 width: `calc(100% - ${manualIndent}px)`,
                 boxSizing: 'border-box'
             }
-        }, data.name);
+        }, ...children);
     }
     
     // Regular node rendering (folder, file, entity)
@@ -585,11 +640,11 @@ const CodeAnalysisTree = ({ data }) => {
                     if (entity.issues && Array.isArray(entity.issues)) {
                         entity.issues.forEach((issue, idx) => {
                             // Fix the score display - use the actual entity score, not the issue severity
-                            let issueText = `⚠️ ${issue.category}: ${issue.description}`;
+                            let issueText = `${issue.category}: ${issue.description}`;
                             
                             // For complexity issues, show the actual entity score
                             if (issue.category?.toLowerCase().includes('complexity') && entity.score) {
-                                issueText = `⚠️ ${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                                issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
                             }
                             
                             entityChildren.push({
@@ -605,17 +660,17 @@ const CodeAnalysisTree = ({ data }) => {
                     if (entity.suggestions && Array.isArray(entity.suggestions)) {
                         entity.suggestions.forEach((suggestion, idx) => {
                             // Fix the score display in suggestions too
-                            let suggestionText = `💡 ${suggestion.type}: ${suggestion.description}`;
+                            let suggestionText = `${suggestion.type}: ${suggestion.description}`;
                             
                             // For complexity suggestions, show the actual entity score
                             if (suggestion.description?.includes('score: 0.0') && entity.score) {
-                                suggestionText = `💡 ${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                                suggestionText = `${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
                             }
                             
                             // For extract method suggestions, include the method name context
                             if (suggestion.type?.toLowerCase().includes('extract_method') || 
                                 suggestion.type?.toLowerCase().includes('extract method')) {
-                                suggestionText = `💡 Extract Method for ${cleanName}: ${suggestion.description}`;
+                                suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
                             }
                             
                             entityChildren.push({
