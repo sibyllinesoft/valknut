@@ -21,11 +21,7 @@ module.exports = (env, argv) => {
       clean: true
     },
     plugins: [
-      new HtmlWebpackPlugin({
-        template: './src/template.html',
-        filename: 'tree-component.html',
-        inject: 'head'
-      })
+      // HTML generation disabled - we only need the JS bundle
     ],
     optimization: {
       minimize: isProduction

@@ -8,20 +8,14 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     const isFile = data.type === 'file';
     const isEntity = data.type === 'entity';
     
-    // Debug logging to see what we're getting
-    console.log('TreeNode debug:', {
-        name: data.name,
-        type: data.type,
-        hasChildren: node.hasChildren,
-        childrenLength: node.children?.length,
-        isInternal: node.isInternal,
-        level: node.level,
-        isOpen: node.isOpen,
-        tree_id: node.id
-    });
-    
-    // Use react-arborist's built-in hasChildren property
-    const hasChildren = node.isInternal; // react-arborist sets isInternal for nodes with children
+    // Check for children using multiple approaches to ensure chevrons show
+    // But entities (functions) should never have chevrons, even if they have children
+    const hasChildren = !isEntity && (
+        node.isInternal || 
+        (node.children && node.children.length > 0) || 
+        (data.children && data.children.length > 0) ||
+        node.hasChildren
+    );
     
     // Priority color mapping
     const getPriorityClass = (priority) => {
@@ -45,22 +39,54 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Expand/collapse arrow for nodes with children
     if (hasChildren) {
+        console.log('🔽 RENDERING CHEVRON for', data.name, '- isOpen:', node.isOpen, 'chevron:', node.isOpen ? 'chevron-down' : 'chevron-right');
+        const chevronIcon = node.isOpen ? 'chevron-down' : 'chevron-right';
+        const fallbackSymbol = node.isOpen ? '▼' : '▶'; // Unicode fallback
+        
         children.push(React.createElement('i', {
-            'data-lucide': node.isOpen ? 'chevron-down' : 'chevron-right',
+            'data-lucide': chevronIcon,
             key: 'chevron',
+            className: 'tree-chevron-icon',
             style: { 
                 width: '16px', 
                 height: '16px', 
                 marginRight: '0.25rem',
                 cursor: 'pointer',
-                transition: 'transform 0.2s ease'
+                transition: 'transform 0.2s ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-secondary, #666)',
+                fontSize: '12px',
+                userSelect: 'none'
             },
             onClick: (e) => {
                 e.stopPropagation();
                 tree.toggle(node.id);
+            },
+            // Force Lucide refresh and add fallback
+            ref: (el) => {
+                if (el) {
+                    // Add fallback text in case Lucide doesn't render
+                    if (!el.querySelector('svg')) {
+                        el.textContent = fallbackSymbol;
+                    }
+                    
+                    // Try to initialize Lucide
+                    if (typeof window !== 'undefined' && window.lucide) {
+                        setTimeout(() => {
+                            window.lucide.createIcons();
+                            // Check if Lucide worked, if not use fallback
+                            if (!el.querySelector('svg')) {
+                                el.textContent = fallbackSymbol;
+                            }
+                        }, 50);
+                    }
+                }
             }
         }));
     } else {
+        console.log('❌ NO CHEVRON for', data.name, '- hasChildren is false');
         // Add spacing for nodes without children to align with expandable nodes
         children.push(React.createElement('div', {
             key: 'spacer',
@@ -69,8 +95,12 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     }
     
     // Icon
+    let iconName = 'function-square'; // default for entities
+    if (isFolder) iconName = 'folder';
+    else if (isFile) iconName = 'file-code';
+    
     children.push(React.createElement('i', {
-        'data-lucide': isFolder ? 'folder' : (isFile ? 'file-code' : 'function-square'),
+        'data-lucide': iconName,
         key: 'icon',
         style: { width: '16px', height: '16px', marginRight: '0.5rem' }
     }));
@@ -141,7 +171,6 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Manual indentation calculation - ignore react-arborist's style to fix indentation
     const manualIndent = node.level * 24; // 24px per level
-    console.log('Manual indent for', data.name, '- level:', node.level, 'indent:', manualIndent + 'px');
 
     return React.createElement('div', {
         ref: innerRef,
@@ -168,11 +197,6 @@ const CodeAnalysisTree = ({ data }) => {
     
     // Build tree structure from file paths and directory health
     const buildTreeData = useCallback((refactoringFiles, directoryHealth) => {
-        console.log('🏗️ buildTreeData called with:', {
-            refactoringFilesCount: refactoringFiles?.length || 0,
-            directoryHealthPresent: !!directoryHealth,
-            directoryHealthDirs: directoryHealth?.directories ? Object.keys(directoryHealth.directories).length : 0
-        });
         
         const folderMap = new Map();
         const result = [];
@@ -254,20 +278,30 @@ const CodeAnalysisTree = ({ data }) => {
                 entityCount: typeof fileGroup.entityCount === 'number' ? fileGroup.entityCount : 0,
                 avgScore: typeof fileGroup.avgScore === 'number' ? fileGroup.avgScore : 0,
                 totalIssues: typeof fileGroup.totalIssues === 'number' ? fileGroup.totalIssues : 0,
-                children: fileGroup.entities.map((entity, entityIndex) => ({
-                    id: `entity-${fileIndex}-${entityIndex}`,
-                    name: String(entity.name || 'Unknown Entity'),
-                    type: 'entity',
-                    priority: String(entity.priority || 'Low'),
-                    score: typeof entity.score === 'number' ? entity.score : 0,
-                    lineRange: entity.lineRange,
-                    issueCount: Array.isArray(entity.issues) ? entity.issues.length : 0,
-                    suggestionCount: Array.isArray(entity.suggestions) ? entity.suggestions.length : 0,
-                    children: []
-                }))
+                children: fileGroup.entities.map((entity, entityIndex) => {
+                    // Clean up entity name - remove filename and :function: prefix
+                    let cleanName = String(entity.name || 'Unknown Entity');
+                    // Remove filename prefix (e.g., "./src/core/pipeline/pipeline_config.rs:function:")
+                    const functionMatch = cleanName.match(/:function:(.+)$/);
+                    if (functionMatch) {
+                        cleanName = functionMatch[1];
+                    }
+                    
+                    return {
+                        id: `entity-${fileIndex}-${entityIndex}`,
+                        name: cleanName,
+                        type: 'entity',
+                        priority: String(entity.priority || 'Low'),
+                        score: typeof entity.score === 'number' ? entity.score : 0,
+                        lineRange: entity.lineRange,
+                        issueCount: Array.isArray(entity.issues) ? entity.issues.length : 0,
+                        suggestionCount: Array.isArray(entity.suggestions) ? entity.suggestions.length : 0,
+                        children: []
+                    };
+                })
             };
             
-                parentFolder.push(fileNode);
+            parentFolder.push(fileNode);
             });
         }
         
@@ -301,51 +335,19 @@ const CodeAnalysisTree = ({ data }) => {
         
         const sortedResult = sortNodes(result);
         
-        console.log('🌳 buildTreeData returning:', {
-            resultLength: sortedResult.length,
-            firstFewNodes: sortedResult.slice(0, 3).map(n => ({
-                name: n.name, 
-                type: n.type, 
-                childrenCount: n.children?.length,
-                id: n.id,
-                hasChildren: n.children && n.children.length > 0
-            }))
-        });
-        
-        // Detailed tree structure logging
-        const logTreeStructure = (nodes, depth = 0) => {
-            nodes.forEach(node => {
-                console.log(`${'  '.repeat(depth)}→ ${node.name} (${node.type}) [children: ${node.children?.length || 0}]`);
-                if (node.children && node.children.length > 0) {
-                    logTreeStructure(node.children, depth + 1);
-                }
-            });
-        };
-        
-        console.log('🏗️ Complete tree structure:');
-        logTreeStructure(sortedResult);
-        
         return sortedResult;
     }, []);
 
     // Load data from props
     useEffect(() => {
         try {
-            console.log('🔍 Loading tree data from props...');
-            console.log('📊 Props data:', data);
-            
             if (data && typeof data === 'object') {
-                console.log('📊 Refactoring candidates:', data.refactoringCandidatesByFile?.length || 0);
-                console.log('🏗️ Directory health tree:', data.directoryHealthTree ? 'present' : 'missing');
-                
                 const treeStructure = buildTreeData(
                     data.refactoringCandidatesByFile || [],
                     data.directoryHealthTree
                 );
-                console.log('🌳 Built tree structure, nodes:', treeStructure.length);
                 setTreeData(treeStructure);
             } else {
-                console.warn('⚠️ No valid data provided in props');
                 setTreeData([]);
             }
         } catch (error) {
@@ -355,7 +357,6 @@ const CodeAnalysisTree = ({ data }) => {
     }, [data, buildTreeData]);
     
     if (treeData.length === 0) {
-        console.log('⚠️ Showing "no analysis data" message - treeData.length is 0');
         return React.createElement('div', {
             style: {
                 textAlign: 'center',
