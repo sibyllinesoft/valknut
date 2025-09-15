@@ -1,9 +1,9 @@
 //! Configuration structs, data types, and core types for structure analysis
 
+use petgraph::{Directed, Graph, Undirected};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use petgraph::{Graph, Directed, Undirected};
-use serde::{Deserialize, Serialize};
 
 /// Configuration for structure analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ impl Default for StructureConfig {
                 min_clusters: 2,
                 naming_fallbacks: vec![
                     "core".to_string(),
-                    "io".to_string(), 
+                    "io".to_string(),
                     "api".to_string(),
                     "util".to_string(),
                 ],

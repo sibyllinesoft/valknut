@@ -313,8 +313,7 @@ impl ValknutError {
     /// Add context to an existing error
     pub fn with_context(mut self, context: impl Into<String>) -> Self {
         match &mut self {
-            Self::Math { context: ctx, .. }
-            | Self::Internal { context: ctx, .. } => {
+            Self::Math { context: ctx, .. } | Self::Internal { context: ctx, .. } => {
                 *ctx = Some(context.into());
             }
             _ => {} // Other variants handle context differently
@@ -420,22 +419,22 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::num::{ParseIntError, ParseFloatError};
+    use std::num::{ParseFloatError, ParseIntError};
 
     #[test]
     fn test_error_creation() {
         let err = ValknutError::config("Invalid configuration");
         assert!(matches!(err, ValknutError::Config { .. }));
-        
+
         let err = ValknutError::parse("python", "Syntax error");
         assert!(matches!(err, ValknutError::Parse { .. }));
     }
 
     #[test]
     fn test_error_with_context() {
-        let err = ValknutError::internal("Something went wrong")
-            .with_context("During file processing");
-        
+        let err =
+            ValknutError::internal("Something went wrong").with_context("During file processing");
+
         if let ValknutError::Internal { context, .. } = err {
             assert_eq!(context, Some("During file processing".to_string()));
         } else {
@@ -445,9 +444,11 @@ mod tests {
 
     #[test]
     fn test_result_extension() {
-        let result: std::result::Result<i32, std::io::Error> = 
-            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"));
-        
+        let result: std::result::Result<i32, std::io::Error> = Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "File not found",
+        ));
+
         let valknut_result = result.context("Failed to read configuration file");
         assert!(valknut_result.is_err());
     }
@@ -456,7 +457,7 @@ mod tests {
     fn test_io_error_creation() {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
         let err = ValknutError::io("Failed to write file", io_err);
-        
+
         if let ValknutError::Io { message, source } = &err {
             assert_eq!(message, "Failed to write file");
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
@@ -468,7 +469,7 @@ mod tests {
     #[test]
     fn test_config_field_error() {
         let err = ValknutError::config_field("Invalid value", "max_files");
-        
+
         if let ValknutError::Config { message, field } = err {
             assert_eq!(message, "Invalid value");
             assert_eq!(field, Some("max_files".to_string()));
@@ -480,14 +481,21 @@ mod tests {
     #[test]
     fn test_parse_with_location() {
         let err = ValknutError::parse_with_location(
-            "rust", 
-            "Missing semicolon", 
-            "main.rs", 
-            Some(42), 
-            Some(10)
+            "rust",
+            "Missing semicolon",
+            "main.rs",
+            Some(42),
+            Some(10),
         );
-        
-        if let ValknutError::Parse { language, message, file_path, line, column } = err {
+
+        if let ValknutError::Parse {
+            language,
+            message,
+            file_path,
+            line,
+            column,
+        } = err
+        {
             assert_eq!(language, "rust");
             assert_eq!(message, "Missing semicolon");
             assert_eq!(file_path, Some("main.rs".to_string()));
@@ -501,7 +509,7 @@ mod tests {
     #[test]
     fn test_math_with_context() {
         let err = ValknutError::math_with_context("Division by zero", "normalize_features");
-        
+
         if let ValknutError::Math { message, context } = err {
             assert_eq!(message, "Division by zero");
             assert_eq!(context, Some("normalize_features".to_string()));
@@ -513,7 +521,7 @@ mod tests {
     #[test]
     fn test_graph_error() {
         let err = ValknutError::graph("Cycle detected");
-        
+
         if let ValknutError::Graph { message, element } = err {
             assert_eq!(message, "Cycle detected");
             assert_eq!(element, None);
@@ -525,8 +533,12 @@ mod tests {
     #[test]
     fn test_lsh_error() {
         let err = ValknutError::lsh("Invalid hash function");
-        
-        if let ValknutError::Lsh { message, parameters } = err {
+
+        if let ValknutError::Lsh {
+            message,
+            parameters,
+        } = err
+        {
             assert_eq!(message, "Invalid hash function");
             assert_eq!(parameters, None);
         } else {
@@ -537,8 +549,13 @@ mod tests {
     #[test]
     fn test_pipeline_error() {
         let err = ValknutError::pipeline("feature_extraction", "Timeout exceeded");
-        
-        if let ValknutError::Pipeline { stage, message, processed_count } = err {
+
+        if let ValknutError::Pipeline {
+            stage,
+            message,
+            processed_count,
+        } = err
+        {
             assert_eq!(stage, "feature_extraction");
             assert_eq!(message, "Timeout exceeded");
             assert_eq!(processed_count, None);
@@ -550,8 +567,14 @@ mod tests {
     #[test]
     fn test_validation_error() {
         let err = ValknutError::validation("Invalid range");
-        
-        if let ValknutError::Validation { message, field, expected, actual } = err {
+
+        if let ValknutError::Validation {
+            message,
+            field,
+            expected,
+            actual,
+        } = err
+        {
             assert_eq!(message, "Invalid range");
             assert_eq!(field, None);
             assert_eq!(expected, None);
@@ -564,7 +587,7 @@ mod tests {
     #[test]
     fn test_feature_unavailable() {
         let err = ValknutError::feature_unavailable("SIMD operations", "CPU does not support AVX2");
-        
+
         if let ValknutError::FeatureUnavailable { feature, reason } = err {
             assert_eq!(feature, "SIMD operations");
             assert_eq!(reason, Some("CPU does not support AVX2".to_string()));
@@ -576,7 +599,7 @@ mod tests {
     #[test]
     fn test_unsupported_error() {
         let err = ValknutError::unsupported("Language not supported");
-        
+
         if let ValknutError::Unsupported { message } = err {
             assert_eq!(message, "Language not supported");
         } else {
@@ -588,7 +611,7 @@ mod tests {
     fn test_from_io_error() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let valknut_err: ValknutError = io_err.into();
-        
+
         assert!(matches!(valknut_err, ValknutError::Io { .. }));
     }
 
@@ -596,7 +619,7 @@ mod tests {
     fn test_from_json_error() {
         let json_err = serde_json::from_str::<i32>("invalid json").unwrap_err();
         let valknut_err: ValknutError = json_err.into();
-        
+
         if let ValknutError::Serialization { data_type, .. } = valknut_err {
             assert_eq!(data_type, Some("JSON".to_string()));
         } else {
@@ -608,7 +631,7 @@ mod tests {
     fn test_from_yaml_error() {
         let yaml_err = serde_yaml::from_str::<i32>("invalid: yaml: content").unwrap_err();
         let valknut_err: ValknutError = yaml_err.into();
-        
+
         if let ValknutError::Serialization { data_type, .. } = valknut_err {
             assert_eq!(data_type, Some("YAML".to_string()));
         } else {
@@ -620,7 +643,7 @@ mod tests {
     fn test_from_parse_int_error() {
         let parse_err = "not_a_number".parse::<i32>().unwrap_err();
         let valknut_err: ValknutError = parse_err.into();
-        
+
         assert!(matches!(valknut_err, ValknutError::Validation { .. }));
     }
 
@@ -628,7 +651,7 @@ mod tests {
     fn test_from_parse_float_error() {
         let parse_err = "not_a_float".parse::<f64>().unwrap_err();
         let valknut_err: ValknutError = parse_err.into();
-        
+
         assert!(matches!(valknut_err, ValknutError::Validation { .. }));
     }
 
@@ -637,7 +660,7 @@ mod tests {
         let invalid_utf8 = vec![0, 159, 146, 150]; // Invalid UTF-8 sequence
         let utf8_err = std::str::from_utf8(&invalid_utf8).unwrap_err();
         let valknut_err: ValknutError = utf8_err.into();
-        
+
         assert!(matches!(valknut_err, ValknutError::Parse { .. }));
     }
 
@@ -645,7 +668,7 @@ mod tests {
     fn test_with_context_math_error() {
         let mut err = ValknutError::math("Overflow occurred");
         err = err.with_context("In statistical calculation");
-        
+
         if let ValknutError::Math { context, .. } = err {
             assert_eq!(context, Some("In statistical calculation".to_string()));
         } else {
@@ -657,7 +680,7 @@ mod tests {
     fn test_with_context_non_contextual_error() {
         let err = ValknutError::config("Bad config");
         let err_with_context = err.with_context("Should not change");
-        
+
         // Config errors don't support context, so it should remain unchanged
         if let ValknutError::Config { message, .. } = err_with_context {
             assert_eq!(message, "Bad config");
@@ -668,12 +691,14 @@ mod tests {
 
     #[test]
     fn test_result_ext_with_context() {
-        let result: std::result::Result<i32, std::io::Error> = 
-            Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Bad input"));
-        
+        let result: std::result::Result<i32, std::io::Error> = Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Bad input",
+        ));
+
         let valknut_result = result.with_context(|| "Processing failed".to_string());
         assert!(valknut_result.is_err());
-        
+
         // Verify the error was converted and context was added
         let err = valknut_result.unwrap_err();
         assert!(matches!(err, ValknutError::Io { .. }));
@@ -681,7 +706,13 @@ mod tests {
 
     #[test]
     fn test_error_display_formatting() {
-        let err = ValknutError::parse_with_location("python", "Syntax error", "test.py", Some(10), Some(5));
+        let err = ValknutError::parse_with_location(
+            "python",
+            "Syntax error",
+            "test.py",
+            Some(10),
+            Some(5),
+        );
         let display = format!("{}", err);
         assert!(display.contains("Parse error in python"));
         assert!(display.contains("Syntax error"));

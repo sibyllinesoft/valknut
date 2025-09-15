@@ -74,6 +74,10 @@ cache/
 rr.yml
 config.yml
 
+# Node.js
+node_modules/
+templates/**/node_modules/
+
 # Logs
 *.log
 logs/

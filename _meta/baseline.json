@@ -1,0 +1,1 @@
+{"test_results": {"total": 518, "passed": 491, "failed": 27, "ignored": 0}, "code_metrics": {"rust_files": 62, "total_lines": 49202}, "clippy_warnings": 0, "timestamp": "2025-09-15T01:14:57-04:00"}

@@ -1,7 +1,7 @@
 //! Configuration types and defaults for the analysis pipeline.
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use crate::core::config::ValknutConfig;
 
@@ -35,7 +35,7 @@ impl Default for AnalysisConfig {
             enable_complexity_analysis: true,
             enable_refactoring_analysis: true,
             enable_impact_analysis: true,
-            enable_lsh_analysis: false, // Disabled by default
+            enable_lsh_analysis: false,     // Disabled by default
             enable_coverage_analysis: true, // Enabled by default for comprehensive analysis
             file_extensions: vec![
                 "py".to_string(),
@@ -63,7 +63,9 @@ impl Default for AnalysisConfig {
 impl From<ValknutConfig> for AnalysisConfig {
     fn from(config: ValknutConfig) -> Self {
         // Convert exclude patterns to directories - extract directory names from patterns
-        let exclude_directories: Vec<String> = config.analysis.exclude_patterns
+        let exclude_directories: Vec<String> = config
+            .analysis
+            .exclude_patterns
             .into_iter()
             .filter_map(|pattern| {
                 // Extract directory names from patterns like "*/node_modules/*" -> "node_modules"
@@ -79,15 +81,16 @@ impl From<ValknutConfig> for AnalysisConfig {
                 }
             })
             .collect();
-        
+
         // Derive file extensions from language config
-        let file_extensions: Vec<String> = config.languages
+        let file_extensions: Vec<String> = config
+            .languages
             .values()
             .filter(|lang| lang.enabled)
             .flat_map(|lang| lang.file_extensions.clone())
             .map(|ext| ext.trim_start_matches('.').to_string()) // Remove leading dots
             .collect();
-            
+
         let final_file_extensions = if file_extensions.is_empty() {
             vec![
                 "py".to_string(),
@@ -102,7 +105,7 @@ impl From<ValknutConfig> for AnalysisConfig {
         } else {
             file_extensions
         };
-        
+
         let final_exclude_directories = if exclude_directories.is_empty() {
             vec![
                 "node_modules".to_string(),
@@ -115,7 +118,7 @@ impl From<ValknutConfig> for AnalysisConfig {
         } else {
             exclude_directories
         };
-        
+
         Self {
             enable_structure_analysis: config.analysis.enable_structure_analysis,
             enable_complexity_analysis: true, // Default enabled, no equivalent in core config
