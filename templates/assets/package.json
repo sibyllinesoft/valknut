@@ -1,0 +1,46 @@
+{
+  "name": "assets",
+  "version": "1.0.0",
+  "description": "Valknut React Tree Components with Testing",
+  "main": "react-arborist.min.js",
+  "scripts": {
+    "build": "webpack",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:pages": "playwright test",
+    "test:playwright": "playwright test tests/playwright",
+    "dev": "webpack --mode development --watch",
+    "build:dev": "webpack --mode development"
+  },
+  "keywords": [
+    "react",
+    "tree",
+    "code-analysis",
+    "valknut"
+  ],
+  "author": "Valknut",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@babel/preset-react": "^7.22.0",
+    "@playwright/test": "^1.40.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.4.3",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^20.0.3",
+    "react": "^19.1.1",
+    "react-arborist": "^3.4.3",
+    "react-dom": "^19.1.1",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}

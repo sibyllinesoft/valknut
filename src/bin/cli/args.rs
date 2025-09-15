@@ -19,13 +19,19 @@ Generate professional reports for teams and integrate with development workflows
 
 Common Usage:
 
-  # Quick analysis of current directory (default)
+  # Comprehensive analysis (all analyses enabled by default)
   valknut analyze
   
-  # Generate team-friendly HTML report
+  # Generate team-friendly HTML report with coverage discovery
   valknut analyze --format html ./src
   
-  # Analyze with custom output directory
+  # Disable specific analyses if not needed
+  valknut analyze --no-coverage --no-impact ./src
+  
+  # Use specific coverage file instead of auto-discovery
+  valknut analyze --coverage-file ./coverage.xml ./src
+  
+  # Custom output directory
   valknut analyze --out .valknut/reports
   
   # Start MCP server for IDE integration
@@ -81,6 +87,10 @@ pub enum Commands {
     /// List supported programming languages and their status
     #[command(name = "list-languages")]
     ListLanguages,
+    
+    /// Live reachability analysis for production call graphs
+    #[command(name = "live-reach")]
+    LiveReach(valknut_rs::live::cli::LiveReachArgs),
     
     // Legacy individual analyzers for backward compatibility
     /// Analyze code structure and generate refactoring recommendations
@@ -149,6 +159,140 @@ pub struct AnalyzeArgs {
     /// Maximum allowed high-priority issues count [default: 5]
     #[arg(long)]
     pub max_high_priority: Option<usize>,
+    
+    // === Clone Detection Options ===
+    /// Enable semantic clone detection with LSH analysis
+    #[arg(long)]
+    pub semantic_clones: bool,
+    
+    /// Enable strict dedupe analysis with enhanced noise filtering
+    #[arg(long)]
+    pub strict_dedupe: bool,
+    
+    /// Disable automatic threshold calibration (denoising is enabled by default)
+    #[arg(long)]
+    pub no_auto: bool,
+    
+    /// Perform loose sweep analysis on top N candidates for threshold tuning
+    #[arg(long)]
+    pub loose_sweep: bool,
+    
+    /// Enable TF-IDF rarity weighting for structural analysis
+    #[arg(long)]
+    pub rarity_weighting: bool,
+    
+    /// Enable structural validation with PDG motifs and basic blocks
+    #[arg(long)]
+    pub structural_validation: bool,
+    
+    /// Enable live reachability boost for clone prioritization
+    #[arg(long)]
+    pub live_reach_boost: bool,
+    
+    // === Clone Denoising Options ===
+    /// Disable clone denoising system (enabled by default for intelligent clone detection)
+    #[arg(long)]
+    pub no_denoise: bool,
+    
+    /// Minimum function tokens for clone detection (default: 40)
+    #[arg(long)]
+    pub min_function_tokens: Option<usize>,
+    
+    /// Minimum match tokens for clone detection (default: 24)
+    #[arg(long)]
+    pub min_match_tokens: Option<usize>,
+    
+    /// Minimum distinct blocks required for meaningful matches (default: 2)
+    #[arg(long)]
+    pub require_blocks: Option<usize>,
+    
+    /// Similarity threshold for clone detection (0.0-1.0, default: 0.82)
+    #[arg(long)]
+    pub similarity: Option<f64>,
+    
+    
+    /// Dry-run mode - analyze but don't change behavior (for testing)
+    #[arg(long)]
+    pub denoise_dry_run: bool,
+    
+    // === Advanced Denoising Configuration ===
+    /// AST similarity weight (0.0-1.0, default: 0.35)
+    #[arg(long)]
+    pub ast_weight: Option<f64>,
+    
+    /// PDG similarity weight (0.0-1.0, default: 0.45)
+    #[arg(long)]
+    pub pdg_weight: Option<f64>,
+    
+    /// Embedding similarity weight (0.0-1.0, default: 0.20)
+    #[arg(long)]
+    pub emb_weight: Option<f64>,
+    
+    /// I/O mismatch penalty (0.0-1.0, default: 0.25)
+    #[arg(long)]
+    pub io_mismatch_penalty: Option<f64>,
+    
+    /// Auto-calibration quality target (0.0-1.0, default: 0.8)
+    #[arg(long)]
+    pub quality_target: Option<f64>,
+    
+    /// Auto-calibration sample size (default: 200)
+    #[arg(long)]
+    pub sample_size: Option<usize>,
+    
+    /// Minimum saved tokens for ranking (default: 100)
+    #[arg(long)]
+    pub min_saved_tokens: Option<usize>,
+    
+    /// Minimum rarity gain threshold (default: 1.2)
+    #[arg(long)]
+    pub min_rarity_gain: Option<f64>,
+    
+    // === Coverage Analysis Options ===
+    /// Disable coverage analysis (enabled by default for comprehensive analysis)
+    #[arg(long)]
+    pub no_coverage: bool,
+    
+    /// Specific coverage file to use (overrides auto-discovery)
+    #[arg(long)]
+    pub coverage_file: Option<PathBuf>,
+    
+    /// Disable automatic coverage file discovery
+    #[arg(long)]
+    pub no_coverage_auto_discover: bool,
+    
+    /// Maximum age of coverage files in days (default: 7, 0 = no limit)
+    #[arg(long)]
+    pub coverage_max_age_days: Option<u32>,
+    
+    // === Analysis Disable Options ===
+    /// Disable complexity analysis
+    #[arg(long)]
+    pub no_complexity: bool,
+    
+    /// Disable structure analysis
+    #[arg(long)]
+    pub no_structure: bool,
+    
+    /// Disable refactoring analysis
+    #[arg(long)]
+    pub no_refactoring: bool,
+    
+    /// Disable impact analysis (dependency cycles, centrality)
+    #[arg(long)]
+    pub no_impact: bool,
+    
+    /// Disable LSH clone detection analysis
+    #[arg(long)]
+    pub no_lsh: bool,
+    
+    /// Enable AI refactoring oracle using Gemini 2.5 Pro (requires GEMINI_API_KEY env var)
+    #[arg(long)]
+    pub oracle: bool,
+    
+    /// Maximum tokens to send to refactoring oracle (default: 500000)
+    #[arg(long)]
+    pub oracle_max_tokens: Option<usize>,
 }
 
 #[derive(Args)]

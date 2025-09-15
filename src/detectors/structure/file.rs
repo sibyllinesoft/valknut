@@ -6,6 +6,8 @@ use petgraph::graph::NodeIndex;
 
 use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
+use crate::lang::python::PythonAdapter;
+// use crate::lang::rust_lang::RustAdapter; // Temporarily disabled for Phase 0
 
 use super::config::{
     StructureConfig, FileSplitPack, SuggestedSplit, SplitValue, SplitEffort,
@@ -88,17 +90,8 @@ impl FileAnalyzer {
         let mut graph = petgraph::Graph::new_undirected();
         let content = FileReader::read_to_string(file_path)?;
         
-        // Extract entities based on file type
-        let entities = if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-            match ext {
-                "py" => self.extract_python_entities(&content)?,
-                "js" | "ts" | "jsx" | "tsx" => self.extract_javascript_entities(&content)?,
-                "rs" => self.extract_rust_entities(&content)?,
-                _ => Vec::new(),
-            }
-        } else {
-            Vec::new()
-        };
+        // Extract entities based on file type using tree-sitter
+        let entities = self.extract_entities_with_treesitter(file_path, &content)?;
         
         if entities.len() < 2 {
             return Ok(graph); // Need at least 2 entities for cohesion analysis
@@ -356,6 +349,82 @@ impl FileAnalyzer {
         })
     }
 
+    /// Extract entities using tree-sitter for accurate parsing
+    pub fn extract_entities_with_treesitter(&self, file_path: &Path, content: &str) -> Result<Vec<EntityNode>> {
+        let file_path_str = file_path.to_string_lossy().to_string();
+        
+        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+            match ext {
+                "py" => self.extract_python_entities_treesitter(content, &file_path_str),
+                "js" | "jsx" | "ts" | "tsx" => {
+                    // Fallback to legacy extraction for JS/TS until tree-sitter linking is fixed
+                    self.extract_javascript_entities(content)
+                },
+                "rs" => self.extract_rust_entities_treesitter(content, &file_path_str),
+                "go" => {
+                    // Fallback to text-based approach for Go
+                    Ok(Vec::new()) // TODO: Implement Go extraction
+                },
+                _ => Ok(Vec::new()),
+            }
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Extract Python entities using simple tree-sitter approach
+    fn extract_python_entities_treesitter(&self, content: &str, file_path: &str) -> Result<Vec<EntityNode>> {
+        let mut adapter = PythonAdapter::new()?;
+        let code_entities = adapter.extract_code_entities(content, file_path)?;
+        
+        let mut entities = Vec::new();
+        
+        for entity in code_entities {
+            // Extract symbols from entity source code for cohesion analysis
+            let mut symbols = HashSet::new();
+            
+            for line in entity.source_code.lines() {
+                self.extract_symbols_from_line(line.trim(), &mut symbols);
+            }
+            
+            entities.push(EntityNode {
+                name: entity.name.clone(),
+                entity_type: entity.entity_type.clone(),
+                loc: entity.line_range.map(|(start, end)| end - start + 1).unwrap_or(1),
+                symbols,
+            });
+        }
+        
+        Ok(entities)
+    }
+
+    fn extract_rust_entities_treesitter(&self, content: &str, file_path: &str) -> Result<Vec<EntityNode>> {
+        // Temporarily disabled for Phase 0 - RustAdapter not available
+        // if let Ok(mut adapter) = RustAdapter::new() {
+        //     let _code_entities = adapter.extract_code_entities(content, file_path)?;
+        //     // TODO: Convert CodeEntity to EntityNode properly - for now using fallback
+        // }
+        
+        // Convert CodeEntity to EntityNode - need to check the correct structure for EntityNode
+        // For now, fallback to legacy extraction until EntityNode structure is clarified
+        self.extract_rust_entities(content)
+    }
+
+    /// Helper method to extract lines from source code for an entity
+    fn get_entity_lines_from_source(&self, content: &str, start_line: usize, end_line: usize) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let start_idx = (start_line.saturating_sub(1)).min(lines.len());
+        let end_idx = end_line.min(lines.len());
+        
+        if start_idx >= lines.len() || end_idx <= start_idx {
+            return String::new();
+        }
+        
+        lines[start_idx..end_idx].join("\n")
+    }
+
+    // Legacy text-based extraction methods (deprecated - kept for reference)
+    
     /// Extract Python entities (functions, classes)
     pub fn extract_python_entities(&self, content: &str) -> Result<Vec<EntityNode>> {
         let mut entities = Vec::new();
@@ -954,11 +1023,9 @@ mod tests {
 
     fn create_test_config() -> StructureConfig {
         StructureConfig {
-            structure: StructureToggles {
-                enable_branch_packs: true,
-                enable_file_split_packs: true,
-                top_packs: 20,
-            },
+            enable_branch_packs: true,
+            enable_file_split_packs: true,
+            top_packs: 20,
             fsdir: FsDirectoryConfig {
                 max_files_per_dir: 20,
                 max_subdirs_per_dir: 10,

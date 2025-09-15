@@ -52,6 +52,9 @@ async fn main() -> anyhow::Result<()> {
         Commands::ListLanguages => {
             cli::list_languages().await?;
         }
+        Commands::LiveReach(args) => {
+            cli::live_reach_command(args).await?;
+        }
         // Legacy commands for backward compatibility
         Commands::Structure(args) => {
             let config = cli::load_configuration(None).await?;

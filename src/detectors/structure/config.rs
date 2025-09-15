@@ -8,8 +8,12 @@ use serde::{Deserialize, Serialize};
 /// Configuration for structure analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructureConfig {
-    /// Structure analysis toggles
-    pub structure: StructureToggles,
+    /// Enable branch reorganization packs
+    pub enable_branch_packs: bool,
+    /// Enable file split packs
+    pub enable_file_split_packs: bool,
+    /// Maximum number of top packs to return
+    pub top_packs: usize,
     /// File system directory settings
     pub fsdir: FsDirectoryConfig,
     /// File system file settings
@@ -71,11 +75,9 @@ pub struct PartitioningConfig {
 impl Default for StructureConfig {
     fn default() -> Self {
         Self {
-            structure: StructureToggles {
-                enable_branch_packs: true,
-                enable_file_split_packs: true,
-                top_packs: 20,
-            },
+            enable_branch_packs: true,
+            enable_file_split_packs: true,
+            top_packs: 20,
             fsdir: FsDirectoryConfig {
                 max_files_per_dir: 25,
                 max_subdirs_per_dir: 10,

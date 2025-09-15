@@ -35,7 +35,7 @@ Available across all commands:
 
 ### `analyze` - Comprehensive Code Analysis
 
-The primary command for analyzing codebases with comprehensive analysis including structure, complexity, semantic naming, and refactoring opportunities.
+The primary command for analyzing codebases with comprehensive analysis including structure, complexity, and refactoring opportunities.
 
 ```bash
 valknut analyze [OPTIONS] <PATHS>...

@@ -1,6 +1,8 @@
 //! Common AST and parsing abstractions.
 
 use serde::{Deserialize, Serialize};
+use async_trait::async_trait;
+use crate::core::errors::Result;
 
 /// Common entity types across all languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,6 +108,135 @@ impl ParseIndex {
             .map(|ids| ids.iter().filter_map(|id| self.entities.get(id)).collect())
             .unwrap_or_default()
     }
+    
+    /// Count AST nodes (approximate based on entities)
+    pub fn count_ast_nodes(&self) -> usize {
+        // Each entity represents multiple AST nodes
+        // This is a heuristic approximation
+        self.entities.len() * 8
+    }
+    
+    /// Count distinct code blocks (functions, classes, control structures)
+    pub fn count_distinct_blocks(&self) -> usize {
+        let mut block_count = 0;
+        
+        for entity in self.entities.values() {
+            match entity.kind {
+                EntityKind::Function | EntityKind::Method => block_count += 1,
+                EntityKind::Class | EntityKind::Interface | EntityKind::Struct | EntityKind::Enum => block_count += 1,
+                EntityKind::Module => block_count += 1,
+                _ => {}
+            }
+        }
+        
+        // Add heuristic for control structures based on function count
+        let function_count = self.entities.values()
+            .filter(|entity| matches!(entity.kind, EntityKind::Function | EntityKind::Method))
+            .count();
+        
+        block_count += function_count * 2; // Heuristic: each function has ~2 control structures
+        
+        block_count.max(1) // At least 1 block
+    }
+    
+    /// Get all function calls from the parsed entities
+    pub fn get_function_calls(&self) -> Vec<String> {
+        let mut calls = Vec::new();
+        
+        // Extract function calls from metadata where available
+        for entity in self.entities.values() {
+            if let Some(call_metadata) = entity.metadata.get("function_calls") {
+                if let Some(call_array) = call_metadata.as_array() {
+                    for call in call_array {
+                        if let Some(call_str) = call.as_str() {
+                            calls.push(call_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        calls
+    }
+    
+    /// Check if the parsed code contains boilerplate patterns
+    pub fn contains_boilerplate_patterns(&self, patterns: &[String]) -> Vec<String> {
+        let mut found_patterns = Vec::new();
+        
+        // Check entity names and metadata for patterns
+        for entity in self.entities.values() {
+            for pattern in patterns {
+                if entity.name.contains(pattern) {
+                    found_patterns.push(pattern.clone());
+                }
+                
+                // Check in metadata
+                if let Some(source_text) = entity.metadata.get("source_text") {
+                    if let Some(text) = source_text.as_str() {
+                        if text.contains(pattern) {
+                            found_patterns.push(pattern.clone());
+                        }
+                    }
+                }
+            }
+        }
+        
+        found_patterns.sort();
+        found_patterns.dedup();
+        found_patterns
+    }
+    
+    /// Extract identifiers from all entities
+    pub fn extract_identifiers(&self) -> Vec<String> {
+        let mut identifiers = Vec::new();
+        
+        for entity in self.entities.values() {
+            identifiers.push(entity.name.clone());
+            
+            // Extract identifiers from metadata
+            if let Some(identifiers_metadata) = entity.metadata.get("identifiers") {
+                if let Some(id_array) = identifiers_metadata.as_array() {
+                    for id in id_array {
+                        if let Some(id_str) = id.as_str() {
+                            identifiers.push(id_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        identifiers.sort();
+        identifiers.dedup();
+        identifiers
+    }
+}
+
+/// Language adapter trait for AST parsing and analysis
+#[async_trait]
+pub trait LanguageAdapter: Send + Sync {
+    /// Parse source code and return a parse index
+    fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex>;
+    
+    /// Extract function calls from source code using tree-sitter
+    fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>>;
+    
+    /// Check if source contains boilerplate patterns using AST analysis
+    fn contains_boilerplate_patterns(&mut self, source: &str, patterns: &[String]) -> Result<Vec<String>>;
+    
+    /// Extract identifiers from source using tree-sitter
+    fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>>;
+    
+    /// Count AST nodes in the source
+    fn count_ast_nodes(&mut self, source: &str) -> Result<usize>;
+    
+    /// Count distinct code blocks (functions, classes, control structures)
+    fn count_distinct_blocks(&mut self, source: &str) -> Result<usize>;
+    
+    /// Normalize source code for comparison (AST-based)
+    fn normalize_source(&mut self, source: &str) -> Result<String>;
+    
+    /// Get language name
+    fn language_name(&self) -> &str;
 }
 
 #[cfg(test)]

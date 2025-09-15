@@ -1,0 +1,124 @@
+<!-- Code Analysis Tree -->
+<div class="results-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0;">Code Analysis Tree</h2>
+        <div class="filter-dropdown" style="position: relative;">
+            <button id="filter-button" onclick="toggleFilterMenu()" style="display: flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px solid var(--keyline); padding: 0.5rem 0.75rem; border-radius: var(--radius); cursor: pointer; color: var(--text); font-size: 0.875rem;">
+                <i data-lucide="filter" style="width: 16px; height: 16px;"></i>
+                Filter
+                <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+            </button>
+            <div id="filter-menu" class="filter-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 0.25rem; background: rgba(42, 42, 42, 0.85); backdrop-filter: blur(15px); border: 1px solid var(--keyline); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.3); min-width: 320px; z-index: 10; padding: 1rem;">
+                <div style="padding: 0.75rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.75rem;">
+                        <input type="checkbox" id="filter-high-complexity" onchange="applyFilters()" checked>
+                        <span style="font-weight: 500;">High Complexity Only</span>
+                    </label>
+                    <div style="height: 1px; background: var(--keyline); margin: 0.5rem 0;"></div>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="filter-extract-method" onchange="applyFilters()" checked>
+                        <span>Extract Method</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="filter-simplify-conditionals" onchange="applyFilters()" checked>
+                        <span>Simplify Conditionals</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="filter-improve-structure" onchange="applyFilters()" checked>
+                        <span>Improve Structure</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="filter-general-refactoring" onchange="applyFilters()" checked>
+                        <span>General Refactoring</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- React Arborist Tree Container -->
+    <div id="react-tree-root" class="analysis-tree" style="height: 600px;">
+        <!-- Tree will be mounted here by React -->
+    </div>
+    
+    <!-- Data for React tree (embedded JSON) -->
+    <script id="tree-data" type="application/json">
+        {
+            "refactoringCandidatesByFile": [
+                {{#each refactoring_candidates_by_file}}
+                {
+                    "fileName": "{{file_name}}",
+                    "filePath": "{{file_path}}",
+                    "highestPriority": "{{highest_priority}}",
+                    "entityCount": {{entity_count}},
+                    "avgScore": {{avg_score}},
+                    "totalIssues": {{total_issues}},
+                    "entities": [
+                        {{#each entities}}
+                        {
+                            "name": "{{name}}",
+                            "priority": "{{priority}}",
+                            "score": {{score}},
+                            "lineRange": {{#if line_range}}[{{line_range.0}}, {{line_range.1}}]{{else}}null{{/if}},
+                            "issueCount": {{issue_count}},
+                            "suggestionCount": {{suggestion_count}},
+                            "issueCategories": "{{#each issues}}{{category}}{{#unless @last}}, {{/unless}}{{/each}}",
+                            "suggestionTypes": "{{#each suggestions}}{{type}}{{#unless @last}}, {{/unless}}{{/each}}"
+                        }{{#unless @last}},{{/unless}}
+                        {{/each}}
+                    ]
+                }{{#unless @last}},{{/unless}}
+                {{/each}}
+            ],
+            "directoryHealthTree": {{#if directory_health_tree}}{{json directory_health_tree}}{{else}}null{{/if}}
+        }
+    </script>
+    
+    
+    <!-- React and dependencies - bundled -->
+    <script src="./react.min.js"></script>
+    <script src="./react-dom.min.js"></script>
+    <script src="./react-tree-bundle.min.js"></script>
+    
+    <!-- Mount React Tree Component -->
+    <script>
+        // Mount the React component
+        window.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('react-tree-root');
+            if (container && window.CodeAnalysisTree) {
+                try {
+                    // Parse the embedded tree data
+                    const treeDataScript = document.getElementById('tree-data');
+                    let analysisData = null;
+                    
+                    if (treeDataScript) {
+                        const rawData = treeDataScript.textContent;
+                        analysisData = JSON.parse(rawData);
+                        console.log('📊 Parsed analysis data:', analysisData);
+                    } else {
+                        console.warn('⚠️ No tree-data script element found');
+                    }
+                    
+                    // Mount React component with parsed data
+                    const { createRoot } = ReactDOM;
+                    const root = createRoot(container);
+                    root.render(React.createElement(window.CodeAnalysisTree, {
+                        data: analysisData
+                    }));
+                    
+                    // Initialize Lucide icons after React renders
+                    setTimeout(() => {
+                        if (window.lucide) {
+                            window.lucide.createIcons();
+                        }
+                    }, 100);
+                } catch (error) {
+                    console.error('❌ Failed to mount React tree:', error);
+                    // Fallback: render without data
+                    const { createRoot } = ReactDOM;
+                    const root = createRoot(container);
+                    root.render(React.createElement(window.CodeAnalysisTree));
+                }
+            }
+        });
+    </script>
+</div>

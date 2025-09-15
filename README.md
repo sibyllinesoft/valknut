@@ -49,7 +49,7 @@ valknut analyze --format html --out reports/ ./src
 valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 ```
 
-**That's it.** Valknut will analyze your code structure, complexity, naming quality, and technical debt, then provide prioritized recommendations for improvement.
+**That's it.** Valknut will analyze your code structure, complexity, and technical debt, then provide prioritized recommendations for improvement.
 
 ## What Makes Valknut Different
 
@@ -74,7 +74,7 @@ Comprehensive structural analysis for Python, TypeScript, JavaScript, Rust, Go, 
 
 **Complexity Intelligence**: Goes beyond cyclomatic complexity to measure cognitive load and refactoring priority
 
-**Code Quality Analysis**: Statistical evaluation of code patterns and structural complexity
+**Code Quality Analysis**: Statistical evaluation of code patterns, structural complexity, and maintainability metrics
 
 **Refactoring Recommendations**: Actionable insights with quantified impact scoring and effort estimation  
 
@@ -234,7 +234,7 @@ valknut analyze --format sonar ./src
 valknut analyze --config custom.yml ./src
 
 # Specific analysis types
-valknut analyze --skip-naming --skip-refactoring ./src
+valknut analyze --skip-refactoring ./src
 
 # Large codebase optimization
 valknut analyze --max-files 50000 --parallel 8 ./src

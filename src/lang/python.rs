@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
-use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
+use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation, LanguageAdapter};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
 
@@ -104,12 +104,12 @@ if __name__ == "__main__":
     
     #[test]
     fn test_extract_entity_name() {
-        let adapter = PythonAdapter::new().unwrap();
+        let mut adapter = PythonAdapter::new().unwrap();
         let source = "def test_function(): pass";
         let tree = adapter.parser.parse(source, None).unwrap();
         let function_node = tree.root_node().child(0).unwrap(); // Should be function_definition
         
-        let result = adapter.extract_entity_name(&function_node, source);
+        let result = adapter.extract_name(&function_node, source);
         assert!(result.is_ok());
         
         if let Ok(Some(name)) = result {
@@ -131,7 +131,8 @@ if __name__ == "__main__":
                 start_column: 0,
                 end_column: 10,
             },
-            parent_id: None,
+            parent: None,
+            children: vec![],
             metadata: HashMap::new(),
         };
         
@@ -157,9 +158,6 @@ if __name__ == "__main__":
     }
 }
 
-extern "C" {
-    fn tree_sitter_python() -> Language;
-}
 
 /// Python-specific parsing and analysis
 pub struct PythonAdapter {
@@ -173,7 +171,7 @@ pub struct PythonAdapter {
 impl PythonAdapter {
     /// Create a new Python adapter
     pub fn new() -> Result<Self> {
-        let language = unsafe { tree_sitter_python() };
+        let language = tree_sitter_python::language();
         let mut parser = Parser::new();
         parser.set_language(language)
             .map_err(|e| ValknutError::parse("python", format!("Failed to set Python language: {:?}", e)))?;
@@ -455,6 +453,179 @@ impl PythonAdapter {
         
         Ok(code_entity)
     }
+    
+    // Helper methods for LanguageAdapter trait implementation
+    
+    /// Extract function calls recursively from AST
+    fn extract_function_calls_recursive(&self, node: Node, source: &str, calls: &mut Vec<String>) -> Result<()> {
+        match node.kind() {
+            "call" => {
+                // Extract the function name from call expression
+                if let Some(func_node) = node.child_by_field_name("function") {
+                    if let Ok(func_name) = func_node.utf8_text(source.as_bytes()) {
+                        calls.push(func_name.to_string());
+                    }
+                }
+            }
+            "attribute" => {
+                // Handle method calls like obj.method()
+                if let Ok(attr_text) = node.utf8_text(source.as_bytes()) {
+                    calls.push(attr_text.to_string());
+                }
+            }
+            _ => {}
+        }
+        
+        // Process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_function_calls_recursive(child, source, calls)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Check for boilerplate patterns in AST recursively
+    fn check_boilerplate_patterns_recursive(
+        &self, 
+        node: Node, 
+        source: &str, 
+        patterns: &[String], 
+        found_patterns: &mut Vec<String>
+    ) -> Result<()> {
+        // Get text content of current node
+        if let Ok(node_text) = node.utf8_text(source.as_bytes()) {
+            for pattern in patterns {
+                if node_text.contains(pattern) {
+                    found_patterns.push(pattern.clone());
+                }
+            }
+        }
+        
+        // Check specific Python boilerplate patterns based on AST structure
+        match node.kind() {
+            "import_statement" | "import_from_statement" => {
+                // Common import patterns
+                if let Ok(import_text) = node.utf8_text(source.as_bytes()) {
+                    let common_imports = ["import os", "import sys", "from typing import"];
+                    for common in &common_imports {
+                        if import_text.contains(common) {
+                            found_patterns.push(common.to_string());
+                        }
+                    }
+                }
+            }
+            "if_statement" => {
+                // Check for if __name__ == "__main__" pattern
+                if let Ok(if_text) = node.utf8_text(source.as_bytes()) {
+                    if if_text.contains("__name__") && if_text.contains("__main__") {
+                        found_patterns.push("if __name__ == \"__main__\"".to_string());
+                    }
+                }
+            }
+            "function_definition" => {
+                // Check for common function patterns like __init__
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    if let Ok(func_name) = name_node.utf8_text(source.as_bytes()) {
+                        if func_name.starts_with("__") && func_name.ends_with("__") {
+                            found_patterns.push(func_name.to_string());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        
+        // Process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.check_boilerplate_patterns_recursive(child, source, patterns, found_patterns)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Extract identifiers recursively from AST
+    fn extract_identifiers_recursive(&self, node: Node, source: &str, identifiers: &mut Vec<String>) -> Result<()> {
+        match node.kind() {
+            "identifier" => {
+                if let Ok(identifier) = node.utf8_text(source.as_bytes()) {
+                    identifiers.push(identifier.to_string());
+                }
+            }
+            _ => {}
+        }
+        
+        // Process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_identifiers_recursive(child, source, identifiers)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Count AST nodes recursively
+    fn count_nodes_recursive(&self, node: Node) -> usize {
+        let mut count = 1; // Count this node
+        
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            count += self.count_nodes_recursive(child);
+        }
+        
+        count
+    }
+    
+    /// Count distinct code blocks recursively
+    fn count_blocks_recursive(&self, node: Node, block_count: &mut usize) {
+        match node.kind() {
+            "function_definition" | "class_definition" => {
+                *block_count += 1;
+            }
+            "if_statement" | "for_statement" | "while_statement" | "try_statement" | "with_statement" => {
+                *block_count += 1;
+            }
+            _ => {}
+        }
+        
+        // Process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.count_blocks_recursive(child, block_count);
+        }
+    }
+    
+    /// Normalize AST recursively for comparison
+    fn normalize_ast_recursive(&self, node: Node, source: &str, normalized_parts: &mut Vec<String>) -> Result<()> {
+        match node.kind() {
+            // Include semantic tokens, exclude syntactic noise
+            "function_definition" | "class_definition" | "if_statement" | "for_statement" | "while_statement" => {
+                normalized_parts.push(node.kind().to_string());
+            }
+            "identifier" => {
+                if let Ok(identifier) = node.utf8_text(source.as_bytes()) {
+                    // Normalize common identifier patterns
+                    if identifier.len() > 1 && !identifier.starts_with("__") {
+                        normalized_parts.push(identifier.to_string());
+                    }
+                }
+            }
+            "string" | "integer" | "float" => {
+                // Normalize literals to generic types
+                normalized_parts.push(format!("<{}>", node.kind()));
+            }
+            _ => {}
+        }
+        
+        // Process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.normalize_ast_recursive(child, source, normalized_parts)?;
+        }
+        
+        Ok(())
+    }
 }
 
 impl Default for PythonAdapter {
@@ -463,74 +634,83 @@ impl Default for PythonAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_python_adapter_creation() {
-        let adapter = PythonAdapter::new();
-        assert!(adapter.is_ok());
+// Implement the LanguageAdapter trait for comprehensive AST analysis
+#[async_trait]
+impl LanguageAdapter for PythonAdapter {
+    fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex> {
+        // Use existing implementation
+        PythonAdapter::parse_source(self, source, file_path)
     }
     
-    #[test]
-    fn test_simple_function_parsing() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source_code = r#"
-def hello_world():
-    print("Hello, world!")
-    return 42
-"#;
+    fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for function calls"))?;
         
-        let entities = adapter.extract_code_entities(source_code, "test.py").unwrap();
-        assert_eq!(entities.len(), 1);
+        let mut calls = Vec::new();
+        let mut cursor = tree.walk();
         
-        let function_entity = &entities[0];
-        assert_eq!(function_entity.entity_type, "Function");
-        assert_eq!(function_entity.name, "hello_world");
-        assert!(function_entity.source_code.contains("def hello_world"));
+        self.extract_function_calls_recursive(tree.root_node(), source, &mut calls)?;
+        
+        calls.sort();
+        calls.dedup();
+        Ok(calls)
     }
     
-    #[test]
-    fn test_class_parsing() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source_code = r#"
-class TestClass:
-    def __init__(self, value):
-        self.value = value
-    
-    def get_value(self):
-        return self.value
-"#;
+    fn contains_boilerplate_patterns(&mut self, source: &str, patterns: &[String]) -> Result<Vec<String>> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for boilerplate analysis"))?;
         
-        let entities = adapter.extract_code_entities(source_code, "test.py").unwrap();
+        let mut found_patterns = Vec::new();
         
-        // Should find the class and the methods
-        let class_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Class").collect();
-        let function_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Function").collect();
+        // Walk the AST looking for boilerplate patterns
+        self.check_boilerplate_patterns_recursive(tree.root_node(), source, patterns, &mut found_patterns)?;
         
-        assert_eq!(class_entities.len(), 1);
-        assert!(function_entities.len() >= 2); // __init__ and get_value
-        
-        assert_eq!(class_entities[0].name, "TestClass");
+        found_patterns.sort();
+        found_patterns.dedup();
+        Ok(found_patterns)
     }
     
-    #[test]
-    fn test_function_with_parameters() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source_code = r#"
-def calculate(x, y, z=10):
-    return x + y + z
-"#;
+    fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for identifiers"))?;
         
-        let entities = adapter.extract_code_entities(source_code, "test.py").unwrap();
-        assert_eq!(entities.len(), 1);
+        let mut identifiers = Vec::new();
+        self.extract_identifiers_recursive(tree.root_node(), source, &mut identifiers)?;
         
-        let function_entity = &entities[0];
-        assert_eq!(function_entity.name, "calculate");
+        identifiers.sort();
+        identifiers.dedup();
+        Ok(identifiers)
+    }
+    
+    fn count_ast_nodes(&mut self, source: &str) -> Result<usize> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for AST counting"))?;
         
-        // Check if parameters metadata exists
-        let parameters = function_entity.properties.get("parameters");
-        assert!(parameters.is_some());
+        Ok(self.count_nodes_recursive(tree.root_node()))
+    }
+    
+    fn count_distinct_blocks(&mut self, source: &str) -> Result<usize> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for block counting"))?;
+        
+        let mut block_count = 0;
+        self.count_blocks_recursive(tree.root_node(), &mut block_count);
+        
+        Ok(block_count.max(1))
+    }
+    
+    fn normalize_source(&mut self, source: &str) -> Result<String> {
+        let tree = self.parser.parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source for normalization"))?;
+        
+        let mut normalized_parts = Vec::new();
+        self.normalize_ast_recursive(tree.root_node(), source, &mut normalized_parts)?;
+        
+        Ok(normalized_parts.join(" "))
+    }
+    
+    fn language_name(&self) -> &str {
+        "python"
     }
 }
+

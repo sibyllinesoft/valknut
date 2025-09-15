@@ -2,8 +2,8 @@ pub use pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, 
 pub use pipeline_results::{
     ComprehensiveAnalysisResult, AnalysisSummary, StructureAnalysisResults,
     ComplexityAnalysisResults, RefactoringAnalysisResults, ImpactAnalysisResults,
-    HealthMetrics, PipelineResults, PipelineStatistics, MemoryStats, 
-    ResultSummary, ScoringResults, FileScore, PipelineStatus
+    CoverageAnalysisResults, HealthMetrics, PipelineResults, PipelineStatistics, 
+    MemoryStats, ResultSummary, ScoringResults, FileScore, PipelineStatus
 };
 pub use pipeline_executor::{AnalysisPipeline, ProgressCallback, ExtractorRegistry};
 pub use pipeline_stages::AnalysisStages;
@@ -98,6 +98,23 @@ mod tests {
                 chokepoints: vec![],
                 clone_groups: vec![],
                 issues_count: 0,
+            },
+            lsh: pipeline_results::LshAnalysisResults {
+                enabled: false,
+                clone_pairs: vec![],
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            },
+            coverage: pipeline_results::CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: vec![],
+                coverage_gaps: vec![],
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: "none".to_string(),
             },
             health_metrics: pipeline_results::HealthMetrics {
                 overall_health_score: 88.0,

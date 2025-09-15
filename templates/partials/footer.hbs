@@ -1,0 +1,195 @@
+    <!-- Raw Data for Debugging -->
+    <div class="raw-data">
+        <details>
+            <summary>Raw Analysis Data (Debug)</summary>
+            <pre>{{json results}}</pre>
+        </details>
+    </div>
+</div>
+
+<script>
+    // Filter dropdown functionality
+    function toggleFilterMenu() {
+        const menu = document.getElementById('filter-menu');
+        const button = document.getElementById('filter-button');
+        const chevron = button.querySelector('[data-lucide="chevron-down"]');
+        
+        if (menu.style.display === 'none') {
+            menu.style.display = 'block';
+            chevron.style.transform = 'rotate(180deg)';
+        } else {
+            menu.style.display = 'none';
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+    
+    // Close filter menu when clicking outside
+    document.addEventListener('click', function(event) {
+        const dropdown = document.querySelector('.filter-dropdown');
+        const menu = document.getElementById('filter-menu');
+        
+        if (!dropdown.contains(event.target)) {
+            menu.style.display = 'none';
+            const chevron = document.querySelector('#filter-button [data-lucide="chevron-down"]');
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    });
+    
+    // Apply filters based on checkboxes
+    function applyFilters() {
+        const highComplexityOnly = document.getElementById('filter-high-complexity').checked;
+        const extractMethod = document.getElementById('filter-extract-method').checked;
+        const simplifyConditionals = document.getElementById('filter-simplify-conditionals').checked;
+        const improveStructure = document.getElementById('filter-improve-structure').checked;
+        const generalRefactoring = document.getElementById('filter-general-refactoring').checked;
+        
+        const fileNodes = document.querySelectorAll('.file-node');
+        
+        fileNodes.forEach(fileNode => {
+            let shouldShow = false;
+            
+            // Check if file meets complexity filter
+            const priority = fileNode.getAttribute('data-priority');
+            const meetsComplexityFilter = !highComplexityOnly || priority === 'Critical' || priority === 'High';
+            
+            if (meetsComplexityFilter) {
+                // Check if file has any refactoring suggestions that match the selected types
+                const suggestions = fileNode.querySelectorAll('.suggestion-item');
+                if (suggestions.length === 0) {
+                    // If no specific suggestions found, show the file (it might have general refactoring needs)
+                    shouldShow = true;
+                } else {
+                    // Check each suggestion to see if it matches selected refactoring types
+                    suggestions.forEach(suggestion => {
+                        const suggestionText = suggestion.textContent.toLowerCase();
+                        if ((extractMethod && suggestionText.includes('extract')) ||
+                            (simplifyConditionals && suggestionText.includes('conditional')) ||
+                            (improveStructure && suggestionText.includes('structure')) ||
+                            (generalRefactoring && !suggestionText.includes('extract') && 
+                             !suggestionText.includes('conditional') && !suggestionText.includes('structure'))) {
+                            shouldShow = true;
+                        }
+                    });
+                }
+            }
+            
+            // Apply filter
+            if (shouldShow) {
+                fileNode.classList.remove('filtered-out');
+            } else {
+                fileNode.classList.add('filtered-out');
+            }
+        });
+        
+        // Log filtering results
+        const visibleFiles = document.querySelectorAll('.file-node:not(.filtered-out)').length;
+        const totalFiles = fileNodes.length;
+        console.log(`Filter: Showing ${visibleFiles} of ${totalFiles} files`);
+    }
+    
+    // Enhanced tree functionality inspired by Arbiter FileTree
+    function toggleTreeNode(headerElement) {
+        const treeNode = headerElement.closest('.tree-node');
+        const chevron = headerElement.querySelector('.tree-chevron');
+        const children = treeNode.querySelector('.tree-children');
+        
+        if (!children) return;
+        
+        const isExpanded = headerElement.getAttribute('aria-expanded') === 'true';
+        
+        // Toggle expanded state
+        headerElement.setAttribute('aria-expanded', !isExpanded);
+        treeNode.classList.toggle('tree-expanded', !isExpanded);
+        
+        // Toggle children visibility with smooth animation
+        if (isExpanded) {
+            children.classList.add('collapsed');
+            children.classList.remove('expanded');
+        } else {
+            children.classList.remove('collapsed');
+            children.classList.add('expanded');
+        }
+        
+        // Rotate chevron
+        if (chevron) {
+            chevron.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
+    }
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.target.classList.contains('tree-expandable')) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleTreeNode(e.target);
+            }
+        }
+    });
+    
+    // Auto-expand critical and high priority items
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-expand functionality removed to keep all nodes collapsed by default
+        // Users can manually expand file nodes as needed
+        
+        // Initialize all chevrons to point right (collapsed state)
+        document.querySelectorAll('.tree-chevron').forEach(chevron => {
+            chevron.style.transform = 'rotate(0deg)';
+        });
+        
+        {{#if enable_animation}}
+        // Initialize trefoil animation if enabled
+        if (typeof window.initTrefoilAnimation === 'function') {
+            const canvas = document.getElementById('neural-network');
+            if (canvas) {
+                window.initTrefoilAnimation(canvas);
+            }
+        }
+        {{/if}}
+        
+        console.log(`Target: Valknut Analysis Report Loaded`);
+        console.log(`Chart: Found ${document.querySelectorAll('.tree-node').length} refactoring candidates`);
+        console.log(`Palette: Using Sibylline Design System Theme`);
+        
+        // Initialize Lucide icons
+        lucide.createIcons();
+    });
+    
+    // Smooth scrolling for tree navigation
+    function scrollToNode(nodeId) {
+        const element = document.getElementById(nodeId);
+        if (element) {
+            element.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+        }
+    }
+    
+    // Initialize Lucide icons when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        lucide.createIcons();
+    });
+
+    // Oracle phase toggle functionality
+    function togglePhase(element) {
+        const phaseCard = element.closest('.phase-card');
+        const phaseContent = phaseCard.querySelector('.phase-content');
+        const chevron = element.querySelector('[data-lucide="chevron-right"]');
+        
+        if (phaseContent.style.display === 'none') {
+            phaseContent.style.display = 'block';
+            chevron.style.transform = 'rotate(90deg)';
+        } else {
+            phaseContent.style.display = 'none';
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    // Helper function to capitalize strings (for Handlebars templates that might need it)
+    function capitalize(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    }
+</script>
+</body>
+</html>

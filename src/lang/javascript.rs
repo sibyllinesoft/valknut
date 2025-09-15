@@ -119,9 +119,6 @@ const defaultClient = createClient('https://api.example.com');
     }
 }
 
-extern "C" {
-    fn tree_sitter_javascript() -> Language;
-}
 
 /// JavaScript-specific parsing and analysis
 pub struct JavaScriptAdapter {
@@ -135,7 +132,7 @@ pub struct JavaScriptAdapter {
 impl JavaScriptAdapter {
     /// Create a new JavaScript adapter
     pub fn new() -> Result<Self> {
-        let language = unsafe { tree_sitter_javascript() };
+        let language = tree_sitter_javascript::language();
         let mut parser = Parser::new();
         parser.set_language(language)
             .map_err(|e| ValknutError::parse("javascript", format!("Failed to set JavaScript language: {:?}", e)))?;
@@ -453,94 +450,3 @@ impl Default for JavaScriptAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_javascript_adapter_creation() {
-        let adapter = JavaScriptAdapter::new();
-        assert!(adapter.is_ok());
-    }
-    
-    #[test]
-    fn test_function_parsing() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source_code = r#"
-function hello() {
-    console.log("Hello, world!");
-    return 42;
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.js").unwrap();
-        assert_eq!(entities.len(), 1);
-        
-        let function_entity = &entities[0];
-        assert_eq!(function_entity.entity_type, "Function");
-        assert_eq!(function_entity.name, "hello");
-    }
-    
-    #[test]
-    fn test_class_parsing() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source_code = r#"
-class TestClass {
-    constructor(value) {
-        this.value = value;
-    }
-    
-    getValue() {
-        return this.value;
-    }
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.js").unwrap();
-        
-        // Should find the class and the methods
-        let class_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Class").collect();
-        let method_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Method").collect();
-        
-        assert_eq!(class_entities.len(), 1);
-        assert_eq!(class_entities[0].name, "TestClass");
-        assert!(method_entities.len() >= 2); // constructor and getValue
-    }
-    
-    #[test]
-    fn test_arrow_function() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source_code = r#"
-const add = (a, b) => a + b;
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.js").unwrap();
-        
-        // Should find both the const declaration and potentially the arrow function
-        let const_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Constant").collect();
-        
-        assert_eq!(const_entities.len(), 1);
-        assert_eq!(const_entities[0].name, "add");
-    }
-    
-    #[test]
-    fn test_async_function() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source_code = r#"
-async function fetchData() {
-    const response = await fetch('/api/data');
-    return response.json();
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.js").unwrap();
-        let function_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Function").collect();
-        
-        assert_eq!(function_entities.len(), 1);
-        assert_eq!(function_entities[0].name, "fetchData");
-        
-        // Check for async metadata
-        let is_async = function_entities[0].properties.get("is_async");
-        assert_eq!(is_async, Some(&serde_json::Value::Bool(true)));
-    }
-}

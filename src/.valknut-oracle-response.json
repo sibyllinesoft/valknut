@@ -1,0 +1,240 @@
+{
+  "assessment": {
+    "health_score": 47,
+    "strengths": [
+      "Good high-level module separation (core, detectors, lang, live).",
+      "Comprehensive error handling system in `core/errors.rs`.",
+      "Use of `mod.rs` files provides clear module organization at the directory level."
+    ],
+    "weaknesses": [
+      "Presence of several monolithic 'god files', notably `core/config.rs`, `api/results.rs`, and `bin/cli/commands.rs`.",
+      "High coupling between the public `api` layer and the internal `core` logic, especially around configuration and result types.",
+      "Complex and sprawling configuration structure centralized in `core/config.rs`, making feature changes brittle.",
+      "The API layer contains excessive data transformation logic, blurring its responsibility as a simple facade."
+    ],
+    "architecture_quality": "The architecture has a solid foundation with a clear separation of concerns into high-level modules like `core`, `detectors`, and `lang`. However, this principle is violated within the modules themselves, leading to large, low-cohesion files. The boundary between the public API and the core engine is particularly problematic, involving multiple, complex data transformations for configuration and results, which indicates tight coupling and a leaky abstraction.",
+    "organization_quality": "The directory structure follows standard Rust conventions, which is good for navigability. The primary organizational issue is at the file level. Many files have grown excessively large (15k-22k tokens), indicating they have accumulated multiple responsibilities over time. This severely impacts maintainability and makes it difficult for developers to understand and modify the code."
+  },
+  "refactoring_plan": {
+    "phases": [
+      {
+        "id": "phase-1-config-decomposition",
+        "name": "Configuration System Refactoring",
+        "description": "Deconstruct the monolithic configuration system to improve modularity and reduce coupling. Each feature should own its configuration, eliminating the centralized `core/config.rs` bottleneck.",
+        "priority": 1,
+        "subsystems": [
+          {
+            "id": "config-struct-splitting",
+            "name": "Configuration Decomposition",
+            "affected_files": [
+              "src/core/config.rs",
+              "src/api/config_types.rs",
+              "src/core/pipeline/pipeline_config.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-1.1-split-valknut-config",
+                "title": "Decompose Monolithic ValknutConfig",
+                "description": "Break down the large `ValknutConfig` struct in `core/config.rs` into smaller, feature-specific structs (e.g., `DenoiseConfig`, `LshConfig`, `CoverageConfig`). `StructureConfig` already follows this pattern and can be used as a model.",
+                "task_type": "refactor_class",
+                "files": [
+                  "src/core/config.rs"
+                ],
+                "estimated_hours": 12.0,
+                "risk_level": "high",
+                "benefits": [
+                  "Improves Single Responsibility Principle.",
+                  "Reduces coupling between features.",
+                  "Simplifies adding or modifying feature configurations."
+                ]
+              },
+              {
+                "id": "task-1.2-relocate-configs",
+                "title": "Relocate Feature Configs to Respective Modules",
+                "description": "Move the newly created feature-specific configuration structs into their corresponding detector/feature modules (e.g., `DenoiseConfig` should move to `src/detectors/clone_detection/config.rs` or similar).",
+                "task_type": "move_module",
+                "files": [
+                  "src/core/config.rs",
+                  "src/detectors/"
+                ],
+                "estimated_hours": 8.0,
+                "risk_level": "medium",
+                "benefits": [
+                  "Improves code cohesion and organization.",
+                  "Makes features more self-contained."
+                ]
+              },
+              {
+                "id": "task-1.3-unify-api-config",
+                "title": "Unify API and Core Configuration",
+                "description": "Eliminate the multiple layers of configuration transformation (ApiAnalysisConfig -> ValknutConfig -> PipelineAnalysisConfig). The public `ApiAnalysisConfig` should become the single source of truth, composing the smaller feature-specific configs. This will remove redundant structs and complex mapping logic.",
+                "task_type": "architectural_change",
+                "files": [
+                  "src/api/config_types.rs",
+                  "src/api/engine.rs",
+                  "src/core/config.rs",
+                  "src/core/pipeline/pipeline_config.rs"
+                ],
+                "estimated_hours": 16.0,
+                "risk_level": "high",
+                "benefits": [
+                  "Drastically simplifies the configuration flow.",
+                  "Removes a major source of coupling between API and core.",
+                  "Reduces boilerplate and potential for configuration drift."
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phase-2-api-simplification",
+        "name": "API Layer Simplification",
+        "description": "Refactor the API layer to be a thin facade over the core engine, primarily by simplifying the oversized result structures and eliminating the complex data transformation logic within `api/results.rs`.",
+        "priority": 2,
+        "subsystems": [
+          {
+            "id": "results-unification",
+            "name": "API Results Refactoring",
+            "affected_files": [
+              "src/api/results.rs",
+              "src/core/pipeline/pipeline_results.rs",
+              "src/api/engine.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-2.1-unify-result-types",
+                "title": "Unify PipelineResults and AnalysisResults",
+                "description": "The distinction between `core::pipeline::pipeline_results::ComprehensiveAnalysisResult` and `api::results::AnalysisResults` creates a massive, brittle translation layer in `api/results.rs`. Merge them into a single, canonical result structure that the pipeline produces and the API exposes directly. Use `#[serde(skip)]` on internal-only fields if necessary.",
+                "task_type": "architectural_change",
+                "files": [
+                  "src/api/results.rs",
+                  "src/core/pipeline/pipeline_results.rs",
+                  "src/api/engine.rs"
+                ],
+                "estimated_hours": 20.0,
+                "risk_level": "high",
+                "benefits": [
+                  "Eliminates thousands of lines of complex data mapping code.",
+                  "Reduces coupling between API and core pipeline.",
+                  "Makes adding new analysis results much simpler."
+                ]
+              },
+              {
+                "id": "task-2.2-split-results-file",
+                "title": "Decompose `api/results.rs`",
+                "description": "The `api/results.rs` file is over 22,000 tokens. After unifying the result types, split the remaining definitions into a structured module, such as `api/results/summary.rs`, `api/results/candidate.rs`, and `api/results/directory_health.rs`.",
+                "task_type": "split_file",
+                "files": [
+                  "src/api/results.rs"
+                ],
+                "estimated_hours": 8.0,
+                "risk_level": "low",
+                "benefits": [
+                  "Improves maintainability and readability.",
+                  "Follows the Single Responsibility Principle for file organization."
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phase-3-cli-refactoring",
+        "name": "CLI Module Deconstruction",
+        "description": "Refactor the monolithic CLI implementation in `bin/cli` to better separate concerns, making it easier to manage commands, arguments, and output formats.",
+        "priority": 3,
+        "subsystems": [
+          {
+            "id": "cli-commands-and-output",
+            "name": "CLI Command and Output Logic",
+            "affected_files": [
+              "src/bin/cli/commands.rs",
+              "src/bin/cli/output.rs",
+              "src/bin/cli/args.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-3.1-modularize-cli-commands",
+                "title": "Split `commands.rs` into Command Modules",
+                "description": "The `bin/cli/commands.rs` file is over 21,000 tokens and handles all CLI commands. Create a new directory `bin/cli/commands/` and move the logic for each command (e.g., `analyze`, `init_config`) into its own file (e.g., `analyze.rs`).",
+                "task_type": "split_file",
+                "files": [
+                  "src/bin/cli/commands.rs"
+                ],
+                "estimated_hours": 10.0,
+                "risk_level": "medium",
+                "benefits": [
+                  "Improves code organization and maintainability.",
+                  "Makes it easier to add or modify CLI commands."
+                ]
+              },
+              {
+                "id": "task-3.2-centralize-reporting-logic",
+                "title": "Consolidate Report Generation",
+                "description": "The `bin/cli/output.rs` file contains significant report generation logic. This logic should be moved into the existing `io/reports` module. The CLI command should only be responsible for collecting arguments and calling the appropriate report generator.",
+                "task_type": "move_module",
+                "files": [
+                  "src/bin/cli/output.rs",
+                  "src/io/reports.rs"
+                ],
+                "estimated_hours": 12.0,
+                "risk_level": "medium",
+                "benefits": [
+                  "Separates presentation logic from command execution.",
+                  "Makes reporting functionality reusable outside the CLI."
+                ]
+              },
+              {
+                "id": "task-3.3-refactor-cli-args",
+                "title": "Group CLI Arguments into Sub-structs",
+                "description": "The `AnalyzeArgs` struct in `bin/cli/args.rs` is very large. Use `#[clap(flatten)]` to group related arguments into smaller structs like `QualityGateArgs`, `DenoiseArgs`, and `CoverageArgs` to improve readability and structure.",
+                "task_type": "refactor_class",
+                "files": [
+                  "src/bin/cli/args.rs"
+                ],
+                "estimated_hours": 4.0,
+                "risk_level": "low",
+                "benefits": [
+                  "Improves argument parser maintainability.",
+                  "Makes the CLI's configuration options easier to understand."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "risk_assessment": {
+    "overall_risk": "high",
+    "risks": [
+      {
+        "category": "technical",
+        "description": "Refactoring core data structures like `ValknutConfig` and `AnalysisResults` will cause significant breaking changes to the public API and configuration file format.",
+        "probability": "high",
+        "impact": "high",
+        "mitigation": "Introduce new structures alongside old ones, provide a backward-compatibility layer for configuration files, and clearly document the breaking changes in a major version release."
+      },
+      {
+        "category": "technical",
+        "description": "The architectural changes are widespread and could introduce subtle regressions in analysis logic that are difficult to detect with unit tests alone.",
+        "probability": "medium",
+        "impact": "high",
+        "mitigation": "Create a comprehensive suite of integration tests that analyze a sample repository and snapshot the final report. Compare snapshots before and after refactoring to detect any changes in output."
+      },
+      {
+        "category": "process",
+        "description": "The refactoring effort is substantial and may block or slow down new feature development in the short term, potentially impacting project timelines.",
+        "probability": "high",
+        "impact": "medium",
+        "mitigation": "Execute the refactoring plan in phases, delivering value incrementally. Prioritize the configuration refactoring (Phase 1) as it unblocks future development and reduces friction."
+      }
+    ],
+    "mitigation_strategies": [
+      "Perform refactoring on a separate, long-lived feature branch to avoid disrupting the main development line.",
+      "Increase code review scrutiny for all changes related to this plan, requiring at least two approvals.",
+      "Communicate breaking changes to all consumers of the library well in advance of the release."
+    ]
+  }
+}

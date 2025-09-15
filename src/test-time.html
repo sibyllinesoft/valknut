@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repository Analysis: Scribe Analysis</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #b5b5b5;
+            --text-muted: #888;
+            --accent-primary: #4f9cf9;
+            --accent-secondary: #7c3aed;
+            --border-color: #404040;
+            --hover-color: #333333;
+            --code-bg: #252525;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            color: white;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.01) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3e%3cg fill='none' fill-rule='evenodd'%3e%3cg fill='%23ffffff' fill-opacity='0.02'%3e%3ccircle cx='20' cy='20' r='1'/%3e%3c/g%3e%3c/g%3e%3c/svg%3e");
+            pointer-events: none;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header .meta {
+            margin-top: 20px;
+            opacity: 0.9;
+            font-size: 13px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .meta-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
+        }
+        
+        .stats {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .toc {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toc h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 8px;
+        }
+        
+        .toc li {
+            margin: 0;
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .toc a:hover {
+            color: var(--accent-primary);
+            background: var(--hover-color);
+        }
+        
+        .file-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .file-item {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .file-item:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .content {
+            padding: 24px;
+            background: var(--bg-secondary);
+        }
+        
+        .file-section {
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        
+        .file-header {
+            background: var(--bg-tertiary);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-content {
+            max-height: 600px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .file-content::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        
+        .file-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        pre {
+            margin: 0;
+            padding: 24px;
+            background: var(--code-bg);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-primary);
+        }
+        
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .icon-lg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Vanilla JavaScript Tree Styles */
+        .tree-container {
+            height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            user-select: none;
+            border-radius: 4px;
+            margin: 1px 0;
+        }
+
+        .tree-node:hover {
+            background: var(--hover-color);
+            color: var(--accent-primary);
+        }
+
+        .tree-node.selected {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .tree-arrow {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+
+        .tree-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-arrow.hidden {
+            opacity: 0;
+        }
+
+        .tree-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .folder-icon {
+            color: var(--accent-secondary);
+        }
+
+        .file-icon {
+            color: var(--text-secondary);
+        }
+
+        .tree-children {
+            margin-left: 20px;
+            display: none;
+        }
+
+        .tree-children.expanded {
+            display: block;
+        }
+
+        .tree-folder.expanded > .tree-children {
+            display: block;
+        }
+
+        /* Scrollbar styling for tree */
+        .tree-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .tree-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        .tree-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .tree-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .header .meta {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .meta-item {
+                justify-content: center;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 16px;
+                padding: 16px;
+            }
+            
+            .toc ul {
+                grid-template-columns: 1fr;
+            }
+            
+            .content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                🔍 Repository Analysis
+            </h1>
+            <div class="meta">
+                <div class="meta-item">
+                    <i data-lucide="cpu" class="icon"></i>
+                    <span><strong>Algorithm:</strong> V5Integrated (Enhanced)</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="clock" class="icon"></i>
+                    <span><strong>Generated:</strong> 2025-09-15 04:25:22 UTC</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="zap" class="icon"></i>
+                    <span><strong>Selection Time:</strong> 101ms</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="files" class="icon-lg"></i>
+                    8
+                </div>
+                <div class="stat-label">Files Selected</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hash" class="icon-lg"></i>
+                    845
+                </div>
+                <div class="stat-label">Estimated Tokens</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hard-drive" class="icon-lg"></i>
+                    7.8 KB
+                </div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="target" class="icon-lg"></i>
+                    11.8%
+                </div>
+                <div class="stat-label">Coverage</div>
+            </div>
+        </div>
+        
+        <div class="toc">
+            <h3>
+                <i data-lucide="folder-tree" class="icon"></i>
+                File Explorer
+            </h3>
+            <div id="file-tree-container" class="tree-container"></div>
+        </div>
+        
+        <div class="file-list">
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>core/pipeline/mod.rs</span>
+                <span class="file-meta">6.1 KB • ~501 tokens • Score: 1.57</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>io/persistence.rs</span>
+                <span class="file-meta">232 B • ~37 tokens • Score: 0.69</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>bin/mcp/mod.rs</span>
+                <span class="file-meta">352 B • ~69 tokens • Score: 0.64</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>lang/mod.rs</span>
+                <span class="file-meta">336 B • ~61 tokens • Score: 0.63</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>bin/cli/mod.rs</span>
+                <span class="file-meta">447 B • ~88 tokens • Score: 0.63</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>detectors/mod.rs</span>
+                <span class="file-meta">362 B • ~69 tokens • Score: 0.58</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>io/mod.rs</span>
+                <span class="file-meta">96 B • ~20 tokens • Score: 0.56</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file" class="icon"></i>perf.data</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.10</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="file-section" id="file-1">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>core/pipeline/mod.rs</div>
+                <div class="file-content">
+                    <pre>pub use pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
+pub use pipeline_results::{
+    ComprehensiveAnalysisResult, AnalysisSummary, StructureAnalysisResults,
+    ComplexityAnalysisResults, RefactoringAnalysisResults, ImpactAnalysisResults,
+    CoverageAnalysisResults, HealthMetrics, PipelineResults, PipelineStatistics, 
+    MemoryStats, ResultSummary, ScoringResults, FileScore, PipelineStatus
+};
+pub use pipeline_executor::{AnalysisPipeline, ProgressCallback, ExtractorRegistry};
+pub use pipeline_stages::AnalysisStages;
+
+mod pipeline_config;
+mod pipeline_results; 
+mod pipeline_executor;
+mod pipeline_stages;
+
+/// Additional tests for pipeline modules to improve coverage
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+    use std::fs;
+    
+    #[tokio::test]
+    async fn test_pipeline_fit_legacy_api() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let mut pipeline &#x3D; pipeline;
+        let result &#x3D; pipeline.fit(&amp;amp;[]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_extractor_registry() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let registry &#x3D; pipeline.extractor_registry();
+        let extractors: Vec&amp;lt;_&amp;gt; &#x3D; registry.get_all_extractors().collect();
+        assert_eq!(extractors.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_analyze_vectors_legacy() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let result &#x3D; pipeline.analyze_vectors(vec![]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_status() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let status &#x3D; pipeline.get_status();
+        assert!(status.ready);
+        assert!(status.is_ready);
+        assert!(status.config_valid);
+    }
+
+    #[tokio::test]
+    async fn test_quality_gates_evaluation() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let config &#x3D; QualityGateConfig::default();
+        let results &#x3D; pipeline_results::ComprehensiveAnalysisResult {
+            analysis_id: &amp;quot;test&amp;quot;.to_string(),
+            timestamp: chrono::Utc::now(),
+            processing_time: 1.0,
+            config: pipeline_config::AnalysisConfig::default(),
+            summary: pipeline_results::AnalysisSummary {
+                total_files: 1,
+                total_entities: 1,
+                total_lines_of_code: 100,
+                languages: vec![&amp;quot;Rust&amp;quot;.to_string()],
+                total_issues: 0,
+                high_priority_issues: 0,
+                critical_issues: 0,
+            },
+            structure: pipeline_results::StructureAnalysisResults {
+                enabled: true,
+                directory_recommendations: vec![],
+                file_splitting_recommendations: vec![],
+                issues_count: 0,
+            },
+            complexity: pipeline_results::ComplexityAnalysisResults {
+                enabled: true,
+                detailed_results: vec![],
+                average_cyclomatic_complexity: 2.0,
+                average_cognitive_complexity: 1.5,
+                average_technical_debt_score: 10.0,
+                average_maintainability_index: 85.0,
+                issues_count: 0,
+            },
+            refactoring: pipeline_results::RefactoringAnalysisResults {
+                enabled: true,
+                detailed_results: vec![],
+                opportunities_count: 0,
+            },
+            impact: pipeline_results::ImpactAnalysisResults {
+                enabled: true,
+                dependency_cycles: vec![],
+                chokepoints: vec![],
+                clone_groups: vec![],
+                issues_count: 0,
+            },
+            lsh: pipeline_results::LshAnalysisResults {
+                enabled: false,
+                clone_pairs: vec![],
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            },
+            coverage: pipeline_results::CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: vec![],
+                coverage_gaps: vec![],
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: &amp;quot;none&amp;quot;.to_string(),
+            },
+            health_metrics: pipeline_results::HealthMetrics {
+                overall_health_score: 88.0,
+                maintainability_score: 85.0,
+                technical_debt_ratio: 10.0,
+                complexity_score: 15.0,
+                structure_quality_score: 90.0,
+            },
+        };
+
+        let gate_result &#x3D; pipeline.evaluate_quality_gates(&amp;amp;config, &amp;amp;results);
+        assert!(gate_result.passed);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_directory_integration() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
+        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
+        
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let result &#x3D; pipeline.analyze_directory(temp_dir.path()).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_paths_with_progress() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
+        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
+        
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let paths &#x3D; vec![temp_dir.path().to_path_buf()];
+        
+        let progress_called &#x3D; std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let progress_called_clone &#x3D; progress_called.clone();
+        let progress_callback &#x3D; Some(Box::new(move |_msg: &amp;amp;str, _progress: f64| {
+            progress_called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+        }) as ProgressCallback);
+        
+        let result &#x3D; pipeline.analyze_paths(&amp;amp;paths, progress_callback).await;
+        assert!(result.is_ok());
+        assert!(progress_called.load(std::sync::atomic::Ordering::SeqCst));
+    }
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-2">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>io/persistence.rs</div>
+                <div class="file-content">
+                    <pre>//! Persistence layer - placeholder.
+
+#[cfg(feature &#x3D; &amp;quot;database&amp;quot;)]
+#[derive(Debug, Default)]
+pub struct DatabaseBackend;
+
+#[cfg(feature &#x3D; &amp;quot;database&amp;quot;)]
+impl DatabaseBackend {
+    pub fn new() -&amp;gt; Self {
+        Self::default()
+    }
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-3">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>bin/mcp/mod.rs</div>
+                <div class="file-content">
+                    <pre>//! MCP (Model Context Protocol) JSON-RPC server implementation for valknut.
+//! 
+//! This module provides a complete implementation of an MCP server that exposes
+//! valknut&amp;#x27;s code analysis capabilities through JSON-RPC 2.0 over stdin/stdout.
+
+pub mod protocol;
+pub mod tools;
+pub mod server;
+
+pub use protocol::*;
+pub use tools::*;
+pub use server::*;</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-4">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>lang/mod.rs</div>
+                <div class="file-content">
+                    <pre>//! Language-specific parsing and AST processing modules.
+
+pub mod common;
+// Tree-sitter adapters
+pub mod python;
+pub mod javascript;
+pub mod typescript;
+pub mod go;
+pub mod rust_lang;
+
+// Re-export common types and traits for easier access
+pub use common::{
+    EntityKind, ParsedEntity, ParseIndex, SourceLocation, LanguageAdapter
+};</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-5">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>bin/cli/mod.rs</div>
+                <div class="file-content">
+                    <pre>//! CLI Module Organization
+//!
+//! This module organizes the CLI functionality into cohesive sub-modules:
+//! - args: CLI argument structures and configuration types
+//! - commands: Main command execution logic and analysis operations
+//! - output: Output formatting, report generation, and display functions
+
+pub mod args;
+pub mod commands;
+pub mod output;
+
+// Re-export commonly used items for convenience
+pub use args::*;
+pub use commands::*;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-6">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>detectors/mod.rs</div>
+                <div class="file-content">
+                    <pre>//! Detection algorithms and feature extractors.
+
+pub mod complexity;
+pub mod graph;
+pub mod lsh;
+pub mod structure;
+pub mod coverage;
+pub mod refactoring;
+// pub mod names; // Temporarily disabled for build - embedding-based version
+pub mod names_simple; // Simplified rule-based version
+pub mod embedding;
+pub mod clone_detection;
+pub mod boilerplate_learning;</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-7">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>io/mod.rs</div>
+                <div class="file-content">
+                    <pre>//! I/O, persistence, and caching modules.
+
+pub mod cache;
+pub mod persistence;
+pub mod reports;</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-8">
+                <div class="file-header"><i data-lucide="file" class="icon"></i>perf.data</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/babel">
+        const { useState, useCallback, useEffect } = React;
+        const { Tree } = ReactArborist;
+
+        // File data from Handlebars template
+        const fileData = [
+            {
+                path: "core/pipeline/mod.rs",
+                icon: "file-code",
+                index: 0,
+                size: "6.1 KB",
+                tokens: "501",
+                score: "1.57"
+            },
+            {
+                path: "io/persistence.rs",
+                icon: "file-code",
+                index: 1,
+                size: "232 B",
+                tokens: "37",
+                score: "0.69"
+            },
+            {
+                path: "bin/mcp/mod.rs",
+                icon: "file-code",
+                index: 2,
+                size: "352 B",
+                tokens: "69",
+                score: "0.64"
+            },
+            {
+                path: "lang/mod.rs",
+                icon: "file-code",
+                index: 3,
+                size: "336 B",
+                tokens: "61",
+                score: "0.63"
+            },
+            {
+                path: "bin/cli/mod.rs",
+                icon: "file-code",
+                index: 4,
+                size: "447 B",
+                tokens: "88",
+                score: "0.63"
+            },
+            {
+                path: "detectors/mod.rs",
+                icon: "file-code",
+                index: 5,
+                size: "362 B",
+                tokens: "69",
+                score: "0.58"
+            },
+            {
+                path: "io/mod.rs",
+                icon: "file-code",
+                index: 6,
+                size: "96 B",
+                tokens: "20",
+                score: "0.56"
+            },
+            {
+                path: "perf.data",
+                icon: "file",
+                index: 7,
+                size: "0 B",
+                tokens: "0",
+                score: "0.10"
+            }
+        ];
+
+        // Build hierarchical tree structure from flat file paths
+        function buildTreeData(files) {
+            if (!files || files.length === 0) {
+                console.warn('No files provided to buildTreeData');
+                return [];
+            }
+            
+            const nodeMap = new Map();
+            const rootNodes = [];
+            
+            files.forEach((file, index) => {
+                const parts = file.path.split('/');
+                let currentPath = '';
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    const parentPath = currentPath;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    const isLast = i === parts.length - 1;
+                    
+                    if (!nodeMap.has(currentPath)) {
+                        const node = {
+                            id: currentPath,
+                            name: part,
+                            isFolder: !isLast,
+                            path: currentPath,
+                            fileIndex: isLast ? index : undefined,
+                            fileData: isLast ? file : undefined
+                        };
+                        
+                        // Only add children array for folders
+                        if (!isLast) {
+                            node.children = [];
+                        }
+                        
+                        nodeMap.set(currentPath, node);
+                        
+                        if (parentPath) {
+                            const parent = nodeMap.get(parentPath);
+                            if (parent && parent.children) {
+                                parent.children.push(node);
+                            }
+                        } else {
+                            rootNodes.push(node);
+                        }
+                    }
+                }
+            });
+            
+            return rootNodes;
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': case 'jsx': return 'file-text';
+                case 'ts': case 'tsx': return 'file-text';
+                case 'py': return 'file-text';
+                case 'rs': return 'file-text';
+                case 'go': return 'file-text';
+                case 'java': return 'file-text';
+                case 'cpp': case 'c': case 'h': return 'file-text';
+                case 'css': return 'file-text';
+                case 'html': return 'file-text';
+                case 'json': return 'file-text';
+                case 'md': return 'file-text';
+                case 'yml': case 'yaml': return 'file-text';
+                case 'xml': return 'file-text';
+                case 'sql': return 'file-text';
+                case 'sh': case 'bash': return 'file-text';
+                case 'dockerfile': return 'file-text';
+                case 'gitignore': return 'file-text';
+                case 'toml': return 'file-text';
+                case 'lock': return 'file-text';
+                default: return 'file-text';
+            }
+        }
+
+        // Tree Node Component
+        function Node({ node, style, dragHandle, tree }) {
+            const isFolder = node.isFolder;
+            const isOpen = tree.isOpen(node.id);
+            
+            const handleClick = useCallback(() => {
+                if (isFolder) {
+                    tree.toggle(node.id);
+                } else {
+                    // Navigate to file section
+                    const fileIndex = node.fileIndex;
+                    if (fileIndex !== undefined) {
+                        const element = document.getElementById(`file-${fileIndex + 1}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                }
+            }, [node.id, isFolder, tree, node.fileIndex]);
+
+            useEffect(() => {
+                // Re-initialize Lucide icons for this node
+                const iconElements = document.querySelectorAll('[data-lucide]');
+                iconElements.forEach(el => {
+                    if (!el.querySelector('svg')) {
+                        lucide.createIcons();
+                    }
+                });
+            });
+
+            return (
+                <div 
+                    ref={dragHandle} 
+                    style={style} 
+                    className="tree-node"
+                    onClick={handleClick}
+                >
+                    <div className="tree-node-content">
+                        {isFolder && (
+                            <div className={`tree-arrow ${isOpen ? 'expanded' : ''}`}>
+                                <i data-lucide="chevron-right" className="tree-icon"></i>
+                            </div>
+                        )}
+                        {!isFolder && <div className="tree-arrow"></div>}
+                        
+                        <i 
+                            data-lucide={isFolder ? 'folder' : getFileIcon(node.name)} 
+                            className={`tree-icon ${isFolder ? 'folder-icon' : 'file-icon'}`}
+                        ></i>
+                        
+                        <span className="tree-label" title={node.path}>
+                            {node.name}
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+
+        // File Tree Component
+        function FileTree() {
+            const [treeData] = useState(() => {
+                console.log('Building tree data from:', fileData);
+                const tree = buildTreeData(fileData);
+                console.log('Built tree data:', tree);
+                return tree;
+            });
+            
+            useEffect(() => {
+                // Re-initialize Lucide icons after React renders
+                const initIcons = () => {
+                    try {
+                        lucide.createIcons();
+                        console.log('Lucide icons initialized');
+                    } catch (error) {
+                        console.error('Error initializing Lucide icons:', error);
+                    }
+                };
+                
+                // Initialize immediately and after a delay
+                initIcons();
+                setTimeout(initIcons, 100);
+                setTimeout(initIcons, 500);
+            }, []);
+
+            if (!treeData || treeData.length === 0) {
+                return (
+                    <div style={&#123;&#123; padding: '20px', textAlign: 'center', color: 'var(--text-muted)' &#125;&#125;}>
+                        No files to display
+                    </div>
+                );
+            }
+
+            return (
+                <Tree
+                    data={treeData}
+                    openByDefault={false}
+                    width="100%"
+                    height={400}
+                    padding={25}
+                    rowHeight={28}
+                    indent={16}
+                    overscanCount={8}
+                >
+                    {Node}
+                </Tree>
+            );
+        }
+
+        // Render the component
+        try {
+            const container = document.getElementById('file-tree-container');
+            if (container) {
+                const root = ReactDOM.createRoot(container);
+                root.render(<FileTree />);
+                console.log('React tree component rendered successfully');
+            } else {
+                console.error('Could not find file-tree-container element');
+            }
+        } catch (error) {
+            console.error('Error rendering React tree:', error);
+        }
+    </script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

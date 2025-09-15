@@ -1,0 +1,653 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{tool_name}} Analysis Report - Sibylline Design</title>
+    <link rel="stylesheet" href="./sibylline.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        /* Additional styles for enhanced tree functionality */
+        .priority-critical { color: #7c3aed; font-weight: 600; }
+        .priority-high { color: var(--error); font-weight: 600; }
+        .priority-medium { color: var(--warning); font-weight: 500; }
+        .priority-low { color: var(--accent); font-weight: 400; }
+        
+        .suggestions-list {
+            margin-top: 0.5rem;
+            padding-left: 1rem;
+        }
+        
+        .suggestion-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .suggestion-type {
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .complexity-score {
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+        
+        .tree-expandable {
+            cursor: pointer;
+        }
+        
+        .tree-badge-Critical {
+            background-color: rgba(147, 51, 234, 0.1);
+            color: #7c3aed;
+        }
+        
+        .tree-badge-High {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+        
+        .tree-badge-Medium {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+        
+        .tree-badge-Low {
+            background-color: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+        
+        .tree-expanded .tree-chevron {
+            transform: rotate(90deg);
+        }
+        
+        .tree-collapsed .tree-children,
+        .tree-children.collapsed {
+            display: none;
+        }
+        
+        /* Filtering styles */
+        .filter-menu {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .filter-menu input[type="checkbox"] {
+            margin: 0;
+            accent-color: var(--accent);
+        }
+        
+        .filter-menu label:hover {
+            background: var(--accent-soft);
+        }
+        
+        /* Hide filtered elements */
+        .tree-node.filtered-out {
+            display: none !important;
+        }
+        
+        /* Subtle tree-leaf styling with left border accent */
+        .tree-leaf-subtle {
+            border-left: 2px solid var(--accent);
+            padding: 1rem;
+            padding-left: 1.5rem;
+        }
+        
+        .tree-leaf-subtle:hover {
+            border-left-color: var(--primary);
+            background: rgba(0, 0, 0, 0.01);
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--keyline);
+            border-radius: 4px;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            background: var(--surface);
+            border-color: var(--accent);
+        }
+        
+        .btn-secondary {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        
+        /* Tree hierarchy indentation based on data-level */
+        .tree-node[data-level="0"] {
+            margin-left: 0;
+        }
+        
+        .tree-node[data-level="1"] {
+            margin-left: 2rem;
+            border-left: 2px solid var(--keyline);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.02);
+        }
+        
+        .tree-node[data-level="2"] {
+            margin-left: 4rem;
+            border-left: 2px solid var(--muted);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.04);
+        }
+        
+        .tree-node[data-level="3"] {
+            margin-left: 6rem;
+            border-left: 2px solid var(--muted);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.06);
+        }
+        
+        /* Function nodes (level 1) special styling */
+        .tree-node[data-level="1"] .tree-icon {
+            color: var(--accent);
+        }
+        
+        .tree-node[data-level="1"] .tree-label {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        /* Directory nodes special styling */
+        .directory-node {
+            border-bottom: 1px solid var(--keyline);
+            margin-bottom: 0.5rem;
+        }
+        
+        .directory-node .tree-header {
+            background: var(--surface);
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+        
+        .directory-node .tree-icon {
+            color: var(--warning);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--accent-hover, var(--accent));
+            opacity: 0.9;
+        }
+        
+        .analysis-summary {
+            background: var(--surface);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-6);
+            margin-bottom: var(--spacing-8);
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--spacing-4);
+            margin-top: var(--spacing-4);
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: var(--spacing-3);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+        
+        .stat-value {
+            font-size: var(--text-xl);
+            font-weight: var(--font-bold);
+            color: var(--accent);
+            font-family: var(--font-mono);
+        }
+        
+        .stat-label {
+            font-size: var(--text-xs);
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            margin-top: var(--spacing-1);
+        }
+
+        /* Oracle section styles */
+        .oracle-section {
+            padding: var(--spacing-6);
+            margin: var(--spacing-8) 0;
+            /* Explicitly remove any gradient or border styling */
+            background: none !important;
+            background-image: none !important;
+            border: none !important;
+            border-bottom: none !important;
+        }
+
+        .oracle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-6);
+            padding-bottom: var(--spacing-4);
+            border-bottom: 2px solid var(--keyline);
+        }
+
+        .oracle-title {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-4);
+        }
+
+        .oracle-title h2 {
+            margin: 0;
+            color: var(--accent);
+            font-size: var(--text-2xl);
+        }
+
+        .oracle-subtitle {
+            color: var(--muted);
+            font-size: var(--text-sm);
+            margin-top: var(--spacing-1);
+        }
+
+        /* Oracle health score styles removed as requested */
+
+        .oracle-content {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-6);
+        }
+
+        /* Assessment styles - no card styling */
+        .oracle-assessment {
+            /* Remove all card styling - just content */
+        }
+
+        .assessment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-6);
+            margin-top: var(--spacing-4);
+        }
+
+        .assessment-strengths, .assessment-weaknesses {
+            padding: var(--spacing-4);
+            border-radius: var(--radius);
+            background: var(--surface) !important;
+            /* Grey card styling like webpage.html - no borders */
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .assessment-strengths h4, .assessment-weaknesses h4 {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+            margin: 0 0 var(--spacing-3) 0;
+            font-size: var(--text-base);
+        }
+
+        .assessment-strengths ul, .assessment-weaknesses ul {
+            margin: 0;
+            padding-left: var(--spacing-4);
+        }
+
+        .assessment-summary {
+            margin-top: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .assessment-summary h4 {
+            margin: 0 0 var(--spacing-2) 0;
+            color: var(--accent);
+        }
+
+        /* Plan styles - grey card like webpage.html */
+        .oracle-plan {
+            background: var(--surface) !important;
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-4);
+        }
+
+        .plan-timeline {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .refactoring-phases {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-4);
+        }
+
+        .phase-card {
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            background: var(--panel);
+            overflow: hidden;
+        }
+
+        .phase-priority-1 {
+            border-left: 4px solid #ef4444;
+        }
+
+        .phase-priority-2 {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .phase-priority-3 {
+            border-left: 4px solid var(--accent);
+        }
+
+        .phase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-4);
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .phase-header:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .phase-title h4 {
+            margin: 0;
+            color: var(--text);
+        }
+
+        .phase-priority {
+            background: var(--accent);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: var(--text-xs);
+            font-weight: var(--font-bold);
+            text-transform: uppercase;
+            margin-bottom: var(--spacing-2);
+            display: inline-block;
+        }
+
+        .phase-description {
+            padding: 0 var(--spacing-4) var(--spacing-4);
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        .phase-expand {
+            padding: var(--spacing-2);
+            transition: transform 0.2s ease;
+        }
+
+        .phase-content {
+            padding: var(--spacing-4);
+            border-top: 1px solid var(--keyline);
+            background: var(--surface);
+        }
+
+        .subsystem {
+            margin-bottom: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .subsystem-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-3);
+        }
+
+        .subsystem-header h5 {
+            margin: 0;
+            color: var(--accent);
+        }
+
+        .subsystem-files {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-1);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .subsystem-tasks {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-3);
+        }
+
+        .task-card {
+            background: var(--surface);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            padding: var(--spacing-3);
+        }
+
+        .task-header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-3);
+            margin-bottom: var(--spacing-2);
+        }
+
+        .task-title {
+            flex: 1;
+            font-weight: var(--font-semibold);
+            color: var(--text);
+        }
+
+        .task-effort {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-1);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .task-risk {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: var(--text-xs);
+            font-weight: var(--font-bold);
+            text-transform: uppercase;
+        }
+
+        .task-risk-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .task-risk-medium {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .task-risk-low {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .task-description {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            margin-bottom: var(--spacing-2);
+        }
+
+        .task-benefits {
+            margin-top: var(--spacing-2);
+            padding: var(--spacing-2);
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .task-benefits ul {
+            margin: var(--spacing-1) 0 0 0;
+            padding-left: var(--spacing-4);
+        }
+
+        .task-files {
+            margin-top: var(--spacing-2);
+            font-size: var(--text-sm);
+        }
+
+        .task-files code {
+            background: var(--panel);
+            padding: 0.125rem 0.25rem;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: var(--text-xs);
+        }
+
+        /* Risk assessment styles - grey card like webpage.html */
+        .oracle-risks {
+            background: var(--surface) !important;
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .risk-overview {
+            margin-bottom: var(--spacing-4);
+        }
+
+        .risk-level {
+            display: inline-block;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: var(--radius);
+            font-weight: var(--font-semibold);
+            text-transform: uppercase;
+            font-size: var(--text-sm);
+        }
+
+        .risk-level-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .risk-level-medium {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .risk-level-low {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .risks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--spacing-4);
+        }
+
+        .risk-card {
+            background: var(--panel);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            padding: var(--spacing-4);
+        }
+
+        .risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-2);
+        }
+
+        .risk-category {
+            font-weight: var(--font-semibold);
+            color: var(--accent);
+            text-transform: capitalize;
+        }
+
+        .risk-probability {
+            color: var(--muted);
+            font-size: var(--text-sm);
+            text-transform: capitalize;
+        }
+
+        .risk-description {
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-3);
+            font-size: var(--text-sm);
+        }
+
+        .risk-mitigation {
+            padding: var(--spacing-2);
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+            font-size: var(--text-sm);
+        }
+
+        /* Effort estimation styles */
+        .oracle-effort {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: 1px solid var(--keyline);
+        }
+
+        .effort-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--spacing-4);
+            margin-top: var(--spacing-4);
+        }
+
+        .effort-stat {
+            text-align: center;
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .effort-value {
+            font-size: var(--text-xl);
+            font-weight: var(--font-bold);
+            color: var(--accent);
+            font-family: var(--font-mono);
+        }
+
+        .effort-label {
+            font-size: var(--text-xs);
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            margin-top: var(--spacing-1);
+        }
+    </style>
+</head>

@@ -32,6 +32,10 @@ pub struct ComprehensiveAnalysisResult {
     pub refactoring: RefactoringAnalysisResults,
     /// Impact analysis results  
     pub impact: ImpactAnalysisResults,
+    /// LSH analysis results for clone detection
+    pub lsh: LshAnalysisResults,
+    /// Coverage analysis results
+    pub coverage: CoverageAnalysisResults,
     /// Overall health metrics
     pub health_metrics: HealthMetrics,
 }
@@ -111,6 +115,66 @@ pub struct ImpactAnalysisResults {
     pub clone_groups: Vec<serde_json::Value>,
     /// Impact issues count
     pub issues_count: usize,
+}
+
+/// LSH analysis results for clone detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LshAnalysisResults {
+    /// Enabled flag
+    pub enabled: bool,
+    /// Clone detection results
+    pub clone_pairs: Vec<serde_json::Value>,
+    /// Maximum similarity found
+    pub max_similarity: f64,
+    /// Average similarity across all comparisons
+    pub avg_similarity: f64,
+    /// Total potential duplicates found
+    pub duplicate_count: usize,
+    /// Whether denoise mode was active
+    pub denoising_enabled: bool,
+    /// TF-IDF statistics (if denoising enabled)
+    pub tfidf_stats: Option<TfIdfStats>,
+}
+
+/// TF-IDF statistics for denoise mode
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TfIdfStats {
+    /// Total k-grams processed
+    pub total_grams: usize,
+    /// Unique k-grams found
+    pub unique_grams: usize,
+    /// Top 1% contribution percentage
+    pub top1pct_contribution: f64,
+}
+
+/// Coverage analysis results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverageAnalysisResults {
+    /// Enabled flag
+    pub enabled: bool,
+    /// Coverage files discovered and used
+    pub coverage_files_used: Vec<CoverageFileInfo>,
+    /// Coverage gaps found
+    pub coverage_gaps: Vec<serde_json::Value>,
+    /// Total number of coverage gaps
+    pub gaps_count: usize,
+    /// Overall coverage percentage (if calculable)
+    pub overall_coverage_percentage: Option<f64>,
+    /// Coverage analysis method used
+    pub analysis_method: String,
+}
+
+/// Information about coverage files used in analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverageFileInfo {
+    /// Path to the coverage file
+    pub path: String,
+    /// Detected format
+    pub format: String,
+    /// File size in bytes
+    pub size: u64,
+    /// Last modified timestamp
+    pub modified: String,
 }
 
 /// Overall health metrics for the codebase

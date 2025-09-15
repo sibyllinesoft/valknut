@@ -1,0 +1,153 @@
+<!-- AI Refactoring Oracle -->
+{{#if has_oracle_data}}
+<div class="oracle-section">
+    <div class="oracle-header">
+        <div class="oracle-title">
+            <div class="oracle-icon">
+                <i data-lucide="brain" style="width: 32px; height: 32px; color: var(--accent);"></i>
+            </div>
+            <div>
+                <h2>AI Refactoring Oracle</h2>
+                <div class="oracle-subtitle">Strategic guidance powered by Gemini 2.5 Pro</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="oracle-content">
+        <!-- Assessment Overview -->
+        <div class="oracle-assessment">
+            <h3>Architecture Assessment</h3>
+            <div class="assessment-grid">
+                <div class="assessment-strengths">
+                    <h4><i data-lucide="check-circle" style="width: 16px; height: 16px; color: var(--accent);"></i> Strengths</h4>
+                    <ul>
+                        {{#each oracle_refactoring_plan.assessment.strengths}}
+                        <li>{{this}}</li>
+                        {{/each}}
+                    </ul>
+                </div>
+                <div class="assessment-weaknesses">
+                    <h4><i data-lucide="alert-triangle" style="width: 16px; height: 16px; color: var(--warning);"></i> Areas for Improvement</h4>
+                    <ul>
+                        {{#each oracle_refactoring_plan.assessment.weaknesses}}
+                        <li>{{this}}</li>
+                        {{/each}}
+                    </ul>
+                </div>
+            </div>
+            
+            {{#if oracle_refactoring_plan.assessment.architecture_quality}}
+            <div class="assessment-summary">
+                <h4>Architecture Quality</h4>
+                <p>{{oracle_refactoring_plan.assessment.architecture_quality}}</p>
+            </div>
+            {{/if}}
+        </div>
+
+        <!-- Refactoring Plan -->
+        {{#if oracle_refactoring_plan.refactoring_plan}}
+        <div class="oracle-plan">
+            <div class="plan-header">
+                <h3>Refactoring Roadmap</h3>
+            </div>
+
+            <!-- Phases -->
+            <div class="refactoring-phases">
+                {{#each oracle_refactoring_plan.refactoring_plan.phases}}
+                <div class="phase-card phase-priority-{{priority}}">
+                    <div class="phase-header" onclick="togglePhase(this)" style="cursor: pointer;">
+                        <div class="phase-title">
+                            <div class="phase-priority">Phase {{priority}}</div>
+                            <h4>{{name}}</h4>
+                        </div>
+                        <div class="phase-expand">
+                            <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                        </div>
+                    </div>
+                    <div class="phase-description">{{description}}</div>
+                    
+                    <div class="phase-content" style="display: none;">
+                        {{#each subsystems}}
+                        <div class="subsystem">
+                            <div class="subsystem-header">
+                                <h5>{{name}}</h5>
+                                <div class="subsystem-files">
+                                    <i data-lucide="file" style="width: 14px; height: 14px;"></i>
+                                    {{#each affected_files}}{{#unless @first}}, {{/unless}}{{this}}{{/each}}
+                                </div>
+                            </div>
+                            
+                            <div class="subsystem-tasks">
+                                {{#each tasks}}
+                                <div class="task-card task-{{task_type}}">
+                                    <div class="task-header">
+                                        <div class="task-title">{{title}}</div>
+                                        <div class="task-effort">
+                                            <i data-lucide="clock" style="width: 12px; height: 12px;"></i>
+                                            {{estimated_hours}}h
+                                        </div>
+                                        <div class="task-risk task-risk-{{risk_level}}">{{risk_level}}</div>
+                                    </div>
+                                    <div class="task-description">{{description}}</div>
+                                    
+                                    {{#if benefits}}
+                                    <div class="task-benefits">
+                                        <strong>Benefits:</strong>
+                                        <ul>
+                                            {{#each benefits}}
+                                            <li>{{this}}</li>
+                                            {{/each}}
+                                        </ul>
+                                    </div>
+                                    {{/if}}
+                                    
+                                    {{#if files}}
+                                    <div class="task-files">
+                                        <strong>Files:</strong>
+                                        {{#each files}}
+                                        <code>{{this}}</code>{{#unless @last}}, {{/unless}}
+                                        {{/each}}
+                                    </div>
+                                    {{/if}}
+                                </div>
+                                {{/each}}
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+        {{/if}}
+
+        <!-- Risk Assessment -->
+        {{#if oracle_refactoring_plan.risk_assessment}}
+        <div class="oracle-risks">
+            <h3>Risk Assessment</h3>
+            <div class="risk-overview">
+                <div class="risk-level risk-level-{{oracle_refactoring_plan.risk_assessment.overall_risk}}">
+                    Overall Risk: {{capitalize oracle_refactoring_plan.risk_assessment.overall_risk}}
+                </div>
+            </div>
+            
+            <div class="risks-grid">
+                {{#each oracle_refactoring_plan.risk_assessment.risks}}
+                <div class="risk-card risk-{{impact}}">
+                    <div class="risk-header">
+                        <div class="risk-category">{{category}}</div>
+                        <div class="risk-probability">{{probability}} probability</div>
+                    </div>
+                    <div class="risk-description">{{description}}</div>
+                    <div class="risk-mitigation">
+                        <strong>Mitigation:</strong> {{mitigation}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+        {{/if}}
+
+    </div>
+</div>
+{{/if}}

@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
+use serde_json::{self, Value};
 
 use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
@@ -139,9 +140,6 @@ pub mod utils {
     }
 }
 
-extern "C" {
-    fn tree_sitter_rust() -> Language;
-}
 
 /// Rust-specific parsing and analysis
 pub struct RustAdapter {
@@ -155,7 +153,12 @@ pub struct RustAdapter {
 impl RustAdapter {
     /// Create a new Rust adapter
     pub fn new() -> Result<Self> {
-        let language = unsafe { tree_sitter_rust() };
+        // Simple test to verify tree_sitter_rust access
+        let language = match std::panic::catch_unwind(|| tree_sitter_rust::language()) {
+            Ok(lang) => lang,
+            Err(_) => return Err(ValknutError::parse("rust", "Failed to access tree_sitter_rust::language()".to_string())),
+        };
+        
         let mut parser = Parser::new();
         parser.set_language(language)
             .map_err(|e| ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e)))?;
@@ -281,7 +284,7 @@ impl RustAdapter {
         let mut metadata = HashMap::new();
         
         // Add Rust-specific metadata
-        metadata.insert("node_kind".to_string(), serde_json::Value::String(node.kind().to_string()));
+        metadata.insert("node_kind".to_string(), Value::String(node.kind().to_string()));
         metadata.insert("byte_range".to_string(), serde_json::json!([node.start_byte(), node.end_byte()]));
         
         // Extract additional metadata based on entity type
@@ -340,7 +343,7 @@ impl RustAdapter {
     }
     
     /// Extract function-specific metadata
-    fn extract_function_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_function_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
         let mut cursor = node.walk();
         let mut parameters = Vec::new();
         let mut is_async = false;
@@ -390,19 +393,19 @@ impl RustAdapter {
         }
         
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
-        metadata.insert("is_async".to_string(), serde_json::Value::Bool(is_async));
-        metadata.insert("is_unsafe".to_string(), serde_json::Value::Bool(is_unsafe));
-        metadata.insert("is_const".to_string(), serde_json::Value::Bool(is_const));
-        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        metadata.insert("is_async".to_string(), Value::Bool(is_async));
+        metadata.insert("is_unsafe".to_string(), Value::Bool(is_unsafe));
+        metadata.insert("is_const".to_string(), Value::Bool(is_const));
+        metadata.insert("visibility".to_string(), Value::String(visibility));
         if let Some(ret_type) = return_type {
-            metadata.insert("return_type".to_string(), serde_json::Value::String(ret_type));
+            metadata.insert("return_type".to_string(), Value::String(ret_type));
         }
         
         Ok(())
     }
     
     /// Extract struct-specific metadata
-    fn extract_struct_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_struct_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
         let mut cursor = node.walk();
         let mut fields = Vec::new();
         let mut visibility = "private".to_string();
@@ -442,7 +445,7 @@ impl RustAdapter {
         }
         
         metadata.insert("fields".to_string(), serde_json::json!(fields));
-        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        metadata.insert("visibility".to_string(), Value::String(visibility));
         if !generic_params.is_empty() {
             metadata.insert("generic_parameters".to_string(), serde_json::json!(generic_params));
         }
@@ -451,7 +454,7 @@ impl RustAdapter {
     }
     
     /// Extract enum-specific metadata
-    fn extract_enum_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_enum_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
         let mut cursor = node.walk();
         let mut variants = Vec::new();
         let mut visibility = "private".to_string();
@@ -482,13 +485,13 @@ impl RustAdapter {
         }
         
         metadata.insert("variants".to_string(), serde_json::json!(variants));
-        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        metadata.insert("visibility".to_string(), Value::String(visibility));
         
         Ok(())
     }
     
     /// Extract trait-specific metadata
-    fn extract_trait_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_trait_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
         let mut cursor = node.walk();
         let mut methods = Vec::new();
         let mut visibility = "private".to_string();
@@ -525,7 +528,7 @@ impl RustAdapter {
         }
         
         metadata.insert("methods".to_string(), serde_json::json!(methods));
-        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
+        metadata.insert("visibility".to_string(), Value::String(visibility));
         if !supertrait_bounds.is_empty() {
             metadata.insert("supertrait_bounds".to_string(), serde_json::json!(supertrait_bounds));
         }
@@ -534,7 +537,7 @@ impl RustAdapter {
     }
     
     /// Extract module-specific metadata
-    fn extract_module_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, serde_json::Value>) -> Result<()> {
+    fn extract_module_metadata(&self, node: &Node, source_code: &str, metadata: &mut HashMap<String, Value>) -> Result<()> {
         let mut cursor = node.walk();
         let mut visibility = "private".to_string();
         let mut is_inline = false;
@@ -552,8 +555,8 @@ impl RustAdapter {
             }
         }
         
-        metadata.insert("visibility".to_string(), serde_json::Value::String(visibility));
-        metadata.insert("is_inline".to_string(), serde_json::Value::Bool(is_inline));
+        metadata.insert("visibility".to_string(), Value::String(visibility));
+        metadata.insert("is_inline".to_string(), Value::Bool(is_inline));
         
         Ok(())
     }
@@ -592,11 +595,11 @@ impl Default for RustAdapter {
 }
 
 #[cfg(test)]
-mod tests {
+mod additional_tests {
     use super::*;
     
     #[test]
-    fn test_rust_adapter_creation() {
+    fn test_rust_adapter_creation_additional() {
         let adapter = RustAdapter::new();
         assert!(adapter.is_ok());
     }
@@ -619,11 +622,11 @@ async unsafe fn complex_function() -> Result<(), Error> {
         
         let calc_func = entities.iter().find(|e| e.name == "calculate").unwrap();
         assert_eq!(calc_func.entity_type, "Function");
-        assert_eq!(calc_func.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        assert_eq!(calc_func.properties.get("visibility"), Some(&Value::String("pub".to_string())));
         
         let complex_func = entities.iter().find(|e| e.name == "complex_function").unwrap();
-        assert_eq!(complex_func.properties.get("is_async"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(complex_func.properties.get("is_unsafe"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(complex_func.properties.get("is_async"), Some(&Value::Bool(true)));
+        assert_eq!(complex_func.properties.get("is_unsafe"), Some(&Value::Bool(true)));
     }
     
     #[test]
@@ -648,7 +651,7 @@ struct Point<T> {
         assert_eq!(struct_entities.len(), 2);
         
         let user_struct = struct_entities.iter().find(|e| e.name == "User").unwrap();
-        assert_eq!(user_struct.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        assert_eq!(user_struct.properties.get("visibility"), Some(&Value::String("pub".to_string())));
         
         let point_struct = struct_entities.iter().find(|e| e.name == "Point").unwrap();
         let generic_params = point_struct.properties.get("generic_parameters");
@@ -674,7 +677,7 @@ pub enum Status {
         let enum_entity = &entities[0];
         assert_eq!(enum_entity.entity_type, "Enum");
         assert_eq!(enum_entity.name, "Status");
-        assert_eq!(enum_entity.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        assert_eq!(enum_entity.properties.get("visibility"), Some(&Value::String("pub".to_string())));
         
         let variants = enum_entity.properties.get("variants");
         assert!(variants.is_some());
@@ -698,7 +701,7 @@ pub trait Display: Debug + Clone {
         let trait_entity = &entities[0];
         assert_eq!(trait_entity.entity_type, "Interface");
         assert_eq!(trait_entity.name, "Display");
-        assert_eq!(trait_entity.properties.get("visibility"), Some(&serde_json::Value::String("pub".to_string())));
+        assert_eq!(trait_entity.properties.get("visibility"), Some(&Value::String("pub".to_string())));
         
         let methods = trait_entity.properties.get("methods");
         assert!(methods.is_some());
@@ -723,7 +726,7 @@ mod internal {
         assert!(module_entities.len() >= 2); // utils and internal modules
         
         let internal_mod = module_entities.iter().find(|e| e.name == "internal").unwrap();
-        assert_eq!(internal_mod.properties.get("is_inline"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(internal_mod.properties.get("is_inline"), Some(&Value::Bool(true)));
     }
     
     #[test]

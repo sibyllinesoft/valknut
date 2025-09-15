@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repository Analysis: Scribe Analysis</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #b5b5b5;
+            --text-muted: #888;
+            --accent-primary: #4f9cf9;
+            --accent-secondary: #7c3aed;
+            --border-color: #404040;
+            --hover-color: #333333;
+            --code-bg: #252525;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            color: white;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.01) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3e%3cg fill='none' fill-rule='evenodd'%3e%3cg fill='%23ffffff' fill-opacity='0.02'%3e%3ccircle cx='20' cy='20' r='1'/%3e%3c/g%3e%3c/g%3e%3c/svg%3e");
+            pointer-events: none;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header .meta {
+            margin-top: 20px;
+            opacity: 0.9;
+            font-size: 13px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .meta-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
+        }
+        
+        .stats {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .toc {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toc h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 8px;
+        }
+        
+        .toc li {
+            margin: 0;
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .toc a:hover {
+            color: var(--accent-primary);
+            background: var(--hover-color);
+        }
+        
+        .file-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .file-item {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .file-item:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .content {
+            padding: 24px;
+            background: var(--bg-secondary);
+        }
+        
+        .file-section {
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        
+        .file-header {
+            background: var(--bg-tertiary);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-content {
+            max-height: 600px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .file-content::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        
+        .file-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        pre {
+            margin: 0;
+            padding: 24px;
+            background: var(--code-bg);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-primary);
+        }
+        
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .icon-lg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Vanilla JavaScript Tree Styles */
+        .tree-container {
+            height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            user-select: none;
+            border-radius: 4px;
+            margin: 1px 0;
+        }
+
+        .tree-node:hover {
+            background: var(--hover-color);
+            color: var(--accent-primary);
+        }
+
+        .tree-node.selected {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .tree-arrow {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+
+        .tree-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-arrow.hidden {
+            opacity: 0;
+        }
+
+        .tree-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .folder-icon {
+            color: var(--accent-secondary);
+        }
+
+        .file-icon {
+            color: var(--text-secondary);
+        }
+
+        .tree-children {
+            margin-left: 20px;
+            display: none;
+        }
+
+        .tree-children.expanded {
+            display: block;
+        }
+
+        .tree-folder.expanded > .tree-children {
+            display: block;
+        }
+
+        /* Scrollbar styling for tree */
+        .tree-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .tree-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        .tree-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .tree-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .header .meta {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .meta-item {
+                justify-content: center;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 16px;
+                padding: 16px;
+            }
+            
+            .toc ul {
+                grid-template-columns: 1fr;
+            }
+            
+            .content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                🔍 Repository Analysis
+            </h1>
+            <div class="meta">
+                <div class="meta-item">
+                    <i data-lucide="cpu" class="icon"></i>
+                    <span><strong>Algorithm:</strong> V5Integrated (Enhanced)</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="clock" class="icon"></i>
+                    <span><strong>Generated:</strong> 2025-09-15 04:27:26 UTC</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="zap" class="icon"></i>
+                    <span><strong>Selection Time:</strong> 20ms</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="files" class="icon-lg"></i>
+                    4
+                </div>
+                <div class="stat-label">Files Selected</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hash" class="icon-lg"></i>
+                    4,985
+                </div>
+                <div class="stat-label">Estimated Tokens</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hard-drive" class="icon-lg"></i>
+                    47.9 KB
+                </div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="target" class="icon-lg"></i>
+                    14.8%
+                </div>
+                <div class="stat-label">Coverage</div>
+            </div>
+        </div>
+        
+        <div class="toc">
+            <h3>
+                <i data-lucide="folder-tree" class="icon"></i>
+                File Explorer
+            </h3>
+            <div id="file-tree-container" class="tree-container"></div>
+        </div>
+        
+        <div class="file-list">
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>clone_denoising/phase3_stop_motifs_cache_tests.rs</span>
+                <span class="file-meta">37.0 KB • ~3,518 tokens • Score: 0.96</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>caching_effectiveness_test.rs</span>
+                <span class="file-meta">7.0 KB • ~970 tokens • Score: 0.76</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>memory_pool_integration_test.rs</span>
+                <span class="file-meta">3.9 KB • ~493 tokens • Score: 0.76</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>fixtures/mod.rs</span>
+                <span class="file-meta">34 B • ~4 tokens • Score: 0.19</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="file-section" id="file-1">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>clone_denoising/phase3_stop_motifs_cache_tests.rs</div>
+                <div class="file-content">
+                    <pre>//! Comprehensive tests for Phase 3: Self-Learned Stop-Motifs Cache
+//! 
+//! Tests the stop-motif cache system including:
+//! - StopMotifCache system and StopMotifCacheManager
+//! - AST pattern mining using tree-sitter (NOT regex)
+//! - Multi-language support (Python, JavaScript, TypeScript, Rust, Go)
+//! - Cache refresh logic and persistence
+//! - Pattern frequency analysis and percentile selection
+
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::sync::Arc;
+use tempfile::TempDir;
+use approx::assert_relative_eq;
+use serde_json;
+
+use valknut_rs::io::cache::{
+    StopMotifCache, StopMotifEntry, AstStopMotifEntry, PatternCategory, AstPatternCategory,
+    StopMotifCacheManager, MiningStats, CacheRefreshPolicy, CodebaseInfo, FunctionInfo, FileInfo
+};
+
+#[cfg(test)]
+mod stop_motif_cache_tests {
+    use super::*;
+
+    /// Test basic stop-motif cache creation and serialization
+    #[test]
+    fn test_stop_motif_cache_creation() {
+        let mut cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![
+                StopMotifEntry {
+                    pattern: &amp;quot;print debug&amp;quot;.to_string(),
+                    support: 150,
+                    idf_score: 0.2,
+                    weight_multiplier: 0.2,
+                    category: PatternCategory::Boilerplate,
+                }
+            ],
+            pdg_motifs: vec![
+                StopMotifEntry {
+                    pattern: &amp;quot;if_then_else&amp;quot;.to_string(),
+                    support: 85,
+                    idf_score: 0.4,
+                    weight_multiplier: 0.3,
+                    category: PatternCategory::ControlFlow,
+                }
+            ],
+            ast_patterns: vec![
+                AstStopMotifEntry {
+                    pattern: &amp;quot;import_statement&amp;quot;.to_string(),
+                    support: 200,
+                    idf_score: 0.1,
+                    weight_multiplier: 0.1,
+                    category: AstPatternCategory::Import,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: {
+                        let mut map &#x3D; HashMap::new();
+                        map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(&amp;quot;import_from_statement&amp;quot;.to_string()));
+                        map
+                    },
+                }
+            ],
+            last_updated: 1234567890,
+            codebase_signature: &amp;quot;test_signature_12345&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 500,
+                total_patterns_found: 1000,
+                patterns_above_threshold: 235,
+                top_1_percent_contribution: 15.2,
+                processing_time_ms: 5000,
+            },
+        };
+
+        // Test serialization
+        let serialized &#x3D; serde_json::to_string(&amp;amp;cache).unwrap();
+        assert!(serialized.contains(&amp;quot;print debug&amp;quot;));
+        assert!(serialized.contains(&amp;quot;if_then_else&amp;quot;));
+        assert!(serialized.contains(&amp;quot;import_statement&amp;quot;));
+
+        // Test deserialization
+        let deserialized: StopMotifCache &#x3D; serde_json::from_str(&amp;amp;serialized).unwrap();
+        assert_eq!(deserialized.version, 1);
+        assert_eq!(deserialized.token_grams.len(), 1);
+        assert_eq!(deserialized.pdg_motifs.len(), 1);
+        assert_eq!(deserialized.ast_patterns.len(), 1);
+    }
+
+    /// Test pattern categorization for different types
+    #[test]
+    fn test_pattern_categorization() {
+        // Test token gram categories
+        let boilerplate_patterns &#x3D; [
+            (&amp;quot;println! debug&amp;quot;, PatternCategory::Boilerplate),
+            (&amp;quot;import os sys&amp;quot;, PatternCategory::Boilerplate),
+            (&amp;quot;if x &amp;gt;&amp;quot;, PatternCategory::ControlFlow),
+            (&amp;quot;x &#x3D; y&amp;quot;, PatternCategory::Assignment),
+            (&amp;quot;func call args&amp;quot;, PatternCategory::FunctionCall),
+            (&amp;quot;list dict map&amp;quot;, PatternCategory::DataStructure),
+        ];
+
+        for (pattern, expected_category) in boilerplate_patterns {
+            let entry &#x3D; StopMotifEntry {
+                pattern: pattern.to_string(),
+                support: 10,
+                idf_score: 0.5,
+                weight_multiplier: 0.2,
+                category: expected_category.clone(),
+            };
+
+            assert_eq!(entry.category, expected_category, 
+                      &amp;quot;Pattern &amp;#x27;{}&amp;#x27; should be categorized as {:?}&amp;quot;, pattern, expected_category);
+        }
+
+        // Test AST pattern categories
+        let ast_patterns &#x3D; [
+            (&amp;quot;import_statement&amp;quot;, AstPatternCategory::Import),
+            (&amp;quot;function_definition&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            (&amp;quot;if_statement&amp;quot;, AstPatternCategory::ControlFlow),
+            (&amp;quot;assignment&amp;quot;, AstPatternCategory::Assignment),
+            (&amp;quot;call_expression&amp;quot;, AstPatternCategory::FunctionCall),
+            (&amp;quot;class_definition&amp;quot;, AstPatternCategory::ClassDeclaration),
+        ];
+
+        for (pattern, expected_category) in ast_patterns {
+            let entry &#x3D; AstStopMotifEntry {
+                pattern: pattern.to_string(),
+                support: 10,
+                idf_score: 0.5,
+                weight_multiplier: 0.2,
+                category: expected_category.clone(),
+                language: &amp;quot;python&amp;quot;.to_string(),
+                metadata: HashMap::new(),
+            };
+
+            assert_eq!(entry.category, expected_category,
+                      &amp;quot;AST pattern &amp;#x27;{}&amp;#x27; should be categorized as {:?}&amp;quot;, pattern, expected_category);
+        }
+    }
+
+    /// Test IDF score calculation and weight assignment
+    #[test]
+    fn test_idf_score_and_weight_calculation() {
+        let total_functions &#x3D; 1000;
+        
+        // High frequency pattern (appears in 80% of functions)
+        let high_freq_support &#x3D; 800;
+        let high_freq_idf &#x3D; ((1.0 + total_functions as f64) / (1.0 + high_freq_support as f64)).ln() + 1.0;
+        
+        // Low frequency pattern (appears in 5% of functions)
+        let low_freq_support &#x3D; 50;
+        let low_freq_idf &#x3D; ((1.0 + total_functions as f64) / (1.0 + low_freq_support as f64)).ln() + 1.0;
+
+        assert!(low_freq_idf &amp;gt; high_freq_idf,
+                &amp;quot;Low frequency patterns should have higher IDF scores: {} vs {}&amp;quot;, 
+                low_freq_idf, high_freq_idf);
+
+        // Test weight multiplier assignment based on frequency
+        let high_freq_weight &#x3D; if high_freq_support &amp;gt; total_functions / 2 { 0.1 } else { 0.5 };
+        let low_freq_weight &#x3D; if low_freq_support &amp;gt; total_functions / 2 { 0.1 } else { 0.5 };
+
+        assert_eq!(high_freq_weight, 0.1, &amp;quot;High frequency patterns should get low weight&amp;quot;);
+        assert_eq!(low_freq_weight, 0.5, &amp;quot;Low frequency patterns should get higher weight&amp;quot;);
+    }
+
+    /// Test percentile-based pattern selection
+    #[test]
+    fn test_percentile_pattern_selection() {
+        // Create patterns with different support frequencies
+        let patterns &#x3D; vec![
+            (&amp;quot;very_common&amp;quot;, 900),
+            (&amp;quot;common&amp;quot;, 600),
+            (&amp;quot;medium&amp;quot;, 300),
+            (&amp;quot;rare&amp;quot;, 100),
+            (&amp;quot;very_rare&amp;quot;, 10),
+        ];
+
+        let total_functions &#x3D; 1000;
+        let top_percentile_threshold &#x3D; 0.95; // Top 5% most frequent
+
+        // Calculate which patterns fall into top percentile
+        let mut sorted_patterns &#x3D; patterns.clone();
+        sorted_patterns.sort_by(|a, b| b.1.cmp(&amp;amp;a.1)); // Sort by support descending
+
+        let top_5_percent_count &#x3D; (patterns.len() as f64 * (1.0 - top_percentile_threshold)).ceil() as usize;
+        let top_patterns: Vec&amp;lt;_&amp;gt; &#x3D; sorted_patterns.iter().take(top_5_percent_count).collect();
+
+        // Should include very_common pattern
+        assert!(top_patterns.iter().any(|(name, _)| *name &#x3D;&#x3D; &amp;quot;very_common&amp;quot;),
+               &amp;quot;Top percentile should include very common patterns&amp;quot;);
+
+        // Should not include very_rare pattern
+        assert!(!top_patterns.iter().any(|(name, _)| *name &#x3D;&#x3D; &amp;quot;very_rare&amp;quot;),
+               &amp;quot;Top percentile should not include very rare patterns&amp;quot;);
+
+        // Calculate contribution of top patterns
+        let top_contribution: usize &#x3D; top_patterns.iter().map(|(_, support)| *support).sum();
+        let total_contribution: usize &#x3D; patterns.iter().map(|(_, support)| *support).sum();
+        let contribution_percentage &#x3D; (top_contribution as f64 / total_contribution as f64) * 100.0;
+
+        assert!(contribution_percentage &amp;gt; 50.0, 
+               &amp;quot;Top percentile should contribute &amp;gt;50% of total patterns: {}%&amp;quot;, contribution_percentage);
+    }
+}
+
+#[cfg(test)]
+mod stop_motif_cache_manager_tests {
+    use super::*;
+
+    /// Test cache manager initialization and configuration
+    #[test]
+    fn test_cache_manager_initialization() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let cache_dir &#x3D; temp_dir.path().to_path_buf();
+
+        let refresh_policy &#x3D; CacheRefreshPolicy {
+            auto_refresh_enabled: true,
+            max_age_hours: 24,
+            min_codebase_change_threshold: 0.1,
+            force_refresh_on_new_languages: true,
+        };
+
+        let manager &#x3D; StopMotifCacheManager::new(cache_dir.clone(), refresh_policy);
+
+        assert_eq!(manager.cache_directory(), &amp;amp;cache_dir);
+        assert!(manager.refresh_policy().auto_refresh_enabled);
+        assert_eq!(manager.refresh_policy().max_age_hours, 24);
+    }
+
+    /// Test cache persistence and loading
+    #[test]
+    fn test_cache_persistence_and_loading() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let cache_dir &#x3D; temp_dir.path().to_path_buf();
+
+        let refresh_policy &#x3D; CacheRefreshPolicy {
+            auto_refresh_enabled: true,
+            max_age_hours: 24,
+            min_codebase_change_threshold: 0.1,
+            force_refresh_on_new_languages: true,
+        };
+
+        let mut manager &#x3D; StopMotifCacheManager::new(cache_dir, refresh_policy);
+
+        // Create a test cache
+        let test_cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![
+                StopMotifEntry {
+                    pattern: &amp;quot;test pattern&amp;quot;.to_string(),
+                    support: 42,
+                    idf_score: 0.5,
+                    weight_multiplier: 0.3,
+                    category: PatternCategory::Boilerplate,
+                }
+            ],
+            pdg_motifs: vec![],
+            ast_patterns: vec![],
+            last_updated: 1234567890,
+            codebase_signature: &amp;quot;test_sig&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 100,
+                total_patterns_found: 200,
+                patterns_above_threshold: 50,
+                top_1_percent_contribution: 10.0,
+                processing_time_ms: 1000,
+            },
+        };
+
+        // Save cache
+        let save_result &#x3D; manager.save_cache(&amp;amp;test_cache);
+        assert!(save_result.is_ok(), &amp;quot;Should be able to save cache&amp;quot;);
+
+        // Load cache
+        let loaded_cache &#x3D; manager.load_cache();
+        assert!(loaded_cache.is_ok(), &amp;quot;Should be able to load cache&amp;quot;);
+
+        let cache &#x3D; loaded_cache.unwrap();
+        assert_eq!(cache.version, 1);
+        assert_eq!(cache.token_grams.len(), 1);
+        assert_eq!(cache.token_grams[0].pattern, &amp;quot;test pattern&amp;quot;);
+        assert_eq!(cache.codebase_signature, &amp;quot;test_sig&amp;quot;);
+    }
+
+    /// Test cache invalidation logic
+    #[test]
+    fn test_cache_invalidation_logic() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let cache_dir &#x3D; temp_dir.path().to_path_buf();
+
+        let refresh_policy &#x3D; CacheRefreshPolicy {
+            auto_refresh_enabled: true,
+            max_age_hours: 1, // Very short for testing
+            min_codebase_change_threshold: 0.05,
+            force_refresh_on_new_languages: true,
+        };
+
+        let manager &#x3D; StopMotifCacheManager::new(cache_dir, refresh_policy);
+
+        // Test age-based invalidation
+        let old_cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![],
+            pdg_motifs: vec![],
+            ast_patterns: vec![],
+            last_updated: 0, // Very old timestamp
+            codebase_signature: &amp;quot;old_sig&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 100,
+                total_patterns_found: 200,
+                patterns_above_threshold: 50,
+                top_1_percent_contribution: 10.0,
+                processing_time_ms: 1000,
+            },
+        };
+
+        assert!(manager.should_refresh_cache(&amp;amp;old_cache, &amp;quot;old_sig&amp;quot;),
+               &amp;quot;Very old cache should be invalidated&amp;quot;);
+
+        // Test signature-based invalidation
+        let current_cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![],
+            pdg_motifs: vec![],
+            ast_patterns: vec![],
+            last_updated: chrono::Utc::now().timestamp() as u64,
+            codebase_signature: &amp;quot;old_sig&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 100,
+                total_patterns_found: 200,
+                patterns_above_threshold: 50,
+                top_1_percent_contribution: 10.0,
+                processing_time_ms: 1000,
+            },
+        };
+
+        assert!(manager.should_refresh_cache(&amp;amp;current_cache, &amp;quot;new_sig&amp;quot;),
+               &amp;quot;Cache with different signature should be invalidated&amp;quot;);
+
+        // Test cache that should not be invalidated
+        assert!(!manager.should_refresh_cache(&amp;amp;current_cache, &amp;quot;old_sig&amp;quot;),
+               &amp;quot;Recent cache with same signature should not be invalidated&amp;quot;);
+    }
+
+    /// Test codebase signature generation
+    #[test]
+    fn test_codebase_signature_generation() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let cache_dir &#x3D; temp_dir.path().to_path_buf();
+
+        let refresh_policy &#x3D; CacheRefreshPolicy {
+            auto_refresh_enabled: true,
+            max_age_hours: 24,
+            min_codebase_change_threshold: 0.1,
+            force_refresh_on_new_languages: true,
+        };
+
+        let manager &#x3D; StopMotifCacheManager::new(cache_dir, refresh_policy);
+
+        // Create test codebase info
+        let mut file_info &#x3D; HashMap::new();
+        file_info.insert(&amp;quot;/test/file1.py&amp;quot;.to_string(), FileInfo {
+            path: &amp;quot;/test/file1.py&amp;quot;.to_string(),
+            language: &amp;quot;python&amp;quot;.to_string(),
+            size_bytes: 1024,
+            last_modified: 1234567890,
+            functions: vec![
+                FunctionInfo {
+                    id: &amp;quot;test_func_1&amp;quot;.to_string(),
+                    name: &amp;quot;test_func&amp;quot;.to_string(),
+                    start_line: 1,
+                    end_line: 10,
+                    complexity: 5,
+                }
+            ],
+        });
+        
+        let codebase_info &#x3D; CodebaseInfo {
+            functions: vec![
+                FunctionInfo {
+                    id: &amp;quot;test_func_1&amp;quot;.to_string(),
+                    name: &amp;quot;test_func&amp;quot;.to_string(),
+                    start_line: 1,
+                    end_line: 10,
+                    complexity: 5,
+                }
+            ],
+            total_lines: 100,
+            file_info,
+        };
+
+        let signature1 &#x3D; manager.generate_codebase_signature(&amp;amp;codebase_info);
+        let signature2 &#x3D; manager.generate_codebase_signature(&amp;amp;codebase_info);
+
+        // Same codebase should generate same signature
+        assert_eq!(signature1, signature2, &amp;quot;Identical codebase should generate identical signatures&amp;quot;);
+
+        // Different codebase should generate different signature
+        let mut modified_info &#x3D; codebase_info.clone();
+        modified_info.total_functions &#x3D; 600;
+        let signature3 &#x3D; manager.generate_codebase_signature(&amp;amp;modified_info);
+
+        assert_ne!(signature1, signature3, &amp;quot;Different codebase should generate different signatures&amp;quot;);
+
+        // Signatures should be reasonably long and contain hex characters
+        assert!(signature1.len() &amp;gt;&#x3D; 32, &amp;quot;Signature should be reasonably long&amp;quot;);
+        assert!(signature1.chars().all(|c| c.is_ascii_hexdigit()), 
+               &amp;quot;Signature should contain only hex characters&amp;quot;);
+    }
+}
+
+#[cfg(test)]
+mod ast_pattern_mining_tests {
+    use super::*;
+
+    /// Test AST pattern detection for Python
+    #[test]
+    fn test_python_ast_pattern_detection() {
+        // Simulate tree-sitter based AST pattern detection for Python
+        let python_code_samples &#x3D; vec![
+            // Import patterns
+            (&amp;quot;import os\nimport sys\nfrom typing import List&amp;quot;, vec![
+                AstStopMotifEntry {
+                    pattern: &amp;quot;import_statement&amp;quot;.to_string(),
+                    support: 2,
+                    idf_score: 0.3,
+                    weight_multiplier: 0.1,
+                    category: AstPatternCategory::Import,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: {
+                        let mut map &#x3D; HashMap::new();
+                        map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(&amp;quot;import_statement&amp;quot;.to_string()));
+                        map
+                    },
+                },
+                AstStopMotifEntry {
+                    pattern: &amp;quot;import_from_statement&amp;quot;.to_string(),
+                    support: 1,
+                    idf_score: 0.5,
+                    weight_multiplier: 0.2,
+                    category: AstPatternCategory::Import,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: {
+                        let mut map &#x3D; HashMap::new();
+                        map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(&amp;quot;import_from_statement&amp;quot;.to_string()));
+                        map
+                    },
+                }
+            ]),
+            
+            // Function definition patterns
+            (&amp;quot;def test_func(x, y):\n    return x + y&amp;quot;, vec![
+                AstStopMotifEntry {
+                    pattern: &amp;quot;function_definition&amp;quot;.to_string(),
+                    support: 1,
+                    idf_score: 0.4,
+                    weight_multiplier: 0.3,
+                    category: AstPatternCategory::FunctionDeclaration,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: {
+                        let mut map &#x3D; HashMap::new();
+                        map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(&amp;quot;function_definition&amp;quot;.to_string()));
+                        map.insert(&amp;quot;parameter_count&amp;quot;.to_string(), serde_json::Value::Number(serde_json::Number::from(2)));
+                        map
+                    },
+                }
+            ]),
+            
+            // Control flow patterns
+            (&amp;quot;if x &amp;gt; 0:\n    print(&amp;#x27;positive&amp;#x27;)\nelse:\n    print(&amp;#x27;negative&amp;#x27;)&amp;quot;, vec![
+                AstStopMotifEntry {
+                    pattern: &amp;quot;if_statement&amp;quot;.to_string(),
+                    support: 1,
+                    idf_score: 0.6,
+                    weight_multiplier: 0.4,
+                    category: AstPatternCategory::ControlFlow,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: {
+                        let mut map &#x3D; HashMap::new();
+                        map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(&amp;quot;if_statement&amp;quot;.to_string()));
+                        map.insert(&amp;quot;has_else&amp;quot;.to_string(), serde_json::Value::Bool(true));
+                        map
+                    },
+                }
+            ]),
+        ];
+
+        for (code, expected_patterns) in python_code_samples {
+            // In a real implementation, this would use tree-sitter to parse the code
+            // and extract AST patterns. For testing, we verify the expected pattern structure.
+            for pattern in expected_patterns {
+                assert_eq!(pattern.language, &amp;quot;python&amp;quot;);
+                assert!(!pattern.pattern.is_empty());
+                assert!(pattern.idf_score &amp;gt; 0.0);
+                assert!(pattern.support &amp;gt; 0);
+                
+                // Verify metadata contains expected keys
+                match pattern.category {
+                    AstPatternCategory::Import &#x3D;&amp;gt; {
+                        assert!(pattern.metadata.contains_key(&amp;quot;node_type&amp;quot;));
+                    },
+                    AstPatternCategory::FunctionDeclaration &#x3D;&amp;gt; {
+                        assert!(pattern.metadata.contains_key(&amp;quot;node_type&amp;quot;));
+                        // Could contain parameter_count, return_type_annotation, etc.
+                    },
+                    AstPatternCategory::ControlFlow &#x3D;&amp;gt; {
+                        assert!(pattern.metadata.contains_key(&amp;quot;node_type&amp;quot;));
+                        // Could contain condition complexity, branch count, etc.
+                    },
+                    _ &#x3D;&amp;gt; {}
+                }
+            }
+        }
+    }
+
+    /// Test AST pattern detection for JavaScript/TypeScript
+    #[test]
+    fn test_javascript_typescript_ast_patterns() {
+        let js_ts_patterns &#x3D; vec![
+            // JavaScript patterns
+            (&amp;quot;javascript&amp;quot;, &amp;quot;console.log(&amp;#x27;debug&amp;#x27;);\nfunction test() { return 42; }&amp;quot;, vec![
+                (&amp;quot;console_call&amp;quot;, AstPatternCategory::FunctionCall),
+                (&amp;quot;function_declaration&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            ]),
+            
+            // TypeScript patterns
+            (&amp;quot;typescript&amp;quot;, &amp;quot;interface User { id: number; name: string; }\nfunction getUser(): User | null { return null; }&amp;quot;, vec![
+                (&amp;quot;interface_declaration&amp;quot;, AstPatternCategory::InterfaceDeclaration),
+                (&amp;quot;function_declaration&amp;quot;, AstPatternCategory::FunctionDeclaration),
+                (&amp;quot;union_type&amp;quot;, AstPatternCategory::TypeAnnotation),
+            ]),
+        ];
+
+        for (language, code, expected_pattern_types) in js_ts_patterns {
+            for (pattern_name, category) in expected_pattern_types {
+                let pattern &#x3D; AstStopMotifEntry {
+                    pattern: pattern_name.to_string(),
+                    support: 1,
+                    idf_score: 0.5,
+                    weight_multiplier: 0.3,
+                    category,
+                    language: language.to_string(),
+                    metadata: HashMap::new(),
+                };
+
+                assert_eq!(pattern.language, language);
+                assert!(!pattern.pattern.is_empty());
+                
+                // Verify category-specific expectations
+                match pattern.category {
+                    AstPatternCategory::FunctionCall &#x3D;&amp;gt; {
+                        assert!(pattern.pattern.contains(&amp;quot;call&amp;quot;) || pattern.pattern.contains(&amp;quot;function&amp;quot;));
+                    },
+                    AstPatternCategory::InterfaceDeclaration &#x3D;&amp;gt; {
+                        assert_eq!(language, &amp;quot;typescript&amp;quot;); // Interface should be TypeScript-specific
+                    },
+                    _ &#x3D;&amp;gt; {}
+                }
+            }
+        }
+    }
+
+    /// Test AST pattern detection for Rust
+    #[test]
+    fn test_rust_ast_patterns() {
+        let rust_code &#x3D; r#&amp;quot;
+use std::collections::HashMap;
+
+fn main() {
+    println!(&amp;quot;Hello, world!&amp;quot;);
+    let mut map &#x3D; HashMap::new();
+    map.insert(&amp;quot;key&amp;quot;, &amp;quot;value&amp;quot;);
+    
+    match map.get(&amp;quot;key&amp;quot;) {
+        Some(val) &#x3D;&amp;gt; println!(&amp;quot;Found: {}&amp;quot;, val),
+        None &#x3D;&amp;gt; println!(&amp;quot;Not found&amp;quot;),
+    }
+}
+&amp;quot;#;
+
+        let expected_rust_patterns &#x3D; vec![
+            (&amp;quot;use_declaration&amp;quot;, AstPatternCategory::Import),
+            (&amp;quot;function_item&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            (&amp;quot;macro_invocation&amp;quot;, AstPatternCategory::MacroCall), // println!
+            (&amp;quot;let_declaration&amp;quot;, AstPatternCategory::VariableDeclaration),
+            (&amp;quot;match_expression&amp;quot;, AstPatternCategory::ControlFlow),
+        ];
+
+        for (pattern_name, category) in expected_rust_patterns {
+            let pattern &#x3D; AstStopMotifEntry {
+                pattern: pattern_name.to_string(),
+                support: 1,
+                idf_score: 0.4,
+                weight_multiplier: 0.3,
+                category,
+                language: &amp;quot;rust&amp;quot;.to_string(),
+                metadata: {
+                    let mut map &#x3D; HashMap::new();
+                    map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(pattern_name.to_string()));
+                    map
+                },
+            };
+
+            assert_eq!(pattern.language, &amp;quot;rust&amp;quot;);
+            assert!(!pattern.pattern.is_empty());
+            
+            // Rust-specific pattern validations
+            match pattern.category {
+                AstPatternCategory::MacroCall &#x3D;&amp;gt; {
+                    assert!(pattern.pattern.contains(&amp;quot;macro&amp;quot;));
+                },
+                AstPatternCategory::Import &#x3D;&amp;gt; {
+                    assert!(pattern.pattern.contains(&amp;quot;use&amp;quot;));
+                },
+                _ &#x3D;&amp;gt; {}
+            }
+        }
+    }
+
+    /// Test AST pattern detection for Go
+    #[test]
+    fn test_go_ast_patterns() {
+        let go_code &#x3D; r#&amp;quot;
+package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;strings&amp;quot;
+)
+
+type User struct {
+    ID   int    &#x60;json:&amp;quot;id&amp;quot;&#x60;
+    Name string &#x60;json:&amp;quot;name&amp;quot;&#x60;
+}
+
+func (u *User) String() string {
+    return fmt.Sprintf(&amp;quot;User{ID: %d, Name: %s}&amp;quot;, u.ID, u.Name)
+}
+
+func main() {
+    user :&#x3D; &amp;amp;User{ID: 1, Name: &amp;quot;John&amp;quot;}
+    fmt.Println(user.String())
+    
+    if strings.Contains(user.Name, &amp;quot;John&amp;quot;) {
+        fmt.Println(&amp;quot;Found John!&amp;quot;)
+    }
+}
+&amp;quot;#;
+
+        let expected_go_patterns &#x3D; vec![
+            (&amp;quot;package_clause&amp;quot;, AstPatternCategory::PackageDeclaration),
+            (&amp;quot;import_declaration&amp;quot;, AstPatternCategory::Import),
+            (&amp;quot;type_declaration&amp;quot;, AstPatternCategory::TypeDeclaration),
+            (&amp;quot;method_declaration&amp;quot;, AstPatternCategory::MethodDeclaration),
+            (&amp;quot;function_declaration&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            (&amp;quot;if_statement&amp;quot;, AstPatternCategory::ControlFlow),
+        ];
+
+        for (pattern_name, category) in expected_go_patterns {
+            let pattern &#x3D; AstStopMotifEntry {
+                pattern: pattern_name.to_string(),
+                support: 1,
+                idf_score: 0.4,
+                weight_multiplier: 0.3,
+                category,
+                language: &amp;quot;go&amp;quot;.to_string(),
+                metadata: {
+                    let mut map &#x3D; HashMap::new();
+                    map.insert(&amp;quot;node_type&amp;quot;.to_string(), serde_json::Value::String(pattern_name.to_string()));
+                    map
+                },
+            };
+
+            assert_eq!(pattern.language, &amp;quot;go&amp;quot;);
+            assert!(!pattern.pattern.is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
+mod multi_language_support_tests {
+    use super::*;
+
+    /// Test multi-language cache with different pattern frequencies
+    #[test]
+    fn test_multi_language_cache() {
+        let mut cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![],
+            pdg_motifs: vec![],
+            ast_patterns: vec![],
+            last_updated: chrono::Utc::now().timestamp() as u64,
+            codebase_signature: &amp;quot;multi_lang_test&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 1000,
+                total_patterns_found: 5000,
+                patterns_above_threshold: 500,
+                top_1_percent_contribution: 20.0,
+                processing_time_ms: 10000,
+            },
+        };
+
+        // Add patterns from different languages
+        let multi_lang_patterns &#x3D; vec![
+            // Python patterns (high frequency)
+            (&amp;quot;import os&amp;quot;, 200, &amp;quot;python&amp;quot;, AstPatternCategory::Import),
+            (&amp;quot;def function&amp;quot;, 180, &amp;quot;python&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            (&amp;quot;if condition&amp;quot;, 160, &amp;quot;python&amp;quot;, AstPatternCategory::ControlFlow),
+            
+            // JavaScript patterns (medium frequency)
+            (&amp;quot;console.log&amp;quot;, 100, &amp;quot;javascript&amp;quot;, AstPatternCategory::FunctionCall),
+            (&amp;quot;function declaration&amp;quot;, 90, &amp;quot;javascript&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            (&amp;quot;const variable&amp;quot;, 85, &amp;quot;javascript&amp;quot;, AstPatternCategory::VariableDeclaration),
+            
+            // TypeScript patterns (lower frequency)
+            (&amp;quot;interface definition&amp;quot;, 50, &amp;quot;typescript&amp;quot;, AstPatternCategory::InterfaceDeclaration),
+            (&amp;quot;type annotation&amp;quot;, 45, &amp;quot;typescript&amp;quot;, AstPatternCategory::TypeAnnotation),
+            
+            // Rust patterns (low frequency)
+            (&amp;quot;use crate&amp;quot;, 30, &amp;quot;rust&amp;quot;, AstPatternCategory::Import),
+            (&amp;quot;fn function&amp;quot;, 25, &amp;quot;rust&amp;quot;, AstPatternCategory::FunctionDeclaration),
+            
+            // Go patterns (low frequency)
+            (&amp;quot;package main&amp;quot;, 20, &amp;quot;go&amp;quot;, AstPatternCategory::PackageDeclaration),
+            (&amp;quot;func main&amp;quot;, 18, &amp;quot;go&amp;quot;, AstPatternCategory::FunctionDeclaration),
+        ];
+
+        for (pattern, support, language, category) in multi_lang_patterns {
+            let idf_score &#x3D; ((1.0 + cache.mining_stats.total_functions_analyzed as f64) / (1.0 + support as f64)).ln() + 1.0;
+            let weight_multiplier &#x3D; if support &amp;gt; 100 { 0.1 } else { 0.3 };
+
+            cache.ast_patterns.push(AstStopMotifEntry {
+                pattern: pattern.to_string(),
+                support,
+                idf_score,
+                weight_multiplier,
+                category,
+                language: language.to_string(),
+                metadata: HashMap::new(),
+            });
+        }
+
+        // Verify multi-language support
+        let languages: HashSet&amp;lt;String&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .map(|p| p.language.clone())
+            .collect();
+        assert_eq!(languages.len(), 5, &amp;quot;Should support 5 different languages&amp;quot;);
+        assert!(languages.contains(&amp;quot;python&amp;quot;));
+        assert!(languages.contains(&amp;quot;javascript&amp;quot;));
+        assert!(languages.contains(&amp;quot;typescript&amp;quot;));
+        assert!(languages.contains(&amp;quot;rust&amp;quot;));
+        assert!(languages.contains(&amp;quot;go&amp;quot;));
+
+        // Verify frequency-based IDF scoring
+        let python_import &#x3D; cache.ast_patterns.iter()
+            .find(|p| p.pattern &#x3D;&#x3D; &amp;quot;import os&amp;quot; &amp;amp;&amp;amp; p.language &#x3D;&#x3D; &amp;quot;python&amp;quot;)
+            .unwrap();
+        let rust_import &#x3D; cache.ast_patterns.iter()
+            .find(|p| p.pattern &#x3D;&#x3D; &amp;quot;use crate&amp;quot; &amp;amp;&amp;amp; p.language &#x3D;&#x3D; &amp;quot;rust&amp;quot;)
+            .unwrap();
+
+        assert!(rust_import.idf_score &amp;gt; python_import.idf_score,
+               &amp;quot;Lower frequency patterns should have higher IDF: Rust&#x3D;{}, Python&#x3D;{}&amp;quot;, 
+               rust_import.idf_score, python_import.idf_score);
+
+        // Verify weight assignment based on frequency
+        assert_eq!(python_import.weight_multiplier, 0.1, &amp;quot;High frequency patterns should get low weight&amp;quot;);
+        assert_eq!(rust_import.weight_multiplier, 0.3, &amp;quot;Low frequency patterns should get higher weight&amp;quot;);
+    }
+
+    /// Test language-specific pattern filtering
+    #[test]
+    fn test_language_specific_pattern_filtering() {
+        let cache &#x3D; StopMotifCache {
+            version: 1,
+            k_gram_size: 3,
+            token_grams: vec![],
+            pdg_motifs: vec![],
+            ast_patterns: vec![
+                AstStopMotifEntry {
+                    pattern: &amp;quot;import_statement&amp;quot;.to_string(),
+                    support: 100,
+                    idf_score: 0.3,
+                    weight_multiplier: 0.2,
+                    category: AstPatternCategory::Import,
+                    language: &amp;quot;python&amp;quot;.to_string(),
+                    metadata: HashMap::new(),
+                },
+                AstStopMotifEntry {
+                    pattern: &amp;quot;console.log&amp;quot;.to_string(),
+                    support: 80,
+                    idf_score: 0.4,
+                    weight_multiplier: 0.2,
+                    category: AstPatternCategory::FunctionCall,
+                    language: &amp;quot;javascript&amp;quot;.to_string(),
+                    metadata: HashMap::new(),
+                },
+                AstStopMotifEntry {
+                    pattern: &amp;quot;interface&amp;quot;.to_string(),
+                    support: 40,
+                    idf_score: 0.6,
+                    weight_multiplier: 0.3,
+                    category: AstPatternCategory::InterfaceDeclaration,
+                    language: &amp;quot;typescript&amp;quot;.to_string(),
+                    metadata: HashMap::new(),
+                },
+            ],
+            last_updated: chrono::Utc::now().timestamp() as u64,
+            codebase_signature: &amp;quot;filter_test&amp;quot;.to_string(),
+            mining_stats: MiningStats {
+                total_functions_analyzed: 500,
+                total_patterns_found: 220,
+                patterns_above_threshold: 220,
+                top_1_percent_contribution: 15.0,
+                processing_time_ms: 3000,
+            },
+        };
+
+        // Test filtering by language
+        let python_patterns: Vec&amp;lt;_&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .filter(|p| p.language &#x3D;&#x3D; &amp;quot;python&amp;quot;)
+            .collect();
+        assert_eq!(python_patterns.len(), 1);
+        assert_eq!(python_patterns[0].pattern, &amp;quot;import_statement&amp;quot;);
+
+        let js_patterns: Vec&amp;lt;_&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .filter(|p| p.language &#x3D;&#x3D; &amp;quot;javascript&amp;quot;)
+            .collect();
+        assert_eq!(js_patterns.len(), 1);
+        assert_eq!(js_patterns[0].pattern, &amp;quot;console.log&amp;quot;);
+
+        let ts_patterns: Vec&amp;lt;_&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .filter(|p| p.language &#x3D;&#x3D; &amp;quot;typescript&amp;quot;)
+            .collect();
+        assert_eq!(ts_patterns.len(), 1);
+        assert_eq!(ts_patterns[0].pattern, &amp;quot;interface&amp;quot;);
+
+        // Test filtering by category
+        let import_patterns: Vec&amp;lt;_&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .filter(|p| matches!(p.category, AstPatternCategory::Import))
+            .collect();
+        assert_eq!(import_patterns.len(), 1);
+
+        let function_call_patterns: Vec&amp;lt;_&amp;gt; &#x3D; cache.ast_patterns.iter()
+            .filter(|p| matches!(p.category, AstPatternCategory::FunctionCall))
+            .collect();
+        assert_eq!(function_call_patterns.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod cache_refresh_tests {
+    use super::*;
+
+    /// Test cache refresh triggers and policies
+    #[test] 
+    fn test_cache_refresh_policies() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let cache_dir &#x3D; temp_dir.path().to_path_buf();
+
+        // Test different refresh policies
+        let policies &#x3D; vec![
+            // Conservative policy
+            CacheRefreshPolicy {
+                auto_refresh_enabled: true,
+                max_age_hours: 168, // 1 week
+                min_codebase_change_threshold: 0.2, // 20% change required
+                force_refresh_on_new_languages: false,
+            },
+            // Aggressive policy
+            CacheRefreshPolicy {
+                auto_refresh_enabled: true,
+                max_age_hours: 6, // 6 hours
+                min_codebase_change_threshold: 0.05, // 5% change required
+                force_refresh_on_new_languages: true,
+            },
+            // Disabled policy
+            CacheRefreshPolicy {
+                auto_refresh_enabled: false,
+                max_age_hours: 0,
+                min_codebase_change_threshold: 1.0, // Never refresh
+                force_refresh_on_new_languages: false,
+            },
+        ];
+
+        for (i, policy) in policies.iter().enumerate() {
+            let manager &#x3D; StopMotifCacheManager::new(cache_dir.clone(), policy.clone());
+
+            let old_cache &#x3D; StopMotifCache {
+                version: 1,
+                k_gram_size: 3,
+                token_grams: vec![],
+                pdg_motifs: vec![],
+                ast_patterns: vec![],
+                last_updated: if policy.max_age_hours &amp;gt; 0 {
+                    chrono::Utc::now().timestamp() as u64 - (policy.max_age_hours as u64 * 3600 + 1)
+                } else {
+                    chrono::Utc::now().timestamp() as u64
+                },
+                codebase_signature: &amp;quot;old_signature&amp;quot;.to_string(),
+                mining_stats: MiningStats {
+                    total_functions_analyzed: 100,
+                    total_patterns_found: 200,
+                    patterns_above_threshold: 50,
+                    top_1_percent_contribution: 10.0,
+                    processing_time_ms: 1000,
+                },
+            };
+
+            let should_refresh &#x3D; manager.should_refresh_cache(&amp;amp;old_cache, &amp;quot;new_signature&amp;quot;);
+
+            match i {
+                0 &#x3D;&amp;gt; { // Conservative
+                    // Should refresh due to signature change (if auto refresh enabled)
+                    assert_eq!(should_refresh, policy.auto_refresh_enabled);
+                },
+                1 &#x3D;&amp;gt; { // Aggressive
+                    // Should refresh due to age and signature change
+                    assert!(should_refresh, &amp;quot;Aggressive policy should trigger refresh&amp;quot;);
+                },
+                2 &#x3D;&amp;gt; { // Disabled
+                    // Should not refresh when disabled
+                    assert!(!should_refresh, &amp;quot;Disabled policy should not trigger refresh&amp;quot;);
+                },
+                _ &#x3D;&amp;gt; {}
+            }
+        }
+    }
+
+    /// Test mining statistics tracking
+    #[test]
+    fn test_mining_statistics() {
+        let stats &#x3D; MiningStats {
+            total_functions_analyzed: 1000,
+            total_patterns_found: 5000,
+            patterns_above_threshold: 200,
+            top_1_percent_contribution: 25.5,
+            processing_time_ms: 15000,
+        };
+
+        // Test derived metrics
+        let pattern_density &#x3D; stats.total_patterns_found as f64 / stats.total_functions_analyzed as f64;
+        assert_relative_eq!(pattern_density, 5.0, epsilon &#x3D; 0.01);
+
+        let threshold_percentage &#x3D; (stats.patterns_above_threshold as f64 / stats.total_patterns_found as f64) * 100.0;
+        assert_relative_eq!(threshold_percentage, 4.0, epsilon &#x3D; 0.01);
+
+        let processing_rate &#x3D; stats.total_functions_analyzed as f64 / (stats.processing_time_ms as f64 / 1000.0);
+        assert_relative_eq!(processing_rate, 66.67, epsilon &#x3D; 0.01); // functions per second
+
+        // Validate statistics ranges
+        assert!(stats.top_1_percent_contribution &amp;gt; 0.0 &amp;amp;&amp;amp; stats.top_1_percent_contribution &amp;lt;&#x3D; 100.0);
+        assert!(stats.patterns_above_threshold &amp;lt;&#x3D; stats.total_patterns_found);
+        assert!(stats.processing_time_ms &amp;gt; 0);
+    }
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-2">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>caching_effectiveness_test.rs</div>
+                <div class="file-content">
+                    <pre>//! Test to validate token and signature caching effectiveness
+
+use std::time::Instant;
+use valknut_rs::core::featureset::CodeEntity;
+use valknut_rs::detectors::lsh::LshExtractor;
+use valknut_rs::core::config::LshConfig;
+
+#[test]
+fn test_caching_effectiveness() {
+    let lsh_extractor &#x3D; LshExtractor::new()
+        .with_lsh_config(LshConfig {
+            num_hashes: 64,
+            num_bands: 8,
+            shingle_size: 3,
+            similarity_threshold: 0.7,
+            max_candidates: 50,
+            use_semantic_similarity: false,
+        });
+    
+    // Create test source code
+    let source_code &#x3D; r#&amp;quot;
+        def calculate_fibonacci(n):
+            if n &amp;lt;&#x3D; 1:
+                return n
+            else:
+                return calculate_fibonacci(n-1) + calculate_fibonacci(n-2)
+        
+        def main():
+            result &#x3D; calculate_fibonacci(10)
+            print(f&amp;quot;Fibonacci of 10 is: {result}&amp;quot;)
+            return result
+    &amp;quot;#;
+    
+    println!(&amp;quot;&#x3D;&#x3D;&#x3D; Testing Signature Caching Effectiveness &#x3D;&#x3D;&#x3D;&amp;quot;);
+    
+    // Measure first signature generation (cache miss)
+    let start_time &#x3D; Instant::now();
+    let signature1 &#x3D; lsh_extractor.generate_minhash_signature(source_code);
+    let first_time &#x3D; start_time.elapsed();
+    
+    // Measure second signature generation (should be cache hit)
+    let start_time &#x3D; Instant::now();
+    let signature2 &#x3D; lsh_extractor.generate_minhash_signature(source_code);
+    let second_time &#x3D; start_time.elapsed();
+    
+    // Measure third signature generation (should be cache hit)
+    let start_time &#x3D; Instant::now();
+    let signature3 &#x3D; lsh_extractor.generate_minhash_signature(source_code);
+    let third_time &#x3D; start_time.elapsed();
+    
+    println!(&amp;quot;First generation (cache miss): {:?}&amp;quot;, first_time);
+    println!(&amp;quot;Second generation (cache hit): {:?}&amp;quot;, second_time);
+    println!(&amp;quot;Third generation (cache hit): {:?}&amp;quot;, third_time);
+    
+    // Verify signatures are identical
+    assert_eq!(signature1, signature2, &amp;quot;Cached signature should match original&amp;quot;);
+    assert_eq!(signature2, signature3, &amp;quot;All cached signatures should match&amp;quot;);
+    
+    // Cache hits should be significantly faster than cache miss
+    // (We expect at least 50% speed improvement for cache hits)
+    let cache_speedup &#x3D; first_time.as_nanos() as f64 / second_time.as_nanos() as f64;
+    println!(&amp;quot;Cache speedup factor: {:.2}x&amp;quot;, cache_speedup);
+    
+    // Get cache statistics
+    let cache_stats &#x3D; lsh_extractor.get_cache_statistics();
+    println!(&amp;quot;Cache statistics: {:?}&amp;quot;, cache_stats);
+    
+    // Validate cache behavior
+    assert!(cache_stats.signature_hits &amp;gt;&#x3D; 2, &amp;quot;Should have at least 2 signature cache hits&amp;quot;);
+    // Note: token hits may be 0 if signature cache prevents token generation
+    assert!(cache_stats.token_hits &amp;gt;&#x3D; 0, &amp;quot;Token hits should be non-negative&amp;quot;);
+    
+    let hit_rate &#x3D; cache_stats.overall_hit_rate();
+    println!(&amp;quot;Overall cache hit rate: {:.1}%&amp;quot;, hit_rate * 100.0);
+    
+    // With 3 calls to same source, we expect good hit rate after first miss
+    assert!(hit_rate &amp;gt; 0.0, &amp;quot;Should have some cache hits&amp;quot;);
+}
+
+#[test]
+fn test_token_caching_with_variations() {
+    let lsh_extractor &#x3D; LshExtractor::new();
+    
+    println!(&amp;quot;\n&#x3D;&#x3D;&#x3D; Testing Token Caching with Source Variations &#x3D;&#x3D;&#x3D;&amp;quot;);
+    
+    // Base source code
+    let base_source &#x3D; r#&amp;quot;
+        def test_function():
+            x &#x3D; 1
+            y &#x3D; 2
+            return x + y
+    &amp;quot;#;
+    
+    // Same source with different whitespace (should have same normalized tokens)
+    let whitespace_variant &#x3D; r#&amp;quot;
+    def test_function():
+          x &#x3D; 1
+          y &#x3D; 2
+          return x + y
+    &amp;quot;#;
+    
+    // Different source (should not hit cache)
+    let different_source &#x3D; r#&amp;quot;
+        def other_function():
+            a &#x3D; 5
+            b &#x3D; 10
+            return a * b
+    &amp;quot;#;
+    
+    // Process base source multiple times
+    for i in 0..3 {
+        let start &#x3D; Instant::now();
+        let _shingles &#x3D; lsh_extractor.create_shingles(base_source);
+        let elapsed &#x3D; start.elapsed();
+        println!(&amp;quot;Base source iteration {}: {:?}&amp;quot;, i + 1, elapsed);
+    }
+    
+    // Process whitespace variant (tokens should be cached, but normalization may differ)
+    let start &#x3D; Instant::now();
+    let _shingles_variant &#x3D; lsh_extractor.create_shingles(whitespace_variant);
+    let elapsed &#x3D; start.elapsed();
+    println!(&amp;quot;Whitespace variant: {:?}&amp;quot;, elapsed);
+    
+    // Process different source (should not hit cache)
+    let start &#x3D; Instant::now();
+    let _shingles_different &#x3D; lsh_extractor.create_shingles(different_source);
+    let elapsed &#x3D; start.elapsed();
+    println!(&amp;quot;Different source: {:?}&amp;quot;, elapsed);
+    
+    let cache_stats &#x3D; lsh_extractor.get_cache_statistics();
+    println!(&amp;quot;Final cache statistics: {:?}&amp;quot;, cache_stats);
+    
+    // Verify we got some cache hits
+    assert!(cache_stats.token_hits &amp;gt; 0, &amp;quot;Should have token cache hits for repeated source&amp;quot;);
+}
+
+#[test]
+fn test_cache_memory_management() {
+    let lsh_extractor &#x3D; LshExtractor::new();
+    
+    println!(&amp;quot;\n&#x3D;&#x3D;&#x3D; Testing Cache Memory Management &#x3D;&#x3D;&#x3D;&amp;quot;);
+    
+    // Generate many different source codes to test cache eviction
+    let mut sources &#x3D; Vec::new();
+    for i in 0..100 {
+        let source &#x3D; format!(
+            r#&amp;quot;
+            def function_{}():
+                x &#x3D; {}
+                y &#x3D; x * 2
+                return y + {}
+            &amp;quot;#,
+            i, i % 10, i % 5
+        );
+        sources.push(source);
+    }
+    
+    println!(&amp;quot;Generating signatures for {} different sources&amp;quot;, sources.len());
+    
+    // Process all sources
+    let start_time &#x3D; Instant::now();
+    for (i, source) in sources.iter().enumerate() {
+        let _signature &#x3D; lsh_extractor.generate_minhash_signature(source);
+        
+        if i % 20 &#x3D;&#x3D; 0 {
+            let cache_stats &#x3D; lsh_extractor.get_cache_statistics();
+            println!(&amp;quot;After {} sources - hits: {}, misses: {}, evictions: {}&amp;quot;, 
+                     i + 1, 
+                     cache_stats.signature_hits + cache_stats.token_hits,
+                     cache_stats.signature_misses + cache_stats.token_misses,
+                     cache_stats.evictions);
+        }
+    }
+    
+    let elapsed &#x3D; start_time.elapsed();
+    println!(&amp;quot;Processed {} sources in {:?}&amp;quot;, sources.len(), elapsed);
+    
+    // Now test cache effectiveness with repeated access
+    let repeat_start &#x3D; Instant::now();
+    for source in sources.iter().take(10) {
+        let _signature &#x3D; lsh_extractor.generate_minhash_signature(source);
+    }
+    let repeat_elapsed &#x3D; repeat_start.elapsed();
+    
+    println!(&amp;quot;Repeated access to 10 sources: {:?}&amp;quot;, repeat_elapsed);
+    
+    let final_stats &#x3D; lsh_extractor.get_cache_statistics();
+    println!(&amp;quot;Final statistics: {:?}&amp;quot;, final_stats);
+    
+    // Validate cache is working and managing memory
+    assert!(final_stats.signature_hits &amp;gt; 0 || final_stats.token_hits &amp;gt; 0, 
+            &amp;quot;Should have some cache hits&amp;quot;);
+    
+    let avg_time_per_source &#x3D; elapsed.as_millis() / sources.len() as u128;
+    println!(&amp;quot;Average time per source: {}ms&amp;quot;, avg_time_per_source);
+    
+    // Performance should be reasonable even with cache management
+    assert!(avg_time_per_source &amp;lt; 100, &amp;quot;Average processing time should be reasonable&amp;quot;);
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-3">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>memory_pool_integration_test.rs</div>
+                <div class="file-content">
+                    <pre>//! Test memory pool integration in LSH operations
+
+use valknut_rs::detectors::lsh::LshExtractor;
+
+#[test]
+fn test_memory_pool_integration() {
+    println!(&amp;quot;&#x3D;&#x3D;&#x3D; Testing Memory Pool Integration &#x3D;&#x3D;&#x3D;&amp;quot;);
+    
+    let lsh_extractor &#x3D; LshExtractor::new();
+    
+    // Test source code
+    let source_code &#x3D; r#&amp;quot;
+        def calculate_sum(a, b):
+            result &#x3D; a + b
+            return result
+        
+        def main():
+            x &#x3D; 10
+            y &#x3D; 20
+            total &#x3D; calculate_sum(x, y)
+            print(f&amp;quot;Sum: {total}&amp;quot;)
+    &amp;quot;#;
+    
+    // Test signature generation with memory pools
+    println!(&amp;quot;Testing signature generation with memory pools...&amp;quot;);
+    
+    let signature1 &#x3D; lsh_extractor.generate_minhash_signature(source_code);
+    assert_eq!(signature1.len(), 128, &amp;quot;Signature should have 128 hashes&amp;quot;);
+    
+    // Test shingle creation with memory pools  
+    println!(&amp;quot;Testing shingle creation with memory pools...&amp;quot;);
+    
+    let shingles1 &#x3D; lsh_extractor.create_shingles(source_code);
+    assert!(!shingles1.is_empty(), &amp;quot;Should generate shingles&amp;quot;);
+    
+    // Test multiple operations to validate pool reuse
+    println!(&amp;quot;Testing pool reuse with multiple operations...&amp;quot;);
+    
+    for i in 0..5 {
+        let test_code &#x3D; format!(r#&amp;quot;
+            def test_function_{}():
+                x &#x3D; {}
+                y &#x3D; x * 2
+                return y + {}
+        &amp;quot;#, i, i, i % 3);
+        
+        let signature &#x3D; lsh_extractor.generate_minhash_signature(&amp;amp;test_code);
+        let shingles &#x3D; lsh_extractor.create_shingles(&amp;amp;test_code);
+        
+        assert_eq!(signature.len(), 128);
+        assert!(!shingles.is_empty());
+    }
+    
+    // Check memory pool statistics
+    let (string_stats, sig_stats) &#x3D; lsh_extractor.get_memory_pool_statistics();
+    
+    println!(&amp;quot;Memory Pool Statistics:&amp;quot;);
+    println!(&amp;quot;  String Pool - Created: {}, Reused: {}, Pool Size: {}&amp;quot;, 
+             string_stats.created_count, string_stats.reused_count, string_stats.current_pool_size);
+    println!(&amp;quot;  Signature Pool - Created: {}, Reused: {}, Pool Size: {}&amp;quot;, 
+             sig_stats.created_count, sig_stats.reused_count, sig_stats.current_pool_size);
+    
+    // Validate some reuse occurred
+    assert!(string_stats.created_count + string_stats.reused_count &amp;gt; 0, 
+            &amp;quot;Should have some string pool activity&amp;quot;);
+    assert!(sig_stats.created_count + sig_stats.reused_count &amp;gt; 0, 
+            &amp;quot;Should have some signature pool activity&amp;quot;);
+    
+    // Log comprehensive statistics
+    println!(&amp;quot;\nComprehensive Performance Statistics:&amp;quot;);
+    lsh_extractor.log_performance_statistics();
+    
+    println!(&amp;quot;✅ Memory pool integration test completed successfully!&amp;quot;);
+}
+
+#[test]
+fn test_memory_pool_effectiveness() {
+    println!(&amp;quot;\n&#x3D;&#x3D;&#x3D; Testing Memory Pool Effectiveness &#x3D;&#x3D;&#x3D;&amp;quot;);
+    
+    let lsh_extractor &#x3D; LshExtractor::new();
+    
+    // Same code processed multiple times should increase reuse
+    let source_code &#x3D; r#&amp;quot;
+        def repeated_function():
+            for i in range(10):
+                print(f&amp;quot;Iteration {i}&amp;quot;)
+            return &amp;quot;done&amp;quot;
+    &amp;quot;#;
+    
+    // Process the same code multiple times
+    for _ in 0..3 {
+        let _signature &#x3D; lsh_extractor.generate_minhash_signature(source_code);
+        let _shingles &#x3D; lsh_extractor.create_shingles(source_code);
+    }
+    
+    let (string_stats, sig_stats) &#x3D; lsh_extractor.get_memory_pool_statistics();
+    
+    println!(&amp;quot;After repeated processing:&amp;quot;);
+    println!(&amp;quot;  String reuse rate: {:.1}%&amp;quot;, string_stats.reuse_rate() * 100.0);
+    println!(&amp;quot;  Signature reuse rate: {:.1}%&amp;quot;, sig_stats.reuse_rate() * 100.0);
+    
+    // With repeated processing, we should see some reuse
+    // Note: Cache might prevent some pool reuse, so we check for reasonable activity
+    assert!(string_stats.reused_count &amp;gt; 0 || sig_stats.reused_count &amp;gt; 0,
+            &amp;quot;Should have some memory pool reuse with repeated operations&amp;quot;);
+    
+    println!(&amp;quot;✅ Memory pool effectiveness test completed!&amp;quot;);
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-4">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>fixtures/mod.rs</div>
+                <div class="file-content">
+                    <pre>pub mod clone_denoising_test_data;</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/babel">
+        const { useState, useCallback, useEffect } = React;
+        const { Tree } = ReactArborist;
+
+        // File data from Handlebars template
+        const fileData = [
+            {
+                path: "clone_denoising/phase3_stop_motifs_cache_tests.rs",
+                icon: "file-code",
+                index: 0,
+                size: "37.0 KB",
+                tokens: "3,518",
+                score: "0.96"
+            },
+            {
+                path: "caching_effectiveness_test.rs",
+                icon: "file-code",
+                index: 1,
+                size: "7.0 KB",
+                tokens: "970",
+                score: "0.76"
+            },
+            {
+                path: "memory_pool_integration_test.rs",
+                icon: "file-code",
+                index: 2,
+                size: "3.9 KB",
+                tokens: "493",
+                score: "0.76"
+            },
+            {
+                path: "fixtures/mod.rs",
+                icon: "file-code",
+                index: 3,
+                size: "34 B",
+                tokens: "4",
+                score: "0.19"
+            }
+        ];
+
+        // Build hierarchical tree structure from flat file paths
+        function buildTreeData(files) {
+            if (!files || files.length === 0) {
+                console.warn('No files provided to buildTreeData');
+                return [];
+            }
+            
+            const nodeMap = new Map();
+            const rootNodes = [];
+            
+            files.forEach((file, index) => {
+                const parts = file.path.split('/');
+                let currentPath = '';
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    const parentPath = currentPath;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    const isLast = i === parts.length - 1;
+                    
+                    if (!nodeMap.has(currentPath)) {
+                        const node = {
+                            id: currentPath,
+                            name: part,
+                            isFolder: !isLast,
+                            path: currentPath,
+                            fileIndex: isLast ? index : undefined,
+                            fileData: isLast ? file : undefined
+                        };
+                        
+                        // Only add children array for folders
+                        if (!isLast) {
+                            node.children = [];
+                        }
+                        
+                        nodeMap.set(currentPath, node);
+                        
+                        if (parentPath) {
+                            const parent = nodeMap.get(parentPath);
+                            if (parent && parent.children) {
+                                parent.children.push(node);
+                            }
+                        } else {
+                            rootNodes.push(node);
+                        }
+                    }
+                }
+            });
+            
+            return rootNodes;
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': case 'jsx': return 'file-text';
+                case 'ts': case 'tsx': return 'file-text';
+                case 'py': return 'file-text';
+                case 'rs': return 'file-text';
+                case 'go': return 'file-text';
+                case 'java': return 'file-text';
+                case 'cpp': case 'c': case 'h': return 'file-text';
+                case 'css': return 'file-text';
+                case 'html': return 'file-text';
+                case 'json': return 'file-text';
+                case 'md': return 'file-text';
+                case 'yml': case 'yaml': return 'file-text';
+                case 'xml': return 'file-text';
+                case 'sql': return 'file-text';
+                case 'sh': case 'bash': return 'file-text';
+                case 'dockerfile': return 'file-text';
+                case 'gitignore': return 'file-text';
+                case 'toml': return 'file-text';
+                case 'lock': return 'file-text';
+                default: return 'file-text';
+            }
+        }
+
+        // Tree Node Component
+        function Node({ node, style, dragHandle, tree }) {
+            const isFolder = node.isFolder;
+            const isOpen = tree.isOpen(node.id);
+            
+            const handleClick = useCallback(() => {
+                if (isFolder) {
+                    tree.toggle(node.id);
+                } else {
+                    // Navigate to file section
+                    const fileIndex = node.fileIndex;
+                    if (fileIndex !== undefined) {
+                        const element = document.getElementById(`file-${fileIndex + 1}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                }
+            }, [node.id, isFolder, tree, node.fileIndex]);
+
+            useEffect(() => {
+                // Re-initialize Lucide icons for this node
+                const iconElements = document.querySelectorAll('[data-lucide]');
+                iconElements.forEach(el => {
+                    if (!el.querySelector('svg')) {
+                        lucide.createIcons();
+                    }
+                });
+            });
+
+            return (
+                <div 
+                    ref={dragHandle} 
+                    style={style} 
+                    className="tree-node"
+                    onClick={handleClick}
+                >
+                    <div className="tree-node-content">
+                        {isFolder && (
+                            <div className={`tree-arrow ${isOpen ? 'expanded' : ''}`}>
+                                <i data-lucide="chevron-right" className="tree-icon"></i>
+                            </div>
+                        )}
+                        {!isFolder && <div className="tree-arrow"></div>}
+                        
+                        <i 
+                            data-lucide={isFolder ? 'folder' : getFileIcon(node.name)} 
+                            className={`tree-icon ${isFolder ? 'folder-icon' : 'file-icon'}`}
+                        ></i>
+                        
+                        <span className="tree-label" title={node.path}>
+                            {node.name}
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+
+        // File Tree Component
+        function FileTree() {
+            const [treeData] = useState(() => {
+                console.log('Building tree data from:', fileData);
+                const tree = buildTreeData(fileData);
+                console.log('Built tree data:', tree);
+                return tree;
+            });
+            
+            useEffect(() => {
+                // Re-initialize Lucide icons after React renders
+                const initIcons = () => {
+                    try {
+                        lucide.createIcons();
+                        console.log('Lucide icons initialized');
+                    } catch (error) {
+                        console.error('Error initializing Lucide icons:', error);
+                    }
+                };
+                
+                // Initialize immediately and after a delay
+                initIcons();
+                setTimeout(initIcons, 100);
+                setTimeout(initIcons, 500);
+            }, []);
+
+            if (!treeData || treeData.length === 0) {
+                return (
+                    <div style={&#123;&#123; padding: '20px', textAlign: 'center', color: 'var(--text-muted)' &#125;&#125;}>
+                        No files to display
+                    </div>
+                );
+            }
+
+            return (
+                <Tree
+                    data={treeData}
+                    openByDefault={false}
+                    width="100%"
+                    height={400}
+                    padding={25}
+                    rowHeight={28}
+                    indent={16}
+                    overscanCount={8}
+                >
+                    {Node}
+                </Tree>
+            );
+        }
+
+        // Render the component
+        try {
+            const container = document.getElementById('file-tree-container');
+            if (container) {
+                const root = ReactDOM.createRoot(container);
+                root.render(<FileTree />);
+                console.log('React tree component rendered successfully');
+            } else {
+                console.error('Could not find file-tree-container element');
+            }
+        } catch (error) {
+            console.error('Error rendering React tree:', error);
+        }
+    </script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

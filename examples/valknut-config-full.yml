@@ -1,0 +1,217 @@
+# Complete Valknut Configuration Example
+# This demonstrates all available denoising and analysis configuration options
+
+# Core analysis pipeline settings
+analysis:
+  enable_scoring: true
+  enable_graph_analysis: true
+  enable_lsh_analysis: true
+  enable_refactoring_analysis: true
+  enable_coverage_analysis: false
+  enable_structure_analysis: true
+  enable_names_analysis: true
+  confidence_threshold: 0.7
+  max_files: 0
+  exclude_patterns:
+    - "*/node_modules/*"
+    - "*/venv/*"
+    - "*/target/*"
+    - "*/__pycache__/*"
+    - "*.min.js"
+  include_patterns:
+    - "**/*"
+
+# Intelligent clone detection and denoising (DEFAULT ENABLED)
+denoise:
+  # Core settings - enabled by default for intelligent clone detection
+  enabled: true                 # Enable denoising system
+  auto: true                    # Enable auto-calibration by default
+  
+  # Core thresholds (user-configurable)
+  min_function_tokens: 40       # Minimum function size (40+ recommended)
+  min_match_tokens: 24          # Minimum matching tokens (24+ recommended)
+  require_blocks: 2             # Require distinct blocks for meaningful matches (≥2)
+  similarity: 0.82              # Final similarity threshold (0.0-1.0)
+  
+  # Advanced settings
+  weights:
+    ast: 0.35                   # AST similarity weight
+    pdg: 0.45                   # Program dependence graph weight  
+    emb: 0.20                   # Embedding similarity weight
+  
+  io_mismatch_penalty: 0.25     # I/O signature mismatch penalty
+  threshold_s: 0.82             # Final similarity threshold (alias)
+  
+  # Stop motifs (AST-based boilerplate filtering)
+  stop_motifs:
+    enabled: true               # Enable stop motifs filtering
+    percentile: 0.5             # Top 0.5% patterns marked as boilerplate
+    refresh_days: 7             # Cache refresh interval
+  
+  # Auto-calibration
+  auto_calibration:
+    enabled: true               # Enable auto-calibration
+    quality_target: 0.8         # 80% of candidates must meet quality
+    sample_size: 200            # Top N candidates for calibration
+    max_iterations: 50          # Binary search limit
+  
+  # Payoff ranking
+  ranking:
+    by: "saved_tokens"          # Ranking criteria: "saved_tokens" or "frequency"
+    min_saved_tokens: 100       # Minimum saved tokens to report
+    min_rarity_gain: 1.2        # Minimum rarity gain threshold
+    live_reach_boost: true      # Use live reachability data if available
+  
+  # Development/debugging
+  dry_run: false                # Analyze but don't change behavior
+
+# Feature scoring and normalization
+scoring:
+  normalization_scheme: "z_score"
+  use_bayesian_fallbacks: true
+  confidence_reporting: false
+  weights:
+    complexity: 1.0
+    graph: 0.8
+    structure: 0.9
+    style: 0.5
+    coverage: 0.7
+  statistical_params:
+    confidence_level: 0.95
+    min_sample_size: 10
+    outlier_threshold: 3.0
+
+# Graph analysis settings
+graph:
+  enable_betweenness: true
+  enable_closeness: false
+  enable_cycle_detection: true
+  max_exact_size: 10000
+  use_approximation: true
+  approximation_sample_rate: 0.1
+
+# LSH and similarity detection
+lsh:
+  num_hashes: 128
+  num_bands: 16
+  shingle_size: 3
+  similarity_threshold: 0.7
+  max_candidates: 100
+  use_semantic_similarity: false
+
+# Language-specific settings
+languages:
+  python:
+    enabled: true
+    file_extensions: [".py", ".pyi"]
+    tree_sitter_language: "python"
+    max_file_size_mb: 10.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  
+  javascript:
+    enabled: true
+    file_extensions: [".js", ".mjs", ".jsx"]
+    tree_sitter_language: "javascript"
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  
+  typescript:
+    enabled: true
+    file_extensions: [".ts", ".tsx", ".d.ts"]
+    tree_sitter_language: "typescript"
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+
+# I/O and persistence
+io:
+  cache_dir: null
+  enable_caching: true
+  cache_ttl_seconds: 3600
+  report_dir: null
+  report_format: "json"
+
+# Performance and resource limits
+performance:
+  max_threads: null
+  memory_limit_mb: null
+  file_timeout_seconds: 30
+  total_timeout_seconds: null
+  enable_simd: false
+  batch_size: 100
+
+# Structure analysis
+structure:
+  enable_branch_packs: true
+  enable_file_split_packs: true
+  min_pack_size: 3
+  max_pack_size: 15
+  similarity_threshold: 0.7
+  top_packs: 10
+  exclude_patterns: []
+
+# Enhanced duplicate detection (legacy compatibility)
+dedupe:
+  include: ["src/**"]
+  exclude:
+    - "benches/**"
+    - "examples/**"
+    - "datasets/**"
+    - "**/generated/**"
+    - "**/*.pb.rs"
+  min_function_tokens: 40
+  min_ast_nodes: 35
+  min_match_tokens: 24
+  min_match_coverage: 0.40
+  shingle_k: 9
+  require_distinct_blocks: 2
+  weights:
+    ast: 0.35
+    pdg: 0.45
+    emb: 0.20
+  io_mismatch_penalty: 0.25
+  threshold_s: 0.82
+  stop_phrases:
+    - "^\\s*@staticmethod\\b"
+    - "group\\.bench_with_input\\s*\\("
+    - "\\bb\\.iter\\s*\\(\\|\\|"
+    - "\\bgroup\\.finish\\s*\\(\\)\\s*;?"
+    - "\\blet\\s+config\\s*=\\s*AnalysisConfig::(new|default)\\s*\\(\\)\\s*;?"
+    - "\\bchecks\\.push\\s*\\(\\s*HealthCheck\\s*\\{"
+  rank_by: "saved_tokens"
+  min_saved_tokens: 100
+  keep_top_per_file: 3
+  adaptive:
+    auto_denoise: true
+    adaptive_learning: true
+    rarity_weighting: true
+    structural_validation: true
+    live_reach_integration: true
+    stop_motif_percentile: 0.75
+    hub_suppression_threshold: 0.6
+    quality_gate_percentage: 0.8
+    tfidf_kgram_size: 8
+    wl_iterations: 3
+    min_rarity_gain: 1.2
+    external_call_jaccard_threshold: 0.2
+    cache_refresh_days: 7
+    auto_refresh_cache: true
+
+# Live reachability analysis (optional)
+# live_reach:
+#   ingest:
+#     ns_allow: ["myco.", "github.com/myco/"]
+#     lang: "auto"
+#     input_glob: "stacks/*.txt"
+#     out_dir: ".valknut/live/out"
+#     upload_uri: "s3://company-valknut/live"
+#   build:
+#     since_days: 30
+#     services: ["api"]
+#     weight_static: 0.1
+#     island:
+#       min_size: 5
+#       min_score: 0.6
+#       resolution: 0.8

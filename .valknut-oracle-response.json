@@ -1,0 +1,192 @@
+{
+  "assessment": {
+    "health_score": 63,
+    "strengths": [
+      "Good modularity with clear separation between core logic, detectors, API, and binary layers.",
+      "Comprehensive, type-safe error handling is centralized in `src/core/errors.rs`.",
+      "The analysis pipeline is well-structured into distinct, understandable stages."
+    ],
+    "weaknesses": [
+      "A monolithic configuration struct in `src/core/config.rs` creates high coupling across all modules.",
+      "Significant code duplication exists in non-production code, particularly in benchmark suites and static web assets.",
+      "High complexity in benchmark setup functions (`benches/`) makes performance testing difficult to maintain and understand.",
+      "Public API data structures in `src/api/results.rs` are tightly coupled to internal pipeline representations."
+    ],
+    "architecture_quality": "The core architecture follows a sound pipeline pattern with good separation of concerns. However, it is critically undermined by a centralized, monolithic configuration object (`ValknutConfig`) that couples all components together. The public API layer is not sufficiently decoupled from internal data structures, making the library brittle and hard to evolve without causing breaking changes.",
+    "organization_quality": "The directory structure is logical and follows standard Rust conventions. The primary organizational issue is at the file level; several key files (`config.rs`, `api/results.rs`, `core/pipeline/pipeline_results.rs`) have grown excessively large and contain too many disparate responsibilities. This indicates a need for further decomposition into more cohesive, feature-specific modules."
+  },
+  "refactoring_plan": {
+    "phases": [
+      {
+        "id": "phase-1-core-decoupling",
+        "name": "Core Decoupling and Configuration Refactoring",
+        "description": "This phase addresses the most critical architectural issue: the monolithic configuration system. By breaking down the central config and API models, we can significantly reduce coupling and improve overall maintainability.",
+        "priority": 1,
+        "subsystems": [
+          {
+            "id": "config-decomposition",
+            "name": "Configuration Decomposition",
+            "affected_files": [
+              "src/core/config.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-1.1-split-config",
+                "title": "Decompose monolithic ValknutConfig struct",
+                "description": "The `ValknutConfig` struct in `src/core/config.rs` is over 1000 lines long and couples all features. It must be broken down into smaller, feature-specific configuration structs (e.g., `DenoiseConfig`, `StructureConfig`, `CoverageConfig`). These smaller structs should be moved into their respective modules. The root `ValknutConfig` will then compose these smaller structs, acting as a facade.",
+                "task_type": "architectural_change",
+                "files": [
+                  "src/core/config.rs",
+                  "src/detectors/clone_detection/mod.rs",
+                  "src/detectors/structure/config.rs",
+                  "src/core/pipeline/pipeline_config.rs"
+                ],
+                "estimated_hours": 16.0,
+                "risk_level": "high",
+                "benefits": [
+                  "Drastically reduced coupling between modules.",
+                  "Improved modularity and maintainability.",
+                  "Easier to add or modify feature-specific configurations."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "api-decoupling",
+            "name": "API and Pipeline Decoupling",
+            "affected_files": [
+              "src/api/results.rs",
+              "src/api/engine.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-1.2-refactor-results",
+                "title": "Decouple API results from internal pipeline results",
+                "description": "The `AnalysisResults::from_pipeline_results` function creates a tight coupling between the public API and internal data structures. Introduce a `Builder` pattern or an intermediate representation to decouple this conversion. Result structs in `src/core/pipeline/pipeline_results.rs` should be co-located with the modules that produce them.",
+                "task_type": "refactor_class",
+                "files": [
+                  "src/api/results.rs",
+                  "src/core/pipeline/pipeline_results.rs",
+                  "src/core/pipeline/pipeline_executor.rs"
+                ],
+                "estimated_hours": 12.0,
+                "risk_level": "medium",
+                "benefits": [
+                  "Better separation between public API and internal implementation.",
+                  "Simplifies the `pipeline_results.rs` file.",
+                  "Improves testability of the API layer."
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phase-2-benchmark-cleanup",
+        "name": "Benchmark and Test Suite Refactoring",
+        "description": "The benchmark suite is a major source of complexity and duplication, as identified by the Valknut analysis. Refactoring this code will simplify performance testing and improve clarity.",
+        "priority": 2,
+        "subsystems": [
+          {
+            "id": "benchmark-fixtures",
+            "name": "Benchmark Fixture Extraction",
+            "affected_files": [
+              "benches/performance.rs",
+              "benches/clone_denoising_benchmarks.rs",
+              "benches/lsh_optimization_benchmarks.rs"
+            ],
+            "tasks": [
+              {
+                "id": "task-2.1-extract-helpers",
+                "title": "Extract common benchmark setup logic into shared fixtures",
+                "description": "The benchmark files contain large, complex, and duplicated functions for generating test data (e.g., `generate_test_vectors`, `generate_test_entities`). Extract this logic into a shared helper module (e.g., `benches/fixtures.rs`) to reduce duplication and simplify the benchmark definitions.",
+                "task_type": "extract_method",
+                "files": [
+                  "benches/performance.rs",
+                  "benches/clone_denoising_benchmarks.rs"
+                ],
+                "estimated_hours": 8.0,
+                "risk_level": "low",
+                "benefits": [
+                  "Reduces code duplication in test code.",
+                  "Simplifies the creation of new benchmarks.",
+                  "Improves readability of performance tests."
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "phase-3-asset-consolidation",
+        "name": "Web Asset Consolidation",
+        "description": "Address the significant duplication of static web assets used for demos and reports.",
+        "priority": 3,
+        "subsystems": [
+          {
+            "id": "asset-deduplication",
+            "name": "Static Asset Deduplication",
+            "affected_files": [
+              "webpage_files/trefoil-animation.js",
+              "final-demo/webpage_files/trefoil-animation.js",
+              "test-report/webpage_files/trefoil-animation.js"
+            ],
+            "tasks": [
+              {
+                "id": "task-3.1-consolidate-js",
+                "title": "Consolidate duplicated JavaScript assets",
+                "description": "The file `trefoil-animation.js` is duplicated in at least 5 different locations. Consolidate these into a single canonical location (e.g., `assets/js/`) and update any dependent HTML files or build scripts to reference the single source. This resolves a major source of asset management debt.",
+                "task_type": "architectural_change",
+                "files": [
+                  "webpage_files/trefoil-animation.js",
+                  "final-demo/webpage_files/trefoil-animation.js",
+                  "test-report/webpage_files/trefoil-animation.js",
+                  "release-eval/webpage_files/trefoil-animation.js",
+                  "comprehensive-coverage-report/webpage_files/trefoil-animation.js"
+                ],
+                "estimated_hours": 4.0,
+                "risk_level": "low",
+                "benefits": [
+                  "Reduces repository size.",
+                  "Eliminates maintenance overhead from duplicated files.",
+                  "Ensures consistency across all web-based outputs."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "risk_assessment": {
+    "overall_risk": "high",
+    "risks": [
+      {
+        "category": "technical",
+        "description": "Refactoring the central `ValknutConfig` struct is a pervasive change that will cause compilation failures across the entire codebase, requiring a careful and systematic update process.",
+        "probability": "high",
+        "impact": "high",
+        "mitigation": "Introduce a temporary compatibility layer using `From` traits to allow for incremental updates. Ensure comprehensive test coverage for configuration loading and usage before starting the refactoring."
+      },
+      {
+        "category": "process",
+        "description": "The large scope of the configuration refactoring could disrupt or block ongoing feature development if not managed carefully.",
+        "probability": "medium",
+        "impact": "medium",
+        "mitigation": "Perform the refactoring on a dedicated, long-lived feature branch. Communicate the upcoming changes clearly to all developers and schedule a specific integration window to minimize disruption."
+      },
+      {
+        "category": "technical",
+        "description": "Co-locating result structs from `pipeline_results.rs` into their respective detector modules could complicate the serialization logic for final reports.",
+        "probability": "low",
+        "impact": "medium",
+        "mitigation": "Create a unified `ReportData` struct or builder in the `io/reports` module that aggregates data from different modules just before serialization. This keeps the internal modules decoupled while centralizing report generation logic."
+      }
+    ],
+    "mitigation_strategies": [
+      "Increase unit and integration test coverage for core components (config, pipeline, API) before beginning major refactoring.",
+      "Use the Rust compiler's strict type checking as a guide to systematically resolve all breakages from the configuration changes.",
+      "Merge refactoring changes in small, verifiable pull requests, even if they are merged into a single long-lived feature branch."
+    ]
+  }
+}

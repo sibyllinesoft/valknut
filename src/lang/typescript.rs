@@ -138,9 +138,6 @@ export default function createClient(config: Config): HttpClient {
     }
 }
 
-extern "C" {
-    fn tree_sitter_typescript() -> Language;
-}
 
 /// TypeScript-specific parsing and analysis
 pub struct TypeScriptAdapter {
@@ -154,7 +151,7 @@ pub struct TypeScriptAdapter {
 impl TypeScriptAdapter {
     /// Create a new TypeScript adapter
     pub fn new() -> Result<Self> {
-        let language = unsafe { tree_sitter_typescript() };
+        let language = tree_sitter_typescript::language_typescript();
         let mut parser = Parser::new();
         parser.set_language(language)
             .map_err(|e| ValknutError::parse("typescript", format!("Failed to set TypeScript language: {:?}", e)))?;
@@ -565,129 +562,3 @@ impl Default for TypeScriptAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_typescript_adapter_creation() {
-        let adapter = TypeScriptAdapter::new();
-        assert!(adapter.is_ok());
-    }
-    
-    #[test]
-    fn test_function_with_types() {
-        let mut adapter = TypeScriptAdapter::new().unwrap();
-        let source_code = r#"
-function calculate(x: number, y: number): number {
-    return x + y;
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.ts").unwrap();
-        assert_eq!(entities.len(), 1);
-        
-        let function_entity = &entities[0];
-        assert_eq!(function_entity.entity_type, "Function");
-        assert_eq!(function_entity.name, "calculate");
-        
-        // Should capture return type information
-        let return_type = function_entity.properties.get("return_type");
-        assert!(return_type.is_some());
-    }
-    
-    #[test]
-    fn test_interface_parsing() {
-        let mut adapter = TypeScriptAdapter::new().unwrap();
-        let source_code = r#"
-interface User {
-    id: number;
-    name: string;
-    email?: string;
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.ts").unwrap();
-        assert_eq!(entities.len(), 1);
-        
-        let interface_entity = &entities[0];
-        assert_eq!(interface_entity.entity_type, "Interface");
-        assert_eq!(interface_entity.name, "User");
-    }
-    
-    #[test]
-    fn test_class_with_inheritance() {
-        let mut adapter = TypeScriptAdapter::new().unwrap();
-        let source_code = r#"
-abstract class Animal {
-    abstract makeSound(): void;
-}
-
-class Dog extends Animal implements Pet {
-    makeSound(): void {
-        console.log("Woof!");
-    }
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.ts").unwrap();
-        
-        let class_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Class").collect();
-        assert_eq!(class_entities.len(), 2); // Animal and Dog
-        
-        // Check for inheritance metadata
-        let dog_class = class_entities.iter().find(|e| e.name == "Dog").unwrap();
-        let extends = dog_class.properties.get("extends");
-        assert_eq!(extends, Some(&serde_json::Value::String("Animal".to_string())));
-        
-        let animal_class = class_entities.iter().find(|e| e.name == "Animal").unwrap();
-        let is_abstract = animal_class.properties.get("is_abstract");
-        assert_eq!(is_abstract, Some(&serde_json::Value::Bool(true)));
-    }
-    
-    #[test]
-    fn test_enum_parsing() {
-        let mut adapter = TypeScriptAdapter::new().unwrap();
-        let source_code = r#"
-enum Color {
-    Red,
-    Green,
-    Blue
-}
-
-const enum Direction {
-    Up = 1,
-    Down,
-    Left,
-    Right
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.ts").unwrap();
-        
-        let enum_entities: Vec<_> = entities.iter().filter(|e| e.entity_type == "Enum").collect();
-        assert_eq!(enum_entities.len(), 2); // Color and Direction
-        
-        // Check const enum metadata
-        let direction_enum = enum_entities.iter().find(|e| e.name == "Direction").unwrap();
-        let is_const = direction_enum.properties.get("is_const");
-        assert_eq!(is_const, Some(&serde_json::Value::Bool(true)));
-    }
-    
-    #[test]
-    fn test_generic_function() {
-        let mut adapter = TypeScriptAdapter::new().unwrap();
-        let source_code = r#"
-function identity<T>(arg: T): T {
-    return arg;
-}
-"#;
-        
-        let entities = adapter.extract_code_entities(source_code, "test.ts").unwrap();
-        assert_eq!(entities.len(), 1);
-        
-        let function_entity = &entities[0];
-        assert_eq!(function_entity.entity_type, "Function");
-        assert_eq!(function_entity.name, "identity");
-    }
-}

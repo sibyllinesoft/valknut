@@ -1,0 +1,2685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repository Analysis: Scribe Analysis</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #b5b5b5;
+            --text-muted: #888;
+            --accent-primary: #4f9cf9;
+            --accent-secondary: #7c3aed;
+            --border-color: #404040;
+            --hover-color: #333333;
+            --code-bg: #252525;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            color: white;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.01) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3e%3cg fill='none' fill-rule='evenodd'%3e%3cg fill='%23ffffff' fill-opacity='0.02'%3e%3ccircle cx='20' cy='20' r='1'/%3e%3c/g%3e%3c/g%3e%3c/svg%3e");
+            pointer-events: none;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header .meta {
+            margin-top: 20px;
+            opacity: 0.9;
+            font-size: 13px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .meta-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
+        }
+        
+        .stats {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .toc {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toc h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 8px;
+        }
+        
+        .toc li {
+            margin: 0;
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .toc a:hover {
+            color: var(--accent-primary);
+            background: var(--hover-color);
+        }
+        
+        .file-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .file-item {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .file-item:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .content {
+            padding: 24px;
+            background: var(--bg-secondary);
+        }
+        
+        .file-section {
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        
+        .file-header {
+            background: var(--bg-tertiary);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-content {
+            max-height: 600px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .file-content::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        
+        .file-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        pre {
+            margin: 0;
+            padding: 24px;
+            background: var(--code-bg);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-primary);
+        }
+        
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .icon-lg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Vanilla JavaScript Tree Styles */
+        .tree-container {
+            height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            user-select: none;
+            border-radius: 4px;
+            margin: 1px 0;
+        }
+
+        .tree-node:hover {
+            background: var(--hover-color);
+            color: var(--accent-primary);
+        }
+
+        .tree-node.selected {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .tree-arrow {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+
+        .tree-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-arrow.hidden {
+            opacity: 0;
+        }
+
+        .tree-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .folder-icon {
+            color: var(--accent-secondary);
+        }
+
+        .file-icon {
+            color: var(--text-secondary);
+        }
+
+        .tree-children {
+            margin-left: 20px;
+            display: none;
+        }
+
+        .tree-children.expanded {
+            display: block;
+        }
+
+        .tree-folder.expanded > .tree-children {
+            display: block;
+        }
+
+        /* Scrollbar styling for tree */
+        .tree-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .tree-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        .tree-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .tree-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .header .meta {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .meta-item {
+                justify-content: center;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 16px;
+                padding: 16px;
+            }
+            
+            .toc ul {
+                grid-template-columns: 1fr;
+            }
+            
+            .content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                🔍 Repository Analysis
+            </h1>
+            <div class="meta">
+                <div class="meta-item">
+                    <i data-lucide="cpu" class="icon"></i>
+                    <span><strong>Algorithm:</strong> V5Integrated (Enhanced)</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="clock" class="icon"></i>
+                    <span><strong>Generated:</strong> 2025-09-15 04:23:04 UTC</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="zap" class="icon"></i>
+                    <span><strong>Selection Time:</strong> 7ms</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="files" class="icon-lg"></i>
+                    3
+                </div>
+                <div class="stat-label">Files Selected</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hash" class="icon-lg"></i>
+                    7,292
+                </div>
+                <div class="stat-label">Estimated Tokens</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hard-drive" class="icon-lg"></i>
+                    50.3 KB
+                </div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="target" class="icon-lg"></i>
+                    9.7%
+                </div>
+                <div class="stat-label">Coverage</div>
+            </div>
+        </div>
+        
+        <div class="toc">
+            <h3>
+                <i data-lucide="folder-tree" class="icon"></i>
+                File Explorer
+            </h3>
+            <div id="file-tree-container" class="tree-container"></div>
+        </div>
+        
+        <div class="file-list">
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-text" class="icon"></i>development/CI_CD_INTEGRATION.md</span>
+                <span class="file-meta">32.5 KB • ~4,218 tokens • Score: 0.82</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-text" class="icon"></i>development/CONTRIBUTING.md</span>
+                <span class="file-meta">9.7 KB • ~1,726 tokens • Score: 0.46</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-text" class="icon"></i>mcp/MCP_IMPLEMENTATION_ROADMAP.md</span>
+                <span class="file-meta">8.1 KB • ~1,348 tokens • Score: 0.45</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="file-section" id="file-1">
+                <div class="file-header"><i data-lucide="file-text" class="icon"></i>development/CI_CD_INTEGRATION.md</div>
+                <div class="file-content">
+                    <pre># CI/CD Integration Guide
+
+This guide provides comprehensive instructions for integrating Valknut into your CI/CD pipelines for automated code quality enforcement.
+
+## Table of Contents
+- [Overview](#overview)
+- [Quality Gates](#quality-gates)
+- [GitHub Actions](#github-actions)
+- [Jenkins](#jenkins)
+- [GitLab CI](#gitlab-ci)
+- [Azure DevOps](#azure-devops)
+- [CircleCI](#circleci)
+- [SonarQube Integration](#sonarqube-integration)
+- [Custom Integration](#custom-integration)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+
+## Overview
+
+Valknut provides robust CI/CD integration through:
+
+- **Quality Gates**: Configurable failure conditions with exit codes
+- **Multiple Output Formats**: JSON, SonarQube, CSV for different tools  
+- **Performance Optimization**: Fast analysis suitable for CI environments
+- **Comprehensive Reporting**: Detailed reports for team review
+- **Flexible Configuration**: Adaptable to different project standards
+
+### Key Benefits
+
+- **Automated Quality Enforcement**: Prevent quality regressions automatically
+- **Configurable Standards**: Set team-specific quality thresholds
+- **Rich Reporting**: Generate reports for stakeholders
+- **Integration Flexibility**: Works with any CI/CD system
+- **Performance Optimized**: Fast enough for every commit/PR
+
+## Quality Gates
+
+Quality gates enable automated pass/fail decisions based on code quality metrics.
+
+### Basic Quality Gate Setup
+
+&#x60;&#x60;&#x60;bash
+# Enable quality gates with default thresholds
+valknut analyze --quality-gate ./src
+
+# Fail on any issues found
+valknut analyze --fail-on-issues ./src
+
+# Custom thresholds
+valknut analyze \
+  --quality-gate \
+  --max-complexity 75 \
+  --min-health 60 \
+  --max-debt 30 \
+  --max-issues 50 \
+  --max-critical 0 \
+  ./src
+&#x60;&#x60;&#x60;
+
+### Quality Gate Configuration
+
+| Threshold | CLI Option | Range | Default | Description |
+|-----------|------------|-------|---------|-------------|
+| Max Complexity | &#x60;--max-complexity&#x60; | 0-100 | 75 | Maximum complexity score (lower is better) |
+| Min Health | &#x60;--min-health&#x60; | 0-100 | 60 | Minimum health score (higher is better) |
+| Max Debt | &#x60;--max-debt&#x60; | 0-100% | 30 | Maximum technical debt ratio |
+| Min Maintainability | &#x60;--min-maintainability&#x60; | 0-100 | 20 | Minimum maintainability index |
+| Max Issues | &#x60;--max-issues&#x60; | 0+ | 50 | Maximum total issues |
+| Max Critical | &#x60;--max-critical&#x60; | 0+ | 0 | Maximum critical issues |
+| Max High Priority | &#x60;--max-high-priority&#x60; | 0+ | 5 | Maximum high-priority issues |
+
+### Exit Codes
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 0 | ✅ Success | Analysis completed, quality gates passed |
+| 1 | ❌ Quality Gate Failure | One or more thresholds exceeded |
+| 2 | ⚠️ Configuration Error | Invalid arguments or configuration |
+| 3 | ⚠️ File System Error | Path or permission issues |
+| 4 | ⚠️ Analysis Error | Internal analysis engine error |
+
+## GitHub Actions
+
+### Basic Quality Gate Workflow
+
+&#x60;&#x60;&#x60;yaml
+name: Code Quality Gate
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        
+    - name: Install Valknut
+      run: |
+        cargo install --git https://github.com/nathanricedev/valknut
+        
+    - name: Run Quality Gate
+      run: |
+        valknut analyze \
+          --quality-gate \
+          --max-complexity 75 \
+          --min-health 60 \
+          --max-debt 30 \
+          --format ci-summary \
+          --out quality-reports/ \
+          ./src
+          
+    - name: Upload Quality Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: quality-reports
+        path: quality-reports/
+        retention-days: 30
+&#x60;&#x60;&#x60;
+
+### Advanced GitHub Actions Setup
+
+&#x60;&#x60;&#x60;yaml
+name: Comprehensive Code Analysis
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  VALKNUT_VERSION: &amp;quot;latest&amp;quot;
+
+jobs:
+  quality-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+        
+    - name: Cache Valknut installation
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/valknut
+        key: valknut-${{ env.VALKNUT_VERSION }}
+        
+    - name: Install Valknut
+      run: |
+        if [ ! -f ~/.cargo/bin/valknut ]; then
+          cargo install --git https://github.com/nathanricedev/valknut
+        fi
+        
+    - name: Create Quality Gate Configuration
+      run: |
+        cat &amp;gt; .valknut.yml &amp;lt;&amp;lt; EOF
+        analysis:
+          enable_structure_analysis: true
+          enable_complexity_analysis: true
+          enable_refactoring_analysis: true
+          enable_names_analysis: true
+          max_files: 1000
+        
+        quality_gates:
+          enabled: true
+          max_complexity: 75
+          min_health: 60
+          max_debt: 30
+          max_issues: 50
+          max_critical: 0
+          max_high_priority: 5
+        EOF
+        
+    - name: Run Comprehensive Analysis
+      run: |
+        valknut analyze \
+          --config .valknut.yml \
+          --quality-gate \
+          --format json \
+          --out reports/ \
+          ./src
+          
+    - name: Generate Team Report
+      run: |
+        valknut analyze \
+          --config .valknut.yml \
+          --format html \
+          --out reports/html/ \
+          ./src
+          
+    - name: Comment PR with Results
+      if: github.event_name &#x3D;&#x3D; &amp;#x27;pull_request&amp;#x27;
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs &#x3D; require(&amp;#x27;fs&amp;#x27;);
+          const path &#x3D; &amp;#x27;reports/ci-summary.json&amp;#x27;;
+          
+          if (fs.existsSync(path)) {
+            const report &#x3D; JSON.parse(fs.readFileSync(path, &amp;#x27;utf8&amp;#x27;));
+            const comment &#x3D; &#x60;## 🔍 Code Quality Report
+            
+            **Health Score**: ${report.health_metrics.overall_health_score.toFixed(1)}/100
+            **Complexity Score**: ${report.health_metrics.complexity_score.toFixed(1)}/100
+            **Technical Debt**: ${report.health_metrics.technical_debt_ratio.toFixed(1)}%
+            
+            **Issues Found**: ${report.summary.total_issues}
+            - Critical: ${report.summary.critical_issues}
+            - High Priority: ${report.summary.high_priority_issues}
+            
+            [View Detailed Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            &#x60;;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+          
+    - name: Upload Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: code-quality-reports
+        path: reports/
+        retention-days: 90
+&#x60;&#x60;&#x60;
+
+### Matrix Strategy for Multiple Languages
+
+&#x60;&#x60;&#x60;yaml
+name: Multi-Language Quality Gate
+on: [push, pull_request]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language:
+          - { name: &amp;quot;python&amp;quot;, path: &amp;quot;./python-service&amp;quot;, config: &amp;quot;python-config.yml&amp;quot; }
+          - { name: &amp;quot;typescript&amp;quot;, path: &amp;quot;./web-app&amp;quot;, config: &amp;quot;web-config.yml&amp;quot; }
+          - { name: &amp;quot;rust&amp;quot;, path: &amp;quot;./rust-service&amp;quot;, config: &amp;quot;rust-config.yml&amp;quot; }
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Valknut
+      run: cargo install --git https://github.com/nathanricedev/valknut
+      
+    - name: Run Quality Gate for ${{ matrix.language.name }}
+      run: |
+        valknut analyze \
+          --config configs/${{ matrix.language.config }} \
+          --quality-gate \
+          --format ci-summary \
+          --out reports/${{ matrix.language.name }}/ \
+          ${{ matrix.language.path }}
+&#x60;&#x60;&#x60;
+
+## Jenkins
+
+### Basic Jenkins Pipeline
+
+&#x60;&#x60;&#x60;groovy
+pipeline {
+    agent any
+    
+    environment {
+        VALKNUT_VERSION &#x3D; &amp;#x27;latest&amp;#x27;
+    }
+    
+    stages {
+        stage(&amp;#x27;Checkout&amp;#x27;) {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage(&amp;#x27;Install Valknut&amp;#x27;) {
+            steps {
+                sh &amp;#x27;&amp;#x27;&amp;#x27;
+                    if [ ! -f ~/.cargo/bin/valknut ]; then
+                        curl --proto &amp;#x27;&#x3D;https&amp;#x27; --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+                        source ~/.cargo/env
+                        cargo install --git https://github.com/nathanricedev/valknut
+                    fi
+                &amp;#x27;&amp;#x27;&amp;#x27;
+            }
+        }
+        
+        stage(&amp;#x27;Quality Gate&amp;#x27;) {
+            steps {
+                sh &amp;#x27;&amp;#x27;&amp;#x27;
+                    ~/.cargo/bin/valknut analyze \
+                      --quality-gate \
+                      --max-complexity 75 \
+                      --min-health 60 \
+                      --max-debt 30 \
+                      --format ci-summary \
+                      --out quality-reports/ \
+                      ./src
+                &amp;#x27;&amp;#x27;&amp;#x27;
+            }
+        }
+        
+        stage(&amp;#x27;Generate Reports&amp;#x27;) {
+            steps {
+                sh &amp;#x27;&amp;#x27;&amp;#x27;
+                    ~/.cargo/bin/valknut analyze \
+                      --format html \
+                      --out reports/html/ \
+                      ./src
+                &amp;#x27;&amp;#x27;&amp;#x27;
+            }
+        }
+    }
+    
+    post {
+        always {
+            archiveArtifacts artifacts: &amp;#x27;quality-reports/**/*&amp;#x27;, fingerprint: true
+            archiveArtifacts artifacts: &amp;#x27;reports/**/*&amp;#x27;, fingerprint: true
+        }
+        
+        failure {
+            emailext (
+                subject: &amp;quot;Quality Gate Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}&amp;quot;,
+                body: &amp;quot;The code quality gate failed. Check the build logs and quality reports.&amp;quot;,
+                to: &amp;quot;${env.CHANGE_AUTHOR_EMAIL}&amp;quot;
+            )
+        }
+    }
+}
+&#x60;&#x60;&#x60;
+
+### Advanced Jenkins Pipeline with Quality Gates
+
+&#x60;&#x60;&#x60;groovy
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: &amp;#x27;QUALITY_LEVEL&amp;#x27;,
+            choices: [&amp;#x27;strict&amp;#x27;, &amp;#x27;normal&amp;#x27;, &amp;#x27;permissive&amp;#x27;],
+            description: &amp;#x27;Quality gate strictness level&amp;#x27;
+        )
+        booleanParam(
+            name: &amp;#x27;GENERATE_REPORTS&amp;#x27;,
+            defaultValue: true,
+            description: &amp;#x27;Generate detailed HTML reports&amp;#x27;
+        )
+    }
+    
+    environment {
+        QUALITY_CONFIG &#x3D; getQualityConfig(params.QUALITY_LEVEL)
+    }
+    
+    stages {
+        stage(&amp;#x27;Setup&amp;#x27;) {
+            steps {
+                script {
+                    // Install Valknut if not cached
+                    sh &amp;#x27;&amp;#x27;&amp;#x27;
+                        if [ ! -f ~/.cargo/bin/valknut ]; then
+                            curl --proto &amp;#x27;&#x3D;https&amp;#x27; --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+                            source ~/.cargo/env
+                            cargo install --git https://github.com/nathanricedev/valknut
+                        fi
+                    &amp;#x27;&amp;#x27;&amp;#x27;
+                }
+            }
+        }
+        
+        stage(&amp;#x27;Quality Gate&amp;#x27;) {
+            steps {
+                script {
+                    def qualityArgs &#x3D; getQualityArgs(params.QUALITY_LEVEL)
+                    sh &amp;quot;&amp;quot;&amp;quot;
+                        ~/.cargo/bin/valknut analyze ${qualityArgs} \
+                          --quality-gate \
+                          --format ci-summary \
+                          --out quality-reports/ \
+                          ./src
+                    &amp;quot;&amp;quot;&amp;quot;
+                }
+            }
+        }
+        
+        stage(&amp;#x27;Generate Reports&amp;#x27;) {
+            when {
+                expression { params.GENERATE_REPORTS }
+            }
+            parallel {
+                stage(&amp;#x27;HTML Report&amp;#x27;) {
+                    steps {
+                        sh &amp;#x27;&amp;#x27;&amp;#x27;
+                            ~/.cargo/bin/valknut analyze \
+                              --format html \
+                              --out reports/html/ \
+                              ./src
+                        &amp;#x27;&amp;#x27;&amp;#x27;
+                    }
+                }
+                stage(&amp;#x27;Markdown Summary&amp;#x27;) {
+                    steps {
+                        sh &amp;#x27;&amp;#x27;&amp;#x27;
+                            ~/.cargo/bin/valknut analyze \
+                              --format markdown \
+                              --out reports/markdown/ \
+                              ./src
+                        &amp;#x27;&amp;#x27;&amp;#x27;
+                    }
+                }
+                stage(&amp;#x27;CSV Export&amp;#x27;) {
+                    steps {
+                        sh &amp;#x27;&amp;#x27;&amp;#x27;
+                            ~/.cargo/bin/valknut analyze \
+                              --format csv \
+                              --out reports/csv/ \
+                              ./src
+                        &amp;#x27;&amp;#x27;&amp;#x27;
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            publishHTML([
+                allowMissing: false,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: &amp;#x27;reports/html&amp;#x27;,
+                reportFiles: &amp;#x27;index.html&amp;#x27;,
+                reportName: &amp;#x27;Code Quality Report&amp;#x27;
+            ])
+            
+            archiveArtifacts artifacts: &amp;#x27;quality-reports/**/*&amp;#x27;, fingerprint: true
+            archiveArtifacts artifacts: &amp;#x27;reports/**/*&amp;#x27;, fingerprint: true
+        }
+        
+        failure {
+            script {
+                def reportPath &#x3D; &amp;#x27;quality-reports/ci-summary.json&amp;#x27;
+                if (fileExists(reportPath)) {
+                    def report &#x3D; readJSON file: reportPath
+                    def message &#x3D; &amp;quot;&amp;quot;&amp;quot;
+                    Quality Gate Failed!
+                    
+                    Health Score: ${report.health_metrics.overall_health_score}/100
+                    Issues Found: ${report.summary.total_issues}
+                    Critical Issues: ${report.summary.critical_issues}
+                    
+                    View detailed report: ${env.BUILD_URL}Code_Quality_Report/
+                    &amp;quot;&amp;quot;&amp;quot;
+                    
+                    slackSend(
+                        channel: &amp;#x27;#code-quality&amp;#x27;,
+                        color: &amp;#x27;danger&amp;#x27;,
+                        message: message
+                    )
+                }
+            }
+        }
+    }
+}
+
+def getQualityArgs(level) {
+    switch(level) {
+        case &amp;#x27;strict&amp;#x27;:
+            return &amp;#x27;--max-complexity 60 --min-health 70 --max-debt 20 --max-issues 25 --max-critical 0&amp;#x27;
+        case &amp;#x27;normal&amp;#x27;:
+            return &amp;#x27;--max-complexity 75 --min-health 60 --max-debt 30 --max-issues 50 --max-critical 0&amp;#x27;
+        case &amp;#x27;permissive&amp;#x27;:
+            return &amp;#x27;--max-complexity 85 --min-health 40 --max-debt 50 --max-issues 100 --max-critical 5&amp;#x27;
+        default:
+            return &amp;#x27;--max-complexity 75 --min-health 60 --max-debt 30 --max-issues 50 --max-critical 0&amp;#x27;
+    }
+}
+&#x60;&#x60;&#x60;
+
+## GitLab CI
+
+### Basic GitLab CI Configuration
+
+&#x60;&#x60;&#x60;yaml
+# .gitlab-ci.yml
+stages:
+  - quality-gate
+  - reports
+
+variables:
+  VALKNUT_VERSION: &amp;quot;latest&amp;quot;
+
+before_script:
+  - apt-get update -qq &amp;amp;&amp;amp; apt-get install -y -qq curl build-essential
+  - curl --proto &amp;#x27;&#x3D;https&amp;#x27; --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - source ~/.cargo/env
+  - cargo install --git https://github.com/nathanricedev/valknut
+
+quality-gate:
+  stage: quality-gate
+  script:
+    - |
+      valknut analyze \
+        --quality-gate \
+        --max-complexity 75 \
+        --min-health 60 \
+        --max-debt 30 \
+        --format ci-summary \
+        --out quality-reports/ \
+        ./src
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: quality-reports/junit.xml
+    paths:
+      - quality-reports/
+  rules:
+    - if: $CI_PIPELINE_SOURCE &#x3D;&#x3D; &amp;quot;merge_request_event&amp;quot;
+    - if: $CI_COMMIT_BRANCH &#x3D;&#x3D; $CI_DEFAULT_BRANCH
+
+generate-reports:
+  stage: reports
+  script:
+    - |
+      valknut analyze \
+        --format html \
+        --out reports/html/ \
+        ./src
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - reports/
+  pages:
+    stage: deploy
+    script:
+      - mkdir public
+      - cp -r reports/html/* public/
+    artifacts:
+      paths:
+        - public
+  rules:
+    - if: $CI_COMMIT_BRANCH &#x3D;&#x3D; $CI_DEFAULT_BRANCH
+&#x60;&#x60;&#x60;
+
+### Advanced GitLab CI with Docker
+
+&#x60;&#x60;&#x60;yaml
+# .gitlab-ci.yml
+image: rust:1.70
+
+variables:
+  DOCKER_DRIVER: overlay2
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+
+cache:
+  paths:
+    - .cargo/
+    - target/
+
+stages:
+  - build
+  - quality-gate
+  - security
+  - reports
+  - deploy
+
+# Custom Docker image with Valknut pre-installed
+.valknut_base:
+  image: registry.gitlab.com/your-org/valknut-ci:latest
+  before_script:
+    - valknut --version
+
+quality-gate:
+  extends: .valknut_base
+  stage: quality-gate
+  script:
+    - |
+      valknut analyze \
+        --config .valknut-ci.yml \
+        --quality-gate \
+        --format ci-summary \
+        --out quality-reports/ \
+        ./src
+    - |
+      # Custom script to parse results and set GitLab variables
+      python3 scripts/parse_quality_results.py quality-reports/ci-summary.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: quality-reports/junit.xml
+    paths:
+      - quality-reports/
+  variables:
+    QUALITY_GATE_ENABLED: &amp;quot;true&amp;quot;
+
+security-scan:
+  extends: .valknut_base
+  stage: security
+  script:
+    - |
+      valknut analyze \
+        --config .valknut-security.yml \
+        --fail-on-issues \
+        --max-critical 0 \
+        --format sonar \
+        --out security-reports/ \
+        ./src
+  artifacts:
+    reports:
+      sast: security-reports/security-report.json
+  allow_failure: false
+
+comprehensive-report:
+  extends: .valknut_base
+  stage: reports
+  script:
+    - |
+      valknut analyze \
+        --format html \
+        --out reports/html/ \
+        ./src
+    - |
+      valknut analyze \
+        --format markdown \
+        --out reports/markdown/ \
+        ./src
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - reports/
+  rules:
+    - if: $CI_COMMIT_BRANCH &#x3D;&#x3D; $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE &#x3D;&#x3D; &amp;quot;schedule&amp;quot;
+
+pages:
+  stage: deploy
+  dependencies:
+    - comprehensive-report
+  script:
+    - mkdir public
+    - cp -r reports/html/* public/
+    - echo &amp;quot;Quality reports deployed to GitLab Pages&amp;quot;
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH &#x3D;&#x3D; $CI_DEFAULT_BRANCH
+&#x60;&#x60;&#x60;
+
+## Azure DevOps
+
+### Azure DevOps Pipeline
+
+&#x60;&#x60;&#x60;yaml
+# azure-pipelines.yml
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    exclude:
+      - docs/*
+      - README.md
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: &amp;#x27;ubuntu-latest&amp;#x27;
+
+variables:
+  VALKNUT_VERSION: &amp;#x27;latest&amp;#x27;
+  buildConfiguration: &amp;#x27;Release&amp;#x27;
+
+stages:
+- stage: QualityGate
+  displayName: &amp;#x27;Code Quality Gate&amp;#x27;
+  jobs:
+  - job: Analysis
+    displayName: &amp;#x27;Run Code Analysis&amp;#x27;
+    steps:
+    - task: Cache@2
+      inputs:
+        key: &amp;#x27;valknut | &amp;quot;$(Agent.OS)&amp;quot; | &amp;quot;$(VALKNUT_VERSION)&amp;quot;&amp;#x27;
+        path: ~/.cargo/bin/valknut
+      displayName: &amp;#x27;Cache Valknut installation&amp;#x27;
+
+    - script: |
+        if [ ! -f ~/.cargo/bin/valknut ]; then
+          curl --proto &amp;#x27;&#x3D;https&amp;#x27; --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+          cargo install --git https://github.com/nathanricedev/valknut
+        fi
+      displayName: &amp;#x27;Install Valknut&amp;#x27;
+
+    - script: |
+        ~/.cargo/bin/valknut analyze \
+          --quality-gate \
+          --max-complexity 75 \
+          --min-health 60 \
+          --max-debt 30 \
+          --format ci-summary \
+          --out $(Agent.TempDirectory)/quality-reports/ \
+          ./src
+      displayName: &amp;#x27;Run Quality Gate&amp;#x27;
+
+    - task: PublishTestResults@2
+      condition: always()
+      inputs:
+        testResultsFormat: &amp;#x27;JUnit&amp;#x27;
+        testResultsFiles: &amp;#x27;$(Agent.TempDirectory)/quality-reports/junit.xml&amp;#x27;
+        failTaskOnFailedTests: true
+      displayName: &amp;#x27;Publish Quality Gate Results&amp;#x27;
+
+    - script: |
+        ~/.cargo/bin/valknut analyze \
+          --format html \
+          --out $(Agent.TempDirectory)/reports/html/ \
+          ./src
+      displayName: &amp;#x27;Generate HTML Report&amp;#x27;
+      condition: always()
+
+    - task: PublishHtmlReport@1
+      condition: always()
+      inputs:
+        reportDir: &amp;#x27;$(Agent.TempDirectory)/reports/html/&amp;#x27;
+        tabName: &amp;#x27;Code Quality Report&amp;#x27;
+      displayName: &amp;#x27;Publish HTML Report&amp;#x27;
+
+    - task: PublishPipelineArtifact@1
+      condition: always()
+      inputs:
+        targetPath: &amp;#x27;$(Agent.TempDirectory)/quality-reports/&amp;#x27;
+        artifactName: &amp;#x27;quality-reports&amp;#x27;
+      displayName: &amp;#x27;Publish Quality Reports&amp;#x27;
+
+- stage: Security
+  displayName: &amp;#x27;Security Analysis&amp;#x27;
+  dependsOn: QualityGate
+  condition: succeeded()
+  jobs:
+  - job: SecurityScan
+    displayName: &amp;#x27;Security Scan&amp;#x27;
+    steps:
+    - script: |
+        ~/.cargo/bin/valknut analyze \
+          --config .valknut-security.yml \
+          --max-critical 0 \
+          --format sonar \
+          --out $(Agent.TempDirectory)/security-reports/ \
+          ./src
+      displayName: &amp;#x27;Run Security Analysis&amp;#x27;
+
+    - task: PublishPipelineArtifact@1
+      condition: always()
+      inputs:
+        targetPath: &amp;#x27;$(Agent.TempDirectory)/security-reports/&amp;#x27;
+        artifactName: &amp;#x27;security-reports&amp;#x27;
+      displayName: &amp;#x27;Publish Security Reports&amp;#x27;
+&#x60;&#x60;&#x60;
+
+## CircleCI
+
+### CircleCI Configuration
+
+&#x60;&#x60;&#x60;yaml
+# .circleci/config.yml
+version: 2.1
+
+orbs:
+  rust: circleci/rust@1.6.0
+
+executors:
+  rust-executor:
+    docker:
+      - image: cimg/rust:1.70
+    working_directory: ~/project
+
+commands:
+  install-valknut:
+    description: &amp;quot;Install Valknut code analyzer&amp;quot;
+    steps:
+      - restore_cache:
+          keys:
+            - valknut-v1-{{ checksum &amp;quot;Cargo.lock&amp;quot; }}
+      - run:
+          name: Install Valknut
+          command: |
+            if [ ! -f ~/.cargo/bin/valknut ]; then
+              cargo install --git https://github.com/nathanricedev/valknut
+            fi
+      - save_cache:
+          key: valknut-v1-{{ checksum &amp;quot;Cargo.lock&amp;quot; }}
+          paths:
+            - ~/.cargo/bin/valknut
+
+jobs:
+  quality-gate:
+    executor: rust-executor
+    steps:
+      - checkout
+      - install-valknut
+      - run:
+          name: Run Quality Gate
+          command: |
+            ~/.cargo/bin/valknut analyze \
+              --quality-gate \
+              --max-complexity 75 \
+              --min-health 60 \
+              --max-debt 30 \
+              --format ci-summary \
+              --out quality-reports/ \
+              ./src
+      - store_test_results:
+          path: quality-reports/
+      - store_artifacts:
+          path: quality-reports/
+          destination: quality-reports
+
+  comprehensive-analysis:
+    executor: rust-executor
+    steps:
+      - checkout
+      - install-valknut
+      - run:
+          name: Generate Comprehensive Report
+          command: |
+            ~/.cargo/bin/valknut analyze \
+              --format html \
+              --out reports/html/ \
+              ./src
+      - run:
+          name: Generate Team Report
+          command: |
+            ~/.cargo/bin/valknut analyze \
+              --format markdown \
+              --out reports/markdown/ \
+              ./src
+      - store_artifacts:
+          path: reports/
+          destination: reports
+
+workflows:
+  version: 2
+  quality-check:
+    jobs:
+      - quality-gate
+      - comprehensive-analysis:
+          requires:
+            - quality-gate
+          filters:
+            branches:
+              only: main
+&#x60;&#x60;&#x60;
+
+## SonarQube Integration
+
+### SonarQube Import Configuration
+
+&#x60;&#x60;&#x60;bash
+# Generate SonarQube-compatible report
+valknut analyze \
+  --format sonar \
+  --out sonar-reports/ \
+  ./src
+
+# Import into SonarQube
+sonar-scanner \
+  -Dsonar.projectKey&#x3D;my-project \
+  -Dsonar.sources&#x3D;./src \
+  -Dsonar.externalIssuesReportPaths&#x3D;sonar-reports/issues.json
+&#x60;&#x60;&#x60;
+
+### SonarQube Properties File
+
+&#x60;&#x60;&#x60;properties
+# sonar-project.properties
+sonar.projectKey&#x3D;my-project
+sonar.projectName&#x3D;My Project
+sonar.projectVersion&#x3D;1.0
+
+# Source configuration
+sonar.sources&#x3D;src/
+sonar.exclusions&#x3D;**/node_modules/**,**/target/**
+
+# External analyzer integration
+sonar.externalIssuesReportPaths&#x3D;sonar-reports/valknut-issues.json
+
+# Quality gate configuration
+sonar.qualitygate.wait&#x3D;true
+&#x60;&#x60;&#x60;
+
+### Docker Integration with SonarQube
+
+&#x60;&#x60;&#x60;yaml
+# docker-compose.yml for local SonarQube testing
+version: &amp;#x27;3.8&amp;#x27;
+services:
+  sonarqube:
+    image: sonarqube:community
+    ports:
+      - &amp;quot;9000:9000&amp;quot;
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE&#x3D;true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+
+  valknut-analysis:
+    image: rust:1.70
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: |
+      bash -c &amp;quot;
+        cargo install --git https://github.com/nathanricedev/valknut &amp;amp;&amp;amp;
+        valknut analyze --format sonar --out sonar-reports/ ./src
+      &amp;quot;
+
+volumes:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+&#x60;&#x60;&#x60;
+
+## Custom Integration
+
+### REST API Integration
+
+For custom CI/CD systems, integrate via REST API calls:
+
+&#x60;&#x60;&#x60;bash
+#!/bin/bash
+# Custom CI script
+
+# Run analysis and capture results
+RESULT&#x3D;$(valknut analyze \
+  --quality-gate \
+  --format json \
+  --quiet \
+  ./src 2&amp;gt;&amp;amp;1)
+
+EXIT_CODE&#x3D;$?
+
+# Parse results and send to custom API
+if [ $EXIT_CODE -eq 0 ]; then
+  curl -X POST &amp;quot;https://api.example.com/quality-reports&amp;quot; \
+    -H &amp;quot;Content-Type: application/json&amp;quot; \
+    -H &amp;quot;Authorization: Bearer $API_TOKEN&amp;quot; \
+    -d &amp;quot;$RESULT&amp;quot;
+else
+  curl -X POST &amp;quot;https://api.example.com/quality-failures&amp;quot; \
+    -H &amp;quot;Content-Type: application/json&amp;quot; \
+    -H &amp;quot;Authorization: Bearer $API_TOKEN&amp;quot; \
+    -d &amp;quot;{\&amp;quot;error\&amp;quot;: \&amp;quot;Quality gate failed\&amp;quot;, \&amp;quot;details\&amp;quot;: \&amp;quot;$RESULT\&amp;quot;}&amp;quot;
+fi
+
+exit $EXIT_CODE
+&#x60;&#x60;&#x60;
+
+### Webhook Integration
+
+&#x60;&#x60;&#x60;python
+#!/usr/bin/env python3
+&amp;quot;&amp;quot;&amp;quot;
+Custom webhook integration for Valknut results
+&amp;quot;&amp;quot;&amp;quot;
+import json
+import subprocess
+import requests
+import sys
+from typing import Dict, Any
+
+def run_valknut_analysis(path: str, config: Dict[str, Any]) -&amp;gt; tuple[int, str]:
+    &amp;quot;&amp;quot;&amp;quot;Run Valknut analysis and return exit code and output&amp;quot;&amp;quot;&amp;quot;
+    cmd &#x3D; [
+        &amp;quot;valknut&amp;quot;, &amp;quot;analyze&amp;quot;,
+        &amp;quot;--quality-gate&amp;quot;,
+        &amp;quot;--format&amp;quot;, &amp;quot;json&amp;quot;,
+        &amp;quot;--out&amp;quot;, &amp;quot;reports/&amp;quot;,
+        path
+    ]
+    
+    # Add quality gate options from config
+    if config.get(&amp;quot;max_complexity&amp;quot;):
+        cmd.extend([&amp;quot;--max-complexity&amp;quot;, str(config[&amp;quot;max_complexity&amp;quot;])])
+    if config.get(&amp;quot;min_health&amp;quot;):
+        cmd.extend([&amp;quot;--min-health&amp;quot;, str(config[&amp;quot;min_health&amp;quot;])])
+    
+    try:
+        result &#x3D; subprocess.run(cmd, capture_output&#x3D;True, text&#x3D;True, timeout&#x3D;300)
+        return result.returncode, result.stdout
+    except subprocess.TimeoutExpired:
+        return 4, &amp;quot;Analysis timeout after 5 minutes&amp;quot;
+
+def send_webhook(webhook_url: str, data: Dict[str, Any]) -&amp;gt; None:
+    &amp;quot;&amp;quot;&amp;quot;Send results to webhook endpoint&amp;quot;&amp;quot;&amp;quot;
+    try:
+        response &#x3D; requests.post(
+            webhook_url,
+            json&#x3D;data,
+            headers&#x3D;{&amp;quot;Content-Type&amp;quot;: &amp;quot;application/json&amp;quot;},
+            timeout&#x3D;10
+        )
+        response.raise_for_status()
+        print(f&amp;quot;Webhook sent successfully: {response.status_code}&amp;quot;)
+    except requests.exceptions.RequestException as e:
+        print(f&amp;quot;Webhook failed: {e}&amp;quot;)
+
+def main():
+    config &#x3D; {
+        &amp;quot;max_complexity&amp;quot;: 75,
+        &amp;quot;min_health&amp;quot;: 60,
+        &amp;quot;webhook_url&amp;quot;: &amp;quot;https://your-webhook-url.com/quality-reports&amp;quot;
+    }
+    
+    exit_code, output &#x3D; run_valknut_analysis(&amp;quot;./src&amp;quot;, config)
+    
+    webhook_data &#x3D; {
+        &amp;quot;status&amp;quot;: &amp;quot;passed&amp;quot; if exit_code &#x3D;&#x3D; 0 else &amp;quot;failed&amp;quot;,
+        &amp;quot;exit_code&amp;quot;: exit_code,
+        &amp;quot;analysis_output&amp;quot;: output,
+        &amp;quot;project&amp;quot;: &amp;quot;my-project&amp;quot;,
+        &amp;quot;branch&amp;quot;: os.environ.get(&amp;quot;CI_BRANCH&amp;quot;, &amp;quot;unknown&amp;quot;),
+        &amp;quot;commit&amp;quot;: os.environ.get(&amp;quot;CI_COMMIT&amp;quot;, &amp;quot;unknown&amp;quot;)
+    }
+    
+    send_webhook(config[&amp;quot;webhook_url&amp;quot;], webhook_data)
+    sys.exit(exit_code)
+
+if __name__ &#x3D;&#x3D; &amp;quot;__main__&amp;quot;:
+    main()
+&#x60;&#x60;&#x60;
+
+## Best Practices
+
+### 1. Quality Gate Strategy
+
+#### Gradual Implementation
+&#x60;&#x60;&#x60;bash
+# Phase 1: Monitoring only (no failures)
+valknut analyze --format ci-summary ./src
+
+# Phase 2: Permissive gates
+valknut analyze --quality-gate --max-complexity 90 --min-health 30 ./src
+
+# Phase 3: Standard gates  
+valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
+
+# Phase 4: Strict gates
+valknut analyze --quality-gate --max-complexity 60 --min-health 70 ./src
+&#x60;&#x60;&#x60;
+
+#### Branch-Specific Configuration
+&#x60;&#x60;&#x60;yaml
+# Different standards for different branches
+- name: Quality Gate - Main Branch
+  if: github.ref &#x3D;&#x3D; &amp;#x27;refs/heads/main&amp;#x27;
+  run: |
+    valknut analyze --quality-gate \
+      --max-complexity 60 --min-health 70 --max-critical 0 ./src
+
+- name: Quality Gate - Feature Branch  
+  if: github.ref !&#x3D; &amp;#x27;refs/heads/main&amp;#x27;
+  run: |
+    valknut analyze --quality-gate \
+      --max-complexity 75 --min-health 60 --max-critical 2 ./src
+&#x60;&#x60;&#x60;
+
+### 2. Performance Optimization
+
+#### Caching Strategy
+&#x60;&#x60;&#x60;yaml
+# Cache Valknut installation and analysis results
+- name: Cache Valknut
+  uses: actions/cache@v4
+  with:
+    path: |
+      ~/.cargo/bin/valknut
+      ~/.valknut/cache/
+    key: valknut-${{ hashFiles(&amp;#x27;**/Cargo.lock&amp;#x27;) }}
+&#x60;&#x60;&#x60;
+
+#### Parallel Analysis
+&#x60;&#x60;&#x60;bash
+# Analyze different components in parallel
+valknut analyze --config backend-config.yml ./backend &amp;amp;
+valknut analyze --config frontend-config.yml ./frontend &amp;amp;
+valknut analyze --config shared-config.yml ./shared &amp;amp;
+wait
+&#x60;&#x60;&#x60;
+
+#### Incremental Analysis
+&#x60;&#x60;&#x60;bash
+# Only analyze changed files (future feature)
+git diff --name-only HEAD~1 HEAD | \
+  grep -E &amp;#x27;\.(py|js|ts|rs)$&amp;#x27; | \
+  xargs valknut analyze --quality-gate
+&#x60;&#x60;&#x60;
+
+### 3. Configuration Management
+
+#### Environment-Specific Configs
+&#x60;&#x60;&#x60;
+configs/
+├── development.yml     # Permissive for dev
+├── staging.yml        # Standard for staging  
+├── production.yml     # Strict for production
+└── security.yml       # Security-focused analysis
+&#x60;&#x60;&#x60;
+
+#### Team-Specific Standards
+&#x60;&#x60;&#x60;yaml
+# Team A: Frontend team
+analysis:
+  enable_names_analysis: true
+  focus_areas: [&amp;quot;ui&amp;quot;, &amp;quot;components&amp;quot;]
+quality_gates:
+  max_complexity: 70
+  min_health: 65
+
+# Team B: Backend team  
+analysis:
+  enable_security_analysis: true
+  focus_areas: [&amp;quot;api&amp;quot;, &amp;quot;services&amp;quot;]
+quality_gates:
+  max_complexity: 75
+  min_health: 60
+  max_critical: 0
+&#x60;&#x60;&#x60;
+
+### 4. Reporting Strategy
+
+#### Multi-Format Reports
+&#x60;&#x60;&#x60;bash
+# Generate reports for different audiences
+valknut analyze --format html --out reports/executive/ ./src     # Leadership
+valknut analyze --format markdown --out reports/technical/ ./src # Developers  
+valknut analyze --format csv --out reports/metrics/ ./src        # Analytics
+&#x60;&#x60;&#x60;
+
+#### Historical Tracking
+&#x60;&#x60;&#x60;python
+# Track quality metrics over time
+import json
+from datetime import datetime
+
+def store_metrics(analysis_result: dict) -&amp;gt; None:
+    timestamp &#x3D; datetime.now().isoformat()
+    
+    metrics &#x3D; {
+        &amp;quot;timestamp&amp;quot;: timestamp,
+        &amp;quot;health_score&amp;quot;: analysis_result[&amp;quot;health_metrics&amp;quot;][&amp;quot;overall_health_score&amp;quot;],
+        &amp;quot;complexity_score&amp;quot;: analysis_result[&amp;quot;health_metrics&amp;quot;][&amp;quot;complexity_score&amp;quot;],
+        &amp;quot;technical_debt&amp;quot;: analysis_result[&amp;quot;health_metrics&amp;quot;][&amp;quot;technical_debt_ratio&amp;quot;],
+        &amp;quot;total_issues&amp;quot;: analysis_result[&amp;quot;summary&amp;quot;][&amp;quot;total_issues&amp;quot;]
+    }
+    
+    # Store in time series database or append to file
+    with open(&amp;quot;quality-metrics.jsonl&amp;quot;, &amp;quot;a&amp;quot;) as f:
+        f.write(json.dumps(metrics) + &amp;quot;\n&amp;quot;)
+&#x60;&#x60;&#x60;
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Installation Problems
+&#x60;&#x60;&#x60;bash
+# Problem: Cargo not found
+# Solution: Install Rust toolchain
+curl --proto &amp;#x27;&#x3D;https&amp;#x27; --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Problem: Permission denied
+# Solution: Use user installation
+cargo install --git https://github.com/nathanricedev/valknut --locked
+&#x60;&#x60;&#x60;
+
+#### 2. Quality Gate Failures
+&#x60;&#x60;&#x60;bash
+# Problem: Unexpectedly failing quality gates
+# Solution: Generate detailed report for investigation
+valknut analyze --verbose --format html --out debug-reports/ ./src
+
+# Problem: False positive issues
+# Solution: Adjust configuration
+valknut analyze --config relaxed-config.yml --quality-gate ./src
+&#x60;&#x60;&#x60;
+
+#### 3. Performance Issues
+&#x60;&#x60;&#x60;bash
+# Problem: Analysis too slow for CI
+# Solution: Limit scope and enable parallel processing
+valknut analyze --max-files 500 --exclude-patterns &amp;quot;**/node_modules/**&amp;quot; ./src
+
+# Problem: Memory usage too high
+# Solution: Use streaming analysis
+export VALKNUT_MEMORY_LIMIT&#x3D;512MB
+valknut analyze ./src
+&#x60;&#x60;&#x60;
+
+#### 4. Configuration Issues
+&#x60;&#x60;&#x60;bash
+# Problem: Configuration not found
+# Solution: Specify absolute path
+valknut analyze --config $(pwd)/.valknut.yml ./src
+
+# Problem: Invalid configuration
+# Solution: Validate before use
+valknut validate-config --config .valknut.yml --verbose
+&#x60;&#x60;&#x60;
+
+### Debug Commands
+
+&#x60;&#x60;&#x60;bash
+# Enable verbose logging
+valknut --verbose analyze ./src
+
+# Rust-level debugging
+RUST_LOG&#x3D;debug valknut analyze ./src
+
+# Performance profiling
+RUST_LOG&#x3D;valknut::performance&#x3D;trace valknut analyze ./src
+
+# Memory usage tracking
+valgrind --tool&#x3D;massif valknut analyze ./src
+&#x60;&#x60;&#x60;
+
+### Support Resources
+
+- **GitHub Issues**: https://github.com/nathanricedev/valknut/issues
+- **Discussions**: https://github.com/nathanricedev/valknut/discussions
+- **Documentation**: https://github.com/nathanricedev/valknut/docs
+- **Configuration Examples**: https://github.com/nathanricedev/valknut/examples
+
+This guide provides comprehensive integration patterns for most CI/CD systems. Adapt the examples to your specific environment and quality standards.</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-2">
+                <div class="file-header"><i data-lucide="file-text" class="icon"></i>development/CONTRIBUTING.md</div>
+                <div class="file-content">
+                    <pre># Contributing to Valknut
+
+We welcome contributions to Valknut! This document provides guidelines for contributing to this high-performance Rust code analysis engine.
+
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Development Setup](#development-setup)
+- [Making Changes](#making-changes)
+- [Testing](#testing)
+- [Code Style](#code-style)
+- [Pull Request Process](#pull-request-process)
+- [Release Process](#release-process)
+- [Community Guidelines](#community-guidelines)
+
+## Getting Started
+
+### Prerequisites
+
+- **Rust**: 1.75+ (latest stable recommended)
+- **Git**: For version control
+- **System Requirements**: Linux, macOS, or Windows with WSL2
+
+### Quick Setup
+
+&#x60;&#x60;&#x60;bash
+# Clone the repository
+git clone https://github.com/nathanricedev/valknut.git
+cd valknut
+
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Install for local development
+cargo install --path .
+&#x60;&#x60;&#x60;
+
+## Development Setup
+
+### Development Dependencies
+
+&#x60;&#x60;&#x60;bash
+# Install additional development tools
+cargo install cargo-audit          # Security auditing
+cargo install cargo-machete        # Unused dependency detection
+cargo install cargo-outdated       # Dependency update checking
+&#x60;&#x60;&#x60;
+
+### Build Configurations
+
+&#x60;&#x60;&#x60;bash
+# Debug build (default)
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Build with all features
+cargo build --all-features
+
+# Build with specific features
+cargo build --features &amp;quot;database,benchmarks&amp;quot;
+&#x60;&#x60;&#x60;
+
+## Making Changes
+
+### Branch Naming Conventions
+
+- &#x60;feature/description&#x60; - New features
+- &#x60;fix/description&#x60; - Bug fixes
+- &#x60;docs/description&#x60; - Documentation updates
+- &#x60;refactor/description&#x60; - Code refactoring
+- &#x60;perf/description&#x60; - Performance improvements
+
+### Commit Message Format
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+&#x60;&#x60;&#x60;
+&amp;lt;type&amp;gt;[optional scope]: &amp;lt;description&amp;gt;
+
+[optional body]
+
+[optional footer(s)]
+&#x60;&#x60;&#x60;
+
+Examples:
+&#x60;&#x60;&#x60;
+feat(detector): add new complexity analysis algorithm
+fix(core): resolve memory leak in scoring engine  
+docs(api): update configuration examples
+perf(lsh): optimize hash computation with SIMD
+&#x60;&#x60;&#x60;
+
+### Code Organization
+
+- **Core Logic**: &#x60;src/core/&#x60; - Fundamental algorithms and data structures
+- **Detectors**: &#x60;src/detectors/&#x60; - Specialized analysis modules
+- **Language Support**: &#x60;src/lang/&#x60; - Language-specific parsers and adapters
+- **I/O Operations**: &#x60;src/io/&#x60; - File handling, caching, and reporting
+- **Public API**: &#x60;src/api/&#x60; - High-level user-facing interfaces
+- **CLI**: &#x60;src/bin/&#x60; - Command-line interface implementation
+
+## Testing
+
+### Running Tests
+
+&#x60;&#x60;&#x60;bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run specific test module
+cargo test core::scoring
+
+# Run integration tests only
+cargo test --test integration
+
+# Run with coverage (requires additional tools)
+cargo tarpaulin --out html
+&#x60;&#x60;&#x60;
+
+### Test Guidelines
+
+1. **Unit Tests**: Test individual functions and methods
+2. **Integration Tests**: Test component interactions
+3. **Property Tests**: Use &#x60;proptest&#x60; for algorithmic validation
+4. **Performance Tests**: Benchmark critical paths
+
+### Writing Tests
+
+&#x60;&#x60;&#x60;rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_function_name() {
+        // Arrange
+        let input &#x3D; create_test_input();
+        
+        // Act
+        let result &#x3D; function_under_test(input);
+        
+        // Assert
+        assert_eq!(result.expected_field, expected_value);
+    }
+    
+    #[test]
+    #[should_panic(expected &#x3D; &amp;quot;specific error message&amp;quot;)]
+    fn test_error_conditions() {
+        function_that_should_panic(invalid_input);
+    }
+}
+&#x60;&#x60;&#x60;
+
+## Code Style
+
+### Rust Style Guidelines
+
+We follow the official Rust style guidelines with additional project-specific conventions:
+
+&#x60;&#x60;&#x60;bash
+# Format code
+cargo fmt
+
+# Check style and common issues
+cargo clippy
+
+# Check with pedantic lints
+cargo clippy -- -W clippy::pedantic
+&#x60;&#x60;&#x60;
+
+### Documentation Requirements
+
+- **Public APIs**: Must have comprehensive documentation
+- **Complex Algorithms**: Include implementation notes and complexity analysis
+- **Configuration**: Document all options with examples
+- **Examples**: Provide working code examples
+
+&#x60;&#x60;&#x60;rust
+/// Calculates complexity scores using advanced statistical normalization.
+/// 
+/// This function implements a hybrid approach combining Bayesian inference
+/// with robust statistical measures to handle outliers effectively.
+/// 
+/// # Arguments
+/// 
+/// * &#x60;metrics&#x60; - Raw complexity metrics from code analysis
+/// * &#x60;config&#x60; - Configuration parameters for normalization
+/// 
+/// # Returns
+/// 
+/// Returns a &#x60;Result&amp;lt;ComplexityScore&amp;gt;&#x60; with normalized scores or an error
+/// if the input data is insufficient for reliable analysis.
+/// 
+/// # Examples
+/// 
+/// &#x60;&#x60;&#x60;rust
+/// use valknut_rs::{ComplexityMetrics, ScoringConfig};
+/// 
+/// let metrics &#x3D; ComplexityMetrics::new(cyclomatic, cognitive, nesting);
+/// let config &#x3D; ScoringConfig::default();
+/// let score &#x3D; calculate_complexity_score(&amp;amp;metrics, &amp;amp;config)?;
+/// &#x60;&#x60;&#x60;
+/// 
+/// # Performance
+/// 
+/// Time complexity: O(n log n) where n is the number of metrics
+/// Space complexity: O(n) for intermediate calculations
+pub fn calculate_complexity_score(
+    metrics: &amp;amp;ComplexityMetrics,
+    config: &amp;amp;ScoringConfig,
+) -&amp;gt; Result&amp;lt;ComplexityScore&amp;gt; {
+    // Implementation...
+}
+&#x60;&#x60;&#x60;
+
+### Performance Considerations
+
+- **Use SIMD**: Leverage SIMD operations for mathematical computations
+- **Memory Efficiency**: Prefer stack allocation and avoid unnecessary clones
+- **Async I/O**: Use async operations for file processing
+- **Parallel Processing**: Use &#x60;rayon&#x60; for CPU-intensive tasks
+
+&#x60;&#x60;&#x60;rust
+// Good: SIMD-optimized computation
+use wide::f64x4;
+let values &#x3D; f64x4::from([a, b, c, d]);
+let result &#x3D; values.fast_max();
+
+// Good: Efficient iteration
+results.par_iter()
+    .filter_map(|item| item.valid_metric())
+    .collect()
+
+// Avoid: Unnecessary allocations
+let owned_string &#x3D; input.to_string(); // Only if ownership needed
+let borrowed &#x3D; &amp;amp;input; // Prefer borrowing when possible
+&#x60;&#x60;&#x60;
+
+## Pull Request Process
+
+### Before Submitting
+
+1. **Run Tests**: Ensure all tests pass locally
+2. **Check Linting**: Fix all clippy warnings
+3. **Update Documentation**: Update relevant documentation
+4. **Add Tests**: Include tests for new functionality
+5. **Update Changelog**: Add entry to &#x60;CHANGELOG.md&#x60;
+
+### PR Requirements
+
+- **Clear Description**: Explain what changes were made and why
+- **Linked Issues**: Reference related issues using &#x60;Fixes #123&#x60; or &#x60;Closes #123&#x60;
+- **Small Scope**: Keep changes focused on a single feature/fix
+- **Clean History**: Squash commits into logical units
+
+### PR Template
+
+&#x60;&#x60;&#x60;markdown
+## Description
+Brief description of the changes and their purpose.
+
+## Type of Change
+- [ ] Bug fix (non-breaking change that fixes an issue)
+- [ ] New feature (non-breaking change that adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to change)
+- [ ] Documentation update
+- [ ] Performance improvement
+- [ ] Code refactoring
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] Manual testing performed
+- [ ] Performance impact assessed
+
+## Checklist
+- [ ] Code follows project style guidelines
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] Tests added/updated and passing
+- [ ] Changelog updated
+&#x60;&#x60;&#x60;
+
+### Review Process
+
+1. **Automated Checks**: CI/CD pipeline runs automatically
+2. **Code Review**: Maintainers review code quality and design
+3. **Testing**: Additional testing may be requested
+4. **Approval**: At least one maintainer approval required
+5. **Merge**: Squash and merge into main branch
+
+## Release Process
+
+### Version Numbers
+
+We follow [Semantic Versioning](https://semver.org/):
+
+- **MAJOR.MINOR.PATCH** (e.g., 1.2.3)
+- **Major**: Breaking changes
+- **Minor**: New features, backwards compatible
+- **Patch**: Bug fixes, backwards compatible
+
+### Release Steps
+
+1. **Update Version**: Increment version in &#x60;Cargo.toml&#x60;
+2. **Update Changelog**: Finalize changelog entries
+3. **Create Tag**: &#x60;git tag v1.2.3&#x60;
+4. **Push Tag**: Automated release process triggers
+5. **Publish Crate**: Released to crates.io automatically
+
+## Community Guidelines
+
+### Code of Conduct
+
+We are committed to providing a welcoming and inclusive environment. Please:
+
+- **Be Respectful**: Treat all contributors with respect
+- **Be Constructive**: Provide helpful feedback and suggestions
+- **Be Patient**: Remember that everyone has different skill levels
+- **Be Professional**: Keep discussions focused on technical matters
+
+### Getting Help
+
+- **Documentation**: Check the extensive documentation first
+- **Issues**: Search existing issues before creating new ones
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Discord**: Join our community Discord for real-time help
+
+### Reporting Issues
+
+When reporting bugs, please include:
+
+1. **Environment**: OS, Rust version, valknut version
+2. **Reproduction Steps**: Minimal example to reproduce the issue
+3. **Expected Behavior**: What you expected to happen
+4. **Actual Behavior**: What actually happened
+5. **Error Messages**: Complete error messages and stack traces
+6. **Configuration**: Relevant configuration files
+
+### Security Issues
+
+For security vulnerabilities, please:
+
+1. **Do NOT** create a public issue
+2. **Email**: Send details to security@sibyllinesoft.com
+3. **Include**: Detailed description and reproduction steps
+4. **Response**: We aim to respond within 48 hours
+
+## Recognition
+
+Contributors are recognized in several ways:
+
+- **Changelog**: Significant contributions mentioned in release notes
+- **Contributors File**: Added to CONTRIBUTORS.md
+- **Special Thanks**: Major contributions highlighted in releases
+
+Thank you for contributing to Valknut! Your efforts help make code analysis faster, more accurate, and more accessible for developers worldwide.</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-3">
+                <div class="file-header"><i data-lucide="file-text" class="icon"></i>mcp/MCP_IMPLEMENTATION_ROADMAP.md</div>
+                <div class="file-content">
+                    <pre># MCP Implementation Roadmap for Valknut
+
+## Executive Summary
+
+The MCP (Model Control Protocol) integration for Valknut is **85% complete** with comprehensive test coverage validating all components. Only the MCP protocol layer requires implementation to enable full Claude Code integration.
+
+## Current Status: What Works ✅
+
+### 1. MCP Manifest Generation (100% Complete)
+- **Command**: &#x60;valknut mcp-manifest&#x60;
+- **Output**: Production-ready JSON manifest
+- **Tools Defined**: &#x60;analyze_code&#x60; and &#x60;get_refactoring_suggestions&#x60;
+- **Validation**: All parameter schemas tested and correct
+
+### 2. Core Analysis Engine (100% Complete)  
+- **Command**: &#x60;valknut analyze&#x60;
+- **Capability**: Dynamic analysis without pre-existing results
+- **Output**: Structured JSON at &#x60;.valknut/analysis_results.json&#x60;
+- **Formats**: JSON, Markdown, HTML
+- **Languages**: Python, JavaScript, Rust, and more
+- **Evidence**: Successfully detects complexity issues like high cognitive complexity (27.0) and deep nesting (7 levels)
+
+### 3. CLI Infrastructure (100% Complete)
+- Argument parsing for MCP commands
+- Configuration file loading
+- Error handling and validation
+- Survey flag support
+
+## What&amp;#x27;s Missing: Implementation Gap ⚠️
+
+### MCP Stdio Server (15% Complete)
+- **Current State**: Stubbed out with warning message
+- **Location**: &#x60;src/bin/cli/commands.rs:mcp_stdio_command&#x60; (lines 264-290)
+- **Missing**: JSON-RPC 2.0 protocol handling over stdio
+
+## Implementation Strategy
+
+### Phase 1: Basic MCP Protocol (2-3 days)
+
+**1. Add Dependencies**
+&#x60;&#x60;&#x60;toml
+[dependencies]
+serde_json &#x3D; &amp;quot;1.0&amp;quot;
+tokio &#x3D; { version &#x3D; &amp;quot;1.0&amp;quot;, features &#x3D; [&amp;quot;io-util&amp;quot;, &amp;quot;io-std&amp;quot;] }
+&#x60;&#x60;&#x60;
+
+**2. Replace Stub Implementation**
+&#x60;&#x60;&#x60;rust
+pub async fn mcp_stdio_command(
+    args: McpStdioArgs,
+    survey: bool,
+    survey_verbosity: SurveyVerbosity
+) -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let mut stdin &#x3D; tokio::io::stdin();
+    let mut stdout &#x3D; tokio::io::stdout();
+    
+    // 1. MCP Initialization handshake
+    // 2. JSON-RPC 2.0 message loop
+    // 3. Tool call routing to analysis engine
+    // 4. Response formatting
+    
+    loop {
+        // Handle MCP messages
+        match handle_mcp_message(&amp;amp;mut stdin, &amp;amp;mut stdout).await {
+            Ok(should_continue) &#x3D;&amp;gt; if !should_continue { break; },
+            Err(e) &#x3D;&amp;gt; eprintln!(&amp;quot;MCP Error: {}&amp;quot;, e),
+        }
+    }
+    
+    Ok(())
+}
+&#x60;&#x60;&#x60;
+
+**3. Tool Implementation Priority**
+1. &#x60;analyze_code&#x60; tool (high priority - core functionality)
+2. &#x60;get_refactoring_suggestions&#x60; tool (medium priority - enhanced features)
+
+### Phase 2: Enhanced Integration (1-2 days)
+
+**1. Advanced Error Handling**
+- Protocol-level error responses
+- Graceful degradation
+- Timeout handling
+
+**2. Performance Optimization**
+- Analysis result caching
+- Concurrent tool execution
+- Streaming large responses
+
+### Phase 3: Production Readiness (1 day)
+
+**1. Enable Protocol Tests**
+- Remove &#x60;#[ignore]&#x60; from future MCP tests
+- Validate end-to-end functionality
+- Performance benchmarking
+
+**2. Claude Code Integration Testing**
+- Manifest discovery validation
+- Tool execution verification
+- Response format compliance
+
+## Technical Implementation Details
+
+### &#x60;analyze_code&#x60; Tool Implementation
+
+**Expected Parameters**: 
+- &#x60;path&#x60; (required): File or directory path
+- &#x60;format&#x60; (optional): &amp;quot;json&amp;quot;, &amp;quot;markdown&amp;quot;, or &amp;quot;html&amp;quot;
+
+**Implementation Approach**:
+&#x60;&#x60;&#x60;rust
+async fn execute_analyze_code(path: &amp;amp;str, format: Option&amp;lt;&amp;amp;str&amp;gt;) -&amp;gt; Result&amp;lt;String&amp;gt; {
+    let format &#x3D; format.unwrap_or(&amp;quot;json&amp;quot;);
+    
+    // Execute analysis engine
+    let output &#x3D; Command::new(&amp;quot;valknut&amp;quot;)
+        .args([&amp;quot;analyze&amp;quot;, path, &amp;quot;--format&amp;quot;, format, &amp;quot;--quiet&amp;quot;])
+        .output()
+        .await?;
+    
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(&amp;quot;Analysis failed: {}&amp;quot;, 
+            String::from_utf8_lossy(&amp;amp;output.stderr)));
+    }
+    
+    // Read results from working directory
+    let results_path &#x3D; format!(&amp;quot;.valknut/analysis_results.{}&amp;quot;, format);
+    let content &#x3D; tokio::fs::read_to_string(results_path).await?;
+    
+    Ok(content)
+}
+&#x60;&#x60;&#x60;
+
+### &#x60;get_refactoring_suggestions&#x60; Tool Implementation
+
+**Expected Parameters**:
+- &#x60;entity_id&#x60; (required): Entity identifier like &amp;quot;file.py::Class::method&amp;quot;
+- &#x60;max_suggestions&#x60; (optional): Maximum number of suggestions
+
+**Implementation Approach**:
+&#x60;&#x60;&#x60;rust
+async fn execute_refactoring_suggestions(
+    entity_id: &amp;amp;str, 
+    max_suggestions: Option&amp;lt;u32&amp;gt;
+) -&amp;gt; Result&amp;lt;String&amp;gt; {
+    // 1. Parse entity_id to extract file/class/method
+    // 2. Read existing analysis results from .valknut/analysis_results.json
+    // 3. Filter recommendations for specific entity
+    // 4. Format as structured suggestions for AI consumption
+    
+    let analysis_results &#x3D; tokio::fs::read_to_string(&amp;quot;.valknut/analysis_results.json&amp;quot;).await?;
+    let data: Value &#x3D; serde_json::from_str(&amp;amp;analysis_results)?;
+    
+    // Extract recommendations for specific entity
+    let suggestions &#x3D; extract_entity_suggestions(&amp;amp;data, entity_id, max_suggestions);
+    
+    Ok(serde_json::to_string_pretty(&amp;amp;suggestions)?)
+}
+&#x60;&#x60;&#x60;
+
+## Test Coverage Report
+
+### Completed Test Categories (11/13)
+
+**✅ Protocol Compliance**
+- MCP manifest structure validation
+- Tool parameter schema validation
+
+**✅ Core Functionality** 
+- Dynamic analysis triggering (verified with complex code)
+- Multiple output format support
+- Fresh directory analysis
+- Large codebase handling
+
+**✅ Error Handling**
+- Invalid path handling
+- Empty directory handling  
+- Configuration error handling
+
+**✅ Integration Readiness**
+- End-to-end workflow validation
+
+### Pending Test Categories (2/13)
+**🔄 Protocol Implementation** (blocked by missing implementation)
+- Actual MCP communication over stdio
+- Tool call execution and response formatting
+
+## Quality Assurance Evidence
+
+### Test Results Summary
+- **Passing Tests**: 11/11 implemented tests
+- **Test Coverage**: Comprehensive edge cases and error conditions
+- **Real-world Validation**: Successfully analyzes complex JavaScript with high cognitive complexity (27.0) and deep nesting (7 levels)
+
+### Performance Characteristics
+- **Analysis Speed**: ~0.01 seconds for small projects
+- **Output Quality**: Structured JSON with detailed metrics
+- **Language Support**: Multi-language analysis working correctly
+
+## Risk Assessment
+
+### Technical Risks: LOW
+- **Reason**: All core components working and well-tested
+- **Mitigation**: Clear implementation path with comprehensive test coverage
+
+### Integration Risks: LOW  
+- **Reason**: MCP manifest is production-ready and follows specification
+- **Mitigation**: Protocol structure tests validate expected behavior
+
+### Timeline Risks: LOW
+- **Reason**: Minimal implementation required (protocol layer only)
+- **Mitigation**: Estimated 2-3 days for basic functionality
+
+## Success Criteria
+
+### Phase 1 Complete When:
+1. &#x60;valknut mcp-stdio&#x60; responds to MCP initialization
+2. &#x60;analyze_code&#x60; tool executes and returns valid results
+3. Claude Code can discover and call tools via MCP
+4. All disabled tests pass with real implementation
+
+### Phase 2 Complete When:
+1. &#x60;get_refactoring_suggestions&#x60; tool implemented
+2. Error handling covers all edge cases
+3. Performance meets production requirements
+4. Documentation updated for users
+
+## Next Steps
+
+### Immediate Actions (Today)
+1. **Add MCP Dependencies**: Update Cargo.toml with required crates
+2. **Implement Basic Protocol**: Replace stub with minimal JSON-RPC handler
+3. **Add analyze_code Tool**: Connect to existing analysis engine
+
+### This Week
+1. **Complete Protocol Implementation**: Full MCP specification compliance  
+2. **Enable All Tests**: Remove #[ignore] flags and validate functionality
+3. **Claude Code Integration**: Test with actual Claude Code MCP client
+
+### Follow-up
+1. **Advanced Features**: Implement get_refactoring_suggestions tool
+2. **Performance Optimization**: Caching and streaming for large projects
+3. **Documentation**: User guides for MCP integration
+
+## Conclusion
+
+The MCP integration is in excellent shape with comprehensive test coverage validating all components. The analysis engine works perfectly and can handle dynamic analysis without pre-existing results. Only the MCP protocol layer needs implementation to complete Claude Code integration.
+
+**Confidence Level**: High  
+**Estimated Completion**: 2-3 days for basic functionality  
+**Risk Level**: Low - clear path with full test coverage</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/babel">
+        const { useState, useCallback, useEffect } = React;
+        const { Tree } = ReactArborist;
+
+        // File data from Handlebars template
+        const fileData = [
+            {
+                path: "development/CI_CD_INTEGRATION.md",
+                icon: "file-text",
+                index: 0,
+                size: "32.5 KB",
+                tokens: "4,218",
+                score: "0.82"
+            },
+            {
+                path: "development/CONTRIBUTING.md",
+                icon: "file-text",
+                index: 1,
+                size: "9.7 KB",
+                tokens: "1,726",
+                score: "0.46"
+            },
+            {
+                path: "mcp/MCP_IMPLEMENTATION_ROADMAP.md",
+                icon: "file-text",
+                index: 2,
+                size: "8.1 KB",
+                tokens: "1,348",
+                score: "0.45"
+            }
+        ];
+
+        // Build hierarchical tree structure from flat file paths
+        function buildTreeData(files) {
+            if (!files || files.length === 0) {
+                console.warn('No files provided to buildTreeData');
+                return [];
+            }
+            
+            const nodeMap = new Map();
+            const rootNodes = [];
+            
+            files.forEach((file, index) => {
+                const parts = file.path.split('/');
+                let currentPath = '';
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    const parentPath = currentPath;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    const isLast = i === parts.length - 1;
+                    
+                    if (!nodeMap.has(currentPath)) {
+                        const node = {
+                            id: currentPath,
+                            name: part,
+                            isFolder: !isLast,
+                            path: currentPath,
+                            fileIndex: isLast ? index : undefined,
+                            fileData: isLast ? file : undefined
+                        };
+                        
+                        // Only add children array for folders
+                        if (!isLast) {
+                            node.children = [];
+                        }
+                        
+                        nodeMap.set(currentPath, node);
+                        
+                        if (parentPath) {
+                            const parent = nodeMap.get(parentPath);
+                            if (parent && parent.children) {
+                                parent.children.push(node);
+                            }
+                        } else {
+                            rootNodes.push(node);
+                        }
+                    }
+                }
+            });
+            
+            return rootNodes;
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': case 'jsx': return 'file-text';
+                case 'ts': case 'tsx': return 'file-text';
+                case 'py': return 'file-text';
+                case 'rs': return 'file-text';
+                case 'go': return 'file-text';
+                case 'java': return 'file-text';
+                case 'cpp': case 'c': case 'h': return 'file-text';
+                case 'css': return 'file-text';
+                case 'html': return 'file-text';
+                case 'json': return 'file-text';
+                case 'md': return 'file-text';
+                case 'yml': case 'yaml': return 'file-text';
+                case 'xml': return 'file-text';
+                case 'sql': return 'file-text';
+                case 'sh': case 'bash': return 'file-text';
+                case 'dockerfile': return 'file-text';
+                case 'gitignore': return 'file-text';
+                case 'toml': return 'file-text';
+                case 'lock': return 'file-text';
+                default: return 'file-text';
+            }
+        }
+
+        // Tree Node Component
+        function Node({ node, style, dragHandle, tree }) {
+            const isFolder = node.isFolder;
+            const isOpen = tree.isOpen(node.id);
+            
+            const handleClick = useCallback(() => {
+                if (isFolder) {
+                    tree.toggle(node.id);
+                } else {
+                    // Navigate to file section
+                    const fileIndex = node.fileIndex;
+                    if (fileIndex !== undefined) {
+                        const element = document.getElementById(`file-${fileIndex + 1}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                }
+            }, [node.id, isFolder, tree, node.fileIndex]);
+
+            useEffect(() => {
+                // Re-initialize Lucide icons for this node
+                const iconElements = document.querySelectorAll('[data-lucide]');
+                iconElements.forEach(el => {
+                    if (!el.querySelector('svg')) {
+                        lucide.createIcons();
+                    }
+                });
+            });
+
+            return (
+                <div 
+                    ref={dragHandle} 
+                    style={style} 
+                    className="tree-node"
+                    onClick={handleClick}
+                >
+                    <div className="tree-node-content">
+                        {isFolder && (
+                            <div className={`tree-arrow ${isOpen ? 'expanded' : ''}`}>
+                                <i data-lucide="chevron-right" className="tree-icon"></i>
+                            </div>
+                        )}
+                        {!isFolder && <div className="tree-arrow"></div>}
+                        
+                        <i 
+                            data-lucide={isFolder ? 'folder' : getFileIcon(node.name)} 
+                            className={`tree-icon ${isFolder ? 'folder-icon' : 'file-icon'}`}
+                        ></i>
+                        
+                        <span className="tree-label" title={node.path}>
+                            {node.name}
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+
+        // File Tree Component
+        function FileTree() {
+            const [treeData] = useState(() => {
+                console.log('Building tree data from:', fileData);
+                const tree = buildTreeData(fileData);
+                console.log('Built tree data:', tree);
+                return tree;
+            });
+            
+            useEffect(() => {
+                // Re-initialize Lucide icons after React renders
+                const initIcons = () => {
+                    try {
+                        lucide.createIcons();
+                        console.log('Lucide icons initialized');
+                    } catch (error) {
+                        console.error('Error initializing Lucide icons:', error);
+                    }
+                };
+                
+                // Initialize immediately and after a delay
+                initIcons();
+                setTimeout(initIcons, 100);
+                setTimeout(initIcons, 500);
+            }, []);
+
+            if (!treeData || treeData.length === 0) {
+                return (
+                    <div style={&#123;&#123; padding: '20px', textAlign: 'center', color: 'var(--text-muted)' &#125;&#125;}>
+                        No files to display
+                    </div>
+                );
+            }
+
+            return (
+                <Tree
+                    data={treeData}
+                    openByDefault={false}
+                    width="100%"
+                    height={400}
+                    padding={25}
+                    rowHeight={28}
+                    indent={16}
+                    overscanCount={8}
+                >
+                    {Node}
+                </Tree>
+            );
+        }
+
+        // Render the component
+        try {
+            const container = document.getElementById('file-tree-container');
+            if (container) {
+                const root = ReactDOM.createRoot(container);
+                root.render(<FileTree />);
+                console.log('React tree component rendered successfully');
+            } else {
+                console.error('Could not find file-tree-container element');
+            }
+        } catch (error) {
+            console.error('Error rendering React tree:', error);
+        }
+    </script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

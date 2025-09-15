@@ -32,9 +32,9 @@ impl ValknutEngine {
         // Validate configuration
         internal_config.validate()?;
         
-        let config_arc = Arc::new(internal_config);
-        let analysis_config = PipelineAnalysisConfig::from((*config_arc).clone());
-        let pipeline = AnalysisPipeline::new(analysis_config);
+        let config_arc = Arc::new(internal_config.clone());
+        let analysis_config = PipelineAnalysisConfig::from(internal_config.clone());
+        let pipeline = AnalysisPipeline::new_with_config(analysis_config, internal_config);
         
         // TODO: Register feature extractors based on enabled languages
         // For now, we'll create a minimal setup
@@ -71,7 +71,9 @@ impl ValknutEngine {
         }
         
         // Run the pipeline
+        println!("🔍 ENGINE DEBUG: Calling pipeline.analyze_directory");
         let pipeline_results = self.pipeline.analyze_directory(path).await?;
+        println!("🔍 ENGINE DEBUG: Pipeline returned {} scoring files", pipeline_results.scoring_results.files.len());
         
         // Convert to public API format
         let results = AnalysisResults::from_pipeline_results(pipeline_results);
@@ -104,6 +106,7 @@ impl ValknutEngine {
                     code_health_score: 1.0,
                 },
                 refactoring_candidates: Vec::new(),
+                refactoring_candidates_by_file: Vec::new(),
                 statistics: crate::api::results::AnalysisStatistics {
                     total_duration: std::time::Duration::from_secs(0),
                     avg_file_processing_time: std::time::Duration::from_secs(0),
@@ -117,8 +120,11 @@ impl ValknutEngine {
                         efficiency_score: 1.0,
                     },
                 },
+                directory_health_tree: None,
                 // naming_results: None,
+                clone_analysis: None,
                 warnings: Vec::new(),
+                coverage_packs: Vec::new(),
             });
         }
         

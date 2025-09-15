@@ -1,0 +1,22 @@
+<!-- Analysis Summary -->
+<div class="analysis-summary">
+    <h2>Analysis Summary</h2>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <div class="stat-value">{{summary.files_processed}}</div>
+            <div class="stat-label">Files Analyzed</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{summary.entities_analyzed}}</div>
+            <div class="stat-label">Code Entities</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{summary.refactoring_needed}}</div>
+            <div class="stat-label">Need Refactoring</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{#if summary.code_health_score}}{{percentage summary.code_health_score "1"}}%{{else}}N/A{{/if}}</div>
+            <div class="stat-label">Health Score</div>
+        </div>
+    </div>
+</div>

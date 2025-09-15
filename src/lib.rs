@@ -92,6 +92,7 @@ pub mod detectors {
     pub mod coverage;
     pub mod refactoring;
     pub mod names_simple;
+    pub mod clone_detection;
 }
 
 // Language-specific AST adapters
@@ -99,13 +100,12 @@ pub mod lang {
     //! Language-specific parsing and AST processing.
     
     pub mod common;
-    pub mod python_simple;
-    // Tree-sitter adapters disabled due to linking issues
-    // pub mod python;
-    // pub mod javascript;
-    // pub mod typescript;
-    // pub mod rust_lang; // Avoid name collision with `rust` keyword
-    // pub mod go;
+    // Tree-sitter adapters
+    pub mod python;
+    pub mod javascript;
+    pub mod typescript;
+    pub mod rust_lang;
+    pub mod go;
 }
 
 // I/O, persistence, and reporting
@@ -115,6 +115,23 @@ pub mod io {
     pub mod cache;
     pub mod persistence;
     pub mod reports;
+}
+
+// AI refactoring oracle
+pub mod oracle;
+
+// Live reachability analysis
+pub mod live {
+    //! Live reachability analysis for production call graphs.
+    
+    pub mod types;
+    pub mod collectors;
+    pub mod storage;
+    pub mod graph;
+    pub mod community;
+    pub mod scoring;
+    pub mod reports;
+    pub mod cli;
 }
 
 // Public API and engine interface
@@ -131,6 +148,9 @@ pub use api::engine::ValknutEngine;
 pub use api::config_types::AnalysisConfig;
 pub use api::results::AnalysisResults;
 pub use core::errors::{ValknutError, Result};
+
+#[cfg(test)]
+mod test_coverage_integration;
 
 // Feature-gated exports
 #[cfg(feature = "database")]

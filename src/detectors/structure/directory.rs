@@ -1114,11 +1114,9 @@ mod tests {
 
     fn create_test_config() -> StructureConfig {
         StructureConfig {
-            structure: StructureToggles {
-                enable_branch_packs: true,
-                enable_file_split_packs: true,
-                top_packs: 20,
-            },
+            enable_branch_packs: true,
+            enable_file_split_packs: true,
+            top_packs: 20,
             fsdir: FsDirectoryConfig {
                 max_files_per_dir: 20,
                 max_subdirs_per_dir: 10,

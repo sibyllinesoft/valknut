@@ -159,14 +159,14 @@ impl StructureExtractor {
                 .partial_cmp(&a.gain.imbalance_delta)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        branch_reorg_packs.truncate(self.config.structure.top_packs);
+        branch_reorg_packs.truncate(self.config.top_packs);
 
         file_split_packs.sort_by(|a, b| {
             b.value.score
                 .partial_cmp(&a.value.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        file_split_packs.truncate(self.config.structure.top_packs);
+        file_split_packs.truncate(self.config.top_packs);
 
         Ok(StructureRecommendations {
             branch_reorg_packs,
@@ -176,7 +176,7 @@ impl StructureExtractor {
 
     /// Generate branch reorganization packs
     async fn generate_branch_reorg_packs(&self, root_path: &Path) -> Result<Vec<BranchReorgPack>> {
-        if !self.config.structure.enable_branch_packs {
+        if !self.config.enable_branch_packs {
             return Ok(Vec::new());
         }
 
@@ -194,7 +194,7 @@ impl StructureExtractor {
 
     /// Generate file split packs
     async fn generate_file_split_packs(&self, root_path: &Path) -> Result<Vec<FileSplitPack>> {
-        if !self.config.structure.enable_file_split_packs {
+        if !self.config.enable_file_split_packs {
             return Ok(Vec::new());
         }
 

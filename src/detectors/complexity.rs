@@ -14,6 +14,11 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::file_utils::FileReader;
+use crate::lang::python::PythonAdapter;
+use crate::lang::javascript::JavaScriptAdapter;
+use crate::lang::typescript::TypeScriptAdapter;
+use crate::lang::rust_lang::RustAdapter;
+use crate::lang::go::GoAdapter;
 
 // Local entity struct for complexity analysis
 #[derive(Debug, Clone)]
@@ -779,8 +784,8 @@ impl ComplexityAnalyzer {
         
         let mut results = Vec::new();
 
-        // Extract functions and classes
-        let entities = self.extract_python_entities(content);
+        // Extract functions and classes using tree-sitter
+        let entities = self.extract_python_entities_treesitter(content, &file_path.to_string_lossy().to_string())?;
         
         for entity in entities {
             let metrics = self.calculate_entity_metrics(&entity.content, "python");
@@ -831,8 +836,8 @@ impl ComplexityAnalyzer {
         
         let mut results = Vec::new();
 
-        // Extract functions and classes
-        let entities = self.extract_js_entities(content);
+        // Extract functions and classes using tree-sitter
+        let entities = self.extract_entities_treesitter(content, &file_path.to_string_lossy().to_string())?;
         
         for entity in entities {
             let metrics = self.calculate_entity_metrics(&entity.content, "javascript");
@@ -882,25 +887,26 @@ impl ComplexityAnalyzer {
         debug!("Analyzing Rust file: {}", file_path.display());
         
         let mut results = Vec::new();
+        // Extract functions and other entities using tree-sitter
+        let entities = self.extract_entities_treesitter(content, &file_path.to_string_lossy().to_string())?;
+        
+        for entity in entities {
+            let metrics = self.calculate_entity_metrics(&entity.content, "rust");
+            let severity = self.determine_severity(&metrics);
+            let issues = self.generate_issues(&metrics);
+            let recommendations = self.generate_recommendations(&issues);
 
-        let metrics = self.calculate_basic_metrics(content, "rust");
-        let severity = self.determine_severity(&metrics);
-        let issues = self.generate_issues(&metrics);
-        let recommendations = self.generate_recommendations(&issues);
-
-        results.push(ComplexityAnalysisResult {
-            entity_id: format!("{}:file", file_path.display()),
-            entity_name: file_path.file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            file_path: file_path.to_string_lossy().to_string(),
-            start_line: 1,
-            metrics,
-            severity,
-            issues,
-            recommendations,
-        });
+            results.push(ComplexityAnalysisResult {
+                entity_id: format!("{}:{}", file_path.display(), entity.name),
+                entity_name: entity.name,
+                file_path: file_path.to_string_lossy().to_string(),
+                start_line: entity.line_number,
+                metrics,
+                severity,
+                issues,
+                recommendations,
+            });
+        }
 
         Ok(results)
     }
@@ -933,7 +939,83 @@ impl ComplexityAnalyzer {
         Ok(results)
     }
 
-    // Entity extraction methods
+    // Entity extraction methods (replaced with tree-sitter versions)
+    
+    /// Extract Python entities using simple tree-sitter for accurate parsing
+    fn extract_python_entities_treesitter(&self, content: &str, file_path: &str) -> Result<Vec<ComplexityEntity>> {
+        let mut adapter = PythonAdapter::new()?;
+        let code_entities = adapter.extract_code_entities(content, file_path)?;
+        
+        Ok(code_entities.into_iter()
+            .filter_map(|entity| {
+                // Convert CodeEntity to ComplexityEntity
+                // For complexity analysis, we use the entity's source_code directly
+                Some(ComplexityEntity {
+                    name: entity.name.clone(),
+                    entity_type: entity.entity_type.clone(),
+                    content: entity.source_code.clone(),
+                    line_number: entity.line_range.map(|(start, _)| start).unwrap_or(1),
+                })
+            })
+            .collect())
+    }
+
+    /// Extract entities using tree-sitter AST parsing (supports JavaScript, TypeScript, Go, Rust)
+    fn extract_entities_treesitter(&self, content: &str, file_path: &str) -> Result<Vec<ComplexityEntity>> {
+        let language = self.detect_language_from_path(file_path);
+        
+        match language.as_str() {
+            "javascript" => {
+                if let Ok(mut adapter) = JavaScriptAdapter::new() {
+                    if let Ok(index) = adapter.parse_source(content, file_path) {
+                        return Ok(self.convert_index_to_complexity_entities(&index, content));
+                    }
+                }
+            }
+            "typescript" => {
+                if let Ok(mut adapter) = TypeScriptAdapter::new() {
+                    if let Ok(index) = adapter.parse_source(content, file_path) {
+                        return Ok(self.convert_index_to_complexity_entities(&index, content));
+                    }
+                }
+            }
+            "go" => {
+                if let Ok(mut adapter) = GoAdapter::new() {
+                    if let Ok(index) = adapter.parse_source(content, file_path) {
+                        return Ok(self.convert_index_to_complexity_entities(&index, content));
+                    }
+                }
+            }
+            "rust" => {
+                if let Ok(mut adapter) = RustAdapter::new() {
+                    if let Ok(index) = adapter.parse_source(content, file_path) {
+                        return Ok(self.convert_index_to_complexity_entities(&index, content));
+                    }
+                }
+            }
+            _ => {}
+        }
+        
+        // Fallback to text-based parsing for unsupported languages or parsing failures
+        Ok(self.extract_entities_fallback(content))
+    }
+
+    /// Extract entity content from source code given line range
+    fn extract_entity_content_from_source(&self, content: &str, start_line: usize, end_line: usize) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        
+        // Convert from 1-based to 0-based indexing
+        let start_idx = (start_line.saturating_sub(1)).min(lines.len());
+        let end_idx = end_line.min(lines.len());
+        
+        if start_idx >= lines.len() || end_idx <= start_idx {
+            return String::new();
+        }
+        
+        lines[start_idx..end_idx].join("\n")
+    }
+
+    // Legacy text-based extraction (deprecated - kept for reference)
     fn extract_python_entities(&self, content: &str) -> Vec<ComplexityEntity> {
         let mut entities = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
@@ -1003,7 +1085,7 @@ impl ComplexityAnalyzer {
         entities
     }
     
-    fn extract_js_entities(&self, content: &str) -> Vec<ComplexityEntity> {
+    fn extract_entities_fallback(&self, content: &str) -> Vec<ComplexityEntity> {
         let mut entities = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
         
@@ -1141,6 +1223,61 @@ impl ComplexityAnalyzer {
         } else {
             None
         }
+    }
+
+    /// Detect programming language from file path
+    fn detect_language_from_path(&self, file_path: &str) -> String {
+        let path = std::path::Path::new(file_path);
+        if let Some(extension) = path.extension() {
+            match extension.to_str().unwrap_or("") {
+                "py" => "python".to_string(),
+                "js" => "javascript".to_string(),
+                "ts" | "tsx" => "typescript".to_string(),
+                "go" => "go".to_string(),
+                "rs" => "rust".to_string(),
+                _ => "unknown".to_string(),
+            }
+        } else {
+            "unknown".to_string()
+        }
+    }
+
+    /// Convert tree-sitter parse index to complexity entities
+    fn convert_index_to_complexity_entities(&self, index: &crate::lang::common::ParseIndex, content: &str) -> Vec<ComplexityEntity> {
+        use crate::lang::common::EntityKind;
+        
+        let mut entities = Vec::new();
+        
+        for (_id, entity) in &index.entities {
+            // Only process functions, methods, and classes for complexity analysis
+            match entity.kind {
+                EntityKind::Function | EntityKind::Method | EntityKind::Class => {
+                    let entity_content = self.extract_entity_content_from_source(
+                        content, 
+                        entity.location.start_line, 
+                        entity.location.end_line
+                    );
+                    
+                    if !entity_content.trim().is_empty() {
+                        let entity_type = match entity.kind {
+                            EntityKind::Function | EntityKind::Method => "function".to_string(),
+                            EntityKind::Class => "class".to_string(),
+                            _ => "unknown".to_string(),
+                        };
+                        
+                        entities.push(ComplexityEntity {
+                            name: entity.name.clone(),
+                            entity_type,
+                            content: entity_content,
+                            line_number: entity.location.start_line,
+                        });
+                    }
+                }
+                _ => {} // Skip other entity types
+            }
+        }
+        
+        entities
     }
 
     /// Calculate entity-specific complexity metrics

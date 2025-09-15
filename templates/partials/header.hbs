@@ -1,0 +1,35 @@
+<!-- Hero Section with Animated Background -->
+{{#if enable_animation}}
+<div class="hero-container">
+    <canvas id="neural-network" class="neural-background"></canvas>
+    <div class="hero-content">
+        <div class="hero-logo-container">
+            <img src="./webpage_files/valknut-large.webp" alt="Valknut Logo" class="hero-logo">
+        </div>
+        <div class="hero-title-container">
+            <h1 class="hero-title">{{tool_name}} Analysis Report</h1>
+        </div>
+        <p class="hero-subtitle">Comprehensive code quality analysis and refactoring guidance</p>
+    </div>
+</div>
+<hr class="hero-divider">
+{{else}}
+<div class="hero-container no-animation">
+    <div class="hero-content">
+        <div class="hero-logo-container">
+            <img src="./webpage_files/valknut-large.webp" alt="Valknut Logo" class="hero-logo">
+        </div>
+        <div class="hero-title-container">
+            <h1 class="hero-title">{{tool_name}} Analysis Report</h1>
+        </div>
+        <p class="hero-subtitle">Comprehensive code quality analysis and refactoring guidance</p>
+    </div>
+</div>
+<hr class="hero-divider">
+{{/if}}
+
+<div class="container">
+    <!-- Report Metadata -->
+    <div class="meta" style="text-align: center; margin-bottom: var(--space-xl); color: var(--color-text-muted); font-size: var(--text-sm);">
+        Generated: {{generated_at}} • Version: {{version}}
+    </div>

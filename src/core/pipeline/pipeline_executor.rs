@@ -10,6 +10,7 @@ use tokio::fs;
 
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::FeatureVector;
+use crate::core::config::ValknutConfig;
 use crate::detectors::complexity::{ComplexityAnalyzer, ComplexityConfig, ComplexitySeverity};
 use crate::detectors::structure::{StructureExtractor, StructureConfig};
 use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
@@ -17,7 +18,8 @@ use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
 use super::pipeline_results::{
     ComprehensiveAnalysisResult, AnalysisSummary, HealthMetrics,
-    PipelineResults, PipelineStatistics, MemoryStats, ScoringResults, PipelineStatus
+    PipelineResults, PipelineStatistics, MemoryStats, ScoringResults, PipelineStatus,
+    CoverageAnalysisResults
 };
 use super::pipeline_stages::AnalysisStages;
 
@@ -27,6 +29,7 @@ pub type ProgressCallback = Box<dyn Fn(&str, f64) + Send + Sync>;
 /// Main analysis pipeline that orchestrates all analyzers
 pub struct AnalysisPipeline {
     config: AnalysisConfig,
+    valknut_config: Option<ValknutConfig>,
     stages: AnalysisStages,
 }
 
@@ -45,6 +48,67 @@ impl AnalysisPipeline {
 
         Self {
             config,
+            valknut_config: None,
+            stages,
+        }
+    }
+
+    /// Create new analysis pipeline with full ValknutConfig support
+    pub fn new_with_config(analysis_config: AnalysisConfig, valknut_config: ValknutConfig) -> Self {
+        // Debug output removed - LSH integration is working
+        
+        let complexity_config = ComplexityConfig::default();
+        let structure_config = StructureConfig::default();
+        let refactoring_config = RefactoringConfig::default();
+
+        // Configure LSH extractor with denoising (enabled by default)
+        let stages = if valknut_config.denoise.enabled && analysis_config.enable_lsh_analysis {
+            use crate::detectors::lsh::LshExtractor;
+            use crate::core::config::DedupeConfig;
+            
+            // Create LSH extractor with denoising configuration
+            let mut dedupe_config = DedupeConfig::default();
+            dedupe_config.min_function_tokens = valknut_config.denoise.min_function_tokens;
+            dedupe_config.min_ast_nodes = valknut_config.denoise.min_match_tokens; // Mapping to closest field
+            dedupe_config.shingle_k = valknut_config.lsh.shingle_size;
+            dedupe_config.threshold_s = valknut_config.denoise.similarity;
+
+            let lsh_extractor = LshExtractor::with_dedupe_config(dedupe_config)
+                .with_denoise_enabled(true);
+            
+            info!("LSH extractor configured with denoising enabled (k={})", valknut_config.lsh.shingle_size);
+
+            AnalysisStages::new_with_lsh(
+                StructureExtractor::with_config(structure_config),
+                ComplexityAnalyzer::new(complexity_config),
+                RefactoringAnalyzer::new(refactoring_config),
+                lsh_extractor,
+            )
+        } else if analysis_config.enable_lsh_analysis {
+            use crate::detectors::lsh::LshExtractor;
+            
+            // Create LSH extractor without denoising
+            let lsh_extractor = LshExtractor::new();
+            info!("LSH extractor configured without denoising");
+
+            AnalysisStages::new_with_lsh(
+                StructureExtractor::with_config(structure_config),
+                ComplexityAnalyzer::new(complexity_config),
+                RefactoringAnalyzer::new(refactoring_config),
+                lsh_extractor,
+            )
+        } else {
+            // No LSH analysis
+            AnalysisStages::new(
+                StructureExtractor::with_config(structure_config),
+                ComplexityAnalyzer::new(complexity_config),
+                RefactoringAnalyzer::new(refactoring_config),
+            )
+        };
+
+        Self {
+            config: analysis_config,
+            valknut_config: Some(valknut_config),
             stages,
         }
     }
@@ -142,10 +206,60 @@ impl AnalysisPipeline {
         };
 
         if let Some(ref callback) = progress_callback {
+            callback("Analyzing code clones and duplicates...", 75.0);
+        }
+
+        // Stage 6: LSH analysis for clone detection
+        let lsh_results = if self.config.enable_lsh_analysis {
+            let denoise_enabled = self.valknut_config
+                .as_ref()
+                .map(|config| config.denoise.enabled)
+                .unwrap_or(false);
+            self.stages.run_lsh_analysis(&files, denoise_enabled).await?
+        } else {
+            super::pipeline_results::LshAnalysisResults {
+                enabled: false,
+                clone_pairs: Vec::new(),
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            }
+        };
+
+        if let Some(ref callback) = progress_callback {
+            callback("Running coverage analysis...", 85.0);
+        }
+
+        // Stage 7: Coverage analysis with automatic file discovery
+        let coverage_results = if self.config.enable_coverage_analysis {
+            let coverage_config = self.valknut_config
+                .as_ref()
+                .map(|config| &config.coverage)
+                .cloned()
+                .unwrap_or_default();
+            
+            // Use the first analysis path as root for coverage discovery
+            let default_path = PathBuf::from(".");
+            let root_path = paths.first().unwrap_or(&default_path);
+            self.stages.run_coverage_analysis(root_path, &coverage_config).await?
+        } else {
+            CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: Vec::new(),
+                coverage_gaps: Vec::new(),
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: "disabled".to_string(),
+            }
+        };
+
+        if let Some(ref callback) = progress_callback {
             callback("Calculating health metrics...", 90.0);
         }
 
-        // Stage 6: Calculate summary and health metrics
+        // Stage 8: Calculate summary and health metrics
         let summary = self.calculate_summary(&files, &structure_results, &complexity_results, &refactoring_results, &impact_results);
         let health_metrics = self.calculate_health_metrics(&complexity_results, &structure_results, &impact_results);
 
@@ -169,6 +283,8 @@ impl AnalysisPipeline {
             complexity: complexity_results,
             refactoring: refactoring_results,
             impact: impact_results,
+            lsh: lsh_results,
+            coverage: coverage_results,
             health_metrics,
         })
     }
@@ -233,6 +349,55 @@ impl AnalysisPipeline {
             !self.config.exclude_directories.contains(&dir_name.to_string())
         } else {
             true
+        }
+    }
+    
+    /// Check if a file should be included for dedupe analysis based on scope filtering
+    pub fn should_include_for_dedupe(&self, file: &Path, valknut_config: &ValknutConfig) -> bool {
+        let file_path_str = file.to_string_lossy();
+        
+        // Check dedupe exclude patterns first
+        for exclude_pattern in &valknut_config.dedupe.exclude {
+            if self.matches_glob_pattern(&file_path_str, exclude_pattern) {
+                return false;
+            }
+        }
+        
+        // Check dedupe include patterns
+        for include_pattern in &valknut_config.dedupe.include {
+            if self.matches_glob_pattern(&file_path_str, include_pattern) {
+                return true;
+            }
+        }
+        
+        // Default to false if no include pattern matches
+        false
+    }
+    
+    /// Simple glob pattern matching
+    fn matches_glob_pattern(&self, path: &str, pattern: &str) -> bool {
+        // Simple implementation - could be enhanced with proper glob matching
+        if pattern.ends_with("/**") {
+            let prefix = &pattern[..pattern.len() - 3];
+            path.starts_with(prefix)
+        } else if pattern.contains("**/") {
+            let parts: Vec<&str> = pattern.split("**/").collect();
+            if parts.len() == 2 {
+                path.starts_with(parts[0]) && path.contains(parts[1])
+            } else {
+                path.contains(&pattern.replace("**/", ""))
+            }
+        } else if pattern.contains('*') {
+            // Simple wildcard matching
+            let parts: Vec<&str> = pattern.split('*').collect();
+            if parts.len() == 2 {
+                path.starts_with(parts[0]) && path.ends_with(parts[1])
+            } else {
+                // More complex patterns - use basic string matching for now
+                path.contains(&pattern.replace('*', ""))
+            }
+        } else {
+            path.contains(pattern)
         }
     }
 
@@ -374,21 +539,24 @@ impl AnalysisPipeline {
         let paths = vec![path.to_path_buf()];
         let results = self.analyze_paths(&paths, None).await?;
         
+        // Convert analysis results to scoring results
+        let scoring_files = Self::convert_to_scoring_results(&results);
+        
         Ok(PipelineResults {
             analysis_id: results.analysis_id.clone(),
             timestamp: results.timestamp,
-            results,
             statistics: PipelineStatistics {
                 memory_stats: MemoryStats {
                     current_memory_bytes: 0,
                     peak_memory_bytes: 0,
                 },
-                files_processed: 1,
-                total_duration_ms: 0,
+                files_processed: results.summary.total_files,
+                total_duration_ms: (results.processing_time * 1000.0) as u64,
             },
+            results,
             errors: Vec::new(),
             scoring_results: ScoringResults {
-                files: Vec::new(),
+                files: scoring_files,
             },
             feature_vectors: Vec::new(),
         })
@@ -437,6 +605,23 @@ impl AnalysisPipeline {
                 chokepoints: Vec::new(),
                 clone_groups: Vec::new(),
                 issues_count: 0,
+            },
+            lsh: super::pipeline_results::LshAnalysisResults {
+                enabled: false,
+                clone_pairs: Vec::new(),
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            },
+            coverage: CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: Vec::new(),
+                coverage_gaps: Vec::new(),
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: "disabled".to_string(),
             },
             health_metrics: HealthMetrics {
                 overall_health_score: 100.0,
@@ -490,6 +675,141 @@ impl AnalysisPipeline {
             violations: Vec::new(),
             overall_score: results.health_metrics.overall_health_score,
         }
+    }
+
+    /// Convert comprehensive analysis results to scoring results
+    fn convert_to_scoring_results(results: &ComprehensiveAnalysisResult) -> Vec<crate::core::scoring::ScoringResult> {
+        use std::collections::HashMap;
+        use crate::core::scoring::{ScoringResult, Priority};
+        
+        
+        let mut scoring_results = Vec::new();
+        
+        // Convert complexity analysis results to scoring results
+        for complexity_result in &results.complexity.detailed_results {
+            let entity_id = format!("{}:{}:{}", 
+                complexity_result.file_path,
+                "function", // Use generic type since entity_type field doesn't exist
+                complexity_result.entity_name
+            );
+            
+            // Map complexity metrics to scoring categories
+            let mut category_scores = HashMap::new();
+            category_scores.insert("complexity".to_string(), 
+                (complexity_result.metrics.cyclomatic + complexity_result.metrics.cognitive) / 2.0);
+            
+            if complexity_result.metrics.max_nesting_depth > 0.0 {
+                category_scores.insert("structure".to_string(), complexity_result.metrics.max_nesting_depth);
+            }
+            
+            // Map individual features to contributions
+            let mut feature_contributions = HashMap::new();
+            feature_contributions.insert("cyclomatic_complexity".to_string(), complexity_result.metrics.cyclomatic);
+            feature_contributions.insert("cognitive_complexity".to_string(), complexity_result.metrics.cognitive);
+            feature_contributions.insert("nesting_depth".to_string(), complexity_result.metrics.max_nesting_depth);
+            feature_contributions.insert("lines_of_code".to_string(), complexity_result.metrics.lines_of_code);
+            feature_contributions.insert("technical_debt_score".to_string(), complexity_result.metrics.technical_debt_score);
+            feature_contributions.insert("maintainability_index".to_string(), complexity_result.metrics.maintainability_index);
+            
+            // Calculate overall score based on complexity
+            let complexity_avg = (complexity_result.metrics.cyclomatic + complexity_result.metrics.cognitive) / 2.0;
+            let overall_score = complexity_avg + (complexity_result.metrics.max_nesting_depth * 0.5);
+            
+            // Determine priority based on overall score and issues
+            let priority = if !complexity_result.issues.is_empty() {
+                use crate::detectors::complexity::ComplexitySeverity;
+                // Use the severity of the complexity result itself since we can't easily find max
+                match complexity_result.severity {
+                    ComplexitySeverity::Critical => Priority::Critical,
+                    ComplexitySeverity::VeryHigh => Priority::High,
+                    ComplexitySeverity::High => Priority::High,
+                    ComplexitySeverity::Moderate => Priority::Medium,
+                    ComplexitySeverity::Low => Priority::Low,
+                }
+            } else if overall_score >= 20.0 {
+                Priority::Critical
+            } else if overall_score >= 15.0 {
+                Priority::High
+            } else if overall_score >= 10.0 {
+                Priority::Medium
+            } else if overall_score >= 5.0 {
+                Priority::Low
+            } else {
+                Priority::None
+            };
+            
+            // Calculate confidence based on data quality
+            let confidence = if complexity_result.metrics.lines_of_code > 10.0 {
+                0.9
+            } else if complexity_result.metrics.lines_of_code > 5.0 {
+                0.7
+            } else {
+                0.5
+            };
+            
+            let feature_count = feature_contributions.len();
+            scoring_results.push(ScoringResult {
+                entity_id,
+                overall_score,
+                priority,
+                category_scores,
+                feature_contributions,
+                normalized_feature_count: feature_count,
+                confidence,
+            });
+        }
+        
+        // Convert refactoring analysis results to scoring results
+        for refactoring_result in &results.refactoring.detailed_results {
+            let entity_id = format!("{}:refactoring:{}", 
+                refactoring_result.file_path,
+                refactoring_result.recommendations.len()
+            );
+            
+            // Map refactoring metrics to scoring categories
+            let mut category_scores = HashMap::new();
+            let refactoring_score = refactoring_result.refactoring_score;
+            category_scores.insert("refactoring".to_string(), refactoring_score);
+            
+            // Map individual features to contributions
+            let mut feature_contributions = HashMap::new();
+            feature_contributions.insert("refactoring_score".to_string(), refactoring_score);
+            feature_contributions.insert("refactoring_recommendations".to_string(), refactoring_result.recommendations.len() as f64);
+            
+            // Calculate overall score based on refactoring needs
+            let overall_score = refactoring_score;
+            
+            // Determine priority based on refactoring score
+            let priority = if refactoring_score >= 80.0 {
+                Priority::Critical
+            } else if refactoring_score >= 60.0 {
+                Priority::High
+            } else if refactoring_score >= 40.0 {
+                Priority::Medium
+            } else if refactoring_score >= 20.0 {
+                Priority::Low
+            } else {
+                Priority::None
+            };
+            
+            // High confidence for refactoring analysis
+            let confidence = 0.85;
+            
+            if priority != Priority::None {
+                let feature_count = feature_contributions.len();
+                scoring_results.push(ScoringResult {
+                    entity_id,
+                    overall_score,
+                    priority,
+                    category_scores,
+                    feature_contributions,
+                    normalized_feature_count: feature_count,
+                    confidence,
+                });
+            }
+        }
+        
+        scoring_results
     }
 }
 

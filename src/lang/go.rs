@@ -7,9 +7,6 @@ use super::common::{EntityKind, ParsedEntity, ParseIndex, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
-extern "C" {
-    fn tree_sitter_go() -> Language;
-}
 
 /// Go-specific parsing and analysis
 pub struct GoAdapter {
@@ -23,7 +20,7 @@ pub struct GoAdapter {
 impl GoAdapter {
     /// Create a new Go adapter
     pub fn new() -> Result<Self> {
-        let language = unsafe { tree_sitter_go() };
+        let language = tree_sitter_go::language();
         let mut parser = Parser::new();
         parser.set_language(language)
             .map_err(|e| ValknutError::parse("go", format!("Failed to set Go language: {:?}", e)))?;

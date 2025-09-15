@@ -1,0 +1,135 @@
+<!-- Coverage Analysis -->
+{{#if results.coverage_packs}}
+<div class="results-section" style="max-width: 1400px; margin: 0 auto var(--spacing-12) auto;">
+    <h2>Test Coverage Guidance</h2>
+    <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--panel); border-radius: 8px; border-left: 4px solid var(--accent);">
+        <strong>AI-Powered Test Guidance:</strong> These coverage packs identify high-value testing opportunities to maximize code quality and reduce technical debt.
+    </div>
+    <div class="analysis-tree" id="coverage-tree">
+        {{#each results.coverage_packs}}
+        <div class="tree-node" data-level="0">
+            <div class="tree-header tree-expandable" 
+                 onclick="toggleTreeNode(this)" 
+                 role="button" 
+                 tabindex="0"
+                 aria-expanded="false">
+                <div class="tree-chevron">
+                    <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="tree-icon"><i data-lucide="target"></i></div>
+                <div class="tree-label">{{path}}</div>
+                <div class="tree-badge tree-badge-Medium">
+                    {{length gaps}} gaps
+                </div>
+                <div class="tree-badge tree-badge-low">
+                    Current: {{percentage file_info.coverage_before "1"}}%
+                </div>
+                <div class="tree-badge tree-badge-High">
+                    Target: {{percentage file_info.coverage_after_if_filled "1"}}%
+                </div>
+            </div>
+            <div class="tree-children collapsed">
+                <!-- File Info -->
+                <div class="tree-leaf">
+                    <div class="tree-leaf-header">
+                        <div class="tree-leaf-title">Coverage Metrics</div>
+                    </div>
+                    <div class="tree-leaf-value">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div class="stat-item">
+                                <div class="stat-value">{{file_info.loc}}</div>
+                                <div class="stat-label">Lines of Code</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{percentage file_info.coverage_before "1"}}%</div>
+                                <div class="stat-label">Current Coverage</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{percentage file_info.coverage_after_if_filled "1"}}%</div>
+                                <div class="stat-label">Target Coverage</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">+{{percentage value.file_cov_gain "1"}}%</div>
+                                <div class="stat-label">Coverage Gain</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Value/Effort Analysis -->
+                <div class="tree-leaf">
+                    <div class="tree-leaf-header">
+                        <div class="tree-leaf-title">Priority Analysis</div>
+                    </div>
+                    <div class="tree-leaf-value">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div style="background: rgba(99, 102, 241, 0.1); padding: 0.5rem; border-radius: 4px;">
+                                <div style="font-weight: 600; color: var(--accent); margin-bottom: 0.25rem;">Value</div>
+                                <div style="font-size: 0.875rem;">
+                                    File Coverage: +{{percentage value.file_cov_gain "1"}}%<br>
+                                    Repo Impact: +{{percentage value.repo_cov_gain_est "2"}}%
+                                </div>
+                            </div>
+                            <div style="background: rgba(245, 158, 11, 0.1); padding: 0.5rem; border-radius: 4px;">
+                                <div style="font-weight: 600; color: var(--warning); margin-bottom: 0.25rem;">Effort</div>
+                                <div style="font-size: 0.875rem;">
+                                    Tests to Write: {{effort.tests_to_write_est}}<br>
+                                    Mocks Needed: {{effort.mocks_est}}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Coverage Gaps -->
+                {{#each gaps}}
+                <div class="tree-leaf">
+                    <div class="tree-leaf-header">
+                        <div class="tree-leaf-title">Coverage Gap (Lines {{span.start}}-{{span.end}})</div>
+                        <div class="tree-badge tree-badge-{{#if (gt score 0.8)}}High{{else}}{{#if (gt score 0.6)}}Medium{{else}}Low{{/if}}{{/if}}">
+                            Score: {{format score "0.2"}}
+                        </div>
+                    </div>
+                    <div class="tree-leaf-value">
+                        <!-- Gap Features -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.25rem; margin-bottom: 0.5rem; font-size: 0.75rem;">
+                            <div><strong>LOC:</strong> {{features.gap_loc}}</div>
+                            <div><strong>Complexity:</strong> {{format features.cyclomatic_in_gap "0.1"}}</div>
+                            <div><strong>Callers:</strong> {{features.fan_in_gap}}</div>
+                            <div><strong>Public API:</strong> {{#if features.exports_touched}}Yes{{else}}No{{/if}}</div>
+                        </div>
+                        
+                        <!-- Code Preview -->
+                        {{#if symbols}}
+                        <div style="margin-top: 0.5rem;">
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">Functions/Methods:</div>
+                            {{#each symbols}}
+                            <div style="background: var(--surface); padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <div style="color: var(--accent); margin-bottom: 0.125rem;">{{kind}}: {{name}}</div>
+                                <div style="color: var(--muted);">{{signature}}</div>
+                            </div>
+                            {{/each}}
+                        </div>
+                        {{/if}}
+                        
+                        <!-- Code Snippet -->
+                        {{#if preview}}
+                        <div style="margin-top: 0.5rem;">
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">Code Preview:</div>
+                            <div style="background: var(--surface); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
+                                <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
+{{/each}}</pre>
+                            </div>
+                        </div>
+                        {{/if}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+        {{/each}}
+    </div>
+</div>
+{{/if}}

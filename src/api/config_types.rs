@@ -1,7 +1,7 @@
 //! High-level configuration types for the public API.
 
 use serde::{Deserialize, Serialize};
-
+use crate::core::errors::{Result, ValknutError};
 use crate::core::config::ValknutConfig;
 
 /// High-level analysis configuration for easy API usage
@@ -33,6 +33,21 @@ pub struct AnalysisConfig {
     
     /// Patterns to include in analysis
     pub include_patterns: Vec<String>,
+    
+    /// Enable animated background in reports (default: true)
+    pub enable_animation: bool,
+    
+    /// Enable coverage analysis
+    pub enable_coverage_analysis: bool,
+    
+    /// Specific coverage file path (overrides auto discovery)
+    pub coverage_file: Option<std::path::PathBuf>,
+    
+    /// Enable automatic coverage file discovery
+    pub auto_discover_coverage: bool,
+    
+    /// Maximum age of coverage files in days (0 = no age limit)
+    pub coverage_max_age_days: u32,
 }
 
 impl Default for AnalysisConfig {
@@ -52,6 +67,11 @@ impl Default for AnalysisConfig {
                 "*.min.js".to_string(),
             ],
             include_patterns: vec!["**/*".to_string()],
+            enable_animation: true,
+            enable_coverage_analysis: true,
+            coverage_file: None,
+            auto_discover_coverage: true,
+            coverage_max_age_days: 7,
         }
     }
 }
@@ -135,6 +155,12 @@ impl AnalysisConfig {
         config.analysis.max_files = self.max_files.unwrap_or(0);
         config.analysis.exclude_patterns = self.exclude_patterns;
         config.analysis.include_patterns = self.include_patterns;
+        config.analysis.enable_coverage_analysis = self.enable_coverage_analysis;
+        
+        // Map coverage configuration
+        config.coverage.coverage_file = self.coverage_file;
+        config.coverage.auto_discover = self.auto_discover_coverage;
+        config.coverage.max_age_days = self.coverage_max_age_days;
         
         // Enable languages
         for language in &self.languages {
@@ -144,6 +170,36 @@ impl AnalysisConfig {
         }
         
         config
+    }
+    
+    /// Create from ValknutConfig
+    pub fn from_valknut_config(valknut_config: ValknutConfig) -> Result<Self> {
+        Ok(Self {
+            // Extract enabled languages
+            languages: valknut_config.languages
+                .into_iter()
+                .filter_map(|(name, config)| if config.enabled { Some(name) } else { None })
+                .collect(),
+            
+            // Map analysis settings
+            enable_scoring: valknut_config.analysis.enable_scoring,
+            enable_graph_analysis: valknut_config.analysis.enable_graph_analysis,
+            enable_lsh_analysis: valknut_config.analysis.enable_lsh_analysis,
+            enable_refactoring_analysis: valknut_config.analysis.enable_refactoring_analysis,
+            confidence_threshold: valknut_config.analysis.confidence_threshold,
+            max_files: if valknut_config.analysis.max_files == 0 { 
+                None 
+            } else { 
+                Some(valknut_config.analysis.max_files) 
+            },
+            exclude_patterns: valknut_config.analysis.exclude_patterns,
+            include_patterns: valknut_config.analysis.include_patterns,
+            enable_animation: true, // Default to enabled for animation
+            enable_coverage_analysis: valknut_config.analysis.enable_coverage_analysis,
+            coverage_file: valknut_config.coverage.coverage_file,
+            auto_discover_coverage: valknut_config.coverage.auto_discover,
+            coverage_max_age_days: valknut_config.coverage.max_age_days,
+        })
     }
 }
 

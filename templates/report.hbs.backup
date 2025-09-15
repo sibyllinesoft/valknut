@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{tool_name}} Analysis Report - Sibylline Design</title>
+    <link rel="stylesheet" href="./sibylline.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Three.js and Animation Scripts -->
+    {{#if enable_animation}}
+    <script src="./webpage_files/three.min.js"></script>
+    <script src="./webpage_files/trefoil-animation.js"></script>
+    {{/if}}
+    <style>
+        /* Additional styles for enhanced tree functionality */
+        .priority-critical { color: #7c3aed; font-weight: 600; }
+        .priority-high { color: var(--error); font-weight: 600; }
+        .priority-medium { color: var(--warning); font-weight: 500; }
+        .priority-low { color: var(--accent); font-weight: 400; }
+        
+        .suggestions-list {
+            margin-top: 0.5rem;
+            padding-left: 1rem;
+        }
+        
+        .suggestion-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .suggestion-type {
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .complexity-score {
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+        
+        .tree-expandable {
+            cursor: pointer;
+        }
+        
+        .tree-badge-Critical {
+            background-color: rgba(147, 51, 234, 0.1);
+            color: #7c3aed;
+        }
+        
+        .tree-badge-High {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+        
+        .tree-badge-Medium {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+        
+        .tree-badge-Low {
+            background-color: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+        
+        .tree-expanded .tree-chevron {
+            transform: rotate(90deg);
+        }
+        
+        .tree-collapsed .tree-children,
+        .tree-children.collapsed {
+            display: none;
+        }
+        
+        /* Filtering styles */
+        .filter-menu {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .filter-menu input[type="checkbox"] {
+            margin: 0;
+            accent-color: var(--accent);
+        }
+        
+        .filter-menu label:hover {
+            background: var(--accent-soft);
+        }
+        
+        /* Hide filtered elements */
+        .tree-node.filtered-out {
+            display: none !important;
+        }
+        
+        /* Subtle tree-leaf styling with left border accent */
+        .tree-leaf-subtle {
+            border-left: 2px solid var(--accent);
+            padding: 1rem;
+            padding-left: 1.5rem;
+        }
+        
+        .tree-leaf-subtle:hover {
+            border-left-color: var(--primary);
+            background: rgba(0, 0, 0, 0.01);
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--keyline);
+            border-radius: 4px;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            background: var(--surface);
+            border-color: var(--accent);
+        }
+        
+        .btn-secondary {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        
+        /* Tree hierarchy indentation based on data-level */
+        .tree-node[data-level="0"] {
+            margin-left: 0;
+        }
+        
+        .tree-node[data-level="1"] {
+            margin-left: 2rem;
+            border-left: 2px solid var(--keyline);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.02);
+        }
+        
+        .tree-node[data-level="2"] {
+            margin-left: 4rem;
+            border-left: 2px solid var(--muted);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.04);
+        }
+        
+        .tree-node[data-level="3"] {
+            margin-left: 6rem;
+            border-left: 2px solid var(--muted);
+            padding-left: 1rem;
+            background: rgba(0, 0, 0, 0.06);
+        }
+        
+        /* Function nodes (level 1) special styling */
+        .tree-node[data-level="1"] .tree-icon {
+            color: var(--accent);
+        }
+        
+        .tree-node[data-level="1"] .tree-label {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        /* Directory nodes special styling */
+        .directory-node {
+            border-bottom: 1px solid var(--keyline);
+            margin-bottom: 0.5rem;
+        }
+        
+        .directory-node .tree-header {
+            background: var(--surface);
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+        
+        .directory-node .tree-icon {
+            color: var(--warning);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--accent-hover, var(--accent));
+            opacity: 0.9;
+        }
+        
+        .analysis-summary {
+            background: var(--surface);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-6);
+            margin-bottom: var(--spacing-8);
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--spacing-4);
+            margin-top: var(--spacing-4);
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: var(--spacing-3);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+        
+        .stat-value {
+            font-size: var(--text-xl);
+            font-weight: var(--font-bold);
+            color: var(--accent);
+            font-family: var(--font-mono);
+        }
+        
+        .stat-label {
+            font-size: var(--text-xs);
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            margin-top: var(--spacing-1);
+        }
+
+        /* Oracle section styles */
+        .oracle-section {
+            padding: var(--spacing-6);
+            margin: var(--spacing-8) 0;
+            /* Explicitly remove any gradient or border styling */
+            background: none !important;
+            background-image: none !important;
+            border: none !important;
+            border-bottom: none !important;
+        }
+
+        .oracle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-6);
+            padding-bottom: var(--spacing-4);
+            border-bottom: 2px solid var(--keyline);
+        }
+
+        .oracle-title {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-4);
+        }
+
+        .oracle-title h2 {
+            margin: 0;
+            color: var(--accent);
+            font-size: var(--text-2xl);
+        }
+
+        .oracle-subtitle {
+            color: var(--muted);
+            font-size: var(--text-sm);
+            margin-top: var(--spacing-1);
+        }
+
+        /* Oracle health score styles removed as requested */
+
+        .oracle-content {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-6);
+        }
+
+        /* Assessment styles - no card styling */
+        .oracle-assessment {
+            /* Remove all card styling - just content */
+        }
+
+        .assessment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-6);
+            margin-top: var(--spacing-4);
+        }
+
+        .assessment-strengths, .assessment-weaknesses {
+            padding: var(--spacing-4);
+            border-radius: var(--radius);
+            background: var(--surface) !important;
+            /* Grey card styling like webpage.html - no borders */
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .assessment-strengths h4, .assessment-weaknesses h4 {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+            margin: 0 0 var(--spacing-3) 0;
+            font-size: var(--text-base);
+        }
+
+        .assessment-strengths ul, .assessment-weaknesses ul {
+            margin: 0;
+            padding-left: var(--spacing-4);
+        }
+
+        .assessment-summary {
+            margin-top: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .assessment-summary h4 {
+            margin: 0 0 var(--spacing-2) 0;
+            color: var(--accent);
+        }
+
+        /* Plan styles - grey card like webpage.html */
+        .oracle-plan {
+            background: var(--surface) !important;
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-4);
+        }
+
+        .plan-timeline {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .refactoring-phases {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-4);
+        }
+
+        .phase-card {
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            background: var(--panel);
+            overflow: hidden;
+        }
+
+        .phase-priority-1 {
+            border-left: 4px solid #ef4444;
+        }
+
+        .phase-priority-2 {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .phase-priority-3 {
+            border-left: 4px solid var(--accent);
+        }
+
+        .phase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-4);
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .phase-header:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .phase-title h4 {
+            margin: 0;
+            color: var(--text);
+        }
+
+        .phase-priority {
+            background: var(--accent);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: var(--text-xs);
+            font-weight: var(--font-bold);
+            text-transform: uppercase;
+            margin-bottom: var(--spacing-2);
+            display: inline-block;
+        }
+
+        .phase-description {
+            padding: 0 var(--spacing-4) var(--spacing-4);
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        .phase-expand {
+            padding: var(--spacing-2);
+            transition: transform 0.2s ease;
+        }
+
+        .phase-content {
+            padding: var(--spacing-4);
+            border-top: 1px solid var(--keyline);
+            background: var(--surface);
+        }
+
+        .subsystem {
+            margin-bottom: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .subsystem-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-3);
+        }
+
+        .subsystem-header h5 {
+            margin: 0;
+            color: var(--accent);
+        }
+
+        .subsystem-files {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-1);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .subsystem-tasks {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-3);
+        }
+
+        .task-card {
+            background: var(--surface);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            padding: var(--spacing-3);
+        }
+
+        .task-header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-3);
+            margin-bottom: var(--spacing-2);
+        }
+
+        .task-title {
+            flex: 1;
+            font-weight: var(--font-semibold);
+            color: var(--text);
+        }
+
+        .task-effort {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-1);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .task-risk {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: var(--text-xs);
+            font-weight: var(--font-bold);
+            text-transform: uppercase;
+        }
+
+        .task-risk-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .task-risk-medium {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .task-risk-low {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .task-description {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            margin-bottom: var(--spacing-2);
+        }
+
+        .task-benefits {
+            margin-top: var(--spacing-2);
+            padding: var(--spacing-2);
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .task-benefits ul {
+            margin: var(--spacing-1) 0 0 0;
+            padding-left: var(--spacing-4);
+        }
+
+        .task-files {
+            margin-top: var(--spacing-2);
+            font-size: var(--text-sm);
+        }
+
+        .task-files code {
+            background: var(--panel);
+            padding: 0.125rem 0.25rem;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: var(--text-xs);
+        }
+
+        /* Risk assessment styles - grey card like webpage.html */
+        .oracle-risks {
+            background: var(--surface) !important;
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: none !important;
+            background-image: none !important;
+        }
+
+        .risk-overview {
+            margin-bottom: var(--spacing-4);
+        }
+
+        .risk-level {
+            display: inline-block;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: var(--radius);
+            font-weight: var(--font-semibold);
+            text-transform: uppercase;
+            font-size: var(--text-sm);
+        }
+
+        .risk-level-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .risk-level-medium {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .risk-level-low {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .risks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--spacing-4);
+        }
+
+        .risk-card {
+            background: var(--panel);
+            border: 1px solid var(--keyline);
+            border-radius: var(--radius);
+            padding: var(--spacing-4);
+        }
+
+        .risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-2);
+        }
+
+        .risk-category {
+            font-weight: var(--font-semibold);
+            color: var(--accent);
+            text-transform: capitalize;
+        }
+
+        .risk-probability {
+            color: var(--muted);
+            font-size: var(--text-sm);
+            text-transform: capitalize;
+        }
+
+        .risk-description {
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-3);
+            font-size: var(--text-sm);
+        }
+
+        .risk-mitigation {
+            padding: var(--spacing-2);
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+            font-size: var(--text-sm);
+        }
+
+        /* Effort estimation styles */
+        .oracle-effort {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: var(--spacing-5);
+            border: 1px solid var(--keyline);
+        }
+
+        .effort-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--spacing-4);
+            margin-top: var(--spacing-4);
+        }
+
+        .effort-stat {
+            text-align: center;
+            padding: var(--spacing-4);
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--keyline);
+        }
+
+        .effort-value {
+            font-size: var(--text-xl);
+            font-weight: var(--font-bold);
+            color: var(--accent);
+            font-family: var(--font-mono);
+        }
+
+        .effort-label {
+            font-size: var(--text-xs);
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            margin-top: var(--spacing-1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section with Animated Background -->
+    {{#if enable_animation}}
+    <div class="hero-container">
+        <canvas id="neural-network" class="neural-background"></canvas>
+        <div class="hero-content">
+            <div class="hero-logo-container">
+                <img src="./webpage_files/valknut-large.webp" alt="Valknut Logo" class="hero-logo">
+            </div>
+            <div class="hero-title-container">
+                <h1 class="hero-title">{{tool_name}} Analysis Report</h1>
+            </div>
+            <p class="hero-subtitle">Comprehensive code quality analysis and refactoring guidance</p>
+        </div>
+    </div>
+    <hr class="hero-divider">
+    {{else}}
+    <div class="hero-container no-animation">
+        <div class="hero-content">
+            <div class="hero-logo-container">
+                <img src="./webpage_files/valknut-large.webp" alt="Valknut Logo" class="hero-logo">
+            </div>
+            <div class="hero-title-container">
+                <h1 class="hero-title">{{tool_name}} Analysis Report</h1>
+            </div>
+            <p class="hero-subtitle">Comprehensive code quality analysis and refactoring guidance</p>
+        </div>
+    </div>
+    <hr class="hero-divider">
+    {{/if}}
+    
+    <div class="container">
+        <!-- Report Metadata -->
+        <div class="meta" style="text-align: center; margin-bottom: var(--space-xl); color: var(--color-text-muted); font-size: var(--text-sm);">
+            Generated: {{generated_at}} • Version: {{version}}
+        </div>
+
+        <!-- Analysis Summary -->
+        <div class="analysis-summary">
+            <h2>Analysis Summary</h2>
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <div class="stat-value">{{summary.files_processed}}</div>
+                    <div class="stat-label">Files Analyzed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{summary.entities_analyzed}}</div>
+                    <div class="stat-label">Code Entities</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{summary.refactoring_needed}}</div>
+                    <div class="stat-label">Need Refactoring</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{#if summary.code_health_score}}{{percentage summary.code_health_score "1"}}%{{else}}N/A{{/if}}</div>
+                    <div class="stat-label">Health Score</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Refactoring Oracle -->
+        {{#if has_oracle_data}}
+        <div class="oracle-section">
+            <div class="oracle-header">
+                <div class="oracle-title">
+                    <div class="oracle-icon">
+                        <i data-lucide="brain" style="width: 32px; height: 32px; color: var(--accent);"></i>
+                    </div>
+                    <div>
+                        <h2>AI Refactoring Oracle</h2>
+                        <div class="oracle-subtitle">Strategic guidance powered by Gemini 2.5 Pro</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="oracle-content">
+                <!-- Assessment Overview -->
+                <div class="oracle-assessment">
+                    <h3>Architecture Assessment</h3>
+                    <div class="assessment-grid">
+                        <div class="assessment-strengths">
+                            <h4><i data-lucide="check-circle" style="width: 16px; height: 16px; color: var(--accent);"></i> Strengths</h4>
+                            <ul>
+                                {{#each oracle_refactoring_plan.assessment.strengths}}
+                                <li>{{this}}</li>
+                                {{/each}}
+                            </ul>
+                        </div>
+                        <div class="assessment-weaknesses">
+                            <h4><i data-lucide="alert-triangle" style="width: 16px; height: 16px; color: var(--warning);"></i> Areas for Improvement</h4>
+                            <ul>
+                                {{#each oracle_refactoring_plan.assessment.weaknesses}}
+                                <li>{{this}}</li>
+                                {{/each}}
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    {{#if oracle_refactoring_plan.assessment.architecture_quality}}
+                    <div class="assessment-summary">
+                        <h4>Architecture Quality</h4>
+                        <p>{{oracle_refactoring_plan.assessment.architecture_quality}}</p>
+                    </div>
+                    {{/if}}
+                </div>
+
+                <!-- Refactoring Plan -->
+                {{#if oracle_refactoring_plan.refactoring_plan}}
+                <div class="oracle-plan">
+                    <div class="plan-header">
+                        <h3>Refactoring Roadmap</h3>
+                    </div>
+
+                    <!-- Phases -->
+                    <div class="refactoring-phases">
+                        {{#each oracle_refactoring_plan.refactoring_plan.phases}}
+                        <div class="phase-card phase-priority-{{priority}}">
+                            <div class="phase-header">
+                                <div class="phase-title">
+                                    <div class="phase-priority">Phase {{priority}}</div>
+                                    <h4>{{name}}</h4>
+                                </div>
+                                <div class="phase-expand" onclick="togglePhase(this)">
+                                    <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                                </div>
+                            </div>
+                            <div class="phase-description">{{description}}</div>
+                            
+                            <div class="phase-content" style="display: none;">
+                                {{#each subsystems}}
+                                <div class="subsystem">
+                                    <div class="subsystem-header">
+                                        <h5>{{name}}</h5>
+                                        <div class="subsystem-files">
+                                            <i data-lucide="file" style="width: 14px; height: 14px;"></i>
+                                            {{#each affected_files}}{{#unless @first}}, {{/unless}}{{this}}{{/each}}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="subsystem-tasks">
+                                        {{#each tasks}}
+                                        <div class="task-card task-{{task_type}}">
+                                            <div class="task-header">
+                                                <div class="task-title">{{title}}</div>
+                                                <div class="task-effort">
+                                                    <i data-lucide="clock" style="width: 12px; height: 12px;"></i>
+                                                    {{estimated_hours}}h
+                                                </div>
+                                                <div class="task-risk task-risk-{{risk_level}}">{{risk_level}}</div>
+                                            </div>
+                                            <div class="task-description">{{description}}</div>
+                                            
+                                            {{#if benefits}}
+                                            <div class="task-benefits">
+                                                <strong>Benefits:</strong>
+                                                <ul>
+                                                    {{#each benefits}}
+                                                    <li>{{this}}</li>
+                                                    {{/each}}
+                                                </ul>
+                                            </div>
+                                            {{/if}}
+                                            
+                                            {{#if files}}
+                                            <div class="task-files">
+                                                <strong>Files:</strong>
+                                                {{#each files}}
+                                                <code>{{this}}</code>{{#unless @last}}, {{/unless}}
+                                                {{/each}}
+                                            </div>
+                                            {{/if}}
+                                        </div>
+                                        {{/each}}
+                                    </div>
+                                </div>
+                                {{/each}}
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                </div>
+                {{/if}}
+
+                <!-- Risk Assessment -->
+                {{#if oracle_refactoring_plan.risk_assessment}}
+                <div class="oracle-risks">
+                    <h3>Risk Assessment</h3>
+                    <div class="risk-overview">
+                        <div class="risk-level risk-level-{{oracle_refactoring_plan.risk_assessment.overall_risk}}">
+                            Overall Risk: {{capitalize oracle_refactoring_plan.risk_assessment.overall_risk}}
+                        </div>
+                    </div>
+                    
+                    <div class="risks-grid">
+                        {{#each oracle_refactoring_plan.risk_assessment.risks}}
+                        <div class="risk-card risk-{{impact}}">
+                            <div class="risk-header">
+                                <div class="risk-category">{{category}}</div>
+                                <div class="risk-probability">{{probability}} probability</div>
+                            </div>
+                            <div class="risk-description">{{description}}</div>
+                            <div class="risk-mitigation">
+                                <strong>Mitigation:</strong> {{mitigation}}
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                </div>
+                {{/if}}
+
+            </div>
+        </div>
+        {{/if}}
+
+        <!-- Refactoring Candidates Tree -->
+        <div class="results-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">Refactoring Candidates</h2>
+                <div class="filter-dropdown" style="position: relative;">
+                    <button id="filter-button" onclick="toggleFilterMenu()" style="display: flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px solid var(--keyline); padding: 0.5rem 0.75rem; border-radius: var(--radius); cursor: pointer; color: var(--text); font-size: 0.875rem;">
+                        <i data-lucide="filter" style="width: 16px; height: 16px;"></i>
+                        Filter
+                        <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                    </button>
+                    <div id="filter-menu" class="filter-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 0.25rem; background: rgba(42, 42, 42, 0.85); backdrop-filter: blur(15px); border: 1px solid var(--keyline); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.3); min-width: 320px; z-index: 10; padding: 1rem;"
+                        <div style="padding: 0.75rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.75rem;">
+                                <input type="checkbox" id="filter-high-complexity" onchange="applyFilters()" checked>
+                                <span style="font-weight: 500;">High Complexity Only</span>
+                            </label>
+                            <div style="height: 1px; background: var(--keyline); margin: 0.5rem 0;"></div>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                                <input type="checkbox" id="filter-extract-method" onchange="applyFilters()" checked>
+                                <span>Extract Method</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                                <input type="checkbox" id="filter-simplify-conditionals" onchange="applyFilters()" checked>
+                                <span>Simplify Conditionals</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                                <input type="checkbox" id="filter-improve-structure" onchange="applyFilters()" checked>
+                                <span>Improve Structure</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="filter-general-refactoring" onchange="applyFilters()" checked>
+                                <span>General Refactoring</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="analysis-tree" id="refactoring-tree">
+                {{#if refactoring_candidates_by_file}}
+                    {{#each refactoring_candidates_by_file}}
+                    <!-- File-level node -->
+                    <div class="tree-node file-node" data-level="0" data-priority="{{highest_priority}}">
+                        <div class="tree-header tree-expandable" 
+                             onclick="toggleTreeNode(this)" 
+                             role="button" 
+                             tabindex="0"
+                             aria-expanded="false">
+                            <div class="tree-chevron">
+                                <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                    <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="tree-icon"><i data-lucide="file-code"></i></div>
+                            <div class="tree-label">{{file_name}}</div>
+                            <div class="tree-badge tree-badge-{{highest_priority}}">
+                                {{highest_priority}}
+                            </div>
+                            <div class="tree-badge tree-badge-low">
+                                {{entity_count}} entities
+                            </div>
+                            <div class="tree-badge tree-badge-low complexity-score">
+                                Avg: {{format avg_score "0.1"}}
+                            </div>
+                        </div>
+                        <div class="tree-children collapsed">
+                            <!-- File info -->
+                            <div class="tree-leaf tree-leaf-subtle" style="margin-left: 1rem;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div>
+                                        <div class="tree-leaf-title" style="margin-bottom: 0.25rem;">File Path</div>
+                                        <div class="tree-leaf-value">
+                                            <div style="font-family: var(--font-mono); font-size: 0.85rem;">{{file_path}}</div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="tree-leaf-title" style="margin-bottom: 0.25rem;">Summary</div>
+                                        <div class="tree-leaf-value">
+                                            <div style="font-size: 0.85rem;">
+                                                {{entity_count}} entities requiring refactoring, {{total_issues}} total issues detected
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Entities in this file -->
+                            {{#each entities}}
+                            <div class="tree-node" data-level="1" data-priority="{{priority}}">
+                                <div class="tree-header tree-expandable" 
+                                     onclick="toggleTreeNode(this)" 
+                                     role="button" 
+                                     tabindex="0"
+                                     aria-expanded="false">
+                                    <div class="tree-chevron">
+                                        <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                            <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="tree-icon"><i data-lucide="function-square"></i></div>
+                                    <div class="tree-label">{{function_name name}}</div>
+                                    <div class="tree-badge tree-badge-{{priority}}">
+                                        {{priority}}
+                                    </div>
+                                    <div class="tree-badge tree-badge-low complexity-score">
+                                        Score: {{format score "0.1"}}
+                                    </div>
+                                </div>
+                                <div class="tree-children collapsed">
+                                    {{#if line_range}}
+                                    <div class="tree-leaf">
+                                        <div class="tree-leaf-header">
+                                            <div class="tree-leaf-title">Location</div>
+                                        </div>
+                                        <div class="tree-leaf-value">
+                                            <div style="font-size: 0.75rem; color: var(--muted);">
+                                                Lines {{line_range.[0]}}-{{line_range.[1]}} ({{subtract line_range.[1] line_range.[0]}} lines)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {{/if}}
+                                    
+                                    {{#if issues}}
+                                    <div class="tree-leaf">
+                                        <div class="tree-leaf-header">
+                                            <div class="tree-leaf-title">Issues Detected</div>
+                                        </div>
+                                        <div class="tree-leaf-details">
+                                            {{#each issues}}
+                                            <div class="tree-leaf-detail">
+                                                <span class="tree-leaf-detail-label priority-{{category}}">
+                                                    {{capitalize category}}
+                                                </span>
+                                                <span class="tree-leaf-detail-value">Severity: {{format severity "0.1"}}</span>
+                                            </div>
+                                            <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+                                                {{description}}
+                                            </div>
+                                            {{#if contributing_features}}
+                                            <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--panel); border-radius: 4px; border: 1px solid var(--keyline);">
+                                                <div style="font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.5px;">Contributing Factors:</div>
+                                                {{#each contributing_features}}
+                                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; margin-bottom: 0.125rem;">
+                                                    <span style="color: var(--text-secondary);">{{replace feature_name "_" " "}}</span>
+                                                    <span style="font-family: var(--font-mono); color: var(--accent);">
+                                                        {{#if value}}{{format value "0.1"}}{{/if}}
+                                                        {{#if contribution}} (impact: {{format contribution "0.1"}}%){{/if}}
+                                                    </span>
+                                                </div>
+                                                {{/each}}
+                                            </div>
+                                            {{/if}}
+                                            {{/each}}
+                                        </div>
+                                    </div>
+                                    {{/if}}
+                                    
+                                    {{#if suggestions}}
+                                    <div class="tree-leaf">
+                                        <div class="tree-leaf-header">
+                                            <div class="tree-leaf-title">Refactoring Suggestions</div>
+                                        </div>
+                                        <div class="suggestions-list">
+                                            {{#each suggestions}}
+                                            <div class="suggestion-item">
+                                                <span class="suggestion-type">{{refactoring_type}}</span>
+                                                <span>{{description}}</span>
+                                                <span style="margin-left: auto; font-family: var(--font-mono); color: var(--muted);">
+                                                    Impact: {{format impact "0.1"}}%
+                                                </span>
+                                            </div>
+                                            {{/each}}
+                                        </div>
+                                    </div>
+                                    {{/if}}
+                                </div>
+                            </div>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/each}}
+                {{else}}
+                    {{#if refactoring_candidates}}
+                    <!-- Fallback to old flat structure if new structure not available -->
+                    <div style="margin-bottom: 1rem; padding: 0.5rem; background: var(--panel); border-radius: 4px; border: 1px solid var(--warning);">
+                        <small style="color: var(--warning);">Note: Using legacy flat structure. Update template for hierarchical view.</small>
+                    </div>
+                    {{#each refactoring_candidates}}
+                    <div class="tree-node" data-level="0" data-priority="{{priority}}">
+                        <div class="tree-header tree-expandable" 
+                             onclick="toggleTreeNode(this)" 
+                             role="button" 
+                             tabindex="0"
+                             aria-expanded="false">
+                            <div class="tree-chevron">
+                                <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                    <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="tree-icon"><i data-lucide="file-text"></i></div>
+                            <div class="tree-label">{{name}}</div>
+                            <div class="tree-badge tree-badge-{{priority}}">
+                                {{priority}}
+                            </div>
+                            <div class="tree-badge tree-badge-low complexity-score">
+                                Score: {{format score "0.1"}}
+                            </div>
+                        </div>
+                        <div class="tree-children collapsed">
+                            <div class="tree-leaf">
+                                <div class="tree-leaf-header">
+                                    <div class="tree-leaf-title">Location</div>
+                                </div>
+                                <div class="tree-leaf-value">
+                                    <div style="font-family: var(--font-mono); font-size: 0.85rem;">{{file_path}}</div>
+                                    {{#if line_range}}
+                                    <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem;">
+                                        Lines {{line_range.[0]}}-{{line_range.[1]}} ({{subtract line_range.[1] line_range.[0]}} lines)
+                                    </div>
+                                    {{/if}}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {{/each}}
+                    {{else}}
+                    <div style="text-align: center; padding: 2rem; color: var(--muted);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">
+                            <i data-lucide="check-circle" style="color: var(--accent); width: 48px; height: 48px;"></i>
+                        </div>
+                        <h3>No Refactoring Candidates Found</h3>
+                        <p>Your code is in excellent shape!</p>
+                    </div>
+                    {{/if}}
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- Directory Health Tree -->
+        {{#if directory_health_tree}}
+        <div class="results-section" style="max-width: 1400px; margin: 0 auto var(--spacing-12) auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">Directory Health Overview</h2>
+            </div>
+            <div class="analysis-tree" id="directory-tree" style="max-height: 600px; overflow-y: auto;">
+                <!-- Show src directory as root with its subdirectories -->
+                {{#with (lookup directory_health_tree.directories "src")}}
+                <div class="tree-node directory-node" data-level="0">
+                    <div class="tree-header tree-expandable" 
+                         onclick="toggleTreeNode(this)" 
+                         role="button" 
+                         tabindex="0"
+                         aria-expanded="false">
+                        <div class="tree-chevron">
+                            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="tree-icon"><i data-lucide="folder" style="color: white;"></i></div>
+                        <div class="tree-label">src</div>
+                        <div class="tree-badge {{health_badge_class health_score}}">
+                            Health: {{percentage health_score "0"}}%
+                        </div>
+                        {{#if entity_count}}
+                        <div class="tree-badge tree-badge-low">
+                            {{entity_count}} entities
+                        </div>
+                        {{/if}}
+                        {{#if critical_issues}}
+                        <div class="tree-badge tree-badge-Critical">
+                            {{critical_issues}} critical
+                        </div>
+                        {{/if}}
+                        {{#if high_priority_issues}}
+                        <div class="tree-badge tree-badge-High">
+                            {{high_priority_issues}} high
+                        </div>
+                        {{/if}}
+                    </div>
+                    {{#if (has_children children)}}
+                    <div class="tree-children collapsed">
+                        {{#each children}}
+                        {{#with (lookup ../../directory_health_tree.directories this)}}
+                        <div class="tree-node directory-node" data-level="1">
+                            <div class="tree-header {{#if (has_children children)}}tree-expandable{{/if}}"
+                                 {{#if (has_children children)}}onclick="toggleTreeNode(this)"{{/if}}
+                                 role="button" 
+                                 tabindex="0"
+                                 aria-expanded="false">
+                                {{#if (has_children children)}}
+                                <div class="tree-chevron">
+                                    <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                        <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                {{else}}
+                                <div class="tree-chevron" style="width: 24px;"></div>
+                                {{/if}}
+                                <div class="tree-icon"><i data-lucide="folder" style="color: white;"></i></div>
+                                <div class="tree-label">{{#if path}}{{basename path}}{{else}}{{this}}{{/if}}</div>
+                                <div class="tree-badge {{health_badge_class health_score}}">
+                                    Health: {{percentage health_score "0"}}%
+                                </div>
+                                {{#if entity_count}}
+                                <div class="tree-badge tree-badge-low">
+                                    {{entity_count}} entities
+                                </div>
+                                {{/if}}
+                                {{#if critical_issues}}
+                                <div class="tree-badge tree-badge-Critical">
+                                    {{critical_issues}} critical
+                                </div>
+                                {{/if}}
+                                {{#if high_priority_issues}}
+                                <div class="tree-badge tree-badge-High">
+                                    {{high_priority_issues}} high
+                                </div>
+                                {{/if}}
+                            </div>
+                            {{#if (has_children children)}}
+                            <div class="tree-children collapsed">
+                                {{#each children}}
+                                {{#with (lookup ../../../directory_health_tree.directories this)}}
+                                <div class="tree-node directory-node" data-level="2">
+                                    <div class="tree-header">
+                                        <div class="tree-chevron" style="width: 24px;"></div>
+                                        <div class="tree-icon"><i data-lucide="folder" style="color: white;"></i></div>
+                                        <div class="tree-label">{{path}}</div>
+                                        <div class="tree-badge {{health_badge_class health_score}}">
+                                            Health: {{percentage health_score "0"}}%
+                                        </div>
+                                        {{#if entity_count}}
+                                        <div class="tree-badge tree-badge-low">
+                                            {{entity_count}} entities
+                                        </div>
+                                        {{/if}}
+                                        {{#if critical_issues}}
+                                        <div class="tree-badge tree-badge-Critical">
+                                            {{critical_issues}} critical
+                                        </div>
+                                        {{/if}}
+                                        {{#if high_priority_issues}}
+                                        <div class="tree-badge tree-badge-High">
+                                            {{high_priority_issues}} high
+                                        </div>
+                                        {{/if}}
+                                    </div>
+                                </div>
+                                {{/with}}
+                                {{/each}}
+                            </div>
+                            {{/if}}
+                        </div>
+                        {{/with}}
+                        {{/each}}
+                    </div>
+                    {{/if}}
+                </div>
+                {{/if}}
+                {{/each}}
+                <!-- Show src subdirectories -->
+                {{#each ../directory_health_tree.directories}}
+                {{#if (starts_with @key "src/")}}
+                <div class="tree-node directory-node" data-level="1">
+                    <div class="tree-header {{#if (has_children children)}}tree-expandable{{/if}}"
+                         {{#if (has_children children)}}onclick="toggleTreeNode(this)"{{/if}}
+                         role="button" 
+                         tabindex="0"
+                         aria-expanded="false">
+                        {{#if (has_children children)}}
+                        <div class="tree-chevron">
+                            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        {{else}}
+                        <div class="tree-chevron" style="width: 24px;"></div>
+                        {{/if}}
+                        <div class="tree-icon"><i data-lucide="folder" style="color: white;"></i></div>
+                        <div class="tree-label">{{basename path}}</div>
+                        <div class="tree-badge {{health_badge_class health_score}}">
+                            Health: {{percentage health_score "0"}}%
+                        </div>
+                        {{#if entity_count}}
+                        <div class="tree-badge tree-badge-low">
+                            {{entity_count}} entities
+                        </div>
+                        {{/if}}
+                        {{#if critical_issues}}
+                        <div class="tree-badge tree-badge-Critical">
+                            {{critical_issues}} critical
+                        </div>
+                        {{/if}}
+                        {{#if high_priority_issues}}
+                        <div class="tree-badge tree-badge-High">
+                            {{high_priority_issues}} high
+                        </div>
+                        {{/if}}
+                    </div>
+                        {{/with}}
+                        {{/each}}
+                    </div>
+                    {{/if}}
+            </div>
+        </div>
+        {{/if}}
+        <!-- Coverage Analysis -->
+        {{#if coverage_packs}}
+        <div class="results-section" style="max-width: 1400px; margin: 0 auto var(--spacing-12) auto;">
+            <h2>Test Coverage Guidance</h2>
+            <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--panel); border-radius: 8px; border-left: 4px solid var(--accent);">
+                <strong>AI-Powered Test Guidance:</strong> These coverage packs identify high-value testing opportunities to maximize code quality and reduce technical debt.
+            </div>
+            <div class="analysis-tree" id="coverage-tree">
+                {{#each coverage_packs}}
+                <div class="tree-node" data-level="0">
+                    <div class="tree-header tree-expandable" 
+                         onclick="toggleTreeNode(this)" 
+                         role="button" 
+                         tabindex="0"
+                         aria-expanded="false">
+                        <div class="tree-chevron">
+                            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none">
+                                <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="tree-icon"><i data-lucide="target"></i></div>
+                        <div class="tree-label">{{path}}</div>
+                        <div class="tree-badge tree-badge-Medium">
+                            {{length gaps}} gaps
+                        </div>
+                        <div class="tree-badge tree-badge-low">
+                            Current: {{percentage file_info.coverage_before "1"}}%
+                        </div>
+                        <div class="tree-badge tree-badge-High">
+                            Target: {{percentage file_info.coverage_after_if_filled "1"}}%
+                        </div>
+                    </div>
+                    <div class="tree-children collapsed">
+                        <!-- File Info -->
+                        <div class="tree-leaf">
+                            <div class="tree-leaf-header">
+                                <div class="tree-leaf-title">Coverage Metrics</div>
+                            </div>
+                            <div class="tree-leaf-value">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <div class="stat-item">
+                                        <div class="stat-value">{{file_info.loc}}</div>
+                                        <div class="stat-label">Lines of Code</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">{{percentage file_info.coverage_before "1"}}%</div>
+                                        <div class="stat-label">Current Coverage</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">{{percentage file_info.coverage_after_if_filled "1"}}%</div>
+                                        <div class="stat-label">Target Coverage</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">+{{percentage value.file_cov_gain "1"}}%</div>
+                                        <div class="stat-label">Coverage Gain</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Value/Effort Analysis -->
+                        <div class="tree-leaf">
+                            <div class="tree-leaf-header">
+                                <div class="tree-leaf-title">Priority Analysis</div>
+                            </div>
+                            <div class="tree-leaf-value">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div style="background: rgba(99, 102, 241, 0.1); padding: 0.5rem; border-radius: 4px;">
+                                        <div style="font-weight: 600; color: var(--accent); margin-bottom: 0.25rem;">Value</div>
+                                        <div style="font-size: 0.875rem;">
+                                            File Coverage: +{{percentage value.file_cov_gain "1"}}%<br>
+                                            Repo Impact: +{{percentage value.repo_cov_gain_est "2"}}%
+                                        </div>
+                                    </div>
+                                    <div style="background: rgba(245, 158, 11, 0.1); padding: 0.5rem; border-radius: 4px;">
+                                        <div style="font-weight: 600; color: var(--warning); margin-bottom: 0.25rem;">Effort</div>
+                                        <div style="font-size: 0.875rem;">
+                                            Tests to Write: {{effort.tests_to_write_est}}<br>
+                                            Mocks Needed: {{effort.mocks_est}}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Coverage Gaps -->
+                        {{#each gaps}}
+                        <div class="tree-leaf">
+                            <div class="tree-leaf-header">
+                                <div class="tree-leaf-title">Coverage Gap (Lines {{span.start}}-{{span.end}})</div>
+                                <div class="tree-badge tree-badge-{{#if (gt score 0.8)}}High{{else}}{{#if (gt score 0.6)}}Medium{{else}}Low{{/if}}{{/if}}">
+                                    Score: {{format score "0.2"}}
+                                </div>
+                            </div>
+                            <div class="tree-leaf-value">
+                                <!-- Gap Features -->
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.25rem; margin-bottom: 0.5rem; font-size: 0.75rem;">
+                                    <div><strong>LOC:</strong> {{features.gap_loc}}</div>
+                                    <div><strong>Complexity:</strong> {{format features.cyclomatic_in_gap "0.1"}}</div>
+                                    <div><strong>Callers:</strong> {{features.fan_in_gap}}</div>
+                                    <div><strong>Public API:</strong> {{#if features.exports_touched}}Yes{{else}}No{{/if}}</div>
+                                </div>
+                                
+                                <!-- Code Preview -->
+                                {{#if symbols}}
+                                <div style="margin-top: 0.5rem;">
+                                    <div style="font-weight: 600; margin-bottom: 0.25rem;">Functions/Methods:</div>
+                                    {{#each symbols}}
+                                    <div style="background: var(--surface); padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.75rem;">
+                                        <div style="color: var(--accent); margin-bottom: 0.125rem;">{{kind}}: {{name}}</div>
+                                        <div style="color: var(--muted);">{{signature}}</div>
+                                    </div>
+                                    {{/each}}
+                                </div>
+                                {{/if}}
+                                
+                                <!-- Code Snippet -->
+                                {{#if preview}}
+                                <div style="margin-top: 0.5rem;">
+                                    <div style="font-weight: 600; margin-bottom: 0.25rem;">Code Preview:</div>
+                                    <div style="background: var(--surface); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
+                                        <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
+{{/each}}</pre>
+                                    </div>
+                                </div>
+                                {{/if}}
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+        {{/if}}
+
+        <!-- Raw Data for Debugging -->
+        <div class="raw-data">
+            <details>
+                <summary>Raw Analysis Data (Debug)</summary>
+                <pre>{{json results}}</pre>
+            </details>
+        </div>
+    </div>
+
+    <script>
+        // Filter dropdown functionality
+        function toggleFilterMenu() {
+            const menu = document.getElementById('filter-menu');
+            const button = document.getElementById('filter-button');
+            const chevron = button.querySelector('[data-lucide="chevron-down"]');
+            
+            if (menu.style.display === 'none') {
+                menu.style.display = 'block';
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                menu.style.display = 'none';
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+        
+        // Close filter menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const dropdown = document.querySelector('.filter-dropdown');
+            const menu = document.getElementById('filter-menu');
+            
+            if (!dropdown.contains(event.target)) {
+                menu.style.display = 'none';
+                const chevron = document.querySelector('#filter-button [data-lucide="chevron-down"]');
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        });
+        
+        // Apply filters based on checkboxes
+        function applyFilters() {
+            const highComplexityOnly = document.getElementById('filter-high-complexity').checked;
+            const extractMethod = document.getElementById('filter-extract-method').checked;
+            const simplifyConditionals = document.getElementById('filter-simplify-conditionals').checked;
+            const improveStructure = document.getElementById('filter-improve-structure').checked;
+            const generalRefactoring = document.getElementById('filter-general-refactoring').checked;
+            
+            const fileNodes = document.querySelectorAll('.file-node');
+            
+            fileNodes.forEach(fileNode => {
+                let shouldShow = false;
+                
+                // Check if file meets complexity filter
+                const priority = fileNode.getAttribute('data-priority');
+                const meetsComplexityFilter = !highComplexityOnly || priority === 'Critical' || priority === 'High';
+                
+                if (meetsComplexityFilter) {
+                    // Check if file has any refactoring suggestions that match the selected types
+                    const suggestions = fileNode.querySelectorAll('.suggestion-item');
+                    if (suggestions.length === 0) {
+                        // If no specific suggestions found, show the file (it might have general refactoring needs)
+                        shouldShow = true;
+                    } else {
+                        // Check each suggestion to see if it matches selected refactoring types
+                        suggestions.forEach(suggestion => {
+                            const suggestionText = suggestion.textContent.toLowerCase();
+                            if ((extractMethod && suggestionText.includes('extract')) ||
+                                (simplifyConditionals && suggestionText.includes('conditional')) ||
+                                (improveStructure && suggestionText.includes('structure')) ||
+                                (generalRefactoring && !suggestionText.includes('extract') && 
+                                 !suggestionText.includes('conditional') && !suggestionText.includes('structure'))) {
+                                shouldShow = true;
+                            }
+                        });
+                    }
+                }
+                
+                // Apply filter
+                if (shouldShow) {
+                    fileNode.classList.remove('filtered-out');
+                } else {
+                    fileNode.classList.add('filtered-out');
+                }
+            });
+            
+            // Log filtering results
+            const visibleFiles = document.querySelectorAll('.file-node:not(.filtered-out)').length;
+            const totalFiles = fileNodes.length;
+            console.log(`Filter: Showing ${visibleFiles} of ${totalFiles} files`);
+        }
+        
+        // Enhanced tree functionality inspired by Arbiter FileTree
+        function toggleTreeNode(headerElement) {
+            const treeNode = headerElement.closest('.tree-node');
+            const chevron = headerElement.querySelector('.tree-chevron');
+            const children = treeNode.querySelector('.tree-children');
+            
+            if (!children) return;
+            
+            const isExpanded = headerElement.getAttribute('aria-expanded') === 'true';
+            
+            // Toggle expanded state
+            headerElement.setAttribute('aria-expanded', !isExpanded);
+            treeNode.classList.toggle('tree-expanded', !isExpanded);
+            
+            // Toggle children visibility with smooth animation
+            if (isExpanded) {
+                children.classList.add('collapsed');
+                children.classList.remove('expanded');
+            } else {
+                children.classList.remove('collapsed');
+                children.classList.add('expanded');
+            }
+            
+            // Rotate chevron
+            if (chevron) {
+                chevron.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+            }
+        }
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.target.classList.contains('tree-expandable')) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleTreeNode(e.target);
+                }
+            }
+        });
+        
+        // Auto-expand critical and high priority items
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-expand functionality removed to keep all nodes collapsed by default
+            // Users can manually expand file nodes as needed
+            
+            // Initialize all chevrons to point right (collapsed state)
+            document.querySelectorAll('.tree-chevron').forEach(chevron => {
+                chevron.style.transform = 'rotate(0deg)';
+            });
+            
+            {{#if enable_animation}}
+            // Initialize trefoil animation if enabled
+            if (typeof window.initTrefoilAnimation === 'function') {
+                const canvas = document.getElementById('neural-network');
+                if (canvas) {
+                    window.initTrefoilAnimation(canvas);
+                }
+            }
+            {{/if}}
+            
+            console.log(`Target: Valknut Analysis Report Loaded`);
+            console.log(`Chart: Found ${document.querySelectorAll('.tree-node').length} refactoring candidates`);
+            console.log(`Palette: Using Sibylline Design System Theme`);
+            
+            // Initialize Lucide icons
+            lucide.createIcons();
+        });
+        
+        // Smooth scrolling for tree navigation
+        function scrollToNode(nodeId) {
+            const element = document.getElementById(nodeId);
+            if (element) {
+                element.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+            }
+        }
+        
+        // Initialize Lucide icons when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+        });
+
+        // Oracle phase toggle functionality
+        function togglePhase(element) {
+            const phaseCard = element.closest('.phase-card');
+            const phaseContent = phaseCard.querySelector('.phase-content');
+            const chevron = element.querySelector('[data-lucide="chevron-right"]');
+            
+            if (phaseContent.style.display === 'none') {
+                phaseContent.style.display = 'block';
+                chevron.style.transform = 'rotate(90deg)';
+            } else {
+                phaseContent.style.display = 'none';
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Helper function to capitalize strings (for Handlebars templates that might need it)
+        function capitalize(str) {
+            if (!str) return '';
+            return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        }
+    </script>
+</body>
+</html>

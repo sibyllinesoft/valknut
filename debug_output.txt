@@ -1,0 +1,125 @@
+[1m[36m┌[39m[0m[36m────────────────────────────────────────────────────────────[39m[1m[36m┐[39m[0m
+[1m[36m│[39m[0m [1m[96m⚙️  Valknut v1.2.2 - AI-Powered Code Analysis[39m[0m [1m[36m│[39m[0m
+[1m[36m└[39m[0m[36m────────────────────────────────────────────────────────────[39m[1m[36m┘[39m[0m
+
+[32m✅ Configuration loaded with comprehensive analysis enabled[39m
+  📊 Analysis Configuration:
+    • Confidence threshold: 70.0%
+    • Max files: unlimited
+    • Coverage max age: 7 days
+    • Coverage patterns: 26 patterns
+    • Clone detection: denoising enabled (similarity: 82%)
+[1m[94m📂 Validating Input Paths[39m[0m
+
+  📁 Directory: [32m./src[39m
+
+[1m📁 Output directory:[0m [36m.valknut[39m
+[1m📊 Report format:[0m [36mHTML[39m
+
+[1m[94m📋 Coverage File Discovery Preview[39m[0m
+  [32m✅[39m Found 1 coverage files:
+    1. .valknut/comprehensive-coverage.xml (format: CoveragePyXml, size: 10 KB)
+
+[1m[94m🔍 Starting Comprehensive Analysis Pipeline[39m[0m
+  Enabled Analyses:
+    ✅ Complexity Analysis - Cyclomatic and cognitive complexity scoring
+    ✅ Structure Analysis - Directory organization and architectural patterns
+    ✅ Refactoring Analysis - Refactoring opportunity detection
+    ✅ Impact Analysis - Dependency graphs, cycles, and centrality
+    ✅ Clone Detection - LSH-based similarity analysis (with denoising)
+    ✅ Coverage Analysis - Test gap analysis
+  📊 Total: 6 analyses enabled
+
+[2m2025-09-13T20:38:47.616890Z[0m [32m INFO[0m Initializing Valknut analysis engine
+[2m2025-09-13T20:38:47.617015Z[0m [32m INFO[0m WeightedShingleAnalyzer enabled for clone denoising with k=3
+[2m2025-09-13T20:38:47.617036Z[0m [32m INFO[0m LSH extractor configured with denoising enabled (k=3)
+[2m2025-09-13T20:38:47.617149Z[0m [32m INFO[0m Valknut engine initialized successfully
+[2m2025-09-13T20:38:47.617338Z[0m [32m INFO[0m Starting directory analysis: ./src
+🔍 ENGINE DEBUG: Calling pipeline.analyze_directory
+[2m2025-09-13T20:38:47.617372Z[0m [32m INFO[0m Starting comprehensive analysis 175497ba-4b5c-44c4-a092-0d8ff5a33ab8 for 1 paths
+[2m2025-09-13T20:38:47.618575Z[0m [32m INFO[0m Discovered 61 files for analysis
+[2m2025-09-13T20:38:48.757353Z[0m [32m INFO[0m Analyzing complexity for file: ./src/api/engine.rs
+[2m2025-09-13T20:38:48.798698Z[0m [32m INFO[0m Analyzing complexity for file: ./src/api/config_types.rs
+[2m2025-09-13T20:38:48.818465Z[0m [32m INFO[0m Analyzing complexity for file: ./src/api/results.rs
+[2m2025-09-13T20:38:48.948247Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/cli/mod.rs
+[2m2025-09-13T20:38:48.949301Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/cli/output.rs
+[2m2025-09-13T20:38:49.054496Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/cli/args.rs
+[2m2025-09-13T20:38:49.058155Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/cli/commands.rs
+[2m2025-09-13T20:38:49.187814Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/mcp/mod.rs
+[2m2025-09-13T20:38:49.190677Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/mcp/protocol.rs
+[2m2025-09-13T20:38:49.199593Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/mcp/server.rs
+[2m2025-09-13T20:38:49.217400Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/mcp/tools.rs
+[2m2025-09-13T20:38:49.256695Z[0m [32m INFO[0m Analyzing complexity for file: ./src/bin/valknut.rs
+[2m2025-09-13T20:38:49.272345Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/pipeline/pipeline_results.rs
+[2m2025-09-13T20:38:49.277450Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/pipeline/pipeline_config.rs
+[2m2025-09-13T20:38:49.285505Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/pipeline/pipeline_executor.rs
+[2m2025-09-13T20:38:49.324208Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/pipeline/pipeline_stages.rs
+[2m2025-09-13T20:38:49.341008Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/pipeline/mod.rs
+[2m2025-09-13T20:38:49.348425Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/errors.rs
+[2m2025-09-13T20:38:49.374345Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/featureset.rs
+[2m2025-09-13T20:38:49.426728Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/bayesian.rs
+[2m2025-09-13T20:38:49.474760Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/config.rs
+[2m2025-09-13T20:38:49.529683Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/scoring.rs
+[2m2025-09-13T20:38:49.586098Z[0m [32m INFO[0m Analyzing complexity for file: ./src/core/file_utils.rs
+[2m2025-09-13T20:38:49.621550Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/graph.rs
+[2m2025-09-13T20:38:49.642259Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/structure/config.rs
+[2m2025-09-13T20:38:49.647522Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/structure/mod.rs
+[2m2025-09-13T20:38:49.666548Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/structure/directory.rs
+[2m2025-09-13T20:38:49.802002Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/structure/file.rs
+[2m2025-09-13T20:38:49.915275Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/refactoring.rs
+[2m2025-09-13T20:38:49.970200Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/coverage.rs
+[2m2025-09-13T20:38:50.151925Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/mod.rs
+[2m2025-09-13T20:38:50.156042Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/complexity.rs
+[2m2025-09-13T20:38:50.288254Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/names_simple.rs
+[2m2025-09-13T20:38:50.353853Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/boilerplate_learning.rs
+[2m2025-09-13T20:38:50.402049Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/clone_detection.rs
+[2m2025-09-13T20:38:50.589368Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/lsh/lsh_cache.rs
+[2m2025-09-13T20:38:50.605538Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/lsh/memory_pool.rs
+[2m2025-09-13T20:38:50.618870Z[0m [32m INFO[0m Analyzing complexity for file: ./src/detectors/lsh/mod.rs
+[2m2025-09-13T20:38:50.712335Z[0m [32m INFO[0m Analyzing complexity for file: ./src/io/mod.rs
+[2m2025-09-13T20:38:50.712869Z[0m [32m INFO[0m Analyzing complexity for file: ./src/io/persistence.rs
+[2m2025-09-13T20:38:50.713215Z[0m [32m INFO[0m Analyzing complexity for file: ./src/io/cache.rs
+[2m2025-09-13T20:38:50.835483Z[0m [32m INFO[0m Analyzing complexity for file: ./src/io/reports.rs
+[2m2025-09-13T20:38:50.935355Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/go.rs
+[2m2025-09-13T20:38:50.973008Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/javascript.rs
+[2m2025-09-13T20:38:51.000042Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/typescript.rs
+[2m2025-09-13T20:38:51.031375Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/rust_lang.rs
+[2m2025-09-13T20:38:51.078287Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/common.rs
+[2m2025-09-13T20:38:51.104341Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/mod.rs
+[2m2025-09-13T20:38:51.104992Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lang/python.rs
+[2m2025-09-13T20:38:51.146082Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/scoring.rs
+[2m2025-09-13T20:38:51.174899Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/types.rs
+[2m2025-09-13T20:38:51.201874Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/storage.rs
+[2m2025-09-13T20:38:51.241052Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/reports.rs
+[2m2025-09-13T20:38:51.265045Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/community.rs
+[2m2025-09-13T20:38:51.315860Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/collectors.rs
+[2m2025-09-13T20:38:51.361560Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/graph.rs
+[2m2025-09-13T20:38:51.414694Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/stacks.rs
+[2m2025-09-13T20:38:51.417767Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/mod.rs
+[2m2025-09-13T20:38:51.423268Z[0m [32m INFO[0m Analyzing complexity for file: ./src/live/cli.rs
+[2m2025-09-13T20:38:51.463728Z[0m [32m INFO[0m Analyzing complexity for file: ./src/oracle/mod.rs
+[2m2025-09-13T20:38:51.505922Z[0m [32m INFO[0m Analyzing complexity for file: ./src/lib.rs
+[2m2025-09-13T20:38:51.509901Z[0m [32m INFO[0m Running refactoring analysis on 61 files
+Found potential duplicate line 241: 'if trimmed.contains("this appears multiple times") {'
+Found potential duplicate line 608: 'let duplicate_line = "this appears multiple times";'
+Found potential duplicate line 612: 'let duplicate_line2 = "this appears multiple times";'
+Found potential duplicate line 616: 'let duplicate_line3 = "this appears multiple times";'
+[2m2025-09-13T20:38:51.808793Z[0m [32m INFO[0m Refactoring analysis found 49 files with opportunities
+[2m2025-09-13T20:38:51.861633Z[0m [32m INFO[0m Computing weighted signatures for 62 entities (cache miss)
+[2m2025-09-13T20:38:51.861833Z[0m [32m INFO[0m Building IDF table for 62 entities with k=3
+[2m2025-09-13T20:38:52.398584Z[0m [32m INFO[0m grams_total: 72030, grams_top1pct_pctcontrib: 7.1%
+[2m2025-09-13T20:38:54.886132Z[0m [32m INFO[0m Computed weighted signatures for 61 entities
+[2m2025-09-13T20:38:57.931169Z[0m [32m INFO[0m Using coverage file: .valknut/comprehensive-coverage.xml (format: CoveragePyXml)
+[2m2025-09-13T20:38:57.931493Z[0m [32m INFO[0m Comprehensive analysis completed in 10.31s
+[2m2025-09-13T20:38:57.931528Z[0m [32m INFO[0m Total issues found: 363
+[2m2025-09-13T20:38:57.931542Z[0m [32m INFO[0m Overall health score: 75.8
+🔍 ENGINE DEBUG: Pipeline returned 1760 scoring files
+DEBUG: build_directory_health_tree called with 509 candidates
+[2m2025-09-13T20:38:57.965533Z[0m [32m INFO[0m Directory analysis completed: 61 files processed, 1760 entities analyzed
+[1m[94m📊 Analysis Results[39m[0m
+
+  ✅ Analysis completed successfully
+
+[1m[94m📝 Generating Reports[39m[0m
+  ✅ Report saved: [36m.valknut/report_20250913_203857.html[39m
+[1m[32m🎉 Analysis completed successfully![39m[0m

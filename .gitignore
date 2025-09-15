@@ -127,6 +127,13 @@ profile/
 *.profdata
 *.profraw
 tarpaulin-report.html
+coverage.lcov
+
+# Generated report assets
+**/webpage_files/
+*.min.js
+three.min.js
+trefoil-animation.js
 
 # Cache directories
 .cache/

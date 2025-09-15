@@ -23,7 +23,7 @@ analysis:
 
 # Scoring and normalization settings
 scoring:
-  normalization_scheme: Standard  # Standard, z_score, min_max, robust
+  normalization_scheme: z_score  # z_score, min_max, robust
   use_bayesian_fallbacks: true
   confidence_reporting: true
   weights:
@@ -63,34 +63,33 @@ structure:
   enable_branch_packs: true
   enable_file_split_packs: true
   top_packs: 10
+  
+  # Directory analysis settings
+  fsdir:
+    max_files_per_dir: 25
+    max_subdirs_per_dir: 10
+    max_dir_loc: 2000
+    min_branch_recommendation_gain: 0.15
+    min_files_for_split: 5
+    target_loc_per_subdir: 1000
 
-# Directory analysis settings
-fsdir:
-  max_files_per_dir: 25
-  max_subdirs_per_dir: 10
-  max_dir_loc: 2000
-  min_branch_recommendation_gain: 0.15
-  min_files_for_split: 5
-  target_loc_per_subdir: 1000
+  # File analysis settings
+  fsfile:
+    huge_loc: 800
+    huge_bytes: 128000
+    min_split_loc: 200
+    min_entities_per_split: 3
 
-# File analysis settings
-fsfile:
-  huge_loc: 800
-  huge_bytes: 128000
-  min_split_loc: 200
-  min_entities_per_split: 3
-  min_split_recommendation_gain: 0.20
-
-# Partitioning configuration
-partitioning:
-  balance_tolerance: 0.25
-  max_clusters: 4
-  min_clusters: 2
-  naming_fallbacks:
-    - core
-    - api
-    - util
-    - shared
+  # Partitioning configuration  
+  partitioning:
+    balance_tolerance: 0.25
+    max_clusters: 4
+    min_clusters: 2
+    naming_fallbacks:
+      - core
+      - api
+      - util
+      - shared
 
 # Basic naming analysis (simple pattern-based)
 names:
@@ -188,3 +187,13 @@ quality_gates:
   max_issues: 50
   max_critical: 0
   max_high_priority: 5
+
+# Clone denoising configuration for reducing noise in clone detection  
+denoise:
+  enabled: true
+  min_function_tokens: 40  # Minimum function tokens to consider
+  min_match_tokens: 24     # Minimum matching tokens for duplicates
+  require_blocks: 2        # Require distinct blocks for meaningful matches
+  similarity: 0.82         # Final similarity threshold (0.0-1.0)
+  auto: true              # Enable automatic threshold calibration
+  dry_run: false          # Dry-run mode (analyze but don't change behavior)

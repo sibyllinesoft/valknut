@@ -14,6 +14,11 @@ use tracing::{debug, info, warn};
 
 use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
+use crate::lang::python::PythonAdapter;
+use crate::lang::javascript::JavaScriptAdapter;
+use crate::lang::typescript::TypeScriptAdapter;
+use crate::lang::rust_lang::RustAdapter;
+use crate::lang::go::GoAdapter;
 
 /// Configuration for semantic naming analysis (simplified)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,15 +258,128 @@ impl SimpleNameAnalyzer {
         Ok(results)
     }
 
-    /// Simple function extraction using pattern matching
+    /// Extract functions using improved parsing (fallback to simple approach where tree-sitter unavailable)
     fn extract_functions_simple(&self, content: &str, file_path: &Path) -> Result<Vec<FunctionInfo>> {
+        let language = self.detect_language(file_path);
+        let file_path_str = file_path.to_string_lossy().to_string();
+        
+        match language.as_str() {
+            "python" => self.extract_python_functions_improved(content, &file_path_str),
+            "javascript" => self.extract_functions_treesitter_js(content, &file_path_str),
+            "typescript" => self.extract_functions_treesitter_ts(content, &file_path_str),
+            "go" => self.extract_functions_treesitter_go(content, &file_path_str),
+            "rust" => self.extract_functions_treesitter_rust(content, &file_path_str),
+            _ => {
+                debug!("Unsupported language for function extraction: {}", language);
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    /// Extract Python functions using simple tree-sitter approach
+    fn extract_python_functions_improved(&self, content: &str, file_path: &str) -> Result<Vec<FunctionInfo>> {
+        let mut adapter = PythonAdapter::new()?;
+        let entities = adapter.extract_code_entities(content, file_path)?;
+        
+        Ok(entities.into_iter()
+            .filter_map(|entity| {
+                if entity.entity_type.as_str().to_lowercase() == "function" {
+                    Some(FunctionInfo {
+                        name: entity.name.clone(),
+                        line: entity.line_range.map(|(start, _)| start).unwrap_or(1),
+                        is_async: entity.source_code.trim_start().starts_with("async def"),
+                        visibility: if entity.name.starts_with('_') { "private" } else { "public" }.to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
+    /// Extract JavaScript functions using tree-sitter AST parsing
+    fn extract_functions_treesitter_js(&self, content: &str, file_path: &str) -> Result<Vec<FunctionInfo>> {
+        if let Ok(mut adapter) = JavaScriptAdapter::new() {
+            if let Ok(index) = adapter.parse_source(content, file_path) {
+                return Ok(self.convert_index_to_function_info(&index));
+            }
+        }
+        
+        // Fallback to regex-based extraction if tree-sitter fails
+        self.extract_functions_fallback(content, "javascript")
+    }
+
+    /// Extract TypeScript functions using tree-sitter AST parsing
+    fn extract_functions_treesitter_ts(&self, content: &str, file_path: &str) -> Result<Vec<FunctionInfo>> {
+        if let Ok(mut adapter) = TypeScriptAdapter::new() {
+            if let Ok(index) = adapter.parse_source(content, file_path) {
+                return Ok(self.convert_index_to_function_info(&index));
+            }
+        }
+        
+        // Fallback to regex-based extraction if tree-sitter fails
+        self.extract_functions_fallback(content, "typescript")
+    }
+
+    /// Extract Go functions using tree-sitter AST parsing
+    fn extract_functions_treesitter_go(&self, content: &str, file_path: &str) -> Result<Vec<FunctionInfo>> {
+        if let Ok(mut adapter) = GoAdapter::new() {
+            if let Ok(index) = adapter.parse_source(content, file_path) {
+                return Ok(self.convert_index_to_function_info(&index));
+            }
+        }
+        
+        // Fallback to regex-based extraction if tree-sitter fails
+        self.extract_functions_fallback(content, "go")
+    }
+
+    /// Extract Rust functions using tree-sitter AST parsing
+    fn extract_functions_treesitter_rust(&self, content: &str, file_path: &str) -> Result<Vec<FunctionInfo>> {
+        if let Ok(mut adapter) = RustAdapter::new() {
+            if let Ok(index) = adapter.parse_source(content, file_path) {
+                return Ok(self.convert_index_to_function_info(&index));
+            }
+        }
+        
+        // Fallback to regex-based extraction if tree-sitter fails
+        self.extract_functions_fallback(content, "rust")
+    }
+
+    /// Convert tree-sitter parse index to function info list
+    fn convert_index_to_function_info(&self, index: &crate::lang::common::ParseIndex) -> Vec<FunctionInfo> {
+        use crate::lang::common::EntityKind;
+        
+        index.entities.iter()
+            .filter_map(|(_id, entity)| {
+                match entity.kind {
+                    EntityKind::Function | EntityKind::Method => {
+                        Some(FunctionInfo {
+                            name: entity.name.clone(),
+                            line: entity.location.start_line,
+                            is_async: entity.name.contains("async") || entity.metadata
+                                .get("is_async")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false),
+                            visibility: entity.metadata
+                                .get("visibility")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("public")
+                                .to_string(),
+                        })
+                    }
+                    _ => None
+                }
+            })
+            .collect()
+    }
+
+    /// Fallback extraction for languages without proper tree-sitter support
+    fn extract_functions_fallback(&self, content: &str, language: &str) -> Result<Vec<FunctionInfo>> {
         let mut functions = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
-        let language = self.detect_language(file_path);
-
         for (line_num, line) in lines.iter().enumerate() {
-            if let Some(func_info) = self.extract_function_from_line(line, line_num + 1, &language) {
+            if let Some(func_info) = self.extract_function_from_line_improved(line, line_num + 1, language) {
                 functions.push(func_info);
             }
         }
@@ -269,54 +387,106 @@ impl SimpleNameAnalyzer {
         Ok(functions)
     }
 
-    /// Extract function information from a single line
-    fn extract_function_from_line(&self, line: &str, line_num: usize, language: &str) -> Option<FunctionInfo> {
+    /// Improved single-line function extraction with better patterns
+    fn extract_function_from_line_improved(&self, line: &str, line_num: usize, language: &str) -> Option<FunctionInfo> {
         let trimmed = line.trim();
         
         match language {
-            "python" => {
-                if let Some(captures) = regex::Regex::new(r"def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(").ok()?.captures(trimmed) {
-                    Some(FunctionInfo {
-                        name: captures.get(1)?.as_str().to_string(),
-                        line: line_num,
-                        is_async: trimmed.contains("async def"),
-                        visibility: if trimmed.starts_with(' ') { "private" } else { "public" }.to_string(),
-                    })
-                } else {
-                    None
-                }
-            }
             "javascript" | "typescript" => {
-                if let Some(captures) = regex::Regex::new(r"function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(").ok()?.captures(trimmed) {
-                    Some(FunctionInfo {
-                        name: captures.get(1)?.as_str().to_string(),
-                        line: line_num,
-                        is_async: trimmed.contains("async "),
-                        visibility: "public".to_string(), // Simplified
-                    })
-                } else if let Some(captures) = regex::Regex::new(r"const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s+)?\(").ok()?.captures(trimmed) {
-                    Some(FunctionInfo {
-                        name: captures.get(1)?.as_str().to_string(),
-                        line: line_num,
-                        is_async: trimmed.contains("async"),
-                        visibility: "public".to_string(),
-                    })
-                } else {
-                    None
+                // Traditional function declarations
+                if let Some(func_start) = trimmed.find("function ") {
+                    if let Some(paren_pos) = trimmed[func_start + 9..].find('(') {
+                        let name_part = &trimmed[func_start + 9..func_start + 9 + paren_pos];
+                        let clean_name = name_part.trim();
+                        if !clean_name.is_empty() && clean_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            return Some(FunctionInfo {
+                                name: clean_name.to_string(),
+                                line: line_num,
+                                is_async: trimmed.contains("async"),
+                                visibility: "public".to_string(),
+                            });
+                        }
+                    }
                 }
-            }
+                
+                // Arrow functions and const declarations
+                if let Some(equals_pos) = trimmed.find(" = ") {
+                    let before_equals = &trimmed[..equals_pos].trim();
+                    let after_equals = &trimmed[equals_pos + 3..].trim();
+                    
+                    if after_equals.starts_with("async") || after_equals.starts_with("(") || after_equals.starts_with("function") {
+                        if let Some(const_pos) = before_equals.rfind("const ") {
+                            let name = &before_equals[const_pos + 6..].trim();
+                            if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                                return Some(FunctionInfo {
+                                    name: name.to_string(),
+                                    line: line_num,
+                                    is_async: trimmed.contains("async"),
+                                    visibility: "public".to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+                None
+            },
             "rust" => {
-                if let Some(captures) = regex::Regex::new(r"fn\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(").ok()?.captures(trimmed) {
-                    Some(FunctionInfo {
-                        name: captures.get(1)?.as_str().to_string(),
-                        line: line_num,
-                        is_async: trimmed.contains("async fn"),
-                        visibility: if trimmed.starts_with("pub") { "public" } else { "private" }.to_string(),
-                    })
-                } else {
-                    None
+                if let Some(fn_pos) = trimmed.find("fn ") {
+                    if let Some(paren_pos) = trimmed[fn_pos + 3..].find('(') {
+                        let name_part = &trimmed[fn_pos + 3..fn_pos + 3 + paren_pos];
+                        let clean_name = name_part.trim();
+                        if !clean_name.is_empty() && clean_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            return Some(FunctionInfo {
+                                name: clean_name.to_string(),
+                                line: line_num,
+                                is_async: trimmed.contains("async fn"),
+                                visibility: if trimmed.starts_with("pub") { "public" } else { "private" }.to_string(),
+                            });
+                        }
+                    }
                 }
-            }
+                None
+            },
+            "go" => {
+                if let Some(func_pos) = trimmed.find("func ") {
+                    if let Some(paren_pos) = trimmed[func_pos + 5..].find('(') {
+                        let name_part = &trimmed[func_pos + 5..func_pos + 5 + paren_pos];
+                        let clean_name = name_part.trim();
+                        if !clean_name.is_empty() && clean_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            let visibility = if clean_name.chars().next().unwrap_or('a').is_uppercase() {
+                                "public"
+                            } else {
+                                "private"
+                            };
+                            return Some(FunctionInfo {
+                                name: clean_name.to_string(),
+                                line: line_num,
+                                is_async: false, // Go doesn't have explicit async functions
+                                visibility: visibility.to_string(),
+                            });
+                        }
+                    }
+                }
+                None
+            },
+            "python" => {
+                // Handle Python function definitions
+                if let Some(def_pos) = trimmed.find("def ") {
+                    if let Some(paren_pos) = trimmed[def_pos + 4..].find('(') {
+                        let name_part = &trimmed[def_pos + 4..def_pos + 4 + paren_pos];
+                        let clean_name = name_part.trim();
+                        if !clean_name.is_empty() && clean_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            return Some(FunctionInfo {
+                                name: clean_name.to_string(),
+                                line: line_num,
+                                is_async: trimmed.contains("async def"),
+                                visibility: if clean_name.starts_with('_') { "private" } else { "public" }.to_string(),
+                            });
+                        }
+                    }
+                }
+                None
+            },
             _ => None,
         }
     }
@@ -601,11 +771,11 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_function_from_line_python() {
+    fn test_extract_function_from_line_improved_python() {
         let analyzer = SimpleNameAnalyzer::default();
         
         // Test Python function
-        let func = analyzer.extract_function_from_line("def test_func():", 1, "python");
+        let func = analyzer.extract_function_from_line_improved("def test_func():", 1, "python");
         assert!(func.is_some());
         let func = func.unwrap();
         assert_eq!(func.name, "test_func");
@@ -613,7 +783,7 @@ mod tests {
         assert!(!func.is_async);
         
         // Test async Python function
-        let func = analyzer.extract_function_from_line("async def async_func():", 2, "python");
+        let func = analyzer.extract_function_from_line_improved("async def async_func():", 2, "python");
         assert!(func.is_some());
         let func = func.unwrap();
         assert_eq!(func.name, "async_func");
@@ -621,25 +791,25 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_function_from_line_rust() {
+    fn test_extract_function_from_line_improved_rust() {
         let analyzer = SimpleNameAnalyzer::default();
         
         // Test Rust function
-        let func = analyzer.extract_function_from_line("fn test_func() {", 1, "rust");
+        let func = analyzer.extract_function_from_line_improved("fn test_func() {", 1, "rust");
         assert!(func.is_some());
         let func = func.unwrap();
         assert_eq!(func.name, "test_func");
         assert_eq!(func.visibility, "private");
         
         // Test public Rust function
-        let func = analyzer.extract_function_from_line("pub fn public_func() {", 2, "rust");
+        let func = analyzer.extract_function_from_line_improved("pub fn public_func() {", 2, "rust");
         assert!(func.is_some());
         let func = func.unwrap();
         assert_eq!(func.name, "public_func");
         assert_eq!(func.visibility, "public");
         
         // Test async Rust function
-        let func = analyzer.extract_function_from_line("pub async fn async_func() {", 3, "rust");
+        let func = analyzer.extract_function_from_line_improved("pub async fn async_func() {", 3, "rust");
         assert!(func.is_some());
         let func = func.unwrap();
         assert_eq!(func.name, "async_func");

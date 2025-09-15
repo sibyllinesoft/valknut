@@ -14,6 +14,11 @@ use tabled::{Table, Tabled, settings::Style as TableStyle};
 use owo_colors::OwoColorize;
 use chrono;
 
+// Import our proper report generator
+use valknut_rs::io::reports::ReportGenerator;
+use valknut_rs::core::config::ReportFormat;
+use valknut_rs::api::results::AnalysisResults;
+
 /// Generate outputs with progress feedback
 pub async fn generate_outputs_with_feedback(
     result: &serde_json::Value, 
@@ -75,8 +80,22 @@ pub async fn generate_outputs(
         }
         OutputFormat::Html => {
             let report_file = out_path.join("team_report.html");
-            let content = generate_html_report(result).await?;
-            tokio::fs::write(&report_file, content).await?;
+            
+            // Use the proper ReportGenerator with Sibylline theme
+            let templates_dir = std::path::Path::new("templates");
+            let generator = ReportGenerator::new()
+                .with_templates_dir(templates_dir)
+                .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?;
+            
+            // Convert JSON back to AnalysisResults (this is not ideal but works)
+            if let Ok(analysis_results) = serde_json::from_value::<AnalysisResults>(result.clone()) {
+                generator.generate_report(&analysis_results, &report_file, ReportFormat::Html)?;
+            } else {
+                // Fallback to old HTML generation if conversion fails
+                let content = generate_html_report(result).await?;
+                tokio::fs::write(&report_file, content).await?;
+            }
+            
             println!("📊 Team report (html): {}", report_file.display());
         }
         OutputFormat::Sonar => {

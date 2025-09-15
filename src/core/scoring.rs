@@ -512,7 +512,7 @@ impl FeatureScorer {
 }
 
 /// Priority levels for refactoring suggestions
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
     /// No refactoring needed
     None,

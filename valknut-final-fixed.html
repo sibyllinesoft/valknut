@@ -1,0 +1,3344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repository Analysis: Scribe Analysis</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react-arborist@3.4.0/dist/index.umd.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #b5b5b5;
+            --text-muted: #888;
+            --accent-primary: #4f9cf9;
+            --accent-secondary: #7c3aed;
+            --border-color: #404040;
+            --hover-color: #333333;
+            --code-bg: #252525;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            color: white;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.01) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3e%3cg fill='none' fill-rule='evenodd'%3e%3cg fill='%23ffffff' fill-opacity='0.02'%3e%3ccircle cx='20' cy='20' r='1'/%3e%3c/g%3e%3c/g%3e%3c/svg%3e");
+            pointer-events: none;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header .meta {
+            margin-top: 20px;
+            opacity: 0.9;
+            font-size: 13px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .meta-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
+        }
+        
+        .stats {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+        
+        .stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .toc {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toc h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 8px;
+        }
+        
+        .toc li {
+            margin: 0;
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .toc a:hover {
+            color: var(--accent-primary);
+            background: var(--hover-color);
+        }
+        
+        .file-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .file-item {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .file-item:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .content {
+            padding: 24px;
+            background: var(--bg-secondary);
+        }
+        
+        .file-section {
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        
+        .file-header {
+            background: var(--bg-tertiary);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .file-content {
+            max-height: 600px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .file-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .file-content::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        
+        .file-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        
+        .file-content::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        pre {
+            margin: 0;
+            padding: 24px;
+            background: var(--code-bg);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-primary);
+        }
+        
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .icon-lg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* React Arborist Tree Styles */
+        .tree-container {
+            height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            padding: 8px;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            user-select: none;
+            border-radius: 4px;
+            margin: 1px 0;
+        }
+
+        .tree-node:hover {
+            background: var(--hover-color);
+            color: var(--accent-primary);
+        }
+
+        .tree-node.selected {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            width: 100%;
+        }
+
+        .tree-arrow {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .tree-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .folder-icon {
+            color: var(--accent-secondary);
+        }
+
+        .file-icon {
+            color: var(--text-secondary);
+        }
+
+        /* React Arborist specific overrides */
+        .react-arborist-tree {
+            background: transparent !important;
+            color: var(--text-primary) !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .react-arborist-node {
+            color: var(--text-secondary) !important;
+            background: transparent !important;
+        }
+
+        .react-arborist-node:hover {
+            background: var(--hover-color) !important;
+        }
+
+        .react-arborist-node-content {
+            width: 100% !important;
+            background: transparent !important;
+        }
+
+        .react-arborist-row {
+            background: transparent !important;
+        }
+
+        .react-arborist-row:hover {
+            background: transparent !important;
+        }
+
+        /* Scrollbar styling for tree */
+        .tree-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .tree-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        .tree-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .tree-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .header .meta {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .meta-item {
+                justify-content: center;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 16px;
+                padding: 16px;
+            }
+            
+            .toc ul {
+                grid-template-columns: 1fr;
+            }
+            
+            .content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                🔍 Repository Analysis
+            </h1>
+            <div class="meta">
+                <div class="meta-item">
+                    <i data-lucide="cpu" class="icon"></i>
+                    <span><strong>Algorithm:</strong> V5Integrated (Enhanced)</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="clock" class="icon"></i>
+                    <span><strong>Generated:</strong> 2025-09-15 04:50:20 UTC</span>
+                </div>
+                <div class="meta-item">
+                    <i data-lucide="zap" class="icon"></i>
+                    <span><strong>Selection Time:</strong> 5768298ms</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="files" class="icon-lg"></i>
+                    30
+                </div>
+                <div class="stat-label">Files Selected</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hash" class="icon-lg"></i>
+                    10,000
+                </div>
+                <div class="stat-label">Estimated Tokens</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="hard-drive" class="icon-lg"></i>
+                    60.7 KB
+                </div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">
+                    <i data-lucide="target" class="icon-lg"></i>
+                    0.5%
+                </div>
+                <div class="stat-label">Coverage</div>
+            </div>
+        </div>
+        
+        <div class="toc">
+            <h3>
+                <i data-lucide="folder-tree" class="icon"></i>
+                File Explorer
+            </h3>
+            <div id="file-tree-container" class="tree-container"></div>
+        </div>
+        
+        <div class="file-list">
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/domain.ts</span>
+                <span class="file-meta">3.1 KB • ~625 tokens • Score: 1.83</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@babel/core/src/config/files/index-browser.ts</span>
+                <span class="file-meta">2.9 KB • ~412 tokens • Score: 1.82</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/before/src/main.py</span>
+                <span class="file-meta">3.8 KB • ~580 tokens • Score: 1.76</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@babel/core/src/config/files/index.ts</span>
+                <span class="file-meta">747 B • ~114 tokens • Score: 1.76</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/after/src/main.py</span>
+                <span class="file-meta">2.5 KB • ~333 tokens • Score: 1.75</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>src/core/pipeline/mod.rs</span>
+                <span class="file-meta">6.1 KB • ~501 tokens • Score: 1.69</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/domain-without-suffix.ts</span>
+                <span class="file-meta">459 B • ~97 tokens • Score: 1.53</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/subdomain.ts</span>
+                <span class="file-meta">322 B • ~61 tokens • Score: 1.51</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/playwright-core/index.js</span>
+                <span class="file-meta">1.1 KB • ~198 tokens • Score: 1.51</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>node_modules/playwright-core/index.js</span>
+                <span class="file-meta">1.1 KB • ~198 tokens • Score: 1.51</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.d.ts</span>
+                <span class="file-meta">3.5 KB • ~592 tokens • Score: 1.50</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@types/babel__core/index.d.ts</span>
+                <span class="file-meta">28.5 KB • ~5,204 tokens • Score: 1.50</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.js</span>
+                <span class="file-meta">3.8 KB • ~617 tokens • Score: 1.50</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/playwright-core/index.mjs</span>
+                <span class="file-meta">1.0 KB • ~198 tokens • Score: 1.49</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>node_modules/playwright-core/index.mjs</span>
+                <span class="file-meta">1.0 KB • ~198 tokens • Score: 1.49</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/dnd-core/node_modules/redux/src/index.js</span>
+                <span class="file-meta">455 B • ~49 tokens • Score: 1.44</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/shadowed_core/node_modules/util/index.js</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 1.42</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/react-is/index.js</span>
+                <span class="file-meta">196 B • ~22 tokens • Score: 1.41</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/precedence/aaa/main.js</span>
+                <span class="file-meta">28 B • ~1 tokens • Score: 0.78</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/pathfilter/deep_ref/main.js</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.74</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/false_main/index.js</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.74</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/multirepo/packages/package-b/index.js</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.74</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/after/src/shell/__init__.py</span>
+                <span class="file-meta">1 B • ~0 tokens • Score: 0.46</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/cup.coffee</span>
+                <span class="file-meta">1 B • ~0 tokens • Score: 0.10</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/mug.coffee</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.09</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="git-branch" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/symlinked/_/symlink_target/.gitkeep</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.09</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file" class="icon"></i>templates/assets/test-results/.playwright-artifacts-1/f68b0a029edec8b1ad5d972accf3be0f.webm</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.09</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/point-of-sale/after/pos/__init__.py</span>
+                <span class="file-meta">1 B • ~0 tokens • Score: 0.01</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/point-of-sale/before/pos/__init__.py</span>
+                <span class="file-meta">1 B • ~0 tokens • Score: 0.01</span>
+            </div>
+            <div class="file-item">
+                <span class="file-name"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/exit/.npmignore</span>
+                <span class="file-meta">0 B • ~0 tokens • Score: 0.00</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="file-section" id="file-1">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/domain.ts</div>
+                <div class="file-content">
+                    <pre>import { IOptions } from &amp;#x27;./options&amp;#x27;;
+
+/**
+ * Check if &#x60;vhost&#x60; is a valid suffix of &#x60;hostname&#x60; (top-domain)
+ *
+ * It means that &#x60;vhost&#x60; needs to be a suffix of &#x60;hostname&#x60; and we then need to
+ * make sure that: either they are equal, or the character preceding &#x60;vhost&#x60; in
+ * &#x60;hostname&#x60; is a &amp;#x27;.&amp;#x27; (it should not be a partial label).
+ *
+ * * hostname &#x3D; &amp;#x27;not.evil.com&amp;#x27; and vhost &#x3D; &amp;#x27;vil.com&amp;#x27;      &#x3D;&amp;gt; not ok
+ * * hostname &#x3D; &amp;#x27;not.evil.com&amp;#x27; and vhost &#x3D; &amp;#x27;evil.com&amp;#x27;     &#x3D;&amp;gt; ok
+ * * hostname &#x3D; &amp;#x27;not.evil.com&amp;#x27; and vhost &#x3D; &amp;#x27;not.evil.com&amp;#x27; &#x3D;&amp;gt; ok
+ */
+function shareSameDomainSuffix(hostname: string, vhost: string): boolean {
+  if (hostname.endsWith(vhost)) {
+    return (
+      hostname.length &#x3D;&#x3D;&#x3D; vhost.length ||
+      hostname[hostname.length - vhost.length - 1] &#x3D;&#x3D;&#x3D; &amp;#x27;.&amp;#x27;
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Given a hostname and its public suffix, extract the general domain.
+ */
+function extractDomainWithSuffix(
+  hostname: string,
+  publicSuffix: string,
+): string {
+  // Locate the index of the last &amp;#x27;.&amp;#x27; in the part of the &#x60;hostname&#x60; preceding
+  // the public suffix.
+  //
+  // examples:
+  //   1. not.evil.co.uk  &#x3D;&amp;gt; evil.co.uk
+  //         ^    ^
+  //         |    | start of public suffix
+  //         | index of the last dot
+  //
+  //   2. example.co.uk   &#x3D;&amp;gt; example.co.uk
+  //     ^       ^
+  //     |       | start of public suffix
+  //     |
+  //     | (-1) no dot found before the public suffix
+  const publicSuffixIndex &#x3D; hostname.length - publicSuffix.length - 2;
+  const lastDotBeforeSuffixIndex &#x3D; hostname.lastIndexOf(&amp;#x27;.&amp;#x27;, publicSuffixIndex);
+
+  // No &amp;#x27;.&amp;#x27; found, then &#x60;hostname&#x60; is the general domain (no sub-domain)
+  if (lastDotBeforeSuffixIndex &#x3D;&#x3D;&#x3D; -1) {
+    return hostname;
+  }
+
+  // Extract the part between the last &amp;#x27;.&amp;#x27;
+  return hostname.slice(lastDotBeforeSuffixIndex + 1);
+}
+
+/**
+ * Detects the domain based on rules and upon and a host string
+ */
+export default function getDomain(
+  suffix: string,
+  hostname: string,
+  options: IOptions,
+): string | null {
+  // Check if &#x60;hostname&#x60; ends with a member of &#x60;validHosts&#x60;.
+  if (options.validHosts !&#x3D;&#x3D; null) {
+    const validHosts &#x3D; options.validHosts;
+    for (const vhost of validHosts) {
+      if (/*@__INLINE__*/ shareSameDomainSuffix(hostname, vhost)) {
+        return vhost;
+      }
+    }
+  }
+
+  let numberOfLeadingDots &#x3D; 0;
+  if (hostname.startsWith(&amp;#x27;.&amp;#x27;)) {
+    while (
+      numberOfLeadingDots &amp;lt; hostname.length &amp;amp;&amp;amp;
+      hostname[numberOfLeadingDots] &#x3D;&#x3D;&#x3D; &amp;#x27;.&amp;#x27;
+    ) {
+      numberOfLeadingDots +&#x3D; 1;
+    }
+  }
+
+  // If &#x60;hostname&#x60; is a valid public suffix, then there is no domain to return.
+  // Since we already know that &#x60;getPublicSuffix&#x60; returns a suffix of &#x60;hostname&#x60;
+  // there is no need to perform a string comparison and we only compare the
+  // size.
+  if (suffix.length &#x3D;&#x3D;&#x3D; hostname.length - numberOfLeadingDots) {
+    return null;
+  }
+
+  // To extract the general domain, we start by identifying the public suffix
+  // (if any), then consider the domain to be the public suffix with one added
+  // level of depth. (e.g.: if hostname is &#x60;not.evil.co.uk&#x60; and public suffix:
+  // &#x60;co.uk&#x60;, then we take one more level: &#x60;evil&#x60;, giving the final result:
+  // &#x60;evil.co.uk&#x60;).
+  return /*@__INLINE__*/ extractDomainWithSuffix(hostname, suffix);
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-2">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@babel/core/src/config/files/index-browser.ts</div>
+                <div class="file-content">
+                    <pre>/* c8 ignore start */
+
+import type { Handler } from &amp;quot;gensync&amp;quot;;
+
+import type {
+  ConfigFile,
+  IgnoreFile,
+  RelativeConfig,
+  FilePackageData,
+} from &amp;quot;./types.ts&amp;quot;;
+
+import type { CallerMetadata } from &amp;quot;../validation/options.ts&amp;quot;;
+
+export type { ConfigFile, IgnoreFile, RelativeConfig, FilePackageData };
+
+export function findConfigUpwards(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  rootDir: string,
+): string | null {
+  return null;
+}
+
+// eslint-disable-next-line require-yield
+export function* findPackageData(filepath: string): Handler&amp;lt;FilePackageData&amp;gt; {
+  return {
+    filepath,
+    directories: [],
+    pkg: null,
+    isPackage: false,
+  };
+}
+
+// eslint-disable-next-line require-yield
+export function* findRelativeConfig(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  pkgData: FilePackageData,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  envName: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  caller: CallerMetadata | undefined,
+): Handler&amp;lt;RelativeConfig&amp;gt; {
+  return { config: null, ignore: null };
+}
+
+// eslint-disable-next-line require-yield
+export function* findRootConfig(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  dirname: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  envName: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  caller: CallerMetadata | undefined,
+): Handler&amp;lt;ConfigFile | null&amp;gt; {
+  return null;
+}
+
+// eslint-disable-next-line require-yield
+export function* loadConfig(
+  name: string,
+  dirname: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  envName: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  caller: CallerMetadata | undefined,
+): Handler&amp;lt;ConfigFile&amp;gt; {
+  throw new Error(&#x60;Cannot load ${name} relative to ${dirname} in a browser&#x60;);
+}
+
+// eslint-disable-next-line require-yield
+export function* resolveShowConfigPath(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  dirname: string,
+): Handler&amp;lt;string | null&amp;gt; {
+  return null;
+}
+
+export const ROOT_CONFIG_FILENAMES: string[] &#x3D; [];
+
+type Resolved &#x3D;
+  | { loader: &amp;quot;require&amp;quot;; filepath: string }
+  | { loader: &amp;quot;import&amp;quot;; filepath: string };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function resolvePlugin(name: string, dirname: string): Resolved | null {
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function resolvePreset(name: string, dirname: string): Resolved | null {
+  return null;
+}
+
+export function loadPlugin(
+  name: string,
+  dirname: string,
+): Handler&amp;lt;{
+  filepath: string;
+  value: unknown;
+}&amp;gt; {
+  throw new Error(
+    &#x60;Cannot load plugin ${name} relative to ${dirname} in a browser&#x60;,
+  );
+}
+
+export function loadPreset(
+  name: string,
+  dirname: string,
+): Handler&amp;lt;{
+  filepath: string;
+  value: unknown;
+}&amp;gt; {
+  throw new Error(
+    &#x60;Cannot load preset ${name} relative to ${dirname} in a browser&#x60;,
+  );
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-3">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/before/src/main.py</div>
+                <div class="file-content">
+                    <pre>&amp;quot;&amp;quot;&amp;quot;
+
+Author: Hossin azmoud (Moody0101)
+Date: 10/18/2022
+LICENCE: MIT
+Language: Python3.10
+
+&amp;quot;&amp;quot;&amp;quot;
+
+from time import sleep, time
+from colorama import Fore as f
+from UtilPackage import (
+	Shell, 
+	Command,
+	ENCODING,
+	HASHING,
+	EncodingManager, # EncodingManager(Func: callable, s: str | bytes, Op: int)
+	ENCODE, 
+	DECODE,
+	Hasher # Hasher(HashingFunc: callable, s: str | bytes) -&amp;gt; str: 
+)
+
+DOC &#x3D; f&amp;quot;&amp;quot;&amp;quot;{f.YELLOW}
+
+	Author: Hossin azmoud (Moody0101)
+	Date: 10/18/2022
+	LICENCE: MIT
+	Language: {f.CYAN}Python3.10 {f.YELLOW}
+	Descripion: A tool to hash, encode, decode text.
+	command: hash, encode, decode, help, exit
+	Usage: 
+		To encode/Decode:
+			Encode/Decode &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+			Encode/Decode only for help.
+		To hash:
+			Hash &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+			Hash only for help.
+&amp;quot;&amp;quot;&amp;quot;
+
+class Interface:
+	&amp;quot;&amp;quot;&amp;quot; An interface that handles user interactions with the shell program &amp;quot;&amp;quot;&amp;quot;
+	
+	def __init__(self) -&amp;gt; None:
+		# Shell initializer
+		self.shell &#x3D; Shell()
+		
+		
+		self.DefaultCommands &#x3D; {
+			&amp;#x27;EXIT&amp;#x27;: self.Exit,
+			&amp;#x27;HELP&amp;#x27;: self.Help,
+			&amp;quot;HASH&amp;quot;: self.hashDoc,
+			&amp;quot;DECODE&amp;quot;: self.DeDoc,
+			&amp;quot;ENCODE&amp;quot;: self.EnDoc
+		}
+
+		self.Commands &#x3D; {
+			&amp;quot;HASH&amp;quot;: self.hashVal,
+			&amp;quot;DECODE&amp;quot;: self.Decode,
+			&amp;quot;ENCODE&amp;quot;: self.Encode
+		}
+
+	def hashDoc(self):
+		&amp;quot;&amp;quot;&amp;quot; Displays doc for hashing &amp;quot;&amp;quot;&amp;quot;
+		return HASHING[&amp;quot;Doc&amp;quot;] 
+
+	def DeDoc(self):
+		&amp;quot;&amp;quot;&amp;quot; Displays doc for decoding &amp;quot;&amp;quot;&amp;quot;
+		return ENCODING[&amp;quot;Doc&amp;quot;][DECODE]
+
+	def EnDoc(self):
+		&amp;quot;&amp;quot;&amp;quot; Displays doc for encoding &amp;quot;&amp;quot;&amp;quot;
+		return ENCODING[&amp;quot;Doc&amp;quot;][ENCODE]
+
+	def Encode(self, Text, EncoderName):
+		if EncoderName.upper().strip() not in ENCODING.keys():
+			print()
+			print(f&amp;quot;  False algorithm name, {EncoderName}&amp;quot;)
+			print(&amp;quot;  you can only use from this list:&amp;quot;)
+			for i in ENCODING.keys():
+				print(&amp;quot;    %s&amp;quot;, i)
+			return
+
+		# Get Encoder function
+		func_ &#x3D; ENCODING[EncoderName.upper().strip()][ENCODE]
+		# Map the value
+		encode &#x3D; EncodingManager(func_, ENCODE)
+		# return the value
+		return encode(Text)
+
+	def Decode(self, Text, DecoderName):
+		if DecoderName.upper().strip() not in ENCODING.keys():
+			print()
+			print(f&amp;quot;  False algorithm name, {DecoderName}&amp;quot;)
+			print(&amp;quot;  you can only use from this list:&amp;quot;)
+			for i in ENCODING.keys():
+				print(&amp;quot;    %s&amp;quot;, i)
+			return
+
+		# Get Encoder function
+		func_ &#x3D; ENCODING[DecoderName.upper().strip()][DECODE]
+		# Map the value
+		decode &#x3D; EncodingManager(func_, DECODE)
+		# return the value
+		return decode(Text)
+
+	def hashVal(self, Text, HasherName):
+		if HasherName.upper().strip() not in HASHING.keys():
+			print()
+			print(f&amp;quot;  False algorithm name, {DecoderName}&amp;quot;)
+			print(&amp;quot;  you can only use from this list:&amp;quot;)
+			for i in HASHING.keys():
+				print(&amp;quot;    %s&amp;quot;, i)
+			return
+
+		return Hasher(HASHING[HasherName.upper().strip()], Text)
+
+	def showFuncs(self):
+		
+		if self.Tool:
+			for i in CONFIG[self.Tool].keys():
+				print(&amp;quot;  &amp;quot;, i)
+
+	def SetText(self, Text &#x3D; None): 
+		self.text &#x3D; Text
+
+	def Exit(self) -&amp;gt; None:
+		
+		for i in [&amp;#x27;.&amp;#x27;, &amp;#x27;..&amp;#x27;, &amp;#x27;...&amp;#x27;]:
+			print(f&amp;quot;  Exiting{i}&amp;quot;, end&#x3D;&amp;quot;\r&amp;quot;)
+			sleep(1)
+		exit(0)
+
+	def Help(self):
+		return &amp;quot;&amp;quot;&amp;quot;
+
+	To encode/Decode:
+		Encode/Decode &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+		Encode/Decode only for help.
+	To hash:
+		Hash &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+		Hash only for help.
+
+		&amp;quot;&amp;quot;&amp;quot;
+
+	def execute(self, command: Command) -&amp;gt; None:
+		&amp;quot;&amp;quot;&amp;quot;  &amp;quot;&amp;quot;&amp;quot;
+		if command.CMD in self.DefaultCommands.keys():
+			if len(command.argv) &amp;gt; 0:
+				print(self.Commands[command.CMD](*command.argv))
+			else:
+				print(self.DefaultCommands[command.CMD]())
+		elif command.CMD in self.Commands.keys():
+			if len(command.argv) &amp;gt; 0:
+				print(self.Commands[command.CMD](*command.argv))
+			else:
+				print(self.Commands[command.CMD]())
+
+	def run(self) -&amp;gt; None:
+		print()
+		print(DOC)
+		Interact &#x3D; True
+		while Interact:
+			self.command &#x3D; self.shell.shellInput()
+			if self.command:
+				self.execute(self.command)
+			else:
+				pass
+
+def main():
+	Interface_ &#x3D; Interface()
+	Interface_.run()
+
+if __name__ &#x3D;&#x3D; &amp;#x27;__main__&amp;#x27;:
+	main()
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-4">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@babel/core/src/config/files/index.ts</div>
+                <div class="file-content">
+                    <pre>type indexBrowserType &#x3D; typeof import(&amp;quot;./index-browser&amp;quot;);
+type indexType &#x3D; typeof import(&amp;quot;./index&amp;quot;);
+
+// Kind of gross, but essentially asserting that the exports of this module are the same as the
+// exports of index-browser, since this file may be replaced at bundle time with index-browser.
+({}) as any as indexBrowserType as indexType;
+
+export { findPackageData } from &amp;quot;./package.ts&amp;quot;;
+
+export {
+  findConfigUpwards,
+  findRelativeConfig,
+  findRootConfig,
+  loadConfig,
+  resolveShowConfigPath,
+  ROOT_CONFIG_FILENAMES,
+} from &amp;quot;./configuration.ts&amp;quot;;
+export type {
+  ConfigFile,
+  IgnoreFile,
+  RelativeConfig,
+  FilePackageData,
+} from &amp;quot;./types.ts&amp;quot;;
+export {
+  loadPlugin,
+  loadPreset,
+  resolvePlugin,
+  resolvePreset,
+} from &amp;quot;./plugins.ts&amp;quot;;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-5">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/after/src/main.py</div>
+                <div class="file-content">
+                    <pre>&amp;quot;&amp;quot;&amp;quot;
+HEDShell
+Date: 10/18/2022
+LICENCE: MIT
+Language: Python3.10
+&amp;quot;&amp;quot;&amp;quot;
+
+from time import sleep
+
+from colorama import Fore as f
+from shell.api import (
+    decode,
+    decoding_algos,
+    encode,
+    encoding_algos,
+    has_decoding_algo,
+    has_encoding_algo,
+    has_hashing_algo,
+    hash_val,
+    hashing_algos,
+)
+from shell.core import add_command, run_shell
+
+STARTUP_DOC &#x3D; f&amp;quot;&amp;quot;&amp;quot;{f.YELLOW}
+    HEDShell
+    LICENCE: MIT
+    Language: {f.CYAN}Python3.10{f.YELLOW}
+    Description: A tool to hash, encode, decode text
+    Commands: hash, encode, decode, help, exit
+&amp;quot;&amp;quot;&amp;quot;
+
+ENCODING_DOC &#x3D; f&amp;quot;&amp;quot;&amp;quot;
+    Syntax: Encode &amp;lt;InputText&amp;gt; &amp;lt; {&amp;quot; | &amp;quot;.join(encoding_algos())} &amp;gt;
+&amp;quot;&amp;quot;&amp;quot;
+
+DECODING_DOC &#x3D; f&amp;quot;&amp;quot;&amp;quot;
+    Syntax: Decode &amp;lt;InputText&amp;gt; &amp;lt; {&amp;quot; | &amp;quot;.join(decoding_algos())} &amp;gt;
+&amp;quot;&amp;quot;&amp;quot;
+
+HASHING_DOC &#x3D; f&amp;quot;&amp;quot;&amp;quot;
+    Syntax: Hash &amp;lt;InputText&amp;gt; &amp;lt; {&amp;quot; | &amp;quot;.join(hashing_algos())} &amp;gt;
+&amp;quot;&amp;quot;&amp;quot;
+
+HELP_DOC &#x3D; &amp;quot;&amp;quot;&amp;quot;
+    Usage:
+		To encode/Decode:
+			Encode/Decode &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+			Encode/Decode only for help.
+		To hash:
+			Hash &amp;lt;Text&amp;gt; &amp;lt;Algorithm&amp;gt;
+			Hash only for help.
+&amp;quot;&amp;quot;&amp;quot;
+
+
+def exit_shell(_: list[str]) -&amp;gt; None:
+    for i in [&amp;quot;.&amp;quot;, &amp;quot;..&amp;quot;, &amp;quot;...&amp;quot;]:
+        print(f&amp;quot;  Exiting{i}&amp;quot;, end&#x3D;&amp;quot;\r&amp;quot;)
+        sleep(1)
+    exit(0)
+
+
+def help_shell(_: list[str]) -&amp;gt; None:
+    print(HELP_DOC)
+
+
+def process_hash(args: list[str]) -&amp;gt; None:
+    if len(args) !&#x3D; 2:
+        print(HASHING_DOC)
+        return
+    [text, hashing_algo] &#x3D; args
+    if not has_hashing_algo(hashing_algo):
+        print(f&amp;quot;Unknown algorithm name: {hashing_algo}.&amp;quot;)
+        print(HASHING_DOC)
+        return
+    hashed_text &#x3D; hash_val(text, hashing_algo)
+    print(hashed_text)
+
+
+def process_decode(args: list[str]) -&amp;gt; None:
+    if len(args) !&#x3D; 2:
+        print(DECODING_DOC)
+        return
+    [text, decoder_algo] &#x3D; args
+    if not has_decoding_algo(decoder_algo):
+        print(f&amp;quot;Unknown algorithm name: {decoder_algo}.&amp;quot;)
+        print(DECODING_DOC)
+        return
+    decoded_text &#x3D; decode(text, decoder_algo)
+    print(decoded_text)
+
+
+def process_encode(args: list[str]) -&amp;gt; None:
+    if len(args) !&#x3D; 2:
+        print(ENCODING_DOC)
+        return
+    [text, encoder_algo] &#x3D; args
+    if not has_encoding_algo(encoder_algo):
+        print(f&amp;quot;Unknown algorithm name: {encoder_algo}.&amp;quot;)
+        print(ENCODING_DOC)
+        return
+    encoded_text &#x3D; encode(text, encoder_algo)
+    print(encoded_text)
+
+
+def main() -&amp;gt; None:
+    add_command(&amp;quot;exit&amp;quot;, exit_shell)
+    add_command(&amp;quot;help&amp;quot;, help_shell)
+    add_command(&amp;quot;hash&amp;quot;, process_hash)
+    add_command(&amp;quot;encode&amp;quot;, process_encode)
+    add_command(&amp;quot;decode&amp;quot;, process_decode)
+
+    print(STARTUP_DOC)
+    run_shell()
+
+
+if __name__ &#x3D;&#x3D; &amp;quot;__main__&amp;quot;:
+    main()
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-6">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>src/core/pipeline/mod.rs</div>
+                <div class="file-content">
+                    <pre>pub use pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
+pub use pipeline_results::{
+    ComprehensiveAnalysisResult, AnalysisSummary, StructureAnalysisResults,
+    ComplexityAnalysisResults, RefactoringAnalysisResults, ImpactAnalysisResults,
+    CoverageAnalysisResults, HealthMetrics, PipelineResults, PipelineStatistics, 
+    MemoryStats, ResultSummary, ScoringResults, FileScore, PipelineStatus
+};
+pub use pipeline_executor::{AnalysisPipeline, ProgressCallback, ExtractorRegistry};
+pub use pipeline_stages::AnalysisStages;
+
+mod pipeline_config;
+mod pipeline_results; 
+mod pipeline_executor;
+mod pipeline_stages;
+
+/// Additional tests for pipeline modules to improve coverage
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+    use std::fs;
+    
+    #[tokio::test]
+    async fn test_pipeline_fit_legacy_api() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let mut pipeline &#x3D; pipeline;
+        let result &#x3D; pipeline.fit(&amp;amp;[]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_extractor_registry() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let registry &#x3D; pipeline.extractor_registry();
+        let extractors: Vec&amp;lt;_&amp;gt; &#x3D; registry.get_all_extractors().collect();
+        assert_eq!(extractors.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_analyze_vectors_legacy() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let result &#x3D; pipeline.analyze_vectors(vec![]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_status() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let status &#x3D; pipeline.get_status();
+        assert!(status.ready);
+        assert!(status.is_ready);
+        assert!(status.config_valid);
+    }
+
+    #[tokio::test]
+    async fn test_quality_gates_evaluation() {
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let config &#x3D; QualityGateConfig::default();
+        let results &#x3D; pipeline_results::ComprehensiveAnalysisResult {
+            analysis_id: &amp;quot;test&amp;quot;.to_string(),
+            timestamp: chrono::Utc::now(),
+            processing_time: 1.0,
+            config: pipeline_config::AnalysisConfig::default(),
+            summary: pipeline_results::AnalysisSummary {
+                total_files: 1,
+                total_entities: 1,
+                total_lines_of_code: 100,
+                languages: vec![&amp;quot;Rust&amp;quot;.to_string()],
+                total_issues: 0,
+                high_priority_issues: 0,
+                critical_issues: 0,
+            },
+            structure: pipeline_results::StructureAnalysisResults {
+                enabled: true,
+                directory_recommendations: vec![],
+                file_splitting_recommendations: vec![],
+                issues_count: 0,
+            },
+            complexity: pipeline_results::ComplexityAnalysisResults {
+                enabled: true,
+                detailed_results: vec![],
+                average_cyclomatic_complexity: 2.0,
+                average_cognitive_complexity: 1.5,
+                average_technical_debt_score: 10.0,
+                average_maintainability_index: 85.0,
+                issues_count: 0,
+            },
+            refactoring: pipeline_results::RefactoringAnalysisResults {
+                enabled: true,
+                detailed_results: vec![],
+                opportunities_count: 0,
+            },
+            impact: pipeline_results::ImpactAnalysisResults {
+                enabled: true,
+                dependency_cycles: vec![],
+                chokepoints: vec![],
+                clone_groups: vec![],
+                issues_count: 0,
+            },
+            lsh: pipeline_results::LshAnalysisResults {
+                enabled: false,
+                clone_pairs: vec![],
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            },
+            coverage: pipeline_results::CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: vec![],
+                coverage_gaps: vec![],
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: &amp;quot;none&amp;quot;.to_string(),
+            },
+            health_metrics: pipeline_results::HealthMetrics {
+                overall_health_score: 88.0,
+                maintainability_score: 85.0,
+                technical_debt_ratio: 10.0,
+                complexity_score: 15.0,
+                structure_quality_score: 90.0,
+            },
+        };
+
+        let gate_result &#x3D; pipeline.evaluate_quality_gates(&amp;amp;config, &amp;amp;results);
+        assert!(gate_result.passed);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_directory_integration() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
+        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
+        
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let result &#x3D; pipeline.analyze_directory(temp_dir.path()).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_paths_with_progress() {
+        let temp_dir &#x3D; TempDir::new().unwrap();
+        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
+        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
+        
+        let pipeline &#x3D; AnalysisPipeline::default();
+        let paths &#x3D; vec![temp_dir.path().to_path_buf()];
+        
+        let progress_called &#x3D; std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let progress_called_clone &#x3D; progress_called.clone();
+        let progress_callback &#x3D; Some(Box::new(move |_msg: &amp;amp;str, _progress: f64| {
+            progress_called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+        }) as ProgressCallback);
+        
+        let result &#x3D; pipeline.analyze_paths(&amp;amp;paths, progress_callback).await;
+        assert!(result.is_ok());
+        assert!(progress_called.load(std::sync::atomic::Ordering::SeqCst));
+    }
+}</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-7">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/domain-without-suffix.ts</div>
+                <div class="file-content">
+                    <pre>/**
+ * Return the part of domain without suffix.
+ *
+ * Example: for domain &amp;#x27;foo.com&amp;#x27;, the result would be &amp;#x27;foo&amp;#x27;.
+ */
+export default function getDomainWithoutSuffix(
+  domain: string,
+  suffix: string,
+): string {
+  // Note: here &#x60;domain&#x60; and &#x60;suffix&#x60; cannot have the same length because in
+  // this case we set &#x60;domain&#x60; to &#x60;null&#x60; instead. It is thus safe to assume
+  // that &#x60;suffix&#x60; is shorter than &#x60;domain&#x60;.
+  return domain.slice(0, -suffix.length - 1);
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-8">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>node_modules/tldts-core/src/subdomain.ts</div>
+                <div class="file-content">
+                    <pre>/**
+ * Returns the subdomain of a hostname string
+ */
+export default function getSubdomain(hostname: string, domain: string): string {
+  // If &#x60;hostname&#x60; and &#x60;domain&#x60; are the same, then there is no sub-domain
+  if (domain.length &#x3D;&#x3D;&#x3D; hostname.length) {
+    return &amp;#x27;&amp;#x27;;
+  }
+
+  return hostname.slice(0, -domain.length - 1);
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-9">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/playwright-core/index.js</div>
+                <div class="file-content">
+                    <pre>/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+const minimumMajorNodeVersion &#x3D; 18;
+const currentNodeVersion &#x3D; process.versions.node;
+const semver &#x3D; currentNodeVersion.split(&amp;#x27;.&amp;#x27;);
+const [major] &#x3D; [+semver[0]];
+
+if (major &amp;lt; minimumMajorNodeVersion) {
+  console.error(
+      &amp;#x27;You are running Node.js &amp;#x27; +
+      currentNodeVersion +
+      &amp;#x27;.\n&amp;#x27; +
+      &#x60;Playwright requires Node.js ${minimumMajorNodeVersion} or higher. \n&#x60; +
+      &amp;#x27;Please update your version of Node.js.&amp;#x27;
+  );
+  process.exit(1);
+}
+
+module.exports &#x3D; require(&amp;#x27;./lib/inprocess&amp;#x27;);
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-10">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>node_modules/playwright-core/index.js</div>
+                <div class="file-content">
+                    <pre>/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+const minimumMajorNodeVersion &#x3D; 18;
+const currentNodeVersion &#x3D; process.versions.node;
+const semver &#x3D; currentNodeVersion.split(&amp;#x27;.&amp;#x27;);
+const [major] &#x3D; [+semver[0]];
+
+if (major &amp;lt; minimumMajorNodeVersion) {
+  console.error(
+      &amp;#x27;You are running Node.js &amp;#x27; +
+      currentNodeVersion +
+      &amp;#x27;.\n&amp;#x27; +
+      &#x60;Playwright requires Node.js ${minimumMajorNodeVersion} or higher. \n&#x60; +
+      &amp;#x27;Please update your version of Node.js.&amp;#x27;
+  );
+  process.exit(1);
+}
+
+module.exports &#x3D; require(&amp;#x27;./lib/inprocess&amp;#x27;);
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-11">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.d.ts</div>
+                <div class="file-content">
+                    <pre>declare namespace ansiStyles {
+	interface CSPair {
+		/**
+		The ANSI terminal control sequence for starting this style.
+		*/
+		readonly open: string;
+
+		/**
+		The ANSI terminal control sequence for ending this style.
+		*/
+		readonly close: string;
+	}
+
+	interface ColorBase {
+		/**
+		The ANSI terminal control sequence for ending this color.
+		*/
+		readonly close: string;
+
+		ansi256(code: number): string;
+
+		ansi16m(red: number, green: number, blue: number): string;
+	}
+
+	interface Modifier {
+		/**
+		Resets the current color chain.
+		*/
+		readonly reset: CSPair;
+
+		/**
+		Make text bold.
+		*/
+		readonly bold: CSPair;
+
+		/**
+		Emitting only a small amount of light.
+		*/
+		readonly dim: CSPair;
+
+		/**
+		Make text italic. (Not widely supported)
+		*/
+		readonly italic: CSPair;
+
+		/**
+		Make text underline. (Not widely supported)
+		*/
+		readonly underline: CSPair;
+
+		/**
+		Make text overline.
+
+		Supported on VTE-based terminals, the GNOME terminal, mintty, and Git Bash.
+		*/
+		readonly overline: CSPair;
+
+		/**
+		Inverse background and foreground colors.
+		*/
+		readonly inverse: CSPair;
+
+		/**
+		Prints the text, but makes it invisible.
+		*/
+		readonly hidden: CSPair;
+
+		/**
+		Puts a horizontal line through the center of the text. (Not widely supported)
+		*/
+		readonly strikethrough: CSPair;
+	}
+
+	interface ForegroundColor {
+		readonly black: CSPair;
+		readonly red: CSPair;
+		readonly green: CSPair;
+		readonly yellow: CSPair;
+		readonly blue: CSPair;
+		readonly cyan: CSPair;
+		readonly magenta: CSPair;
+		readonly white: CSPair;
+
+		/**
+		Alias for &#x60;blackBright&#x60;.
+		*/
+		readonly gray: CSPair;
+
+		/**
+		Alias for &#x60;blackBright&#x60;.
+		*/
+		readonly grey: CSPair;
+
+		readonly blackBright: CSPair;
+		readonly redBright: CSPair;
+		readonly greenBright: CSPair;
+		readonly yellowBright: CSPair;
+		readonly blueBright: CSPair;
+		readonly cyanBright: CSPair;
+		readonly magentaBright: CSPair;
+		readonly whiteBright: CSPair;
+	}
+
+	interface BackgroundColor {
+		readonly bgBlack: CSPair;
+		readonly bgRed: CSPair;
+		readonly bgGreen: CSPair;
+		readonly bgYellow: CSPair;
+		readonly bgBlue: CSPair;
+		readonly bgCyan: CSPair;
+		readonly bgMagenta: CSPair;
+		readonly bgWhite: CSPair;
+
+		/**
+		Alias for &#x60;bgBlackBright&#x60;.
+		*/
+		readonly bgGray: CSPair;
+
+		/**
+		Alias for &#x60;bgBlackBright&#x60;.
+		*/
+		readonly bgGrey: CSPair;
+
+		readonly bgBlackBright: CSPair;
+		readonly bgRedBright: CSPair;
+		readonly bgGreenBright: CSPair;
+		readonly bgYellowBright: CSPair;
+		readonly bgBlueBright: CSPair;
+		readonly bgCyanBright: CSPair;
+		readonly bgMagentaBright: CSPair;
+		readonly bgWhiteBright: CSPair;
+	}
+
+	interface ConvertColor {
+		/**
+		Convert from the RGB color space to the ANSI 256 color space.
+
+		@param red - (&#x60;0...255&#x60;)
+		@param green - (&#x60;0...255&#x60;)
+		@param blue - (&#x60;0...255&#x60;)
+		*/
+		rgbToAnsi256(red: number, green: number, blue: number): number;
+
+		/**
+		Convert from the RGB HEX color space to the RGB color space.
+
+		@param hex - A hexadecimal string containing RGB data.
+		*/
+		hexToRgb(hex: string): [red: number, green: number, blue: number];
+
+		/**
+		Convert from the RGB HEX color space to the ANSI 256 color space.
+
+		@param hex - A hexadecimal string containing RGB data.
+		*/
+		hexToAnsi256(hex: string): number;
+	}
+}
+
+declare const ansiStyles: {
+	readonly modifier: ansiStyles.Modifier;
+	readonly color: ansiStyles.ForegroundColor &amp;amp; ansiStyles.ColorBase;
+	readonly bgColor: ansiStyles.BackgroundColor &amp;amp; ansiStyles.ColorBase;
+	readonly codes: ReadonlyMap&amp;lt;number, number&amp;gt;;
+} &amp;amp; ansiStyles.BackgroundColor &amp;amp; ansiStyles.ForegroundColor &amp;amp; ansiStyles.Modifier &amp;amp; ansiStyles.ConvertColor;
+
+export &#x3D; ansiStyles;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-12">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@types/babel__core/index.d.ts</div>
+                <div class="file-content">
+                    <pre>import { GeneratorOptions } from &amp;quot;@babel/generator&amp;quot;;
+import { ParserOptions } from &amp;quot;@babel/parser&amp;quot;;
+import template from &amp;quot;@babel/template&amp;quot;;
+import traverse, { Hub, NodePath, Scope, Visitor } from &amp;quot;@babel/traverse&amp;quot;;
+import * as t from &amp;quot;@babel/types&amp;quot;;
+
+export { GeneratorOptions, NodePath, ParserOptions, t as types, template, traverse, Visitor };
+
+export type Node &#x3D; t.Node;
+export type ParseResult &#x3D; ReturnType&amp;lt;typeof import(&amp;quot;@babel/parser&amp;quot;).parse&amp;gt;;
+export const version: string;
+export const DEFAULT_EXTENSIONS: [&amp;quot;.js&amp;quot;, &amp;quot;.jsx&amp;quot;, &amp;quot;.es6&amp;quot;, &amp;quot;.es&amp;quot;, &amp;quot;.mjs&amp;quot;];
+
+/**
+ * Source map standard format as to revision 3
+ * @see {@link https://sourcemaps.info/spec.html}
+ * @see {@link https://github.com/mozilla/source-map/blob/HEAD/source-map.d.ts}
+ */
+interface InputSourceMap {
+    version: number;
+    sources: string[];
+    names: string[];
+    sourceRoot?: string | undefined;
+    sourcesContent?: string[] | undefined;
+    mappings: string;
+    file: string;
+}
+
+export interface TransformOptions {
+    /**
+     * Specify which assumptions it can make about your code, to better optimize the compilation result. **NOTE**: This replaces the various &#x60;loose&#x60; options in plugins in favor of
+     * top-level options that can apply to multiple plugins
+     *
+     * @see https://babeljs.io/docs/en/assumptions
+     */
+    assumptions?: { [name: string]: boolean } | null | undefined;
+
+    /**
+     * Include the AST in the returned object
+     *
+     * Default: &#x60;false&#x60;
+     */
+    ast?: boolean | null | undefined;
+
+    /**
+     * Attach a comment after all non-user injected code
+     *
+     * Default: &#x60;null&#x60;
+     */
+    auxiliaryCommentAfter?: string | null | undefined;
+
+    /**
+     * Attach a comment before all non-user injected code
+     *
+     * Default: &#x60;null&#x60;
+     */
+    auxiliaryCommentBefore?: string | null | undefined;
+
+    /**
+     * Specify the &amp;quot;root&amp;quot; folder that defines the location to search for &amp;quot;babel.config.js&amp;quot;, and the default folder to allow &#x60;.babelrc&#x60; files inside of.
+     *
+     * Default: &#x60;&amp;quot;.&amp;quot;&#x60;
+     */
+    root?: string | null | undefined;
+
+    /**
+     * This option, combined with the &amp;quot;root&amp;quot; value, defines how Babel chooses its project root.
+     * The different modes define different ways that Babel can process the &amp;quot;root&amp;quot; value to get
+     * the final project root.
+     *
+     * @see https://babeljs.io/docs/en/next/options#rootmode
+     */
+    rootMode?: &amp;quot;root&amp;quot; | &amp;quot;upward&amp;quot; | &amp;quot;upward-optional&amp;quot; | undefined;
+
+    /**
+     * The config file to load Babel&amp;#x27;s config from. Defaults to searching for &amp;quot;babel.config.js&amp;quot; inside the &amp;quot;root&amp;quot; folder. &#x60;false&#x60; will disable searching for config files.
+     *
+     * Default: &#x60;undefined&#x60;
+     */
+    configFile?: string | boolean | null | undefined;
+
+    /**
+     * Specify whether or not to use .babelrc and
+     * .babelignore files.
+     *
+     * Default: &#x60;true&#x60;
+     */
+    babelrc?: boolean | null | undefined;
+
+    /**
+     * Specify which packages should be search for .babelrc files when they are being compiled. &#x60;true&#x60; to always search, or a path string or an array of paths to packages to search
+     * inside of. Defaults to only searching the &amp;quot;root&amp;quot; package.
+     *
+     * Default: &#x60;(root)&#x60;
+     */
+    babelrcRoots?: boolean | MatchPattern | MatchPattern[] | null | undefined;
+
+    /**
+     * Toggles whether or not browserslist config sources are used, which includes searching for any browserslist files or referencing the browserslist key inside package.json.
+     * This is useful for projects that use a browserslist config for files that won&amp;#x27;t be compiled with Babel.
+     *
+     * If a string is specified, it must represent the path of a browserslist configuration file. Relative paths are resolved relative to the configuration file which specifies
+     * this option, or to &#x60;cwd&#x60; when it&amp;#x27;s passed as part of the programmatic options.
+     *
+     * Default: &#x60;true&#x60;
+     */
+    browserslistConfigFile?: boolean | null | undefined;
+
+    /**
+     * The Browserslist environment to use.
+     *
+     * Default: &#x60;undefined&#x60;
+     */
+    browserslistEnv?: string | null | undefined;
+
+    /**
+     * By default &#x60;babel.transformFromAst&#x60; will clone the input AST to avoid mutations.
+     * Specifying &#x60;cloneInputAst: false&#x60; can improve parsing performance if the input AST is not used elsewhere.
+     *
+     * Default: &#x60;true&#x60;
+     */
+    cloneInputAst?: boolean | null | undefined;
+
+    /**
+     * Defaults to environment variable &#x60;BABEL_ENV&#x60; if set, or else &#x60;NODE_ENV&#x60; if set, or else it defaults to &#x60;&amp;quot;development&amp;quot;&#x60;
+     *
+     * Default: env vars
+     */
+    envName?: string | undefined;
+
+    /**
+     * If any of patterns match, the current configuration object is considered inactive and is ignored during config processing.
+     */
+    exclude?: MatchPattern | MatchPattern[] | undefined;
+
+    /**
+     * Enable code generation
+     *
+     * Default: &#x60;true&#x60;
+     */
+    code?: boolean | null | undefined;
+
+    /**
+     * Output comments in generated output
+     *
+     * Default: &#x60;true&#x60;
+     */
+    comments?: boolean | null | undefined;
+
+    /**
+     * Do not include superfluous whitespace characters and line terminators. When set to &#x60;&amp;quot;auto&amp;quot;&#x60; compact is set to &#x60;true&#x60; on input sizes of &amp;gt;500KB
+     *
+     * Default: &#x60;&amp;quot;auto&amp;quot;&#x60;
+     */
+    compact?: boolean | &amp;quot;auto&amp;quot; | null | undefined;
+
+    /**
+     * The working directory that Babel&amp;#x27;s programmatic options are loaded relative to.
+     *
+     * Default: &#x60;&amp;quot;.&amp;quot;&#x60;
+     */
+    cwd?: string | null | undefined;
+
+    /**
+     * Utilities may pass a caller object to identify themselves to Babel and
+     * pass capability-related flags for use by configs, presets and plugins.
+     *
+     * @see https://babeljs.io/docs/en/next/options#caller
+     */
+    caller?: TransformCaller | undefined;
+
+    /**
+     * This is an object of keys that represent different environments. For example, you may have: &#x60;{ env: { production: { \/* specific options *\/ } } }&#x60;
+     * which will use those options when the &#x60;envName&#x60; is &#x60;production&#x60;
+     *
+     * Default: &#x60;{}&#x60;
+     */
+    env?: { [index: string]: TransformOptions | null | undefined } | null | undefined;
+
+    /**
+     * A path to a &#x60;.babelrc&#x60; file to extend
+     *
+     * Default: &#x60;null&#x60;
+     */
+    extends?: string | null | undefined;
+
+    /**
+     * Filename for use in errors etc
+     *
+     * Default: &#x60;&amp;quot;unknown&amp;quot;&#x60;
+     */
+    filename?: string | null | undefined;
+
+    /**
+     * Filename relative to &#x60;sourceRoot&#x60;
+     *
+     * Default: &#x60;(filename)&#x60;
+     */
+    filenameRelative?: string | null | undefined;
+
+    /**
+     * An object containing the options to be passed down to the babel code generator, @babel/generator
+     *
+     * Default: &#x60;{}&#x60;
+     */
+    generatorOpts?: GeneratorOptions | null | undefined;
+
+    /**
+     * Specify a custom callback to generate a module id with. Called as &#x60;getModuleId(moduleName)&#x60;. If falsy value is returned then the generated module id is used
+     *
+     * Default: &#x60;null&#x60;
+     */
+    getModuleId?: ((moduleName: string) &#x3D;&amp;gt; string | null | undefined) | null | undefined;
+
+    /**
+     * ANSI highlight syntax error code frames
+     *
+     * Default: &#x60;true&#x60;
+     */
+    highlightCode?: boolean | null | undefined;
+
+    /**
+     * Opposite to the &#x60;only&#x60; option. &#x60;ignore&#x60; is disregarded if &#x60;only&#x60; is specified
+     *
+     * Default: &#x60;null&#x60;
+     */
+    ignore?: MatchPattern[] | null | undefined;
+
+    /**
+     * This option is a synonym for &amp;quot;test&amp;quot;
+     */
+    include?: MatchPattern | MatchPattern[] | undefined;
+
+    /**
+     * A source map object that the output source map will be based on
+     *
+     * Default: &#x60;null&#x60;
+     */
+    inputSourceMap?: InputSourceMap | null | undefined;
+
+    /**
+     * Should the output be minified (not printing last semicolons in blocks, printing literal string values instead of escaped ones, stripping &#x60;()&#x60; from &#x60;new&#x60; when safe)
+     *
+     * Default: &#x60;false&#x60;
+     */
+    minified?: boolean | null | undefined;
+
+    /**
+     * Specify a custom name for module ids
+     *
+     * Default: &#x60;null&#x60;
+     */
+    moduleId?: string | null | undefined;
+
+    /**
+     * If truthy, insert an explicit id for modules. By default, all modules are anonymous. (Not available for &#x60;common&#x60; modules)
+     *
+     * Default: &#x60;false&#x60;
+     */
+    moduleIds?: boolean | null | undefined;
+
+    /**
+     * Optional prefix for the AMD module formatter that will be prepend to the filename on module definitions
+     *
+     * Default: &#x60;(sourceRoot)&#x60;
+     */
+    moduleRoot?: string | null | undefined;
+
+    /**
+     * A glob, regex, or mixed array of both, matching paths to **only** compile. Can also be an array of arrays containing paths to explicitly match. When attempting to compile
+     * a non-matching file it&amp;#x27;s returned verbatim
+     *
+     * Default: &#x60;null&#x60;
+     */
+    only?: MatchPattern[] | null | undefined;
+
+    /**
+     * Allows users to provide an array of options that will be merged into the current configuration one at a time.
+     * This feature is best used alongside the &amp;quot;test&amp;quot;/&amp;quot;include&amp;quot;/&amp;quot;exclude&amp;quot; options to provide conditions for which an override should apply
+     */
+    overrides?: TransformOptions[] | undefined;
+
+    /**
+     * An object containing the options to be passed down to the babel parser, @babel/parser
+     *
+     * Default: &#x60;{}&#x60;
+     */
+    parserOpts?: ParserOptions | null | undefined;
+
+    /**
+     * List of plugins to load and use
+     *
+     * Default: &#x60;[]&#x60;
+     */
+    plugins?: PluginItem[] | null | undefined;
+
+    /**
+     * List of presets (a set of plugins) to load and use
+     *
+     * Default: &#x60;[]&#x60;
+     */
+    presets?: PluginItem[] | null | undefined;
+
+    /**
+     * Retain line numbers. This will lead to wacky code but is handy for scenarios where you can&amp;#x27;t use source maps. (**NOTE**: This will not retain the columns)
+     *
+     * Default: &#x60;false&#x60;
+     */
+    retainLines?: boolean | null | undefined;
+
+    /**
+     * An optional callback that controls whether a comment should be output or not. Called as &#x60;shouldPrintComment(commentContents)&#x60;. **NOTE**: This overrides the &#x60;comment&#x60; option when used
+     *
+     * Default: &#x60;null&#x60;
+     */
+    shouldPrintComment?: ((commentContents: string) &#x3D;&amp;gt; boolean) | null | undefined;
+
+    /**
+     * Set &#x60;sources[0]&#x60; on returned source map
+     *
+     * Default: &#x60;(filenameRelative)&#x60;
+     */
+    sourceFileName?: string | null | undefined;
+
+    /**
+     * If truthy, adds a &#x60;map&#x60; property to returned output. If set to &#x60;&amp;quot;inline&amp;quot;&#x60;, a comment with a sourceMappingURL directive is added to the bottom of the returned code. If set to &#x60;&amp;quot;both&amp;quot;&#x60;
+     * then a &#x60;map&#x60; property is returned as well as a source map comment appended. **This does not emit sourcemap files by itself!**
+     *
+     * Default: &#x60;false&#x60;
+     */
+    sourceMaps?: boolean | &amp;quot;inline&amp;quot; | &amp;quot;both&amp;quot; | null | undefined;
+
+    /**
+     * The root from which all sources are relative
+     *
+     * Default: &#x60;(moduleRoot)&#x60;
+     */
+    sourceRoot?: string | null | undefined;
+
+    /**
+     * Indicate the mode the code should be parsed in. Can be one of &amp;quot;script&amp;quot;, &amp;quot;module&amp;quot;, or &amp;quot;unambiguous&amp;quot;. &#x60;&amp;quot;unambiguous&amp;quot;&#x60; will make Babel attempt to guess, based on the presence of ES6
+     * &#x60;import&#x60; or &#x60;export&#x60; statements. Files with ES6 &#x60;import&#x60;s and &#x60;export&#x60;s are considered &#x60;&amp;quot;module&amp;quot;&#x60; and are otherwise &#x60;&amp;quot;script&amp;quot;&#x60;.
+     *
+     * Default: &#x60;(&amp;quot;module&amp;quot;)&#x60;
+     */
+    sourceType?: &amp;quot;script&amp;quot; | &amp;quot;module&amp;quot; | &amp;quot;unambiguous&amp;quot; | null | undefined;
+
+    /**
+     * If all patterns fail to match, the current configuration object is considered inactive and is ignored during config processing.
+     */
+    test?: MatchPattern | MatchPattern[] | undefined;
+
+    /**
+     * Describes the environments you support/target for your project.
+     * This can either be a [browserslist-compatible](https://github.com/ai/browserslist) query (with [caveats](https://babeljs.io/docs/en/babel-preset-env#ineffective-browserslist-queries))
+     *
+     * Default: &#x60;{}&#x60;
+     */
+    targets?:
+        | string
+        | string[]
+        | {
+            esmodules?: boolean;
+            node?: Omit&amp;lt;string, &amp;quot;current&amp;quot;&amp;gt; | &amp;quot;current&amp;quot; | true;
+            safari?: Omit&amp;lt;string, &amp;quot;tp&amp;quot;&amp;gt; | &amp;quot;tp&amp;quot;;
+            browsers?: string | string[];
+            android?: string;
+            chrome?: string;
+            deno?: string;
+            edge?: string;
+            electron?: string;
+            firefox?: string;
+            ie?: string;
+            ios?: string;
+            opera?: string;
+            rhino?: string;
+            samsung?: string;
+        };
+
+    /**
+     * An optional callback that can be used to wrap visitor methods. **NOTE**: This is useful for things like introspection, and not really needed for implementing anything. Called as
+     * &#x60;wrapPluginVisitorMethod(pluginAlias, visitorType, callback)&#x60;.
+     */
+    wrapPluginVisitorMethod?:
+        | ((
+            pluginAlias: string,
+            visitorType: &amp;quot;enter&amp;quot; | &amp;quot;exit&amp;quot;,
+            callback: (path: NodePath, state: any) &#x3D;&amp;gt; void,
+        ) &#x3D;&amp;gt; (path: NodePath, state: any) &#x3D;&amp;gt; void)
+        | null
+        | undefined;
+}
+
+export interface TransformCaller {
+    // the only required property
+    name: string;
+    // e.g. set to true by &#x60;babel-loader&#x60; and false by &#x60;babel-jest&#x60;
+    supportsStaticESM?: boolean | undefined;
+    supportsDynamicImport?: boolean | undefined;
+    supportsExportNamespaceFrom?: boolean | undefined;
+    supportsTopLevelAwait?: boolean | undefined;
+    // augment this with a &amp;quot;declare module &amp;#x27;@babel/core&amp;#x27; { ... }&amp;quot; if you need more keys
+}
+
+export type FileResultCallback &#x3D; (err: Error | null, result: BabelFileResult | null) &#x3D;&amp;gt; any;
+
+export interface MatchPatternContext {
+    envName: string;
+    dirname: string;
+    caller: TransformCaller | undefined;
+}
+export type MatchPattern &#x3D; string | RegExp | ((filename: string | undefined, context: MatchPatternContext) &#x3D;&amp;gt; boolean);
+
+/**
+ * Transforms the passed in code. Calling a callback with an object with the generated code, source map, and AST.
+ */
+export function transform(code: string, callback: FileResultCallback): void;
+
+/**
+ * Transforms the passed in code. Calling a callback with an object with the generated code, source map, and AST.
+ */
+export function transform(code: string, opts: TransformOptions | undefined, callback: FileResultCallback): void;
+
+/**
+ * Here for backward-compatibility. Ideally use &#x60;transformSync&#x60; if you want a synchronous API.
+ */
+export function transform(code: string, opts?: TransformOptions): BabelFileResult | null;
+
+/**
+ * Transforms the passed in code. Returning an object with the generated code, source map, and AST.
+ */
+export function transformSync(code: string, opts?: TransformOptions): BabelFileResult | null;
+
+/**
+ * Transforms the passed in code. Calling a callback with an object with the generated code, source map, and AST.
+ */
+export function transformAsync(code: string, opts?: TransformOptions): Promise&amp;lt;BabelFileResult | null&amp;gt;;
+
+/**
+ * Asynchronously transforms the entire contents of a file.
+ */
+export function transformFile(filename: string, callback: FileResultCallback): void;
+
+/**
+ * Asynchronously transforms the entire contents of a file.
+ */
+export function transformFile(filename: string, opts: TransformOptions | undefined, callback: FileResultCallback): void;
+
+/**
+ * Synchronous version of &#x60;babel.transformFile&#x60;. Returns the transformed contents of the &#x60;filename&#x60;.
+ */
+export function transformFileSync(filename: string, opts?: TransformOptions): BabelFileResult | null;
+
+/**
+ * Asynchronously transforms the entire contents of a file.
+ */
+export function transformFileAsync(filename: string, opts?: TransformOptions): Promise&amp;lt;BabelFileResult | null&amp;gt;;
+
+/**
+ * Given an AST, transform it.
+ */
+export function transformFromAst(ast: Node, code: string | undefined, callback: FileResultCallback): void;
+
+/**
+ * Given an AST, transform it.
+ */
+export function transformFromAst(
+    ast: Node,
+    code: string | undefined,
+    opts: TransformOptions | undefined,
+    callback: FileResultCallback,
+): void;
+
+/**
+ * Here for backward-compatibility. Ideally use &amp;quot;.transformSync&amp;quot; if you want a synchronous API.
+ */
+export function transformFromAstSync(ast: Node, code?: string, opts?: TransformOptions): BabelFileResult | null;
+
+/**
+ * Given an AST, transform it.
+ */
+export function transformFromAstAsync(
+    ast: Node,
+    code?: string,
+    opts?: TransformOptions,
+): Promise&amp;lt;BabelFileResult | null&amp;gt;;
+
+// A babel plugin is a simple function which must return an object matching
+// the following interface. Babel will throw if it finds unknown properties.
+// The list of allowed plugin keys is here:
+// https://github.com/babel/babel/blob/4e50b2d9d9c376cee7a2cbf56553fe5b982ea53c/packages/babel-core/src/config/option-manager.js#L71
+export interface PluginObj&amp;lt;S &#x3D; PluginPass&amp;gt; {
+    name?: string | undefined;
+    manipulateOptions?(opts: any, parserOpts: any): void;
+    pre?(this: S, file: BabelFile): void;
+    visitor: Visitor&amp;lt;S&amp;gt;;
+    post?(this: S, file: BabelFile): void;
+    inherits?: any;
+}
+
+export interface BabelFile {
+    ast: t.File;
+    opts: TransformOptions;
+    hub: Hub;
+    metadata: object;
+    path: NodePath&amp;lt;t.Program&amp;gt;;
+    scope: Scope;
+    inputMap: object | null;
+    code: string;
+}
+
+export interface PluginPass {
+    file: BabelFile;
+    key: string;
+    opts: object;
+    cwd: string;
+    filename: string | undefined;
+    get(key: unknown): any;
+    set(key: unknown, value: unknown): void;
+    [key: string]: unknown;
+}
+
+export interface BabelFileResult {
+    ast?: t.File | null | undefined;
+    code?: string | null | undefined;
+    ignored?: boolean | undefined;
+    map?:
+        | {
+            version: number;
+            sources: string[];
+            names: string[];
+            sourceRoot?: string | undefined;
+            sourcesContent?: string[] | undefined;
+            mappings: string;
+            file: string;
+        }
+        | null
+        | undefined;
+    metadata?: BabelFileMetadata | undefined;
+}
+
+export interface BabelFileMetadata {
+    usedHelpers: string[];
+    marked: Array&amp;lt;{
+        type: string;
+        message: string;
+        loc: object;
+    }&amp;gt;;
+    modules: BabelFileModulesMetadata;
+}
+
+export interface BabelFileModulesMetadata {
+    imports: object[];
+    exports: {
+        exported: object[];
+        specifiers: object[];
+    };
+}
+
+export type FileParseCallback &#x3D; (err: Error | null, result: ParseResult | null) &#x3D;&amp;gt; any;
+
+/**
+ * Given some code, parse it using Babel&amp;#x27;s standard behavior.
+ * Referenced presets and plugins will be loaded such that optional syntax plugins are automatically enabled.
+ */
+export function parse(code: string, callback: FileParseCallback): void;
+
+/**
+ * Given some code, parse it using Babel&amp;#x27;s standard behavior.
+ * Referenced presets and plugins will be loaded such that optional syntax plugins are automatically enabled.
+ */
+export function parse(code: string, options: TransformOptions | undefined, callback: FileParseCallback): void;
+
+/**
+ * Given some code, parse it using Babel&amp;#x27;s standard behavior.
+ * Referenced presets and plugins will be loaded such that optional syntax plugins are automatically enabled.
+ */
+export function parse(code: string, options?: TransformOptions): ParseResult | null;
+
+/**
+ * Given some code, parse it using Babel&amp;#x27;s standard behavior.
+ * Referenced presets and plugins will be loaded such that optional syntax plugins are automatically enabled.
+ */
+export function parseSync(code: string, options?: TransformOptions): ParseResult | null;
+
+/**
+ * Given some code, parse it using Babel&amp;#x27;s standard behavior.
+ * Referenced presets and plugins will be loaded such that optional syntax plugins are automatically enabled.
+ */
+export function parseAsync(code: string, options?: TransformOptions): Promise&amp;lt;ParseResult | null&amp;gt;;
+
+/**
+ * Resolve Babel&amp;#x27;s options fully, resulting in an options object where:
+ *
+ * * opts.plugins is a full list of Plugin instances.
+ * * opts.presets is empty and all presets are flattened into opts.
+ * * It can be safely passed back to Babel. Fields like babelrc have been set to false so that later calls to Babel
+ * will not make a second attempt to load config files.
+ *
+ * Plugin instances aren&amp;#x27;t meant to be manipulated directly, but often callers will serialize this opts to JSON to
+ * use it as a cache key representing the options Babel has received. Caching on this isn&amp;#x27;t 100% guaranteed to
+ * invalidate properly, but it is the best we have at the moment.
+ */
+export function loadOptions(options?: TransformOptions): object | null;
+
+/**
+ * To allow systems to easily manipulate and validate a user&amp;#x27;s config, this function resolves the plugins and
+ * presets and proceeds no further. The expectation is that callers will take the config&amp;#x27;s .options, manipulate it
+ * as then see fit and pass it back to Babel again.
+ *
+ * * &#x60;babelrc: string | void&#x60; - The path of the &#x60;.babelrc&#x60; file, if there was one.
+ * * &#x60;babelignore: string | void&#x60; - The path of the &#x60;.babelignore&#x60; file, if there was one.
+ * * &#x60;options: ValidatedOptions&#x60; - The partially resolved options, which can be manipulated and passed back
+ * to Babel again.
+ *  * &#x60;plugins: Array&amp;lt;ConfigItem&amp;gt;&#x60; - See below.
+ *  * &#x60;presets: Array&amp;lt;ConfigItem&amp;gt;&#x60; - See below.
+ *  * It can be safely passed back to Babel. Fields like &#x60;babelrc&#x60; have been set to false so that later calls to
+ * Babel will not make a second attempt to load config files.
+ *
+ * &#x60;ConfigItem&#x60; instances expose properties to introspect the values, but each item should be treated as
+ * immutable. If changes are desired, the item should be removed from the list and replaced with either a normal
+ * Babel config value, or with a replacement item created by &#x60;babel.createConfigItem&#x60;. See that function for
+ * information about &#x60;ConfigItem&#x60; fields.
+ */
+export function loadPartialConfig(options?: TransformOptions): Readonly&amp;lt;PartialConfig&amp;gt; | null;
+export function loadPartialConfigAsync(options?: TransformOptions): Promise&amp;lt;Readonly&amp;lt;PartialConfig&amp;gt; | null&amp;gt;;
+
+export interface PartialConfig {
+    options: TransformOptions;
+    babelrc?: string | undefined;
+    babelignore?: string | undefined;
+    config?: string | undefined;
+    hasFilesystemConfig: () &#x3D;&amp;gt; boolean;
+}
+
+export interface ConfigItem {
+    /**
+     * The name that the user gave the plugin instance, e.g. &#x60;plugins: [ [&amp;#x27;env&amp;#x27;, {}, &amp;#x27;my-env&amp;#x27;] ]&#x60;
+     */
+    name?: string | undefined;
+
+    /**
+     * The resolved value of the plugin.
+     */
+    value: object | ((...args: any[]) &#x3D;&amp;gt; any);
+
+    /**
+     * The options object passed to the plugin.
+     */
+    options?: object | false | undefined;
+
+    /**
+     * The path that the options are relative to.
+     */
+    dirname: string;
+
+    /**
+     * Information about the plugin&amp;#x27;s file, if Babel knows it.
+     *  *
+     */
+    file?:
+        | {
+            /**
+             * The file that the user requested, e.g. &#x60;&amp;quot;@babel/env&amp;quot;&#x60;
+             */
+            request: string;
+
+            /**
+             * The full path of the resolved file, e.g. &#x60;&amp;quot;/tmp/node_modules/@babel/preset-env/lib/index.js&amp;quot;&#x60;
+             */
+            resolved: string;
+        }
+        | null
+        | undefined;
+}
+
+export type PluginOptions &#x3D; object | undefined | false;
+
+export type PluginTarget &#x3D; string | object | ((...args: any[]) &#x3D;&amp;gt; any);
+
+export type PluginItem &#x3D;
+    | ConfigItem
+    | PluginObj&amp;lt;any&amp;gt;
+    | PluginTarget
+    | [PluginTarget, PluginOptions]
+    | [PluginTarget, PluginOptions, string | undefined];
+
+export function resolvePlugin(name: string, dirname: string): string | null;
+export function resolvePreset(name: string, dirname: string): string | null;
+
+export interface CreateConfigItemOptions {
+    dirname?: string | undefined;
+    type?: &amp;quot;preset&amp;quot; | &amp;quot;plugin&amp;quot; | undefined;
+}
+
+/**
+ * Allows build tooling to create and cache config items up front. If this function is called multiple times for a
+ * given plugin, Babel will call the plugin&amp;#x27;s function itself multiple times. If you have a clear set of expected
+ * plugins and presets to inject, pre-constructing the config items would be recommended.
+ */
+export function createConfigItem(
+    value: PluginTarget | [PluginTarget, PluginOptions] | [PluginTarget, PluginOptions, string | undefined],
+    options?: CreateConfigItemOptions,
+): ConfigItem;
+
+// NOTE: the documentation says the ConfigAPI also exposes @babel/core&amp;#x27;s exports, but it actually doesn&amp;#x27;t
+/**
+ * @see https://babeljs.io/docs/en/next/config-files#config-function-api
+ */
+export interface ConfigAPI {
+    /**
+     * The version string for the Babel version that is loading the config file.
+     *
+     * @see https://babeljs.io/docs/en/next/config-files#apiversion
+     */
+    version: string;
+    /**
+     * @see https://babeljs.io/docs/en/next/config-files#apicache
+     */
+    cache: SimpleCacheConfigurator;
+    /**
+     * @see https://babeljs.io/docs/en/next/config-files#apienv
+     */
+    env: EnvFunction;
+    // undocumented; currently hardcoded to return &amp;#x27;false&amp;#x27;
+    // async(): boolean
+    /**
+     * This API is used as a way to access the &#x60;caller&#x60; data that has been passed to Babel.
+     * Since many instances of Babel may be running in the same process with different &#x60;caller&#x60; values,
+     * this API is designed to automatically configure &#x60;api.cache&#x60;, the same way &#x60;api.env()&#x60; does.
+     *
+     * The &#x60;caller&#x60; value is available as the first parameter of the callback function.
+     * It is best used with something like this to toggle configuration behavior
+     * based on a specific environment:
+     *
+     * @example
+     * function isBabelRegister(caller?: { name: string }) {
+     *   return !!(caller &amp;amp;&amp;amp; caller.name &#x3D;&#x3D;&#x3D; &amp;quot;@babel/register&amp;quot;)
+     * }
+     * api.caller(isBabelRegister)
+     *
+     * @see https://babeljs.io/docs/en/next/config-files#apicallercb
+     */
+    caller&amp;lt;T extends SimpleCacheKey&amp;gt;(callerCallback: (caller: TransformOptions[&amp;quot;caller&amp;quot;]) &#x3D;&amp;gt; T): T;
+    /**
+     * While &#x60;api.version&#x60; can be useful in general, it&amp;#x27;s sometimes nice to just declare your version.
+     * This API exposes a simple way to do that with:
+     *
+     * @example
+     * api.assertVersion(7) // major version only
+     * api.assertVersion(&amp;quot;^7.2&amp;quot;)
+     *
+     * @see https://babeljs.io/docs/en/next/config-files#apiassertversionrange
+     */
+    assertVersion(versionRange: number | string): boolean;
+    // NOTE: this is an undocumented reexport from &amp;quot;@babel/parser&amp;quot; but it&amp;#x27;s missing from its types
+    // tokTypes: typeof tokTypes
+}
+
+/**
+ * JS configs are great because they can compute a config on the fly,
+ * but the downside there is that it makes caching harder.
+ * Babel wants to avoid re-executing the config function every time a file is compiled,
+ * because then it would also need to re-execute any plugin and preset functions
+ * referenced in that config.
+ *
+ * To avoid this, Babel expects users of config functions to tell it how to manage caching
+ * within a config file.
+ *
+ * @see https://babeljs.io/docs/en/next/config-files#apicache
+ */
+export interface SimpleCacheConfigurator {
+    // there is an undocumented call signature that is a shorthand for forever()/never()/using().
+    // (ever: boolean): void
+    // &amp;lt;T extends SimpleCacheKey&amp;gt;(callback: CacheCallback&amp;lt;T&amp;gt;): T
+    /**
+     * Permacache the computed config and never call the function again.
+     */
+    forever(): void;
+    /**
+     * Do not cache this config, and re-execute the function every time.
+     */
+    never(): void;
+    /**
+     * Any time the using callback returns a value other than the one that was expected,
+     * the overall config function will be called again and a new entry will be added to the cache.
+     *
+     * @example
+     * api.cache.using(() &#x3D;&amp;gt; process.env.NODE_ENV)
+     */
+    using&amp;lt;T extends SimpleCacheKey&amp;gt;(callback: SimpleCacheCallback&amp;lt;T&amp;gt;): T;
+    /**
+     * Any time the using callback returns a value other than the one that was expected,
+     * the overall config function will be called again and all entries in the cache will
+     * be replaced with the result.
+     *
+     * @example
+     * api.cache.invalidate(() &#x3D;&amp;gt; process.env.NODE_ENV)
+     */
+    invalidate&amp;lt;T extends SimpleCacheKey&amp;gt;(callback: SimpleCacheCallback&amp;lt;T&amp;gt;): T;
+}
+
+// https://github.com/babel/babel/blob/v7.3.3/packages/babel-core/src/config/caching.js#L231
+export type SimpleCacheKey &#x3D; string | boolean | number | null | undefined;
+export type SimpleCacheCallback&amp;lt;T extends SimpleCacheKey&amp;gt; &#x3D; () &#x3D;&amp;gt; T;
+
+/**
+ * Since &#x60;NODE_ENV&#x60; is a fairly common way to toggle behavior, Babel also includes an API function
+ * meant specifically for that. This API is used as a quick way to check the &#x60;&amp;quot;envName&amp;quot;&#x60; that Babel
+ * was loaded with, which takes &#x60;NODE_ENV&#x60; into account if no other overriding environment is set.
+ *
+ * @see https://babeljs.io/docs/en/next/config-files#apienv
+ */
+export interface EnvFunction {
+    /**
+     * @returns the current &#x60;envName&#x60; string
+     */
+    (): string;
+    /**
+     * @returns &#x60;true&#x60; if the &#x60;envName&#x60; is &#x60;&#x3D;&#x3D;&#x3D;&#x60; any of the given strings
+     */
+    (envName: string | readonly string[]): boolean;
+    // the official documentation is misleading for this one...
+    // this just passes the callback to &#x60;cache.using&#x60; but with an additional argument.
+    // it returns its result instead of necessarily returning a boolean.
+    &amp;lt;T extends SimpleCacheKey&amp;gt;(envCallback: (envName: NonNullable&amp;lt;TransformOptions[&amp;quot;envName&amp;quot;]&amp;gt;) &#x3D;&amp;gt; T): T;
+}
+
+export type ConfigFunction &#x3D; (api: ConfigAPI) &#x3D;&amp;gt; TransformOptions;
+
+export as namespace babel;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-13">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.js</div>
+                <div class="file-content">
+                    <pre>&amp;#x27;use strict&amp;#x27;;
+
+const ANSI_BACKGROUND_OFFSET &#x3D; 10;
+
+const wrapAnsi256 &#x3D; (offset &#x3D; 0) &#x3D;&amp;gt; code &#x3D;&amp;gt; &#x60;\u001B[${38 + offset};5;${code}m&#x60;;
+
+const wrapAnsi16m &#x3D; (offset &#x3D; 0) &#x3D;&amp;gt; (red, green, blue) &#x3D;&amp;gt; &#x60;\u001B[${38 + offset};2;${red};${green};${blue}m&#x60;;
+
+function assembleStyles() {
+	const codes &#x3D; new Map();
+	const styles &#x3D; {
+		modifier: {
+			reset: [0, 0],
+			// 21 isn&amp;#x27;t widely supported and 22 does the same thing
+			bold: [1, 22],
+			dim: [2, 22],
+			italic: [3, 23],
+			underline: [4, 24],
+			overline: [53, 55],
+			inverse: [7, 27],
+			hidden: [8, 28],
+			strikethrough: [9, 29]
+		},
+		color: {
+			black: [30, 39],
+			red: [31, 39],
+			green: [32, 39],
+			yellow: [33, 39],
+			blue: [34, 39],
+			magenta: [35, 39],
+			cyan: [36, 39],
+			white: [37, 39],
+
+			// Bright color
+			blackBright: [90, 39],
+			redBright: [91, 39],
+			greenBright: [92, 39],
+			yellowBright: [93, 39],
+			blueBright: [94, 39],
+			magentaBright: [95, 39],
+			cyanBright: [96, 39],
+			whiteBright: [97, 39]
+		},
+		bgColor: {
+			bgBlack: [40, 49],
+			bgRed: [41, 49],
+			bgGreen: [42, 49],
+			bgYellow: [43, 49],
+			bgBlue: [44, 49],
+			bgMagenta: [45, 49],
+			bgCyan: [46, 49],
+			bgWhite: [47, 49],
+
+			// Bright color
+			bgBlackBright: [100, 49],
+			bgRedBright: [101, 49],
+			bgGreenBright: [102, 49],
+			bgYellowBright: [103, 49],
+			bgBlueBright: [104, 49],
+			bgMagentaBright: [105, 49],
+			bgCyanBright: [106, 49],
+			bgWhiteBright: [107, 49]
+		}
+	};
+
+	// Alias bright black as gray (and grey)
+	styles.color.gray &#x3D; styles.color.blackBright;
+	styles.bgColor.bgGray &#x3D; styles.bgColor.bgBlackBright;
+	styles.color.grey &#x3D; styles.color.blackBright;
+	styles.bgColor.bgGrey &#x3D; styles.bgColor.bgBlackBright;
+
+	for (const [groupName, group] of Object.entries(styles)) {
+		for (const [styleName, style] of Object.entries(group)) {
+			styles[styleName] &#x3D; {
+				open: &#x60;\u001B[${style[0]}m&#x60;,
+				close: &#x60;\u001B[${style[1]}m&#x60;
+			};
+
+			group[styleName] &#x3D; styles[styleName];
+
+			codes.set(style[0], style[1]);
+		}
+
+		Object.defineProperty(styles, groupName, {
+			value: group,
+			enumerable: false
+		});
+	}
+
+	Object.defineProperty(styles, &amp;#x27;codes&amp;#x27;, {
+		value: codes,
+		enumerable: false
+	});
+
+	styles.color.close &#x3D; &amp;#x27;\u001B[39m&amp;#x27;;
+	styles.bgColor.close &#x3D; &amp;#x27;\u001B[49m&amp;#x27;;
+
+	styles.color.ansi256 &#x3D; wrapAnsi256();
+	styles.color.ansi16m &#x3D; wrapAnsi16m();
+	styles.bgColor.ansi256 &#x3D; wrapAnsi256(ANSI_BACKGROUND_OFFSET);
+	styles.bgColor.ansi16m &#x3D; wrapAnsi16m(ANSI_BACKGROUND_OFFSET);
+
+	// From https://github.com/Qix-/color-convert/blob/3f0e0d4e92e235796ccb17f6e85c72094a651f49/conversions.js
+	Object.defineProperties(styles, {
+		rgbToAnsi256: {
+			value: (red, green, blue) &#x3D;&amp;gt; {
+				// We use the extended greyscale palette here, with the exception of
+				// black and white. normal palette only has 4 greyscale shades.
+				if (red &#x3D;&#x3D;&#x3D; green &amp;amp;&amp;amp; green &#x3D;&#x3D;&#x3D; blue) {
+					if (red &amp;lt; 8) {
+						return 16;
+					}
+
+					if (red &amp;gt; 248) {
+						return 231;
+					}
+
+					return Math.round(((red - 8) / 247) * 24) + 232;
+				}
+
+				return 16 +
+					(36 * Math.round(red / 255 * 5)) +
+					(6 * Math.round(green / 255 * 5)) +
+					Math.round(blue / 255 * 5);
+			},
+			enumerable: false
+		},
+		hexToRgb: {
+			value: hex &#x3D;&amp;gt; {
+				const matches &#x3D; /(?&amp;lt;colorString&amp;gt;[a-f\d]{6}|[a-f\d]{3})/i.exec(hex.toString(16));
+				if (!matches) {
+					return [0, 0, 0];
+				}
+
+				let {colorString} &#x3D; matches.groups;
+
+				if (colorString.length &#x3D;&#x3D;&#x3D; 3) {
+					colorString &#x3D; colorString.split(&amp;#x27;&amp;#x27;).map(character &#x3D;&amp;gt; character + character).join(&amp;#x27;&amp;#x27;);
+				}
+
+				const integer &#x3D; Number.parseInt(colorString, 16);
+
+				return [
+					(integer &amp;gt;&amp;gt; 16) &amp;amp; 0xFF,
+					(integer &amp;gt;&amp;gt; 8) &amp;amp; 0xFF,
+					integer &amp;amp; 0xFF
+				];
+			},
+			enumerable: false
+		},
+		hexToAnsi256: {
+			value: hex &#x3D;&amp;gt; styles.rgbToAnsi256(...styles.hexToRgb(hex)),
+			enumerable: false
+		}
+	});
+
+	return styles;
+}
+
+// Make the export immutable
+Object.defineProperty(module, &amp;#x27;exports&amp;#x27;, {
+	enumerable: true,
+	get: assembleStyles
+});
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-14">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/playwright-core/index.mjs</div>
+                <div class="file-content">
+                    <pre>/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import playwright from &amp;#x27;./index.js&amp;#x27;;
+
+export const chromium &#x3D; playwright.chromium;
+export const firefox &#x3D; playwright.firefox;
+export const webkit &#x3D; playwright.webkit;
+export const selectors &#x3D; playwright.selectors;
+export const devices &#x3D; playwright.devices;
+export const errors &#x3D; playwright.errors;
+export const request &#x3D; playwright.request;
+export const _electron &#x3D; playwright._electron;
+export const _android &#x3D; playwright._android;
+export default playwright;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-15">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>node_modules/playwright-core/index.mjs</div>
+                <div class="file-content">
+                    <pre>/**
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import playwright from &amp;#x27;./index.js&amp;#x27;;
+
+export const chromium &#x3D; playwright.chromium;
+export const firefox &#x3D; playwright.firefox;
+export const webkit &#x3D; playwright.webkit;
+export const selectors &#x3D; playwright.selectors;
+export const devices &#x3D; playwright.devices;
+export const errors &#x3D; playwright.errors;
+export const request &#x3D; playwright.request;
+export const _electron &#x3D; playwright._electron;
+export const _android &#x3D; playwright._android;
+export default playwright;
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-16">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/dnd-core/node_modules/redux/src/index.js</div>
+                <div class="file-content">
+                    <pre>import { createStore, legacy_createStore } from &amp;#x27;./createStore&amp;#x27;
+import combineReducers from &amp;#x27;./combineReducers&amp;#x27;
+import bindActionCreators from &amp;#x27;./bindActionCreators&amp;#x27;
+import applyMiddleware from &amp;#x27;./applyMiddleware&amp;#x27;
+import compose from &amp;#x27;./compose&amp;#x27;
+import __DO_NOT_USE__ActionTypes from &amp;#x27;./utils/actionTypes&amp;#x27;
+
+export {
+  createStore,
+  legacy_createStore,
+  combineReducers,
+  bindActionCreators,
+  applyMiddleware,
+  compose,
+  __DO_NOT_USE__ActionTypes,
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-17">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/shadowed_core/node_modules/util/index.js</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-18">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/@jest/core/node_modules/react-is/index.js</div>
+                <div class="file-content">
+                    <pre>&amp;#x27;use strict&amp;#x27;;
+
+if (process.env.NODE_ENV &#x3D;&#x3D;&#x3D; &amp;#x27;production&amp;#x27;) {
+  module.exports &#x3D; require(&amp;#x27;./cjs/react-is.production.min.js&amp;#x27;);
+} else {
+  module.exports &#x3D; require(&amp;#x27;./cjs/react-is.development.js&amp;#x27;);
+}
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-19">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/precedence/aaa/main.js</div>
+                <div class="file-content">
+                    <pre>console.log(require(&amp;#x27;./&amp;#x27;));
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-20">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/pathfilter/deep_ref/main.js</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-21">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/false_main/index.js</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-22">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/multirepo/packages/package-b/index.js</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-23">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/command-line-shell/after/src/shell/__init__.py</div>
+                <div class="file-content">
+                    <pre>
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-24">
+                <div class="file-header"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/cup.coffee</div>
+                <div class="file-content">
+                    <pre>
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-25">
+                <div class="file-header"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/mug.coffee</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-26">
+                <div class="file-header"><i data-lucide="git-branch" class="icon"></i>templates/assets/node_modules/resolve/test/resolver/symlinked/_/symlink_target/.gitkeep</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-27">
+                <div class="file-header"><i data-lucide="file" class="icon"></i>templates/assets/test-results/.playwright-artifacts-1/f68b0a029edec8b1ad5d972accf3be0f.webm</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-28">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/point-of-sale/after/pos/__init__.py</div>
+                <div class="file-content">
+                    <pre>
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-29">
+                <div class="file-header"><i data-lucide="file-code" class="icon"></i>datasets/code-smells-python/point-of-sale/before/pos/__init__.py</div>
+                <div class="file-content">
+                    <pre>
+</pre>
+                </div>
+            </div>
+            <div class="file-section" id="file-30">
+                <div class="file-header"><i data-lucide="file" class="icon"></i>templates/assets/node_modules/exit/.npmignore</div>
+                <div class="file-content">
+                    <pre></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/babel">
+        const { useState, useCallback, useEffect } = React;
+        const { Tree } = ReactArborist;
+
+        // File data from Handlebars template
+        const fileData = [
+            {
+                path: "node_modules/tldts-core/src/domain.ts",
+                icon: "file-code",
+                index: 0,
+                size: "3.1 KB",
+                tokens: "625",
+                score: "1.83"
+            },
+            {
+                path: "templates/assets/node_modules/@babel/core/src/config/files/index-browser.ts",
+                icon: "file-code",
+                index: 1,
+                size: "2.9 KB",
+                tokens: "412",
+                score: "1.82"
+            },
+            {
+                path: "datasets/code-smells-python/command-line-shell/before/src/main.py",
+                icon: "file-code",
+                index: 2,
+                size: "3.8 KB",
+                tokens: "580",
+                score: "1.76"
+            },
+            {
+                path: "templates/assets/node_modules/@babel/core/src/config/files/index.ts",
+                icon: "file-code",
+                index: 3,
+                size: "747 B",
+                tokens: "114",
+                score: "1.76"
+            },
+            {
+                path: "datasets/code-smells-python/command-line-shell/after/src/main.py",
+                icon: "file-code",
+                index: 4,
+                size: "2.5 KB",
+                tokens: "333",
+                score: "1.75"
+            },
+            {
+                path: "src/core/pipeline/mod.rs",
+                icon: "file-code",
+                index: 5,
+                size: "6.1 KB",
+                tokens: "501",
+                score: "1.69"
+            },
+            {
+                path: "node_modules/tldts-core/src/domain-without-suffix.ts",
+                icon: "file-code",
+                index: 6,
+                size: "459 B",
+                tokens: "97",
+                score: "1.53"
+            },
+            {
+                path: "node_modules/tldts-core/src/subdomain.ts",
+                icon: "file-code",
+                index: 7,
+                size: "322 B",
+                tokens: "61",
+                score: "1.51"
+            },
+            {
+                path: "templates/assets/node_modules/playwright-core/index.js",
+                icon: "file-code",
+                index: 8,
+                size: "1.1 KB",
+                tokens: "198",
+                score: "1.51"
+            },
+            {
+                path: "node_modules/playwright-core/index.js",
+                icon: "file-code",
+                index: 9,
+                size: "1.1 KB",
+                tokens: "198",
+                score: "1.51"
+            },
+            {
+                path: "templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.d.ts",
+                icon: "file-code",
+                index: 10,
+                size: "3.5 KB",
+                tokens: "592",
+                score: "1.50"
+            },
+            {
+                path: "templates/assets/node_modules/@types/babel__core/index.d.ts",
+                icon: "file-code",
+                index: 11,
+                size: "28.5 KB",
+                tokens: "5,204",
+                score: "1.50"
+            },
+            {
+                path: "templates/assets/node_modules/@jest/core/node_modules/ansi-styles/index.js",
+                icon: "file-code",
+                index: 12,
+                size: "3.8 KB",
+                tokens: "617",
+                score: "1.50"
+            },
+            {
+                path: "templates/assets/node_modules/playwright-core/index.mjs",
+                icon: "file-code",
+                index: 13,
+                size: "1.0 KB",
+                tokens: "198",
+                score: "1.49"
+            },
+            {
+                path: "node_modules/playwright-core/index.mjs",
+                icon: "file-code",
+                index: 14,
+                size: "1.0 KB",
+                tokens: "198",
+                score: "1.49"
+            },
+            {
+                path: "templates/assets/node_modules/dnd-core/node_modules/redux/src/index.js",
+                icon: "file-code",
+                index: 15,
+                size: "455 B",
+                tokens: "49",
+                score: "1.44"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/shadowed_core/node_modules/util/index.js",
+                icon: "file-code",
+                index: 16,
+                size: "0 B",
+                tokens: "0",
+                score: "1.42"
+            },
+            {
+                path: "templates/assets/node_modules/@jest/core/node_modules/react-is/index.js",
+                icon: "file-code",
+                index: 17,
+                size: "196 B",
+                tokens: "22",
+                score: "1.41"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/precedence/aaa/main.js",
+                icon: "file-code",
+                index: 18,
+                size: "28 B",
+                tokens: "1",
+                score: "0.78"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/pathfilter/deep_ref/main.js",
+                icon: "file-code",
+                index: 19,
+                size: "0 B",
+                tokens: "0",
+                score: "0.74"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/resolver/false_main/index.js",
+                icon: "file-code",
+                index: 20,
+                size: "0 B",
+                tokens: "0",
+                score: "0.74"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/resolver/multirepo/packages/package-b/index.js",
+                icon: "file-code",
+                index: 21,
+                size: "0 B",
+                tokens: "0",
+                score: "0.74"
+            },
+            {
+                path: "datasets/code-smells-python/command-line-shell/after/src/shell/__init__.py",
+                icon: "file-code",
+                index: 22,
+                size: "1 B",
+                tokens: "0",
+                score: "0.46"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/resolver/cup.coffee",
+                icon: "file",
+                index: 23,
+                size: "1 B",
+                tokens: "0",
+                score: "0.10"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/resolver/mug.coffee",
+                icon: "file",
+                index: 24,
+                size: "0 B",
+                tokens: "0",
+                score: "0.09"
+            },
+            {
+                path: "templates/assets/node_modules/resolve/test/resolver/symlinked/_/symlink_target/.gitkeep",
+                icon: "git-branch",
+                index: 25,
+                size: "0 B",
+                tokens: "0",
+                score: "0.09"
+            },
+            {
+                path: "templates/assets/test-results/.playwright-artifacts-1/f68b0a029edec8b1ad5d972accf3be0f.webm",
+                icon: "file",
+                index: 26,
+                size: "0 B",
+                tokens: "0",
+                score: "0.09"
+            },
+            {
+                path: "datasets/code-smells-python/point-of-sale/after/pos/__init__.py",
+                icon: "file-code",
+                index: 27,
+                size: "1 B",
+                tokens: "0",
+                score: "0.01"
+            },
+            {
+                path: "datasets/code-smells-python/point-of-sale/before/pos/__init__.py",
+                icon: "file-code",
+                index: 28,
+                size: "1 B",
+                tokens: "0",
+                score: "0.01"
+            },
+            {
+                path: "templates/assets/node_modules/exit/.npmignore",
+                icon: "file",
+                index: 29,
+                size: "0 B",
+                tokens: "0",
+                score: "0.00"
+            }
+        ];
+
+        // Build hierarchical tree structure from flat file paths
+        function buildTreeData(files) {
+            if (!files || files.length === 0) {
+                console.warn('No files provided to buildTreeData');
+                return [];
+            }
+            
+            const nodeMap = new Map();
+            const rootNodes = [];
+            
+            files.forEach((file, index) => {
+                const parts = file.path.split('/');
+                let currentPath = '';
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    const parentPath = currentPath;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
+                    const isLast = i === parts.length - 1;
+                    
+                    if (!nodeMap.has(currentPath)) {
+                        const node = {
+                            id: currentPath,
+                            name: part,
+                            isFolder: !isLast,
+                            path: currentPath,
+                            fileIndex: isLast ? index : undefined,
+                            fileData: isLast ? file : undefined
+                        };
+                        
+                        // Only add children array for folders
+                        if (!isLast) {
+                            node.children = [];
+                        }
+                        
+                        nodeMap.set(currentPath, node);
+                        
+                        if (parentPath) {
+                            const parent = nodeMap.get(parentPath);
+                            if (parent && parent.children) {
+                                parent.children.push(node);
+                            }
+                        } else {
+                            rootNodes.push(node);
+                        }
+                    }
+                }
+            });
+            
+            return rootNodes;
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js': case 'jsx': return 'file-text';
+                case 'ts': case 'tsx': return 'file-text';
+                case 'py': return 'file-text';
+                case 'rs': return 'file-text';
+                case 'go': return 'file-text';
+                case 'java': return 'file-text';
+                case 'cpp': case 'c': case 'h': return 'file-text';
+                case 'css': return 'file-text';
+                case 'html': return 'file-text';
+                case 'json': return 'file-text';
+                case 'md': return 'file-text';
+                case 'yml': case 'yaml': return 'file-text';
+                case 'xml': return 'file-text';
+                case 'sql': return 'file-text';
+                case 'sh': case 'bash': return 'file-text';
+                case 'dockerfile': return 'file-text';
+                case 'gitignore': return 'file-text';
+                case 'toml': return 'file-text';
+                case 'lock': return 'file-text';
+                default: return 'file-text';
+            }
+        }
+
+        // Tree Node Component
+        function Node({ node, style, dragHandle, tree }) {
+            const isFolder = node.data.isFolder;
+            const isOpen = tree.isOpen(node.id);
+            
+            const handleClick = useCallback(() => {
+                if (isFolder) {
+                    tree.toggle(node.id);
+                } else {
+                    // Navigate to file section
+                    const fileIndex = node.data.fileIndex;
+                    if (fileIndex !== undefined) {
+                        const element = document.getElementById(`file-${fileIndex + 1}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                }
+            }, [node.id, isFolder, tree, node.data.fileIndex]);
+
+            useEffect(() => {
+                // Re-initialize Lucide icons for this node
+                const iconElements = document.querySelectorAll('[data-lucide]');
+                iconElements.forEach(el => {
+                    if (!el.querySelector('svg')) {
+                        lucide.createIcons();
+                    }
+                });
+            });
+
+            return (
+                <div 
+                    ref={dragHandle} 
+                    style={style} 
+                    className="tree-node"
+                    onClick={handleClick}
+                >
+                    <div className="tree-node-content">
+                        {isFolder && (
+                            <div className={`tree-arrow ${isOpen ? 'expanded' : ''}`}>
+                                <i data-lucide="chevron-right" className="tree-icon"></i>
+                            </div>
+                        )}
+                        {!isFolder && <div className="tree-arrow"></div>}
+                        
+                        <i 
+                            data-lucide={isFolder ? 'folder' : getFileIcon(node.data.name)} 
+                            className={`tree-icon ${isFolder ? 'folder-icon' : 'file-icon'}`}
+                        ></i>
+                        
+                        <span className="tree-label" title={node.data.path}>
+                            {node.data.name}
+                        </span>
+                    </div>
+                </div>
+            );
+        }
+
+        // File Tree Component
+        function FileTree() {
+            const [treeData] = useState(() => {
+                console.log('Building tree data from:', fileData);
+                const tree = buildTreeData(fileData);
+                console.log('Built tree data:', tree);
+                return tree;
+            });
+            
+            useEffect(() => {
+                // Re-initialize Lucide icons after React renders
+                const initIcons = () => {
+                    try {
+                        lucide.createIcons();
+                        console.log('Lucide icons initialized');
+                    } catch (error) {
+                        console.error('Error initializing Lucide icons:', error);
+                    }
+                };
+                
+                // Initialize immediately and after a delay
+                initIcons();
+                setTimeout(initIcons, 100);
+                setTimeout(initIcons, 500);
+            }, []);
+
+            if (!treeData || treeData.length === 0) {
+                return (
+                    <div style={&#123;&#123; padding: '20px', textAlign: 'center', color: 'var(--text-muted)' &#125;&#125;}>
+                        No files to display
+                    </div>
+                );
+            }
+
+            return (
+                <Tree
+                    data={treeData}
+                    openByDefault={false}
+                    width="100%"
+                    height={400}
+                    padding={25}
+                    rowHeight={28}
+                    indent={16}
+                    overscanCount={8}
+                >
+                    {Node}
+                </Tree>
+            );
+        }
+
+        // Render the component
+        try {
+            const container = document.getElementById('file-tree-container');
+            if (container) {
+                const root = ReactDOM.createRoot(container);
+                root.render(<FileTree />);
+                console.log('React tree component rendered successfully');
+            } else {
+                console.error('Could not find file-tree-container element');
+            }
+        } catch (error) {
+            console.error('Error rendering React tree:', error);
+        }
+    </script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
