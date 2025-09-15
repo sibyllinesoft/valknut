@@ -44,27 +44,40 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         
         // For issue rows (alert-triangle), check if it's complexity or structure and extract score
         if (isIssueRow) {
-            const complexityMatch = data.name.match(/score:\s*(\d+(?:\.\d+)?)/);
             const isComplexityIssue = data.name.toLowerCase().includes('complexity');
             const isStructureIssue = data.name.toLowerCase().includes('structure');
             
-            if (complexityMatch && (isComplexityIssue || isStructureIssue)) {
-                const score = parseFloat(complexityMatch[1]);
-                const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
+            if (isComplexityIssue || isStructureIssue) {
+                // For "very high complexity/structural" descriptions, we need to use the entity score
+                // Extract from text like "score: X" or look for entity score context
+                let score = null;
+                const scoreMatch = data.name.match(/score:\s*(\d+(?:\.\d+)?)/);
                 
-                scoreElement = React.createElement('div', {
-                    key: 'score-badge',
-                    style: {
-                        marginLeft: 'auto',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                        backgroundColor: scoreColor + '20',
-                        color: scoreColor,
-                        border: `1px solid ${scoreColor}40`
-                    }
-                }, score.toString());
+                if (scoreMatch) {
+                    score = parseFloat(scoreMatch[1]);
+                } else if (data.name.includes('very high')) {
+                    // For "very high" descriptions without explicit score, assume high score
+                    // This is a fallback - ideally the entity score should be passed through
+                    score = 15; // Assume very high = 15+
+                }
+                
+                if (score !== null) {
+                    const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
+                    
+                    scoreElement = React.createElement('div', {
+                        key: 'score-badge',
+                        style: {
+                            marginLeft: 'auto',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            backgroundColor: scoreColor + '20',
+                            color: scoreColor,
+                            border: `1px solid ${scoreColor}40`
+                        }
+                    }, score.toString());
+                }
             }
         }
         // For suggestion rows (lightbulb), no badges - just clean text
@@ -612,8 +625,55 @@ const CodeAnalysisTree = ({ data }) => {
                     
                     // Create multiple child nodes instead of one big banner
                     // Each gets its own 40px row in react-arborist
+                    // Order: Issues first (alert-triangle), then suggestions (lightbulb), then info
                     
-                    // Coverage info as separate children
+                    // Issues as separate children - FIRST
+                    if (entity.issues && Array.isArray(entity.issues)) {
+                        entity.issues.forEach((issue, idx) => {
+                            // Fix the score display - use the actual entity score, not the issue severity
+                            let issueText = `${issue.category}: ${issue.description}`;
+                            
+                            // For complexity issues, show the actual entity score
+                            if (issue.category?.toLowerCase().includes('complexity') && entity.score) {
+                                issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                            }
+                            
+                            entityChildren.push({
+                                id: `issue:${entityNodeId}:${idx}`,
+                                name: issueText,
+                                type: 'issue-row',
+                                children: []
+                            });
+                        });
+                    }
+                    
+                    // Suggestions as separate children - SECOND
+                    if (entity.suggestions && Array.isArray(entity.suggestions)) {
+                        entity.suggestions.forEach((suggestion, idx) => {
+                            // Fix the score display in suggestions too
+                            let suggestionText = `${suggestion.type}: ${suggestion.description}`;
+                            
+                            // For complexity suggestions, show the actual entity score
+                            if (suggestion.description?.includes('score: 0.0') && entity.score) {
+                                suggestionText = `${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                            }
+                            
+                            // For extract method suggestions, include the method name context
+                            if (suggestion.type?.toLowerCase().includes('extract_method') || 
+                                suggestion.type?.toLowerCase().includes('extract method')) {
+                                suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
+                            }
+                            
+                            entityChildren.push({
+                                id: `suggestion:${entityNodeId}:${idx}`,
+                                name: suggestionText,
+                                type: 'suggestion-row',
+                                children: []
+                            });
+                        });
+                    }
+                    
+                    // Coverage info as separate children - LAST
                     if (coveragePack && coveragePack.file_info) {
                         if (coveragePack.file_info.coverage_before !== undefined) {
                             entityChildren.push({
@@ -639,52 +699,6 @@ const CodeAnalysisTree = ({ data }) => {
                                 children: []
                             });
                         }
-                    }
-                    
-                    // Issues as separate children
-                    if (entity.issues && Array.isArray(entity.issues)) {
-                        entity.issues.forEach((issue, idx) => {
-                            // Fix the score display - use the actual entity score, not the issue severity
-                            let issueText = `${issue.category}: ${issue.description}`;
-                            
-                            // For complexity issues, show the actual entity score
-                            if (issue.category?.toLowerCase().includes('complexity') && entity.score) {
-                                issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
-                            }
-                            
-                            entityChildren.push({
-                                id: `issue:${entityNodeId}:${idx}`,
-                                name: issueText,
-                                type: 'issue-row',
-                                children: []
-                            });
-                        });
-                    }
-                    
-                    // Suggestions as separate children
-                    if (entity.suggestions && Array.isArray(entity.suggestions)) {
-                        entity.suggestions.forEach((suggestion, idx) => {
-                            // Fix the score display in suggestions too
-                            let suggestionText = `${suggestion.type}: ${suggestion.description}`;
-                            
-                            // For complexity suggestions, show the actual entity score
-                            if (suggestion.description?.includes('score: 0.0') && entity.score) {
-                                suggestionText = `${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
-                            }
-                            
-                            // For extract method suggestions, include the method name context
-                            if (suggestion.type?.toLowerCase().includes('extract_method') || 
-                                suggestion.type?.toLowerCase().includes('extract method')) {
-                                suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
-                            }
-                            
-                            entityChildren.push({
-                                id: `suggestion:${entityNodeId}:${idx}`,
-                                name: suggestionText,
-                                type: 'suggestion-row',
-                                children: []
-                            });
-                        });
                     }
                 }
                 
