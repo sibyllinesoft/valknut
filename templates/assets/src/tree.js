@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom/client';
 import { Tree } from 'react-arborist';
 
 const TreeNode = ({ node, style, innerRef, tree }) => {
@@ -6,6 +7,21 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     const isFolder = data.type === 'folder';
     const isFile = data.type === 'file';
     const isEntity = data.type === 'entity';
+    
+    // Debug logging to see what we're getting
+    console.log('TreeNode debug:', {
+        name: data.name,
+        type: data.type,
+        hasChildren: node.hasChildren,
+        childrenLength: node.children?.length,
+        isInternal: node.isInternal,
+        level: node.level,
+        isOpen: node.isOpen,
+        tree_id: node.id
+    });
+    
+    // Use react-arborist's built-in hasChildren property
+    const hasChildren = node.isInternal; // react-arborist sets isInternal for nodes with children
     
     // Priority color mapping
     const getPriorityClass = (priority) => {
@@ -25,20 +41,45 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         return 'var(--danger)';
     };
     
-    const children = [
-        // Icon
-        React.createElement('i', {
-            'data-lucide': isFolder ? 'folder' : (isFile ? 'file-code' : 'function-square'),
-            key: 'icon',
-            style: { width: '16px', height: '16px', marginRight: '0.5rem' }
-        }),
-        
-        // Label
-        React.createElement('span', {
-            key: 'label',
-            style: { flex: 1, fontWeight: isFolder ? '500' : 'normal' }
-        }, data.name)
-    ];
+    const children = [];
+    
+    // Expand/collapse arrow for nodes with children
+    if (hasChildren) {
+        children.push(React.createElement('i', {
+            'data-lucide': node.isOpen ? 'chevron-down' : 'chevron-right',
+            key: 'chevron',
+            style: { 
+                width: '16px', 
+                height: '16px', 
+                marginRight: '0.25rem',
+                cursor: 'pointer',
+                transition: 'transform 0.2s ease'
+            },
+            onClick: (e) => {
+                e.stopPropagation();
+                tree.toggle(node.id);
+            }
+        }));
+    } else {
+        // Add spacing for nodes without children to align with expandable nodes
+        children.push(React.createElement('div', {
+            key: 'spacer',
+            style: { width: '16px', marginRight: '0.25rem' }
+        }));
+    }
+    
+    // Icon
+    children.push(React.createElement('i', {
+        'data-lucide': isFolder ? 'folder' : (isFile ? 'file-code' : 'function-square'),
+        key: 'icon',
+        style: { width: '16px', height: '16px', marginRight: '0.5rem' }
+    }));
+    
+    // Label
+    children.push(React.createElement('span', {
+        key: 'label',
+        style: { flex: 1, fontWeight: isFolder ? '500' : 'normal' }
+    }, data.name));
     
     // Health score for folders
     if (isFolder && data.healthScore) {
@@ -98,17 +139,26 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         }, `${data.suggestionCount} suggestions`));
     }
     
+    // Manual indentation calculation - ignore react-arborist's style to fix indentation
+    const manualIndent = node.level * 24; // 24px per level
+    console.log('Manual indent for', data.name, '- level:', node.level, 'indent:', manualIndent + 'px');
+
     return React.createElement('div', {
         ref: innerRef,
         style: {
+            // Completely ignore react-arborist's style and use our own
             display: 'flex',
             alignItems: 'center',
-            padding: '0.5rem',
-            cursor: 'pointer',
+            padding: '0.5rem 0.5rem 0.5rem 0px', // No left padding, we'll add it manually
+            marginLeft: `${manualIndent}px`, // Use margin for indentation
+            cursor: hasChildren ? 'pointer' : 'default',
             borderRadius: '4px',
             border: '1px solid transparent',
+            minHeight: '32px',
+            backgroundColor: node.isSelected ? 'rgba(0, 123, 255, 0.1)' : 'transparent',
+            width: 'calc(100% - ' + manualIndent + 'px)' // Adjust width to account for margin
         },
-        onClick: () => tree.toggle(node.id)
+        onClick: hasChildren ? () => tree.toggle(node.id) : undefined
     }, ...children.filter(Boolean));
 };
 
@@ -163,11 +213,17 @@ const CodeAnalysisTree = ({ data }) => {
         }
         
         // Add refactoring files
-        refactoringFiles.forEach((fileGroup, fileIndex) => {
-            const pathParts = fileGroup.filePath.split('/').filter(Boolean);
-            const fileName = pathParts.pop();
-            let currentPath = '';
-            let parentFolder = result;
+        if (refactoringFiles && refactoringFiles.length > 0) {
+            refactoringFiles.forEach((fileGroup, fileIndex) => {
+                if (!fileGroup || !fileGroup.filePath) {
+                    console.warn('⚠️ Skipping invalid file group:', fileGroup);
+                    return;
+                }
+                
+                const pathParts = fileGroup.filePath.split('/').filter(Boolean);
+                const fileName = pathParts.pop();
+                let currentPath = '';
+                let parentFolder = result;
             
             // Navigate/create folder structure
             pathParts.forEach(part => {
@@ -211,8 +267,9 @@ const CodeAnalysisTree = ({ data }) => {
                 }))
             };
             
-            parentFolder.push(fileNode);
-        });
+                parentFolder.push(fileNode);
+            });
+        }
         
         // Sort function: directories first, then by health score/priority
         const sortNodes = (nodes) => {
@@ -242,12 +299,33 @@ const CodeAnalysisTree = ({ data }) => {
             }));
         };
         
+        const sortedResult = sortNodes(result);
+        
         console.log('🌳 buildTreeData returning:', {
-            resultLength: result.length,
-            firstFewNodes: result.slice(0, 3).map(n => ({name: n.name, type: n.type, childrenCount: n.children?.length}))
+            resultLength: sortedResult.length,
+            firstFewNodes: sortedResult.slice(0, 3).map(n => ({
+                name: n.name, 
+                type: n.type, 
+                childrenCount: n.children?.length,
+                id: n.id,
+                hasChildren: n.children && n.children.length > 0
+            }))
         });
         
-        return sortNodes(result);
+        // Detailed tree structure logging
+        const logTreeStructure = (nodes, depth = 0) => {
+            nodes.forEach(node => {
+                console.log(`${'  '.repeat(depth)}→ ${node.name} (${node.type}) [children: ${node.children?.length || 0}]`);
+                if (node.children && node.children.length > 0) {
+                    logTreeStructure(node.children, depth + 1);
+                }
+            });
+        };
+        
+        console.log('🏗️ Complete tree structure:');
+        logTreeStructure(sortedResult);
+        
+        return sortedResult;
     }, []);
 
     // Load data from props
@@ -295,11 +373,25 @@ const CodeAnalysisTree = ({ data }) => {
         openByDefault: false,
         width: '100%',
         height: 600,
-        indent: 24,
+        indent: 24, // Indentation per level
         rowHeight: 40,
+        overscanCount: 10, // Render extra rows for better scrolling
+        disableEdit: true, // Disable inline editing
+        disableDrop: true, // Disable drag and drop
         children: TreeNode
     });
 };
 
-// Export for global use
-window.CodeAnalysisTree = CodeAnalysisTree;
+// Export for webpack library
+export default CodeAnalysisTree;
+
+// Also export for global use (fallback) and expose React/ReactDOM
+if (typeof window !== 'undefined') {
+    // Expose React and ReactDOM on window for template compatibility
+    window.React = React;
+    window.ReactDOM = ReactDOM;
+    
+    // Export the component with both names for compatibility
+    window.CodeAnalysisTree = CodeAnalysisTree;
+    window.ReactTreeBundle = CodeAnalysisTree;
+}

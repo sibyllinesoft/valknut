@@ -55,12 +55,12 @@
                     "entities": [
                         {{#each entities}}
                         {
-                            "name": "{{name}}",
+                            "name": "{{{name}}}",
                             "priority": "{{priority}}",
-                            "score": {{score}},
+                            "score": {{#if score}}{{score}}{{else}}0{{/if}},
                             "lineRange": {{#if line_range}}[{{line_range.0}}, {{line_range.1}}]{{else}}null{{/if}},
-                            "issueCount": {{issue_count}},
-                            "suggestionCount": {{suggestion_count}},
+                            "issueCount": {{#if issue_count}}{{issue_count}}{{else}}0{{/if}},
+                            "suggestionCount": {{#if suggestion_count}}{{suggestion_count}}{{else}}0{{/if}},
                             "issueCategories": "{{#each issues}}{{category}}{{#unless @last}}, {{/unless}}{{/each}}",
                             "suggestionTypes": "{{#each suggestions}}{{type}}{{#unless @last}}, {{/unless}}{{/each}}"
                         }{{#unless @last}},{{/unless}}
@@ -69,55 +69,98 @@
                 }{{#unless @last}},{{/unless}}
                 {{/each}}
             ],
-            "directoryHealthTree": {{#if directory_health_tree}}{{json directory_health_tree}}{{else}}null{{/if}}
+            "directoryHealthTree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}}
         }
     </script>
     
     
-    <!-- React and dependencies - bundled -->
-    <script src="./react.min.js"></script>
-    <script src="./react-dom.min.js"></script>
-    <script src="./react-tree-bundle.min.js"></script>
+    <!-- Self-contained React bundle with all dependencies -->
+    <script src="./react-tree-bundle.debug.js"></script>
     
     <!-- Mount React Tree Component -->
     <script>
         // Mount the React component
         window.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 DOM loaded, attempting to mount React tree...');
+            
             const container = document.getElementById('react-tree-root');
-            if (container && window.CodeAnalysisTree) {
-                try {
-                    // Parse the embedded tree data
-                    const treeDataScript = document.getElementById('tree-data');
-                    let analysisData = null;
+            console.log('📦 Container found:', !!container);
+            console.log('⚛️ React available:', typeof window.React !== 'undefined');
+            console.log('🔗 ReactDOM available:', typeof window.ReactDOM !== 'undefined');
+            console.log('🌳 ReactTreeBundle available:', typeof window.ReactTreeBundle !== 'undefined');
+            console.log('🌳 CodeAnalysisTree fallback available:', typeof window.CodeAnalysisTree !== 'undefined');
+            
+            if (!container) {
+                console.error('❌ Container #react-tree-root not found');
+                return;
+            }
+            
+            if (typeof window.React === 'undefined') {
+                console.error('❌ React not loaded');
+                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ React not loaded</div>';
+                return;
+            }
+            
+            if (typeof window.ReactDOM === 'undefined') {
+                console.error('❌ ReactDOM not loaded');
+                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ ReactDOM not loaded</div>';
+                return;
+            }
+            
+            // Check for webpack library export first, then fallback
+            const TreeComponent = window.ReactTreeBundle || window.CodeAnalysisTree;
+            if (!TreeComponent) {
+                console.error('❌ Tree component not loaded (checked ReactTreeBundle and CodeAnalysisTree)');
+                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Tree component not loaded</div>';
+                return;
+            }
+            
+            try {
+                // Parse the embedded tree data
+                const treeDataScript = document.getElementById('tree-data');
+                let analysisData = null;
+                
+                if (treeDataScript) {
+                    const rawData = treeDataScript.textContent.trim();
+                    console.log('📄 Raw JSON length:', rawData.length);
                     
-                    if (treeDataScript) {
-                        const rawData = treeDataScript.textContent;
+                    try {
                         analysisData = JSON.parse(rawData);
-                        console.log('📊 Parsed analysis data:', analysisData);
-                    } else {
-                        console.warn('⚠️ No tree-data script element found');
+                        console.log('📊 Parsed analysis data successfully:', {
+                            refactoringFiles: analysisData?.refactoringCandidatesByFile?.length || 0,
+                            hasDirectoryHealth: !!analysisData?.directoryHealthTree
+                        });
+                    } catch (jsonError) {
+                        console.error('❌ JSON parse error:', jsonError);
+                        console.error('📄 Raw data sample:', rawData.substring(0, 200) + '...');
+                        container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Invalid JSON data: ' + jsonError.message + '</div>';
+                        return;
                     }
-                    
-                    // Mount React component with parsed data
-                    const { createRoot } = ReactDOM;
-                    const root = createRoot(container);
-                    root.render(React.createElement(window.CodeAnalysisTree, {
-                        data: analysisData
-                    }));
-                    
-                    // Initialize Lucide icons after React renders
-                    setTimeout(() => {
-                        if (window.lucide) {
-                            window.lucide.createIcons();
-                        }
-                    }, 100);
-                } catch (error) {
-                    console.error('❌ Failed to mount React tree:', error);
-                    // Fallback: render without data
-                    const { createRoot } = ReactDOM;
-                    const root = createRoot(container);
-                    root.render(React.createElement(window.CodeAnalysisTree));
+                } else {
+                    console.warn('⚠️ No tree-data script element found');
+                    analysisData = { refactoringCandidatesByFile: [], directoryHealthTree: null };
                 }
+                
+                // Mount React component with parsed data
+                const { createRoot } = ReactDOM;
+                const root = createRoot(container);
+                root.render(React.createElement(TreeComponent, {
+                    data: analysisData
+                }));
+                
+                console.log('✅ React component mounted successfully');
+                
+                // Initialize Lucide icons after React renders
+                setTimeout(() => {
+                    if (window.lucide) {
+                        window.lucide.createIcons();
+                        console.log('🎨 Lucide icons initialized');
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('❌ Failed to mount React tree:', error);
+                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Failed to mount: ' + error.message + '</div>';
             }
         });
     </script>

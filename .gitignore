@@ -139,6 +139,9 @@ coverage.lcov
 three.min.js
 trefoil-animation.js
 
+# Templates assets build artifacts (keep source, ignore build output)
+templates/assets/dist/
+
 # Cache directories
 .cache/
 .pytest_cache/

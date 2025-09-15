@@ -1227,16 +1227,16 @@ impl ReportGenerator {
             fs::create_dir_all(output_dir)?;
         }
 
-        // JavaScript files to copy
+        // JavaScript files to copy - self-contained debug bundle only
         let js_files = vec![
-            ("react.min.js", "react.min.js"),
-            ("react-dom.min.js", "react-dom.min.js"),
-            ("react-tree-bundle.min.js", "react-tree-bundle.min.js"),
+            ("react-tree-bundle.debug.js", "react-tree-bundle.debug.js"),
         ];
 
-        // Try to find JavaScript assets in templates/assets/ directory
+        // Try to find JavaScript assets in templates/assets/dist/ directory (built files)
         let possible_base_paths = vec![
-            Path::new("templates/assets"),
+            Path::new("templates/assets/dist"),
+            Path::new("./templates/assets/dist"),
+            Path::new("templates/assets"), // fallback for any non-built files
             Path::new("./templates/assets"),
         ];
 
