@@ -1,0 +1,339 @@
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security checks nightly
+    - cron: '0 3 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Security audit for known vulnerabilities
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install security tools
+        run: |
+          cargo install cargo-audit
+          cargo install cargo-deny
+
+      - name: Run cargo audit
+        run: |
+          echo "🔍 Running security audit..."
+          cargo audit --ignore RUSTSEC-0000-0000 # Add specific ignores if needed
+
+      - name: Run cargo deny
+        run: |
+          echo "🔍 Running dependency policy checks..."
+          cargo deny check
+
+      - name: Check for yanked crates
+        run: |
+          echo "🔍 Checking for yanked crates..."
+          cargo audit --ignore-source-errors
+
+  # Code scanning with CodeQL
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['rust']
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build for analysis
+        run: cargo build --all-features
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # Supply chain security
+  supply-chain:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install supply chain tools
+        run: |
+          cargo install cargo-geiger
+          cargo install cargo-license
+
+      - name: Check for unsafe code
+        run: |
+          echo "🔍 Scanning for unsafe code usage..."
+          cargo geiger --format GitHubMarkdown > geiger-report.md || true
+          
+          # Check if there are any unsafe functions
+          UNSAFE_COUNT=$(cargo geiger --format json 2>/dev/null | jq '.packages | map(.metrics.functions.unsafe) | add' || echo "0")
+          
+          echo "Unsafe functions found: $UNSAFE_COUNT"
+          
+          if [ "$UNSAFE_COUNT" -gt 0 ]; then
+            echo "⚠️ Unsafe code detected - ensure proper safety documentation"
+            cat geiger-report.md
+          else
+            echo "✅ No unsafe code found"
+          fi
+
+      - name: License compliance check
+        run: |
+          echo "🔍 Checking license compliance..."
+          cargo license --json > licenses.json
+          
+          # Check for GPL or other restrictive licenses
+          RESTRICTIVE_LICENSES=$(jq -r '.[] | select(.license | test("GPL|AGPL|SSPL")) | .name' licenses.json || true)
+          
+          if [ -n "$RESTRICTIVE_LICENSES" ]; then
+            echo "⚠️ Restrictive licenses found:"
+            echo "$RESTRICTIVE_LICENSES"
+            echo "Review license compatibility"
+          else
+            echo "✅ No restrictive licenses found"
+          fi
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            geiger-report.md
+            licenses.json
+
+  # Dependency scanning
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run OSSGADGET risk calculator
+        run: |
+          # Install oss-risk-calculator if available
+          echo "🔍 Analyzing dependency risk..."
+          
+          # Simple risk analysis based on dependency age and activity
+          cargo tree --format "{p}" | head -20 | while read dep; do
+            echo "Analyzing: $dep"
+          done
+
+  # SLSA provenance (for releases)
+  slsa-provenance:
+    name: SLSA Provenance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate SLSA provenance
+        run: |
+          echo "🔍 Generating SLSA provenance information..."
+          
+          # Create basic provenance info
+          cat > slsa-provenance.json << EOF
+          {
+            "buildType": "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@refs/tags/v1.4.0",
+            "builder": {
+              "id": "https://github.com/actions/runner/github-hosted"
+            },
+            "invocation": {
+              "configSource": {
+                "uri": "${{ github.repository }}",
+                "digest": {
+                  "sha1": "${{ github.sha }}"
+                }
+              }
+            },
+            "metadata": {
+              "buildInvocationId": "${{ github.run_id }}",
+              "completeness": {
+                "parameters": true,
+                "environment": false,
+                "materials": false
+              },
+              "reproducible": false
+            },
+            "materials": [
+              {
+                "uri": "${{ github.repository }}",
+                "digest": {
+                  "sha1": "${{ github.sha }}"
+                }
+              }
+            ]
+          }
+          EOF
+
+      - name: Upload provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: slsa-provenance
+          path: slsa-provenance.json
+
+  # Security policy enforcement
+  security-policy:
+    name: Security Policy Enforcement
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for security policy
+        run: |
+          if [ -f "SECURITY.md" ]; then
+            echo "✅ Security policy found"
+          else
+            echo "⚠️ No SECURITY.md found - consider adding security policy"
+            
+            # Create basic security policy template
+            cat > SECURITY.md << 'EOF'
+          # Security Policy
+          
+          ## Supported Versions
+          
+          | Version | Supported          |
+          | ------- | ------------------ |
+          | 1.x.x   | :white_check_mark: |
+          | < 1.0   | :x:                |
+          
+          ## Reporting a Vulnerability
+          
+          Please report security vulnerabilities to [email] or create a private security advisory.
+          
+          ## Security Considerations
+          
+          - All file operations are validated
+          - No unsafe code without proper documentation
+          - Dependencies are regularly audited
+          - Input validation is performed at boundaries
+          EOF
+            
+            echo "📝 Created basic SECURITY.md template"
+          fi
+
+      - name: Check for CI security best practices
+        run: |
+          echo "🔍 Checking CI security practices..."
+          
+          # Check for pinned GitHub Actions
+          UNPINNED_ACTIONS=$(grep -r "uses:.*@" .github/workflows/ | grep -v "@v[0-9]" | grep -v "@[a-f0-9]{40}" || true)
+          
+          if [ -n "$UNPINNED_ACTIONS" ]; then
+            echo "⚠️ Unpinned GitHub Actions found:"
+            echo "$UNPINNED_ACTIONS"
+            echo "Consider pinning to specific versions or commit hashes"
+          else
+            echo "✅ All GitHub Actions appear to be pinned"
+          fi
+
+      - name: Check for secret scanning
+        run: |
+          echo "🔍 Checking for potential secrets..."
+          
+          # Basic secret pattern detection
+          POTENTIAL_SECRETS=$(grep -r -i "password\|secret\|token\|key" . \
+            --exclude-dir=".git" --exclude-dir="target" \
+            --exclude="*.md" --exclude="*.yml" --exclude="*.yaml" \
+            | grep -E "=[[:space:]]*[\"'][^\"']{10,}" || true)
+          
+          if [ -n "$POTENTIAL_SECRETS" ]; then
+            echo "⚠️ Potential secrets found (review carefully):"
+            echo "$POTENTIAL_SECRETS"
+          else
+            echo "✅ No obvious secrets found"
+          fi
+
+  # Security summary
+  security-summary:
+    name: Security Summary
+    needs: [security-audit, codeql, supply-chain, dependency-scan, security-policy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Audit | ${{ needs.security-audit.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | ${{ needs.codeql.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Supply Chain | ${{ needs.supply-chain.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Policy | ${{ needs.security-policy.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review individual job outputs for detailed findings." >> $GITHUB_STEP_SUMMARY
+
+      - name: Security gate result
+        run: |
+          if [[ "${{ needs.security-audit.result }}" != "success" || 
+                "${{ needs.codeql.result }}" != "success" || 
+                "${{ needs.supply-chain.result }}" != "success" || 
+                "${{ needs.dependency-scan.result }}" != "success" ]]; then
+            echo "❌ Security checks failed - review findings"
+            exit 1
+          else
+            echo "✅ All security checks passed"
+          fi

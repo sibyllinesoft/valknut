@@ -1,0 +1,28 @@
+# Rustfmt configuration for Valknut
+# Stable Rust compatible version
+
+edition = "2021"
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Function formatting
+fn_params_layout = "Tall"
+use_small_heuristics = "Default"
+
+# Import organization (stable features only)
+merge_derives = true
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Basic formatting preferences
+match_block_trailing_comma = false
+trailing_comma = "Vertical"
+trailing_semicolon = true
+
+# Keep unstable features for future
+# When using nightly Rust, these can be uncommented:
+# wrap_comments = true
+# format_code_in_doc_comments = true
+# imports_granularity = "Crate"
+# group_imports = "StdExternalCrate"

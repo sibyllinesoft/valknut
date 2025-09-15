@@ -1,0 +1,124 @@
+version: 2
+updates:
+  # Rust dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    assignees:
+      - "nathan"
+    reviewers:
+      - "nathan"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "rust"
+    # Group similar updates to reduce PR noise
+    groups:
+      # Group all patch updates together
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Group development dependencies
+      dev-dependencies:
+        patterns:
+          - "criterion"
+          - "proptest" 
+          - "tempfile"
+          - "pretty_assertions"
+        dependency-type: "development"
+      # Group async runtime dependencies
+      async-runtime:
+        patterns:
+          - "tokio*"
+          - "async*"
+          - "futures*"
+      # Group serde ecosystem
+      serde-ecosystem:
+        patterns:
+          - "serde*"
+          - "toml"
+          - "serde_json"
+      # Group CLI dependencies
+      cli-dependencies:
+        patterns:
+          - "clap*"
+          - "console"
+          - "indicatif"
+      # Group database dependencies
+      database-dependencies:
+        patterns:
+          - "sqlx*"
+          - "sea-*"
+          - "diesel*"
+    # Ignore specific updates that might break compatibility
+    ignore:
+      # Pin major versions for stability
+      - dependency-name: "clap"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tokio"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "serde"
+        update-types: ["version-update:semver-major"]
+    # Auto-merge strategy for low-risk updates
+    allow:
+      - dependency-type: "direct:production"
+        update-type: "security"
+      - dependency-type: "direct:development"
+        update-type: "security"
+      - dependency-type: "direct:production"
+        update-type: "patch"
+      - dependency-type: "direct:development"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    assignees:
+      - "nathan"
+    reviewers:
+      - "nathan"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    # Group GitHub Actions updates
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+
+  # Docker dependencies (if any Dockerfile exists)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    assignees:
+      - "nathan"
+    reviewers:
+      - "nathan"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"

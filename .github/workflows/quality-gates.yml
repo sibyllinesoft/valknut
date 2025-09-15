@@ -1,0 +1,414 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Enforce error handling patterns
+  error-handling-patterns:
+    name: Error Handling Standards
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for raw map_err patterns
+        run: |
+          echo "🔍 Checking for raw map_err patterns..."
+          
+          # Look for raw map_err usage that should use ValknutError helpers
+          RAW_MAP_ERR=$(grep -r "\.map_err(" src/ --include="*.rs" | grep -v "ValknutError::" | grep -v "//允许" || true)
+          
+          if [ -n "$RAW_MAP_ERR" ]; then
+            echo "❌ Found raw map_err patterns that should use ValknutError helpers:"
+            echo "$RAW_MAP_ERR"
+            echo ""
+            echo "Use patterns like:"
+            echo "  .map_err(|e| ValknutError::io(\"context\", e))"
+            echo "  .map_err(|e| ValknutError::parsing(\"context\", e))"
+            exit 1
+          else
+            echo "✅ No raw map_err patterns found"
+          fi
+
+      - name: Check for unwrap/expect usage
+        run: |
+          echo "🔍 Checking for unwrap/expect in library code..."
+          
+          # Exclude test files and main.rs from unwrap checks
+          UNWRAP_USAGE=$(grep -r "\.unwrap()\|\.expect(" src/ --include="*.rs" \
+            --exclude="*/tests/*" --exclude="*/test.rs" --exclude="*/main.rs" \
+            --exclude-dir="bin" || true)
+          
+          if [ -n "$UNWRAP_USAGE" ]; then
+            echo "❌ Found unwrap/expect usage in library code:"
+            echo "$UNWRAP_USAGE"
+            echo ""
+            echo "Library code should use proper error handling with Result types"
+            exit 1
+          else
+            echo "✅ No unwrap/expect found in library code"
+          fi
+
+      - name: Verify error type coverage
+        run: |
+          echo "🔍 Checking error type coverage..."
+          
+          # Ensure all modules that can fail have proper error handling
+          MODULES_WITH_RESULTS=$(grep -r "Result<" src/ --include="*.rs" | cut -d: -f1 | sort -u)
+          MODULES_WITH_VALKNUT_ERROR=$(grep -r "ValknutError" src/ --include="*.rs" | cut -d: -f1 | sort -u)
+          
+          echo "Modules using Result: $(echo "$MODULES_WITH_RESULTS" | wc -l)"
+          echo "Modules using ValknutError: $(echo "$MODULES_WITH_VALKNUT_ERROR" | wc -l)"
+          
+          # Most modules using Result should also use ValknutError
+          # This is a guideline check, not a hard failure
+          if [ $(echo "$MODULES_WITH_RESULTS" | wc -l) -gt $(($(echo "$MODULES_WITH_VALKNUT_ERROR" | wc -l) * 2)) ]; then
+            echo "⚠️ Many modules use Result but not ValknutError - consider error handling consistency"
+          else
+            echo "✅ Error handling appears consistent"
+          fi
+
+  # Code organization standards
+  code-organization:
+    name: Code Organization Standards
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify attic/ isolation
+        run: |
+          echo "🔍 Checking attic/ directory isolation..."
+          
+          # Files in attic/ should not be imported by active code
+          if [ -d "attic/" ]; then
+            ATTIC_IMPORTS=$(grep -r "use.*attic" src/ --include="*.rs" || true)
+            ATTIC_MODS=$(grep -r "mod.*attic\|pub mod.*attic" src/ --include="*.rs" || true)
+            
+            if [ -n "$ATTIC_IMPORTS" ] || [ -n "$ATTIC_MODS" ]; then
+              echo "❌ Found imports from attic/ in active code:"
+              echo "$ATTIC_IMPORTS"
+              echo "$ATTIC_MODS"
+              echo "attic/ should contain only archived/unused code"
+              exit 1
+            else
+              echo "✅ attic/ directory properly isolated"
+            fi
+          else
+            echo "✅ No attic/ directory found"
+          fi
+
+      - name: Check module structure
+        run: |
+          echo "🔍 Checking module structure standards..."
+          
+          # Ensure mod.rs files are used consistently
+          MISSING_MOD_RS=$(find src/ -type d -not -path "*/target/*" -not -path "*/.git/*" \
+            -exec test -d {}/. \; -exec test ! -f {}/mod.rs \; -exec test ! -f {}/lib.rs \; \
+            -exec sh -c 'ls {}/*.rs 2>/dev/null | head -1' \; 2>/dev/null | grep -v "^$" || true)
+          
+          if [ -n "$MISSING_MOD_RS" ]; then
+            echo "⚠️ Directories with Rust files but no mod.rs:"
+            echo "$MISSING_MOD_RS"
+            echo "Consider adding mod.rs files for proper module organization"
+          else
+            echo "✅ Module structure appears consistent"
+          fi
+
+      - name: Check file size limits
+        run: |
+          echo "🔍 Checking for overly large files..."
+          
+          # Files over 1000 lines should be considered for splitting
+          LARGE_FILES=$(find src/ -name "*.rs" -exec wc -l {} \; | awk '$1 > 1000 {print $2 " (" $1 " lines)"}' || true)
+          
+          if [ -n "$LARGE_FILES" ]; then
+            echo "⚠️ Large files found (>1000 lines):"
+            echo "$LARGE_FILES"
+            echo "Consider splitting large files for maintainability"
+          else
+            echo "✅ No excessively large files found"
+          fi
+
+  # Duplicate detection to prevent regression
+  duplicate-detection:
+    name: Duplicate Code Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install duplicate detection tools
+        run: |
+          cargo install cargo-machete  # Unused dependency detection
+          # Note: For true duplicate detection, we'd need tools like jscpd or SonarQube
+
+      - name: Check for unused dependencies
+        run: |
+          echo "🔍 Checking for unused dependencies..."
+          cargo machete || echo "⚠️ Some dependencies may be unused"
+
+      - name: Simple duplicate pattern detection
+        run: |
+          echo "🔍 Checking for simple duplicate patterns..."
+          
+          # Look for repeated error handling patterns
+          DUPLICATE_PATTERNS=$(grep -r "map_err.*ValknutError" src/ --include="*.rs" | \
+            awk '{print $NF}' | sort | uniq -d | head -5 || true)
+          
+          if [ -n "$DUPLICATE_PATTERNS" ]; then
+            echo "⚠️ Found repeated error handling patterns:"
+            echo "$DUPLICATE_PATTERNS"
+            echo "Consider extracting common error handling helpers"
+          else
+            echo "✅ No obvious duplicate patterns found"
+          fi
+
+      - name: Check for duplicate constants
+        run: |
+          echo "🔍 Checking for duplicate constants..."
+          
+          # Look for duplicate string literals and constants
+          DUPLICATE_STRINGS=$(grep -r "const.*&str\|const.*String" src/ --include="*.rs" | \
+            grep -o '"[^"]*"' | sort | uniq -d | head -5 || true)
+          
+          if [ -n "$DUPLICATE_STRINGS" ]; then
+            echo "⚠️ Found duplicate string constants:"
+            echo "$DUPLICATE_STRINGS"
+            echo "Consider centralizing common constants"
+          else
+            echo "✅ No duplicate constants found"
+          fi
+
+  # Documentation coverage checks
+  documentation-coverage:
+    name: Documentation Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check public API documentation
+        run: |
+          echo "🔍 Checking documentation coverage..."
+          
+          # Generate docs and check for missing documentation warnings
+          RUSTDOCFLAGS="-D missing_docs -D rustdoc::missing_doc_code_examples" \
+            cargo doc --all-features --no-deps --document-private-items 2>&1 | \
+            tee doc-output.log
+          
+          # Check if there were any documentation warnings
+          if grep -q "warning:" doc-output.log; then
+            echo "❌ Documentation warnings found:"
+            grep "warning:" doc-output.log
+            exit 1
+          else
+            echo "✅ Documentation coverage is complete"
+          fi
+
+      - name: Verify README exists and is current
+        run: |
+          echo "🔍 Checking README.md..."
+          
+          if [ ! -f "README.md" ]; then
+            echo "❌ README.md is missing"
+            exit 1
+          fi
+          
+          # Check if README mentions major features
+          FEATURES_IN_README=$(grep -i "feature\|usage\|example" README.md | wc -l)
+          
+          if [ "$FEATURES_IN_README" -lt 3 ]; then
+            echo "⚠️ README.md appears minimal - consider adding usage examples"
+          else
+            echo "✅ README.md appears comprehensive"
+          fi
+
+      - name: Check CHANGELOG exists for releases
+        run: |
+          echo "🔍 Checking for CHANGELOG..."
+          
+          if [ -f "CHANGELOG.md" ]; then
+            echo "✅ CHANGELOG.md found"
+            
+            # Check if changelog has recent entries
+            RECENT_ENTRIES=$(head -20 CHANGELOG.md | grep -E "##.*[0-9]" | wc -l)
+            
+            if [ "$RECENT_ENTRIES" -eq 0 ]; then
+              echo "⚠️ CHANGELOG.md appears empty or outdated"
+            else
+              echo "✅ CHANGELOG.md has recent entries"
+            fi
+          else
+            echo "⚠️ CHANGELOG.md not found - consider adding for release tracking"
+          fi
+
+  # Performance and complexity checks
+  complexity-analysis:
+    name: Code Complexity Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install analysis tools
+        run: |
+          # Install tokei for code statistics
+          cargo install tokei
+          
+          # Install scc for more detailed complexity analysis
+          wget -O scc.tar.gz https://github.com/boyter/scc/releases/download/v3.1.0/scc-3.1.0-x86_64-unknown-linux.tar.gz
+          tar -xzf scc.tar.gz
+          sudo mv scc /usr/local/bin/
+
+      - name: Generate code statistics
+        run: |
+          echo "🔍 Analyzing code complexity..."
+          
+          echo "## Code Statistics" >> complexity-report.md
+          echo "\`\`\`" >> complexity-report.md
+          tokei src/ >> complexity-report.md
+          echo "\`\`\`" >> complexity-report.md
+          
+          echo "" >> complexity-report.md
+          echo "## Complexity Analysis" >> complexity-report.md
+          echo "\`\`\`" >> complexity-report.md
+          scc src/ --format tabular >> complexity-report.md
+          echo "\`\`\`" >> complexity-report.md
+
+      - name: Check for high complexity
+        run: |
+          echo "🔍 Checking for high complexity functions..."
+          
+          # This is a simplified check - ideally we'd use cargo-geiger or similar
+          COMPLEX_FUNCTIONS=$(grep -r "for.*for\|match.*match\|if.*if.*if" src/ --include="*.rs" | wc -l)
+          
+          echo "Potential complexity indicators found: $COMPLEX_FUNCTIONS"
+          
+          if [ "$COMPLEX_FUNCTIONS" -gt 20 ]; then
+            echo "⚠️ High number of complexity indicators found"
+            echo "Consider refactoring complex functions"
+          else
+            echo "✅ Complexity appears reasonable"
+          fi
+
+      - name: Upload complexity report
+        uses: actions/upload-artifact@v4
+        with:
+          name: complexity-report
+          path: complexity-report.md
+
+  # Security pattern enforcement
+  security-patterns:
+    name: Security Pattern Enforcement
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for security anti-patterns
+        run: |
+          echo "🔍 Checking for security anti-patterns..."
+          
+          # Check for unsafe blocks
+          UNSAFE_BLOCKS=$(grep -r "unsafe" src/ --include="*.rs" | grep -v "// SAFETY:" || true)
+          
+          if [ -n "$UNSAFE_BLOCKS" ]; then
+            echo "⚠️ Unsafe blocks found without SAFETY comments:"
+            echo "$UNSAFE_BLOCKS"
+            echo "All unsafe blocks should have SAFETY comments explaining why they're safe"
+          else
+            echo "✅ No unsafe blocks or all have SAFETY comments"
+          fi
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "🔍 Checking for potential hardcoded secrets..."
+          
+          # Look for common secret patterns
+          SECRETS=$(grep -ri "password\|secret\|token\|api_key" src/ --include="*.rs" | \
+            grep -E "=[[:space:]]*[\"'][^\"']{10,}" || true)
+          
+          if [ -n "$SECRETS" ]; then
+            echo "⚠️ Potential hardcoded secrets found:"
+            echo "$SECRETS"
+            echo "Ensure no actual secrets are hardcoded"
+          else
+            echo "✅ No obvious hardcoded secrets found"
+          fi
+
+      - name: Check for proper input validation
+        run: |
+          echo "🔍 Checking for input validation patterns..."
+          
+          # Look for direct file operations without validation
+          UNVALIDATED_IO=$(grep -r "std::fs::\|tokio::fs::" src/ --include="*.rs" | \
+            grep -v "validate\|sanitize\|check" | head -5 || true)
+          
+          if [ -n "$UNVALIDATED_IO" ]; then
+            echo "⚠️ File operations found that may need validation:"
+            echo "$UNVALIDATED_IO"
+            echo "Ensure file paths are properly validated"
+          else
+            echo "✅ File operations appear to have validation"
+          fi
+
+  # Final quality summary
+  quality-summary:
+    name: Quality Summary
+    needs: [error-handling-patterns, code-organization, duplicate-detection, documentation-coverage, complexity-analysis, security-patterns]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate quality summary
+        run: |
+          echo "## Quality Gates Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Error Handling | ${{ needs.error-handling-patterns.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Organization | ${{ needs.code-organization.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Duplicate Detection | ${{ needs.duplicate-detection.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Documentation | ${{ needs.documentation-coverage.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Complexity Analysis | ${{ needs.complexity-analysis.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Patterns | ${{ needs.security-patterns.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Quality gate result
+        run: |
+          if [[ "${{ needs.error-handling-patterns.result }}" != "success" || 
+                "${{ needs.code-organization.result }}" != "success" || 
+                "${{ needs.duplicate-detection.result }}" != "success" || 
+                "${{ needs.documentation-coverage.result }}" != "success" || 
+                "${{ needs.complexity-analysis.result }}" != "success" || 
+                "${{ needs.security-patterns.result }}" != "success" ]]; then
+            echo "❌ Quality gate failed - see details in individual checks"
+            exit 1
+          else
+            echo "✅ All quality gates passed"
+          fi
