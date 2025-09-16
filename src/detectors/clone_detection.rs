@@ -137,14 +137,20 @@ impl TfIdfAnalyzer {
     
     /// Check if a term matches a stop-motif pattern
     fn term_matches_pattern(&self, term: &str, pattern: &str) -> bool {
-        // For k-gram patterns, check exact match or containment
-        if pattern.contains(' ') {
-            // Multi-token k-gram - check if term contains the pattern
-            term.contains(pattern) || pattern.contains(term)
-        } else {
-            // Single token - exact match
-            term == pattern
+        // Check exact match first
+        if term == pattern {
+            return true;
         }
+        
+        // For multi-token patterns (contain spaces), check phrase containment
+        if pattern.contains(' ') || term.contains(' ') {
+            return term.contains(pattern) || pattern.contains(term);
+        }
+        
+        // For single tokens, check word boundary matches
+        // Split term into tokens and check if pattern matches any token exactly
+        term.split_whitespace().any(|token| token == pattern) ||
+        pattern.split_whitespace().any(|token| token == term)
     }
     
     /// Calculate IDF (Inverse Document Frequency) for a term
@@ -707,11 +713,13 @@ impl BasicBlockAnalyzer {
             current_block.lines.push(line.to_string());
             current_block.line_ranges.push(line_idx);
             
+            // Check for external calls on any line
+            current_block.has_external_calls |= self.has_external_call(line);
+            
             // Detect control flow changes
             if self.is_control_flow_line(line) {
                 current_block.control_type = self.detect_control_type(line);
                 current_block.cyclomatic_complexity += 1;
-                current_block.has_external_calls |= self.has_external_call(line);
             }
             
             // End block on certain patterns
@@ -998,7 +1006,7 @@ pub struct WeightedMinHash {
 impl WeightedMinHash {
     /// Create a new weighted MinHash
     pub fn new(signature_size: usize, weights: HashMap<String, f64>) -> Self {
-        let seeds: Vec<u64> = (0..signature_size).map(|i| i as u64 * 0x9e3779b97f4a7c15).collect();
+        let seeds: Vec<u64> = (0..signature_size).map(|i| (i as u64).wrapping_mul(0x9e3779b97f4a7c15)).collect();
         let hash_functions = seeds.iter().map(|&seed| HashFunction::new(seed)).collect();
         
         Self {
@@ -1610,10 +1618,33 @@ impl StructuralGateAnalyzer {
     
     /// Count shared motifs between two motif sets based on WL hash
     fn count_shared_motifs(&self, motifs1: &[PdgMotif], motifs2: &[PdgMotif]) -> usize {
-        let hash_set1: HashSet<&String> = motifs1.iter().map(|m| &m.wl_hash).collect();
-        let hash_set2: HashSet<&String> = motifs2.iter().map(|m| &m.wl_hash).collect();
+        // For control flow motifs, use structure patterns instead of exact hashes
+        let mut shared_count = 0;
         
-        hash_set1.intersection(&hash_set2).count()
+        let control_flow_structures1: HashSet<&String> = motifs1.iter()
+            .filter(|m| m.motif_type == MotifType::ControlFlow)
+            .map(|m| &m.structure)
+            .collect();
+        let control_flow_structures2: HashSet<&String> = motifs2.iter()
+            .filter(|m| m.motif_type == MotifType::ControlFlow)
+            .map(|m| &m.structure)
+            .collect();
+        
+        shared_count += control_flow_structures1.intersection(&control_flow_structures2).count();
+        
+        // For other motifs, use exact hash matching
+        let other_hashes1: HashSet<&String> = motifs1.iter()
+            .filter(|m| m.motif_type != MotifType::ControlFlow)
+            .map(|m| &m.wl_hash)
+            .collect();
+        let other_hashes2: HashSet<&String> = motifs2.iter()
+            .filter(|m| m.motif_type != MotifType::ControlFlow)
+            .map(|m| &m.wl_hash)
+            .collect();
+        
+        shared_count += other_hashes1.intersection(&other_hashes2).count();
+        
+        shared_count
     }
     
     /// Count shared motifs by category
@@ -2514,14 +2545,14 @@ mod tests {
     fn test_tfidf_analyzer() {
         let mut analyzer = TfIdfAnalyzer::new(NormalizationConfig::default());
         
-        analyzer.add_document("doc1".to_string(), vec!["hello".to_string(), "world".to_string()]);
-        analyzer.add_document("doc2".to_string(), vec!["hello".to_string(), "rust".to_string()]);
+        analyzer.add_document("doc1".to_string(), vec!["println!".to_string(), "assert!".to_string()]);
+        analyzer.add_document("doc2".to_string(), vec!["println!".to_string(), "debug!".to_string()]);
         
-        let tfidf_hello = analyzer.tf_idf("doc1", "hello");
-        let tfidf_world = analyzer.tf_idf("doc1", "world");
+        let tfidf_println = analyzer.tf_idf("doc1", "println!");
+        let tfidf_assert = analyzer.tf_idf("doc1", "assert!");
         
-        assert!(tfidf_hello > 0.0);
-        assert!(tfidf_world > tfidf_hello); // "world" should be more unique
+        assert!(tfidf_println > 0.0);
+        assert!(tfidf_assert > tfidf_println); // "assert!" should be more unique (only in doc1)
     }
     
     #[test]
@@ -2594,7 +2625,7 @@ mod tests {
     #[test]
     fn test_phase2_structural_gates_basic_blocks() {
         let config = StructuralGateConfig {
-            require_blocks: 2,
+            require_blocks: 4, // Increased threshold to distinguish simple vs complex code
             min_shared_motifs: 1,
             external_call_jaccard_threshold: 0.2,
             io_penalty_multiplier: 0.7,
@@ -2747,6 +2778,7 @@ mod tests {
         );
         
         // External call Jaccard should be low (different call patterns)
+        
         assert!(match_info.external_call_jaccard < 0.5);
         assert!(match_info.total_external_calls_1 > 0);
         assert!(match_info.total_external_calls_2 > 0);
@@ -2948,15 +2980,15 @@ mod tests {
         tfidf_analyzer.set_stop_motif_cache(Arc::new(stop_motifs_cache.clone()));
         
         // Add documents
-        tfidf_analyzer.add_document("doc1".to_string(), vec!["println!".to_string(), "test".to_string()]);
+        tfidf_analyzer.add_document("doc1".to_string(), vec!["println!".to_string(), "unique_function!".to_string()]);
         tfidf_analyzer.add_document("doc2".to_string(), vec!["if".to_string(), "condition".to_string()]);
         
         // Test TF-IDF with stop-motifs adjustment
         let tfidf_println = tfidf_analyzer.tf_idf("doc1", "println!");
-        let tfidf_test = tfidf_analyzer.tf_idf("doc1", "test");
+        let tfidf_unique = tfidf_analyzer.tf_idf("doc1", "unique_function!");
         
         // println! should have lower score due to stop-motif adjustment
-        assert!(tfidf_println < tfidf_test, "Stop-motif 'println!' should have lower TF-IDF score");
+        assert!(tfidf_println < tfidf_unique, "Stop-motif 'println!' should have lower TF-IDF score");
         
         // Test PDG motif analyzer with stop-motifs
         let mut pdg_analyzer = PdgMotifAnalyzer::new(3);
@@ -2998,7 +3030,7 @@ mod tests {
             k_gram_size: 9,
             token_grams: vec![
                 StopMotifEntry {
-                    pattern: "common_pattern".to_string(),
+                    pattern: "LOCAL_VAR".to_string(), // Match the normalized token
                     support: 200,
                     idf_score: 1.0,
                     weight_multiplier: 0.2, // 20% weight
@@ -3017,12 +3049,12 @@ mod tests {
         // Add test documents
         analyzer.add_document("doc1".to_string(), vec![
             "common_pattern".to_string(),
-            "unique_token".to_string()
+            "unique_function!".to_string()  // Use token that won't be normalized
         ]);
         
         // Test weight application
-        let score_common = analyzer.tf_idf("doc1", "common_pattern");
-        let score_unique = analyzer.tf_idf("doc1", "unique_token");
+        let score_common = analyzer.tf_idf("doc1", "LOCAL_VAR"); // "common_pattern" normalizes to "LOCAL_VAR"
+        let score_unique = analyzer.tf_idf("doc1", "unique_function!");
         
         // Common pattern should have reduced weight (×0.2)
         assert!(score_common < score_unique);
