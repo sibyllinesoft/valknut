@@ -16,7 +16,7 @@ use valknut_rs::core::config::{DedupeConfig, ValknutConfig};
 use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 use valknut_rs::detectors::clone_detection::{
     BasicBlockAnalyzer, MotifCategory, NormalizationConfig, PdgMotif, PdgMotifAnalyzer,
-    StructuralGateAnalyzer,
+    // StructuralGateAnalyzer, // Removed - this type no longer exists
 };
 
 #[cfg(test)]
@@ -32,8 +32,8 @@ mod basic_block_analyzer_tests {
         let linear_code = "def simple_func():\n    x = 1\n    y = 2\n    return x + y";
         let linear_entity = CodeEntity::new("linear", "function", "simple_func", "/test/linear.py")
             .with_source_code(linear_code);
-        let linear_blocks = analyzer.count_basic_blocks(&linear_entity).unwrap();
-        assert_eq!(linear_blocks, 1, "Linear code should have 1 basic block");
+        let linear_blocks = analyzer.analyze_basic_blocks(linear_entity.source_code.as_ref().unwrap());
+        assert_eq!(linear_blocks.len(), 1, "Linear code should have 1 basic block");
 
         // Test conditional code (3 blocks: before if, then, else/after)
         let conditional_code = r#"
@@ -48,11 +48,11 @@ def conditional_func(x):
         let conditional_entity =
             CodeEntity::new("cond", "function", "conditional_func", "/test/cond.py")
                 .with_source_code(conditional_code);
-        let conditional_blocks = analyzer.count_basic_blocks(&conditional_entity).unwrap();
+        let conditional_blocks = analyzer.analyze_basic_blocks(conditional_entity.source_code.as_ref().unwrap());
         assert!(
-            conditional_blocks >= 2,
+            conditional_blocks.len() >= 2,
             "Conditional code should have at least 2 basic blocks, got {}",
-            conditional_blocks
+            conditional_blocks.len()
         );
 
         // Test loop code (multiple blocks for loop entry, body, continuation)

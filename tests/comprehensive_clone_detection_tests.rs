@@ -18,7 +18,7 @@ use valknut_rs::detectors::clone_detection::{
 /// Test TF-IDF analysis with language-agnostic normalization
 #[tokio::test]
 async fn test_tfidf_weighted_analysis() {
-    let mut analyzer = TfIdfAnalyzer::new(NormalizationConfig::default());
+    let mut analyzer = TfIdfAnalyzer::new();
 
     // Add documents with different rarity patterns
     analyzer.add_document(
@@ -69,7 +69,7 @@ async fn test_tfidf_weighted_analysis() {
 /// Test PDG motif analysis with structural pattern detection
 #[tokio::test]
 async fn test_pdg_motif_analysis() {
-    let mut analyzer = PdgMotifAnalyzer::new(3);
+    let mut analyzer = PdgMotifAnalyzer::new();
 
     let complex_code = r#"
         fn complex_function(x: i32) -> i32 {
@@ -105,46 +105,42 @@ async fn test_pdg_motif_analysis() {
         simple_motifs.len()
     );
 
-    // Test rarity gain calculation
-    let complex_rarity = analyzer.calculate_rarity_gain(&complex_motifs);
-    let simple_rarity = analyzer.calculate_rarity_gain(&simple_motifs);
+    // Test motif weights calculation
+    let complex_weight_sum: u32 = complex_motifs.iter().map(|m| m.weight).sum();
+    let simple_weight_sum: u32 = simple_motifs.iter().map(|m| m.weight).sum();
 
-    assert!(complex_rarity > 0.0);
-    assert!(simple_rarity > 0.0);
+    assert!(complex_weight_sum > 0);
+    assert!(simple_weight_sum > 0);
+    // Complex code should have higher total motif weights
+    assert!(complex_weight_sum >= simple_weight_sum);
 }
 
 /// Test weighted MinHash with TF-IDF weighting
 #[test]
 fn test_weighted_minhash() {
-    let mut weights = HashMap::new();
-    weights.insert("rare_token".to_string(), 5.0);
-    weights.insert("common_token".to_string(), 0.2);
-    weights.insert("stop_motif".to_string(), 0.05); // Should be filtered
+    let minhash = WeightedMinHash::new(64);
 
-    let minhash = WeightedMinHash::new(64, weights);
+    // Create weighted token sets
+    let mut tokens1 = HashMap::new();
+    tokens1.insert("rare_token".to_string(), 5.0);
+    tokens1.insert("common_token".to_string(), 0.2);
+    tokens1.insert("stop_motif".to_string(), 0.05); // Should be filtered
 
-    let tokens1 = vec![
-        "rare_token".to_string(),
-        "common_token".to_string(),
-        "stop_motif".to_string(),
-    ];
+    let mut tokens2 = HashMap::new();
+    tokens2.insert("rare_token".to_string(), 5.0);
+    tokens2.insert("different_common".to_string(), 0.2);
+    tokens2.insert("stop_motif".to_string(), 0.05);
 
-    let tokens2 = vec![
-        "rare_token".to_string(),
-        "different_common".to_string(),
-        "stop_motif".to_string(),
-    ];
+    let sig1 = minhash.compute_signature(&tokens1);
+    let sig2 = minhash.compute_signature(&tokens2);
 
-    let sig1 = minhash.generate_signature(&tokens1);
-    let sig2 = minhash.generate_signature(&tokens2);
-
-    let similarity = sig1.jaccard_similarity(&sig2);
+    let similarity = minhash.weighted_jaccard_similarity(&sig1, &sig2);
 
     // Should have some similarity due to shared rare token
     // Stop motifs should contribute minimally
     assert!(similarity >= 0.0 && similarity <= 1.0);
-    assert_eq!(sig1.size, 64);
-    assert_eq!(sig2.size, 64);
+    assert_eq!(sig1.size(), 64);
+    assert_eq!(sig2.size(), 64);
 }
 
 /// Test comprehensive clone detector integration

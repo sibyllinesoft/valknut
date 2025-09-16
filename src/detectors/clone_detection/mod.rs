@@ -22,7 +22,9 @@ pub use calibration_engine::{AutoCalibrationEngine, CalibrationResult};
 pub use hash_functions::{HashFunction, WeightedMinHash, WeightedSignature};
 pub use normalization::NormalizationConfig;
 pub use pdg_analyzer::{BasicBlockAnalyzer, PdgMotifAnalyzer};
-pub use ranking_system::{PayoffRankingSystem, RankedCloneCandidate};
+pub use ranking_system::{
+    CloneCandidate as RankingCloneCandidate, PayoffRankingSystem, RankedCloneCandidate,
+};
 pub use tfidf_analyzer::TfIdfAnalyzer;
 pub use types::*;
 

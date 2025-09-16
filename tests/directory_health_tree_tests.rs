@@ -771,6 +771,7 @@ mod directory_health_tree_tests {
             directory_health_tree: Some(directory_health_tree),
             clone_analysis: None,
             coverage_packs: vec![],
+            unified_hierarchy: vec![],
             warnings: vec![],
         };
 
