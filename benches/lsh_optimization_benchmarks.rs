@@ -9,9 +9,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
 use std::time::Duration;
-use valknut_rs::core::config::ValknutConfig;
-use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
-use valknut_rs::detectors::lsh::{LshConfig, LshExtractor};
+use valknut_rs::core::config::{ValknutConfig, LshConfig};
+use valknut_rs::core::featureset::CodeEntity;
+use valknut_rs::detectors::lsh::LshExtractor;
 
 /// Generate test entities for performance testing
 fn generate_test_entities(count: usize) -> Vec<CodeEntity> {
