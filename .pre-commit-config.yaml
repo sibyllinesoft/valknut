@@ -1,0 +1,109 @@
+# Pre-commit hooks for Valknut development workflow
+# Install with: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Rust formatting and linting
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Cargo Format
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: Cargo Clippy
+        entry: bash -c 'cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-check
+        name: Cargo Check
+        entry: cargo check --all-targets --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test-lib
+        name: Cargo Test (Library)
+        entry: cargo test --lib
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-deny
+        name: Cargo Deny
+        entry: cargo deny check
+        language: system
+        files: Cargo\.(toml|lock)
+        pass_filenames: false
+
+  # Documentation checks
+  - repo: local
+    hooks:
+      - id: cargo-doc
+        name: Cargo Doc Check
+        entry: cargo doc --all-features --no-deps --document-private-items
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # Security checks
+  - repo: local
+    hooks:
+      - id: cargo-audit
+        name: Cargo Security Audit
+        entry: cargo audit
+        language: system
+        files: Cargo\.(toml|lock)
+        pass_filenames: false
+
+  # File quality checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  # Rust-specific pre-commit hooks
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: Rust Format (External)
+      - id: clippy
+        name: Rust Clippy (External)
+        args: ['--all-targets', '--all-features', '--', '-D', 'warnings']
+
+  # License header validation (if needed)
+  - repo: local
+    hooks:
+      - id: license-header
+        name: License Header Check
+        entry: bash -c 'find src/ -name "*.rs" -exec grep -L "Licensed under" {} \; | head -5 | while read f; do echo "Missing license header: $f"; done'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+# Configuration for specific hooks
+default_language_version:
+  rust: system
+
+# Skip certain hooks in CI (they're already covered by other workflows)
+ci:
+  skip: [cargo-test-lib, cargo-audit, cargo-deny]
+
+# Custom error messages and suggestions
+fail_fast: false
+minimum_pre_commit_version: '3.0.0'

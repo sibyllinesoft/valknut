@@ -1,0 +1,47 @@
+{
+  "name": "valknut-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for valknut HTML generation pipeline",
+  "main": "run-e2e.js",
+  "scripts": {
+    "test": "bun direct-test.js",
+    "test:e2e": "bun run-e2e.js",
+    "test:e2e:no-open": "bun run-e2e.js --no-open",
+    "test:verbose": "bun run-e2e.js --verbose",
+    "test:quiet": "bun run-e2e.js --quiet",
+    "generate": "bun run-e2e.js --generate-only",
+    "validate": "bun run-e2e.js --skip-validation",
+    "help": "bun run-e2e.js --help",
+    "test:direct": "bun direct-test.js",
+    "test:real": "bun test-real-analysis.js",
+    "test:simple": "bun simple-e2e-test.js",
+    "test:all": "bun run test && bun run test:e2e"
+  },
+  "keywords": [
+    "e2e",
+    "testing",
+    "valknut",
+    "html",
+    "handlebars",
+    "tree-rendering"
+  ],
+  "author": "Valknut Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "jsdom": "^23.2.0",
+    "playwright": "^1.55.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nathanricedev/valknut.git",
+    "directory": "templates/assets/tests/e2e"
+  },
+  "files": [
+    "*.js",
+    "README.md"
+  ]
+}

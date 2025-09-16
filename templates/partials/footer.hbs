@@ -37,6 +37,9 @@
     
     // Apply filters based on checkboxes
     function applyFilters() {
+        // FIXME: Temporarily disable all filtering - show everything
+        return true;
+        
         const highComplexityOnly = document.getElementById('filter-high-complexity').checked;
         const extractMethod = document.getElementById('filter-extract-method').checked;
         const simplifyConditionals = document.getElementById('filter-simplify-conditionals').checked;

@@ -71,47 +71,47 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 // Core analysis engine modules
 pub mod core {
     //! Core analysis algorithms and data structures.
-    
+
+    pub mod bayesian;
     pub mod config;
+    pub mod errors;
+    pub mod featureset;
+    pub mod file_utils;
     pub mod pipeline;
     pub mod scoring;
-    pub mod bayesian;
-    pub mod featureset;
-    pub mod errors;
-    pub mod file_utils;
 }
 
 // Specialized detection algorithms
 pub mod detectors {
     //! Specialized code analysis detectors.
-    
+
+    pub mod clone_detection;
     pub mod complexity;
+    pub mod coverage;
     pub mod graph;
     pub mod lsh;
-    pub mod structure;
-    pub mod coverage;
-    pub mod refactoring;
     pub mod names_simple;
-    pub mod clone_detection;
+    pub mod refactoring;
+    pub mod structure;
 }
 
 // Language-specific AST adapters
 pub mod lang {
     //! Language-specific parsing and AST processing.
-    
+
     pub mod common;
     // Tree-sitter adapters
-    pub mod python;
-    pub mod javascript;
-    pub mod typescript;
-    pub mod rust_lang;
     pub mod go;
+    pub mod javascript;
+    pub mod python;
+    pub mod rust_lang;
+    pub mod typescript;
 }
 
 // I/O, persistence, and reporting
 pub mod io {
     //! I/O operations, caching, and result persistence.
-    
+
     pub mod cache;
     pub mod persistence;
     pub mod reports;
@@ -123,31 +123,31 @@ pub mod oracle;
 // Live reachability analysis
 pub mod live {
     //! Live reachability analysis for production call graphs.
-    
-    pub mod types;
-    pub mod collectors;
-    pub mod storage;
-    pub mod graph;
-    pub mod community;
-    pub mod scoring;
-    pub mod reports;
+
     pub mod cli;
+    pub mod collectors;
+    pub mod community;
+    pub mod graph;
+    pub mod reports;
+    pub mod scoring;
+    pub mod storage;
+    pub mod types;
 }
 
 // Public API and engine interface
 pub mod api {
     //! High-level API and engine interface.
-    
-    pub mod engine;
+
     pub mod config_types;
+    pub mod engine;
     pub mod results;
 }
 
 // Re-export primary types for convenience
-pub use api::engine::ValknutEngine;
 pub use api::config_types::AnalysisConfig;
+pub use api::engine::ValknutEngine;
 pub use api::results::AnalysisResults;
-pub use core::errors::{ValknutError, Result, ValknutResultExt};
+pub use core::errors::{Result, ValknutError, ValknutResultExt};
 
 #[cfg(test)]
 mod test_coverage_integration;
@@ -165,17 +165,17 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Build-time feature detection
 pub mod features {
     //! Runtime feature detection.
-    
+
     /// Check if SIMD acceleration is available
     pub const fn has_simd() -> bool {
         cfg!(feature = "simd")
     }
-    
+
     /// Check if parallel processing is enabled
     pub const fn has_parallel() -> bool {
         cfg!(feature = "parallel")
     }
-    
+
     /// Check if database integration is available
     pub const fn has_database() -> bool {
         cfg!(feature = "database")

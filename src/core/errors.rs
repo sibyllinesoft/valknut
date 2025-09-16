@@ -424,7 +424,9 @@ impl ValknutError {
     }
 
     /// Create error mapping adapter for serialization operations
-    pub fn map_serialization(operation: impl Into<String>) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
+    pub fn map_serialization(
+        operation: impl Into<String>,
+    ) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
         move |e| Self::Serialization {
             message: format!("Serialization failed during {}: {}", operation.into(), e),
             data_type: None,
@@ -438,13 +440,15 @@ impl ValknutError {
     }
 
     /// Create error mapping adapter for internal operations with context
-    pub fn map_internal(operation: impl Into<String>) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
+    pub fn map_internal(
+        operation: impl Into<String>,
+    ) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
         move |e| Self::internal(format!("Internal error during {}: {}", operation.into(), e))
     }
 
     /// Create error mapping adapter for generic operations with error display
     pub fn map_generic<E>(operation: impl Into<String>) -> impl FnOnce(E) -> Self
-    where 
+    where
         E: std::fmt::Display,
     {
         move |e| Self::internal(format!("Failed during {}: {}", operation.into(), e))
@@ -455,29 +459,31 @@ impl ValknutError {
 pub trait ValknutResultExt<T> {
     /// Map I/O errors with a custom message
     fn map_io_err(self, message: impl Into<String>) -> Result<T>;
-    
+
     /// Map JSON parsing errors with context
     fn map_json_err(self, context: impl Into<String>) -> Result<T>;
-    
+
     /// Map generic errors with operation context
     fn map_generic_err(self, operation: impl Into<String>) -> Result<T>;
 }
 
 /// Generic implementation for all error types
-impl<T, E> ValknutResultExt<T> for std::result::Result<T, E> 
-where 
+impl<T, E> ValknutResultExt<T> for std::result::Result<T, E>
+where
     E: std::fmt::Display,
 {
     fn map_io_err(self, message: impl Into<String>) -> Result<T> {
         self.map_err(|e| ValknutError::internal(format!("{}: {}", message.into(), e)))
     }
-    
+
     fn map_json_err(self, context: impl Into<String>) -> Result<T> {
         self.map_err(|e| ValknutError::internal(format!("JSON error in {}: {}", context.into(), e)))
     }
-    
+
     fn map_generic_err(self, operation: impl Into<String>) -> Result<T> {
-        self.map_err(|e| ValknutError::internal(format!("Failed during {}: {}", operation.into(), e)))
+        self.map_err(|e| {
+            ValknutError::internal(format!("Failed during {}: {}", operation.into(), e))
+        })
     }
 }
 

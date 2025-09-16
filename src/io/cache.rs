@@ -318,8 +318,7 @@ impl StopMotifCacheManager {
             )
         })?;
 
-        serde_json::from_str(&content)
-            .map_json_err("cache file content")
+        serde_json::from_str(&content).map_json_err("cache file content")
     }
 
     /// Save cache to disk atomically
@@ -339,8 +338,7 @@ impl StopMotifCacheManager {
         let temp_path = cache_path.with_extension("tmp");
 
         // Write to temporary file first
-        let content = serde_json::to_string_pretty(cache)
-            .map_json_err("cache serialization")?;
+        let content = serde_json::to_string_pretty(cache).map_json_err("cache serialization")?;
 
         fs::write(&temp_path, content).map_err(|e| {
             ValknutError::io(

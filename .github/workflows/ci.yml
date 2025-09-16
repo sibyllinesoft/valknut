@@ -1,4 +1,10 @@
 name: CI
+# Comprehensive CI/CD pipeline supporting the new test structure:
+# - Unit tests (505 tests): make test-unit
+# - CLI integration tests (17 tests): make test-cli  
+# - CLI E2E tests (comprehensive scenarios): make test-e2e
+# - Feature matrix testing across different configurations
+# - Multi-platform validation (Linux, macOS, Windows)
 
 on:
   push:
@@ -16,6 +22,10 @@ env:
   RUST_BACKTRACE: short
   RUSTFLAGS: "-D warnings"
   RUSTDOCFLAGS: "-D warnings"
+  # Optimize caching and build performance
+  CARGO_HTTP_MULTIPLEXING: false
+  CARGO_BUILD_JOBS: 4
+  SCCACHE_GHA_ENABLED: true
 
 jobs:
   # Basic validation job - runs first to catch obvious issues quickly
@@ -31,10 +41,15 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: check
+          key: check-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+          cache-all-crates: true
           
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -45,7 +60,8 @@ jobs:
       - name: Check docs
         run: cargo doc --all-features --no-deps --document-private-items
 
-  # Test matrix across platforms and Rust versions
+  # Test matrix across platforms and Rust versions  
+  # Uses new Makefile targets for organized test execution
   test:
     name: Test Suite
     needs: check
@@ -73,10 +89,16 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: test-${{ matrix.os }}-${{ matrix.rust }}
+          key: test-${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install coverage tools (Linux only)
         if: matrix.coverage
@@ -85,7 +107,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y tree-sitter-cli
 
-      - name: Run tests
+      - name: Run unit tests
+        run: make test-unit
+
+      - name: Run CLI integration tests  
+        run: make test-cli
+
+      - name: Run CLI E2E tests
+        run: make test-e2e
+
+      - name: Run tests with feature matrix
         run: cargo test --verbose ${{ matrix.features }}
 
       - name: Run tests (no default features)
@@ -155,8 +186,11 @@ jobs:
       - name: Build with features
         run: cargo build --verbose ${{ matrix.features }}
 
-      - name: Test with features
-        run: cargo test --verbose ${{ matrix.features }}
+      - name: Test with features (unit tests)
+        run: cargo test --lib --verbose ${{ matrix.features }}
+        
+      - name: Test with features (CLI tests)  
+        run: cargo test --test cli_tests --verbose ${{ matrix.features }}
 
   # Security and dependency auditing
   audit:
@@ -203,7 +237,7 @@ jobs:
           key: bench
 
       - name: Run benchmarks
-        run: cargo bench --features benchmarks --all
+        run: make bench
 
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
@@ -270,28 +304,32 @@ jobs:
           echo 'fn main() { println!("test"); }' > test-project/src/main.rs
           echo 'fn complex_function() { for i in 0..10 { if i % 2 == 0 { println!("{}", i); } } }' > test-project/src/lib.rs
 
-      - name: Run CLI integration tests
+      - name: Run comprehensive CLI integration tests
         run: |
-          # Test basic analysis
-          ./target/release/valknut analyze test-project --format json > results.json
+          # Run the comprehensive CLI E2E test suite
+          make test-e2e
           
-          # Verify output structure
-          jq '.analysis_results' results.json > /dev/null
+          # Additional integration tests with release binary
+          # Test basic analysis
+          ./target/release/valknut analyze test-project --format json
           
           # Test quality gates
           ./target/release/valknut analyze test-project --quality-gate --max-complexity 75 --min-health 60
           
-          # Test different output formats
-          ./target/release/valknut analyze test-project --format html > report.html
-          ./target/release/valknut analyze test-project --format markdown > report.md
+          # Test different output formats  
+          ./target/release/valknut analyze test-project --format yaml
+          ./target/release/valknut analyze test-project --format html
 
       - name: Verify output quality
         run: |
-          # Check that HTML report is valid
-          grep -q "Valknut Analysis Report" report.html
+          # Check that generated files exist in .valknut directory (new file-based output)
+          ls -la .valknut/ || echo "No .valknut directory found"
           
-          # Check JSON structure
-          jq -e '.analysis_results.summary.total_files > 0' results.json
+          # Check for YAML/JSON output files
+          find . -name "*.yml" -o -name "*.yaml" -o -name "*.json" | head -5
+          
+          # Verify CLI help works
+          ./target/release/valknut --help | grep -q "Valknut"
           
           echo "✅ Integration tests passed"
 

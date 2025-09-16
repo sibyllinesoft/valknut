@@ -1,5 +1,5 @@
 //! Comprehensive tests for Phase 4: Auto-Calibration + Payoff Ranking
-//! 
+//!
 //! Tests the auto-calibration and payoff ranking system including:
 //! - AutoCalibrationEngine threshold sweeping
 //! - PayoffRankingSystem with formula: SavedTokens × RarityGain × LiveReachBoost
@@ -7,16 +7,16 @@
 //! - Binary search calibration targeting ≥80% quality
 //! - Hard filtering floors (SavedTokens ≥ 100, RarityGain ≥ 1.2)
 
-use std::collections::{HashMap, BTreeMap};
-use std::sync::Arc;
 use approx::assert_relative_eq;
 use proptest::prelude::*;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
-use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 use valknut_rs::core::config::ValknutConfig;
+use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 use valknut_rs::detectors::clone_detection::{
-    AutoCalibrationEngine, PayoffRankingSystem, CloneCandidate, QualityMetrics,
-    CalibrationSettings, PayoffFormula, QualityThresholds, RankingResult
+    AutoCalibrationEngine, CalibrationSettings, CloneCandidate, PayoffFormula, PayoffRankingSystem,
+    QualityMetrics, QualityThresholds, RankingResult,
 };
 
 #[cfg(test)]
@@ -35,7 +35,7 @@ mod auto_calibration_engine_tests {
         };
 
         let engine = AutoCalibrationEngine::new(settings);
-        
+
         assert_eq!(engine.target_quality(), 0.8);
         assert_eq!(engine.max_iterations(), 10);
         assert_eq!(engine.initial_range(), (0.1, 0.9));
@@ -57,20 +57,30 @@ mod auto_calibration_engine_tests {
 
         // Create synthetic clone candidates with known quality patterns
         let candidates = create_synthetic_candidates();
-        
+
         // Perform binary search calibration
         let calibration_result = engine.calibrate_thresholds(&candidates);
-        
-        assert!(calibration_result.is_ok(), "Calibration should succeed with valid data");
-        
+
+        assert!(
+            calibration_result.is_ok(),
+            "Calibration should succeed with valid data"
+        );
+
         let optimal_threshold = calibration_result.unwrap();
-        assert!(optimal_threshold >= 0.1 && optimal_threshold <= 0.9, 
-                "Optimal threshold should be within initial range: {}", optimal_threshold);
-        
+        assert!(
+            optimal_threshold >= 0.1 && optimal_threshold <= 0.9,
+            "Optimal threshold should be within initial range: {}",
+            optimal_threshold
+        );
+
         // Test that the calibrated threshold achieves target quality
-        let quality_at_threshold = engine.evaluate_quality_at_threshold(&candidates, optimal_threshold);
-        assert!(quality_at_threshold >= 0.75, // Allow some tolerance
-                "Quality at optimal threshold should be near target: {}", quality_at_threshold);
+        let quality_at_threshold =
+            engine.evaluate_quality_at_threshold(&candidates, optimal_threshold);
+        assert!(
+            quality_at_threshold >= 0.75, // Allow some tolerance
+            "Quality at optimal threshold should be near target: {}",
+            quality_at_threshold
+        );
     }
 
     /// Test quality evaluation at different thresholds
@@ -94,42 +104,55 @@ mod auto_calibration_engine_tests {
         for threshold in thresholds {
             let quality = engine.evaluate_quality_at_threshold(&candidates, threshold);
             qualities.push(quality);
-            assert!(quality >= 0.0 && quality <= 1.0, 
-                    "Quality should be in [0,1] range at threshold {}: {}", threshold, quality);
+            assert!(
+                quality >= 0.0 && quality <= 1.0,
+                "Quality should be in [0,1] range at threshold {}: {}",
+                threshold,
+                quality
+            );
         }
 
         // Quality should generally increase with threshold (fewer, better clones)
         // Note: This may not be strictly monotonic due to complex interactions
         let first_half_avg = (qualities[0] + qualities[1]) / 2.0;
         let second_half_avg = (qualities[3] + qualities[4]) / 2.0;
-        assert!(second_half_avg >= first_half_avg - 0.2, // Allow some flexibility
-                "Higher thresholds should generally yield better quality");
+        assert!(
+            second_half_avg >= first_half_avg - 0.2, // Allow some flexibility
+            "Higher thresholds should generally yield better quality"
+        );
     }
 
     /// Test convergence detection
-    #[test] 
+    #[test]
     fn test_convergence_detection() {
         let settings = CalibrationSettings {
             target_quality_threshold: 0.8,
-            binary_search_iterations: 20, // High iteration count
+            binary_search_iterations: 20,        // High iteration count
             initial_threshold_range: (0.4, 0.6), // Narrow range for quick convergence
-            convergence_tolerance: 0.01, // Tight tolerance
+            convergence_tolerance: 0.01,         // Tight tolerance
             min_sample_size: 10,
         };
 
         let mut engine = AutoCalibrationEngine::new(settings);
         let candidates = create_synthetic_candidates();
-        
+
         let calibration_result = engine.calibrate_thresholds(&candidates);
         assert!(calibration_result.is_ok());
-        
+
         // Should converge before maximum iterations due to narrow range
         let iterations_used = engine.last_calibration_iterations();
-        assert!(iterations_used < 20, "Should converge quickly with narrow range: {} iterations", iterations_used);
-        
+        assert!(
+            iterations_used < 20,
+            "Should converge quickly with narrow range: {} iterations",
+            iterations_used
+        );
+
         let final_range = engine.last_calibration_range();
-        assert!(final_range.1 - final_range.0 <= 0.02, // Should be within tolerance
-                "Final range should be narrow: {:?}", final_range);
+        assert!(
+            final_range.1 - final_range.0 <= 0.02, // Should be within tolerance
+            "Final range should be narrow: {:?}",
+            final_range
+        );
     }
 
     /// Test handling edge cases in calibration
@@ -171,7 +194,7 @@ mod auto_calibration_engine_tests {
             assert!(threshold >= 0.0 && threshold <= 1.0);
         }
 
-        // Test with all low-quality candidates  
+        // Test with all low-quality candidates
         let low_quality_candidates = vec![
             create_low_quality_candidate("lq1", 0.2),
             create_low_quality_candidate("lq2", 0.15),
@@ -184,7 +207,11 @@ mod auto_calibration_engine_tests {
         // Should either fail or produce a very high threshold
         if result.is_ok() {
             let threshold = result.unwrap();
-            assert!(threshold >= 0.8, "Should require high threshold for low-quality candidates: {}", threshold);
+            assert!(
+                threshold >= 0.8,
+                "Should require high threshold for low-quality candidates: {}",
+                threshold
+            );
         }
     }
 
@@ -195,13 +222,11 @@ mod auto_calibration_engine_tests {
             create_high_quality_candidate("hq1", 0.9),
             create_high_quality_candidate("hq2", 0.85),
             create_high_quality_candidate("hq3", 0.88),
-            
             // Medium quality clones
             create_medium_quality_candidate("mq1", 0.65),
             create_medium_quality_candidate("mq2", 0.7),
             create_medium_quality_candidate("mq3", 0.6),
             create_medium_quality_candidate("mq4", 0.75),
-            
             // Low quality clones (should be filtered out)
             create_low_quality_candidate("lq1", 0.3),
             create_low_quality_candidate("lq2", 0.4),
@@ -219,7 +244,7 @@ mod auto_calibration_engine_tests {
             rarity_gain: 2.5,
             live_reach_boost: 1.8,
             quality_metrics: QualityMetrics {
-                fragmentarity: 0.1, // Low fragmentarity is good
+                fragmentarity: 0.1,   // Low fragmentarity is good
                 structure_ratio: 0.9, // High structure ratio is good
                 uniqueness: base_quality,
                 overall_quality: base_quality,
@@ -257,7 +282,7 @@ mod auto_calibration_engine_tests {
             rarity_gain: 1.0, // Below hard floor of 1.2
             live_reach_boost: 1.0,
             quality_metrics: QualityMetrics {
-                fragmentarity: 0.7, // High fragmentarity is bad
+                fragmentarity: 0.7,   // High fragmentarity is bad
                 structure_ratio: 0.2, // Low structure ratio is bad
                 uniqueness: base_quality,
                 overall_quality: base_quality,
@@ -303,9 +328,12 @@ mod payoff_ranking_system_tests {
             };
 
             let payoff = ranking_system.calculate_payoff(&candidate);
-            assert_relative_eq!(payoff, expected, epsilon = 0.01,
-                               "Payoff calculation failed for tokens={}, rarity={}, reach={}", 
-                               saved_tokens, rarity_gain, live_reach_boost);
+            assert_relative_eq!(payoff, expected, epsilon = 0.01);
+            assert!(
+                (payoff - expected).abs() < 0.01,
+                "Payoff calculation failed for tokens={}, rarity={}, reach={}, got: {}, expected: {}",
+                saved_tokens, rarity_gain, live_reach_boost, payoff, expected
+            );
         }
     }
 
@@ -333,7 +361,6 @@ mod payoff_ranking_system_tests {
                 },
                 payoff_score: 0.0,
             },
-            
             // Below RarityGain floor
             CloneCandidate {
                 id: "low_rarity".to_string(),
@@ -351,7 +378,6 @@ mod payoff_ranking_system_tests {
                 },
                 payoff_score: 0.0,
             },
-            
             // Passes hard floors
             CloneCandidate {
                 id: "passes_floors".to_string(),
@@ -359,7 +385,7 @@ mod payoff_ranking_system_tests {
                 entity2_id: "e2".to_string(),
                 similarity_score: 0.8,
                 saved_tokens: 150, // ≥ 100
-                rarity_gain: 1.5, // ≥ 1.2
+                rarity_gain: 1.5,  // ≥ 1.2
                 live_reach_boost: 1.3,
                 quality_metrics: QualityMetrics {
                     fragmentarity: 0.4,
@@ -372,13 +398,18 @@ mod payoff_ranking_system_tests {
         ];
 
         let ranking_result = ranking_system.rank_candidates(&filtered_candidates);
-        
+
         // Should filter out candidates that don't meet hard floors
-        assert_eq!(ranking_result.ranked_candidates.len(), 1, 
-                  "Should only include candidates that pass hard floors");
+        assert_eq!(
+            ranking_result.ranked_candidates.len(),
+            1,
+            "Should only include candidates that pass hard floors"
+        );
         assert_eq!(ranking_result.ranked_candidates[0].id, "passes_floors");
-        assert_eq!(ranking_result.filtered_by_hard_floors, 2,
-                  "Should report 2 candidates filtered by hard floors");
+        assert_eq!(
+            ranking_result.filtered_by_hard_floors, 2,
+            "Should report 2 candidates filtered by hard floors"
+        );
     }
 
     /// Test ranking order based on payoff scores
@@ -389,35 +420,39 @@ mod payoff_ranking_system_tests {
         let candidates = vec![
             // High payoff: 200 * 2.5 * 2.0 = 1000
             create_ranking_candidate("high", 200, 2.5, 2.0, 0.9),
-            
-            // Medium payoff: 150 * 1.8 * 1.5 = 405  
+            // Medium payoff: 150 * 1.8 * 1.5 = 405
             create_ranking_candidate("medium", 150, 1.8, 1.5, 0.7),
-            
             // Low payoff: 120 * 1.3 * 1.2 = 187.2
             create_ranking_candidate("low", 120, 1.3, 1.2, 0.6),
         ];
 
         let ranking_result = ranking_system.rank_candidates(&candidates);
-        
+
         assert_eq!(ranking_result.ranked_candidates.len(), 3);
-        
+
         // Verify ranking order (highest payoff first)
         assert_eq!(ranking_result.ranked_candidates[0].id, "high");
         assert_eq!(ranking_result.ranked_candidates[1].id, "medium");
         assert_eq!(ranking_result.ranked_candidates[2].id, "low");
-        
+
         // Verify payoff scores are calculated and ordered correctly
-        let payoffs: Vec<f64> = ranking_result.ranked_candidates.iter()
+        let payoffs: Vec<f64> = ranking_result
+            .ranked_candidates
+            .iter()
             .map(|c| c.payoff_score)
             .collect();
         assert_relative_eq!(payoffs[0], 1000.0, epsilon = 1.0);
         assert_relative_eq!(payoffs[1], 405.0, epsilon = 1.0);
         assert_relative_eq!(payoffs[2], 187.2, epsilon = 1.0);
-        
+
         // Verify ordering: each payoff should be >= the next
-        for i in 0..payoffs.len()-1 {
-            assert!(payoffs[i] >= payoffs[i+1], 
-                   "Payoffs should be in descending order: {} >= {}", payoffs[i], payoffs[i+1]);
+        for i in 0..payoffs.len() - 1 {
+            assert!(
+                payoffs[i] >= payoffs[i + 1],
+                "Payoffs should be in descending order: {} >= {}",
+                payoffs[i],
+                payoffs[i + 1]
+            );
         }
     }
 
@@ -429,22 +464,22 @@ mod payoff_ranking_system_tests {
         let test_cases = vec![
             // (fragmentarity, structure_ratio, uniqueness, expected_quality_range)
             (0.1, 0.9, 0.95, (0.85, 0.95)), // High quality
-            (0.5, 0.6, 0.7, (0.55, 0.75)),   // Medium quality
-            (0.8, 0.3, 0.4, (0.25, 0.45)),   // Low quality
+            (0.5, 0.6, 0.7, (0.55, 0.75)),  // Medium quality
+            (0.8, 0.3, 0.4, (0.25, 0.45)),  // Low quality
         ];
 
         for (fragmentarity, structure_ratio, uniqueness, expected_range) in test_cases {
             let mut candidate = create_ranking_candidate("test", 150, 1.5, 1.3, 0.0);
             candidate.quality_metrics = QualityMetrics {
                 fragmentarity,
-                structure_ratio, 
+                structure_ratio,
                 uniqueness,
                 overall_quality: 0.0, // Will be calculated
             };
 
             let updated_candidate = ranking_system.calculate_quality_metrics(candidate);
             let quality = updated_candidate.quality_metrics.overall_quality;
-            
+
             assert!(quality >= expected_range.0 && quality <= expected_range.1,
                    "Quality {} should be in range {:?} for fragmentarity={}, structure_ratio={}, uniqueness={}",
                    quality, expected_range, fragmentarity, structure_ratio, uniqueness);
@@ -473,14 +508,20 @@ mod payoff_ranking_system_tests {
 
         // Conservative should generally be lower than standard
         assert!(conservative_payoff <= standard_payoff * 1.1); // Allow small variance
-        
+
         // All formulas should produce positive payoffs for valid candidates
         assert!(standard_payoff > 0.0);
-        assert!(weighted_payoff > 0.0); 
+        assert!(weighted_payoff > 0.0);
         assert!(conservative_payoff > 0.0);
     }
 
-    fn create_ranking_candidate(id: &str, saved_tokens: usize, rarity_gain: f64, live_reach_boost: f64, quality: f64) -> CloneCandidate {
+    fn create_ranking_candidate(
+        id: &str,
+        saved_tokens: usize,
+        rarity_gain: f64,
+        live_reach_boost: f64,
+        quality: f64,
+    ) -> CloneCandidate {
         CloneCandidate {
             id: id.to_string(),
             entity1_id: format!("{}_e1", id),
@@ -509,20 +550,27 @@ mod quality_metrics_tests {
     fn test_fragmentarity_calculation() {
         // Fragmentarity measures how fragmented/scattered the clone is
         // Lower values indicate more cohesive clones
-        
+
         let test_cases = vec![
             // (description, metrics_input, expected_fragmentarity_range)
-            ("Cohesive clone", (10, 2, 8), (0.0, 0.3)),     // Few fragments, high coherence
+            ("Cohesive clone", (10, 2, 8), (0.0, 0.3)), // Few fragments, high coherence
             ("Moderately fragmented", (20, 6, 14), (0.2, 0.5)), // Some fragmentation
-            ("Highly fragmented", (30, 15, 15), (0.4, 0.8)),    // Many fragments
+            ("Highly fragmented", (30, 15, 15), (0.4, 0.8)), // Many fragments
         ];
 
-        for (description, (total_tokens, fragment_count, coherent_tokens), expected_range) in test_cases {
-            let fragmentarity = calculate_fragmentarity(total_tokens, fragment_count, coherent_tokens);
-            
-            assert!(fragmentarity >= expected_range.0 && fragmentarity <= expected_range.1,
-                   "{}: fragmentarity {} should be in range {:?}", 
-                   description, fragmentarity, expected_range);
+        for (description, (total_tokens, fragment_count, coherent_tokens), expected_range) in
+            test_cases
+        {
+            let fragmentarity =
+                calculate_fragmentarity(total_tokens, fragment_count, coherent_tokens);
+
+            assert!(
+                fragmentarity >= expected_range.0 && fragmentarity <= expected_range.1,
+                "{}: fragmentarity {} should be in range {:?}",
+                description,
+                fragmentarity,
+                expected_range
+            );
         }
     }
 
@@ -531,20 +579,25 @@ mod quality_metrics_tests {
     fn test_structure_ratio_calculation() {
         // Structure ratio measures how much of the similarity is structural vs textual
         // Higher values indicate more meaningful structural similarity
-        
+
         let test_cases = vec![
             // (structural_similarity, textual_similarity, expected_structure_ratio_range)
-            (0.9, 0.5, (0.6, 0.8)),   // High structural, lower textual
-            (0.7, 0.8, (0.4, 0.6)),   // Balanced structural/textual
-            (0.4, 0.9, (0.2, 0.5)),   // Lower structural, high textual
+            (0.9, 0.5, (0.6, 0.8)), // High structural, lower textual
+            (0.7, 0.8, (0.4, 0.6)), // Balanced structural/textual
+            (0.4, 0.9, (0.2, 0.5)), // Lower structural, high textual
         ];
 
         for (structural_sim, textual_sim, expected_range) in test_cases {
             let structure_ratio = calculate_structure_ratio(structural_sim, textual_sim);
-            
-            assert!(structure_ratio >= expected_range.0 && structure_ratio <= expected_range.1,
-                   "structure_ratio {} should be in range {:?} for structural={}, textual={}",
-                   structure_ratio, expected_range, structural_sim, textual_sim);
+
+            assert!(
+                structure_ratio >= expected_range.0 && structure_ratio <= expected_range.1,
+                "structure_ratio {} should be in range {:?} for structural={}, textual={}",
+                structure_ratio,
+                expected_range,
+                structural_sim,
+                textual_sim
+            );
         }
     }
 
@@ -553,20 +606,25 @@ mod quality_metrics_tests {
     fn test_uniqueness_calculation() {
         // Uniqueness measures how rare/distinctive the clone pattern is
         // Higher values indicate more unique/valuable clones
-        
+
         let test_cases = vec![
             // (rarity_score, pattern_frequency, expected_uniqueness_range)
-            (0.9, 5, (0.8, 0.95)),    // Rare pattern, low frequency
-            (0.6, 20, (0.5, 0.7)),    // Medium rarity and frequency  
-            (0.3, 100, (0.1, 0.4)),   // Common pattern, high frequency
+            (0.9, 5, (0.8, 0.95)),  // Rare pattern, low frequency
+            (0.6, 20, (0.5, 0.7)),  // Medium rarity and frequency
+            (0.3, 100, (0.1, 0.4)), // Common pattern, high frequency
         ];
 
         for (rarity_score, pattern_freq, expected_range) in test_cases {
             let uniqueness = calculate_uniqueness(rarity_score, pattern_freq);
-            
-            assert!(uniqueness >= expected_range.0 && uniqueness <= expected_range.1,
-                   "uniqueness {} should be in range {:?} for rarity={}, frequency={}",
-                   uniqueness, expected_range, rarity_score, pattern_freq);
+
+            assert!(
+                uniqueness >= expected_range.0 && uniqueness <= expected_range.1,
+                "uniqueness {} should be in range {:?} for rarity={}, frequency={}",
+                uniqueness,
+                expected_range,
+                rarity_score,
+                pattern_freq
+            );
         }
     }
 
@@ -574,9 +632,9 @@ mod quality_metrics_tests {
     #[test]
     fn test_overall_quality_integration() {
         let quality_thresholds = QualityThresholds {
-            min_fragmentarity: 0.3,  // Lower is better
-            min_structure_ratio: 0.6, // Higher is better  
-            min_uniqueness: 0.5,     // Higher is better
+            min_fragmentarity: 0.3,   // Lower is better
+            min_structure_ratio: 0.6, // Higher is better
+            min_uniqueness: 0.5,      // Higher is better
             min_overall_quality: 0.7,
         };
 
@@ -588,7 +646,6 @@ mod quality_metrics_tests {
                 uniqueness: 0.9,      // Good: rare/unique pattern
                 overall_quality: 0.0, // Will be calculated
             },
-            
             // Poor quality metrics
             QualityMetrics {
                 fragmentarity: 0.8,   // Bad: high fragmentation
@@ -596,7 +653,6 @@ mod quality_metrics_tests {
                 uniqueness: 0.2,      // Bad: common pattern
                 overall_quality: 0.0, // Will be calculated
             },
-            
             // Mixed quality metrics
             QualityMetrics {
                 fragmentarity: 0.4,   // Medium fragmentation
@@ -608,55 +664,80 @@ mod quality_metrics_tests {
 
         for (i, mut metrics) in test_cases.into_iter().enumerate() {
             metrics.overall_quality = calculate_overall_quality(&metrics);
-            
-            assert!(metrics.overall_quality >= 0.0 && metrics.overall_quality <= 1.0,
-                   "Overall quality should be in [0,1] range: {}", metrics.overall_quality);
-            
+
+            assert!(
+                metrics.overall_quality >= 0.0 && metrics.overall_quality <= 1.0,
+                "Overall quality should be in [0,1] range: {}",
+                metrics.overall_quality
+            );
+
             // Verify relationships between individual metrics and overall quality
             match i {
-                0 => { // Good metrics should yield high overall quality
-                    assert!(metrics.overall_quality >= 0.7,
-                           "Good individual metrics should yield high overall quality: {}", metrics.overall_quality);
-                },
-                1 => { // Poor metrics should yield low overall quality
-                    assert!(metrics.overall_quality <= 0.4,
-                           "Poor individual metrics should yield low overall quality: {}", metrics.overall_quality);
-                },
-                2 => { // Mixed metrics should yield medium overall quality
-                    assert!(metrics.overall_quality >= 0.4 && metrics.overall_quality <= 0.8,
-                           "Mixed individual metrics should yield medium overall quality: {}", metrics.overall_quality);
-                },
+                0 => {
+                    // Good metrics should yield high overall quality
+                    assert!(
+                        metrics.overall_quality >= 0.7,
+                        "Good individual metrics should yield high overall quality: {}",
+                        metrics.overall_quality
+                    );
+                }
+                1 => {
+                    // Poor metrics should yield low overall quality
+                    assert!(
+                        metrics.overall_quality <= 0.4,
+                        "Poor individual metrics should yield low overall quality: {}",
+                        metrics.overall_quality
+                    );
+                }
+                2 => {
+                    // Mixed metrics should yield medium overall quality
+                    assert!(
+                        metrics.overall_quality >= 0.4 && metrics.overall_quality <= 0.8,
+                        "Mixed individual metrics should yield medium overall quality: {}",
+                        metrics.overall_quality
+                    );
+                }
                 _ => {}
             }
-            
+
             // Test threshold compliance
-            let passes_thresholds = metrics.fragmentarity <= quality_thresholds.min_fragmentarity &&
-                                   metrics.structure_ratio >= quality_thresholds.min_structure_ratio &&
-                                   metrics.uniqueness >= quality_thresholds.min_uniqueness &&
-                                   metrics.overall_quality >= quality_thresholds.min_overall_quality;
-            
+            let passes_thresholds = metrics.fragmentarity <= quality_thresholds.min_fragmentarity
+                && metrics.structure_ratio >= quality_thresholds.min_structure_ratio
+                && metrics.uniqueness >= quality_thresholds.min_uniqueness
+                && metrics.overall_quality >= quality_thresholds.min_overall_quality;
+
             // Only the first (good) metrics should pass all thresholds
             if i == 0 {
-                assert!(passes_thresholds || metrics.overall_quality >= 0.65, // Allow some tolerance
-                       "Good metrics should pass quality thresholds");
+                assert!(
+                    passes_thresholds || metrics.overall_quality >= 0.65, // Allow some tolerance
+                    "Good metrics should pass quality thresholds"
+                );
             }
         }
     }
 
     // Helper functions for quality metric calculations
-    fn calculate_fragmentarity(total_tokens: usize, fragment_count: usize, coherent_tokens: usize) -> f64 {
-        if total_tokens == 0 { return 0.0; }
-        
+    fn calculate_fragmentarity(
+        total_tokens: usize,
+        fragment_count: usize,
+        coherent_tokens: usize,
+    ) -> f64 {
+        if total_tokens == 0 {
+            return 0.0;
+        }
+
         let fragmentation_factor = fragment_count as f64 / total_tokens as f64;
         let coherence_factor = 1.0 - (coherent_tokens as f64 / total_tokens as f64);
-        
+
         (fragmentation_factor * 0.6 + coherence_factor * 0.4).min(1.0)
     }
 
     fn calculate_structure_ratio(structural_similarity: f64, textual_similarity: f64) -> f64 {
         let total_similarity = structural_similarity + textual_similarity;
-        if total_similarity == 0.0 { return 0.0; }
-        
+        if total_similarity == 0.0 {
+            return 0.0;
+        }
+
         structural_similarity / total_similarity
     }
 
@@ -670,7 +751,7 @@ mod quality_metrics_tests {
         let fragmentarity_score = 1.0 - metrics.fragmentarity; // Invert since lower is better
         let structure_score = metrics.structure_ratio;
         let uniqueness_score = metrics.uniqueness;
-        
+
         // Weighted average with emphasis on structure and uniqueness
         (fragmentarity_score * 0.2 + structure_score * 0.4 + uniqueness_score * 0.4).min(1.0)
     }
@@ -682,11 +763,11 @@ mod integration_tests {
     use tokio;
 
     /// Test complete auto-calibration and ranking pipeline
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_complete_auto_calibration_ranking_pipeline() {
         // Step 1: Create synthetic clone candidates
         let candidates = create_comprehensive_candidate_set();
-        
+
         // Step 2: Auto-calibration
         let calibration_settings = CalibrationSettings {
             target_quality_threshold: 0.8,
@@ -695,41 +776,61 @@ mod integration_tests {
             convergence_tolerance: 0.05,
             min_sample_size: 10,
         };
-        
+
         let mut calibration_engine = AutoCalibrationEngine::new(calibration_settings);
-        let optimal_threshold = calibration_engine.calibrate_thresholds(&candidates).unwrap();
-        
+        let optimal_threshold = calibration_engine
+            .calibrate_thresholds(&candidates)
+            .unwrap();
+
         // Step 3: Apply ranking with auto-calibrated threshold
         let ranking_system = PayoffRankingSystem::new(PayoffFormula::Standard);
         let ranking_result = ranking_system.rank_candidates(&candidates);
-        
+
         // Step 4: Filter by calibrated threshold
-        let high_quality_candidates: Vec<_> = ranking_result.ranked_candidates.into_iter()
+        let high_quality_candidates: Vec<_> = ranking_result
+            .ranked_candidates
+            .into_iter()
             .filter(|c| c.quality_metrics.overall_quality >= optimal_threshold)
             .collect();
-        
+
         // Validate pipeline results
-        assert!(optimal_threshold >= 0.1 && optimal_threshold <= 0.9,
-               "Optimal threshold should be reasonable: {}", optimal_threshold);
-        
-        assert!(!high_quality_candidates.is_empty(),
-               "Should have at least some high-quality candidates after filtering");
-        
-        assert!(ranking_result.filtered_by_hard_floors > 0,
-               "Should filter some candidates by hard floors");
-        
+        assert!(
+            optimal_threshold >= 0.1 && optimal_threshold <= 0.9,
+            "Optimal threshold should be reasonable: {}",
+            optimal_threshold
+        );
+
+        assert!(
+            !high_quality_candidates.is_empty(),
+            "Should have at least some high-quality candidates after filtering"
+        );
+
+        assert!(
+            ranking_result.filtered_by_hard_floors > 0,
+            "Should filter some candidates by hard floors"
+        );
+
         // Verify quality of final candidates
-        let avg_quality: f64 = high_quality_candidates.iter()
+        let avg_quality: f64 = high_quality_candidates
+            .iter()
             .map(|c| c.quality_metrics.overall_quality)
-            .sum::<f64>() / high_quality_candidates.len() as f64;
-        
-        assert!(avg_quality >= optimal_threshold,
-               "Average quality {} should meet threshold {}", avg_quality, optimal_threshold);
-        
+            .sum::<f64>()
+            / high_quality_candidates.len() as f64;
+
+        assert!(
+            avg_quality >= optimal_threshold,
+            "Average quality {} should meet threshold {}",
+            avg_quality,
+            optimal_threshold
+        );
+
         // Verify payoff ranking order
         for i in 0..high_quality_candidates.len().saturating_sub(1) {
-            assert!(high_quality_candidates[i].payoff_score >= high_quality_candidates[i+1].payoff_score,
-                   "Candidates should be sorted by payoff score");
+            assert!(
+                high_quality_candidates[i].payoff_score
+                    >= high_quality_candidates[i + 1].payoff_score,
+                "Candidates should be sorted by payoff score"
+            );
         }
     }
 
@@ -739,40 +840,53 @@ mod integration_tests {
         let candidates = create_comprehensive_candidate_set();
         let ranking_system = PayoffRankingSystem::new(PayoffFormula::Standard);
         let ranking_result = ranking_system.rank_candidates(&candidates);
-        
+
         // Test different threshold levels and their impact
         let thresholds = vec![0.3, 0.5, 0.7, 0.85, 0.95];
         let mut results = Vec::new();
-        
+
         for threshold in thresholds {
-            let filtered_candidates: Vec<_> = ranking_result.ranked_candidates.iter()
+            let filtered_candidates: Vec<_> = ranking_result
+                .ranked_candidates
+                .iter()
                 .filter(|c| c.quality_metrics.overall_quality >= threshold)
                 .collect();
-            
+
             let avg_payoff = if filtered_candidates.is_empty() {
                 0.0
             } else {
-                filtered_candidates.iter().map(|c| c.payoff_score).sum::<f64>() / filtered_candidates.len() as f64
+                filtered_candidates
+                    .iter()
+                    .map(|c| c.payoff_score)
+                    .sum::<f64>()
+                    / filtered_candidates.len() as f64
             };
-            
+
             results.push((threshold, filtered_candidates.len(), avg_payoff));
         }
-        
+
         // Validate sensitivity analysis results
-        for i in 0..results.len()-1 {
+        for i in 0..results.len() - 1 {
             let (thresh1, count1, payoff1) = results[i];
-            let (thresh2, count2, payoff2) = results[i+1];
-            
+            let (thresh2, count2, payoff2) = results[i + 1];
+
             // Higher thresholds should generally result in fewer candidates
-            assert!(count2 <= count1,
-                   "Higher threshold {} should not increase candidate count: {} vs {}", 
-                   thresh2, count2, count1);
-            
+            assert!(
+                count2 <= count1,
+                "Higher threshold {} should not increase candidate count: {} vs {}",
+                thresh2,
+                count2,
+                count1
+            );
+
             // Higher thresholds should generally result in higher average payoffs
             if count2 > 0 && count1 > 0 {
-                assert!(payoff2 >= payoff1 * 0.8, // Allow some flexibility
-                       "Higher threshold should generally improve average payoff: {} vs {}", 
-                       payoff2, payoff1);
+                assert!(
+                    payoff2 >= payoff1 * 0.8, // Allow some flexibility
+                    "Higher threshold should generally improve average payoff: {} vs {}",
+                    payoff2,
+                    payoff1
+                );
             }
         }
     }
@@ -782,29 +896,31 @@ mod integration_tests {
             // Excellent candidates (should rank highest)
             create_quality_candidate("excellent1", 300, 3.0, 2.2, 0.95),
             create_quality_candidate("excellent2", 250, 2.8, 2.0, 0.92),
-            
             // Good candidates
             create_quality_candidate("good1", 180, 2.2, 1.8, 0.85),
             create_quality_candidate("good2", 200, 2.0, 1.6, 0.82),
             create_quality_candidate("good3", 160, 1.9, 1.5, 0.78),
-            
             // Mediocre candidates
             create_quality_candidate("mediocre1", 140, 1.6, 1.3, 0.65),
             create_quality_candidate("mediocre2", 130, 1.4, 1.2, 0.60),
             create_quality_candidate("mediocre3", 120, 1.3, 1.1, 0.55),
-            
             // Poor candidates (should be filtered out)
             create_poor_candidate("poor1", 90, 1.0, 1.0), // Fails hard floors
             create_poor_candidate("poor2", 110, 1.1, 0.9), // Barely fails rarity floor
-            create_poor_candidate("poor3", 70, 0.9, 1.1),  // Fails multiple floors
-            
+            create_poor_candidate("poor3", 70, 0.9, 1.1), // Fails multiple floors
             // Borderline candidates
             create_quality_candidate("borderline1", 105, 1.25, 1.05, 0.45),
             create_quality_candidate("borderline2", 115, 1.3, 1.1, 0.48),
         ]
     }
 
-    fn create_quality_candidate(id: &str, saved_tokens: usize, rarity_gain: f64, live_reach_boost: f64, base_quality: f64) -> CloneCandidate {
+    fn create_quality_candidate(
+        id: &str,
+        saved_tokens: usize,
+        rarity_gain: f64,
+        live_reach_boost: f64,
+        base_quality: f64,
+    ) -> CloneCandidate {
         CloneCandidate {
             id: id.to_string(),
             entity1_id: format!("{}_e1", id),
@@ -823,7 +939,12 @@ mod integration_tests {
         }
     }
 
-    fn create_poor_candidate(id: &str, saved_tokens: usize, rarity_gain: f64, live_reach_boost: f64) -> CloneCandidate {
+    fn create_poor_candidate(
+        id: &str,
+        saved_tokens: usize,
+        rarity_gain: f64,
+        live_reach_boost: f64,
+    ) -> CloneCandidate {
         CloneCandidate {
             id: id.to_string(),
             entity1_id: format!("{}_e1", id),
@@ -833,9 +954,9 @@ mod integration_tests {
             rarity_gain,
             live_reach_boost,
             quality_metrics: QualityMetrics {
-                fragmentarity: 0.8, // High fragmentation
+                fragmentarity: 0.8,   // High fragmentation
                 structure_ratio: 0.2, // Low structure
-                uniqueness: 0.1, // Very common pattern
+                uniqueness: 0.1,      // Very common pattern
                 overall_quality: 0.2, // Poor overall quality
             },
             payoff_score: 0.0,
@@ -856,22 +977,22 @@ mod property_based_tests {
             base_live_reach_boost in 1.0f64..3.0
         ) {
             let ranking_system = PayoffRankingSystem::new(PayoffFormula::Standard);
-            
+
             let base_candidate = create_prop_candidate("base", base_saved_tokens, base_rarity_gain, base_live_reach_boost);
             let base_payoff = ranking_system.calculate_payoff(&base_candidate);
-            
+
             // Increased saved tokens should increase payoff
             let increased_tokens_candidate = create_prop_candidate("tokens", base_saved_tokens + 50, base_rarity_gain, base_live_reach_boost);
             let increased_tokens_payoff = ranking_system.calculate_payoff(&increased_tokens_candidate);
-            assert!(increased_tokens_payoff > base_payoff, 
+            assert!(increased_tokens_payoff > base_payoff,
                    "Increasing saved tokens should increase payoff: {} vs {}", increased_tokens_payoff, base_payoff);
-            
+
             // Increased rarity gain should increase payoff
             let increased_rarity_candidate = create_prop_candidate("rarity", base_saved_tokens, base_rarity_gain + 0.5, base_live_reach_boost);
             let increased_rarity_payoff = ranking_system.calculate_payoff(&increased_rarity_candidate);
             assert!(increased_rarity_payoff > base_payoff,
                    "Increasing rarity gain should increase payoff: {} vs {}", increased_rarity_payoff, base_payoff);
-            
+
             // Increased live reach boost should increase payoff
             let increased_reach_candidate = create_prop_candidate("reach", base_saved_tokens, base_rarity_gain, base_live_reach_boost + 0.3);
             let increased_reach_payoff = ranking_system.calculate_payoff(&increased_reach_candidate);
@@ -892,11 +1013,11 @@ mod property_based_tests {
                 uniqueness,
                 overall_quality: 0.0, // Will be calculated
             };
-            
+
             // Calculate overall quality
             let overall = (1.0 - fragmentarity) * 0.2 + structure_ratio * 0.4 + uniqueness * 0.4;
             let clamped_overall = overall.min(1.0).max(0.0);
-            
+
             assert!(clamped_overall >= 0.0 && clamped_overall <= 1.0,
                    "Overall quality should be in [0,1] range: {}", clamped_overall);
         }
@@ -914,15 +1035,15 @@ mod property_based_tests {
                 convergence_tolerance: 0.05,
                 min_sample_size: 10,
             };
-            
+
             let mut engine = AutoCalibrationEngine::new(settings);
             let candidates = create_diverse_candidate_set();
-            
+
             if let Ok(threshold) = engine.calibrate_thresholds(&candidates) {
                 // Threshold should be within initial range
                 assert!(threshold >= 0.1 && threshold <= 0.9,
                        "Calibrated threshold should be within range: {}", threshold);
-                
+
                 // Should converge within max iterations
                 let iterations_used = engine.last_calibration_iterations();
                 assert!(iterations_used <= max_iterations,
@@ -931,7 +1052,12 @@ mod property_based_tests {
         }
     }
 
-    fn create_prop_candidate(id: &str, saved_tokens: usize, rarity_gain: f64, live_reach_boost: f64) -> CloneCandidate {
+    fn create_prop_candidate(
+        id: &str,
+        saved_tokens: usize,
+        rarity_gain: f64,
+        live_reach_boost: f64,
+    ) -> CloneCandidate {
         CloneCandidate {
             id: id.to_string(),
             entity1_id: format!("{}_e1", id),
@@ -951,14 +1077,16 @@ mod property_based_tests {
     }
 
     fn create_diverse_candidate_set() -> Vec<CloneCandidate> {
-        (0..15).map(|i| {
-            let quality = 0.3 + (i as f64 / 14.0) * 0.6; // Range from 0.3 to 0.9
-            create_prop_candidate(
-                &format!("diverse_{}", i),
-                100 + i * 10,
-                1.2 + (i as f64 * 0.1),
-                1.0 + (i as f64 * 0.1)
-            )
-        }).collect()
+        (0..15)
+            .map(|i| {
+                let quality = 0.3 + (i as f64 / 14.0) * 0.6; // Range from 0.3 to 0.9
+                create_prop_candidate(
+                    &format!("diverse_{}", i),
+                    100 + i * 10,
+                    1.2 + (i as f64 * 0.1),
+                    1.0 + (i as f64 * 0.1),
+                )
+            })
+            .collect()
     }
 }

@@ -1,5 +1,27 @@
 <!-- Code Analysis Tree -->
 <div class="results-section">
+    {{#if editor_mode}}
+    <!-- Editor Control Bar (only shown in --editor mode) -->
+    <div class="editor-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.75rem; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: var(--radius);">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <span style="font-weight: 600; color: #ffc107;">
+                <i data-lucide="edit" style="width: 16px; height: 16px; margin-right: 0.5rem;"></i>
+                Editor Mode
+            </span>
+            <button class="refactor-btn" onclick="refactorSelected()" style="display: flex; align-items: center; gap: 0.5rem; background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: var(--radius); cursor: pointer; font-size: 0.875rem;" disabled>
+                <i data-lucide="wrench" style="width: 14px; height: 14px;"></i>
+                Refactor Selected
+            </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; color: var(--muted);">
+            <span id="selection-count">0 selected</span>
+            <button onclick="selectAllIssues()" style="background: transparent; border: 1px solid var(--keyline); color: var(--text); padding: 0.25rem 0.5rem; border-radius: var(--radius); cursor: pointer; font-size: 0.75rem;">
+                Select All Issues
+            </button>
+        </div>
+    </div>
+    {{/if}}
+    
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2 style="margin: 0;">Code Analysis Tree</h2>
         <div class="filter-dropdown" style="position: relative;">
@@ -40,36 +62,13 @@
         <!-- Tree will be mounted here by React -->
     </div>
     
+    
     <!-- Data for React tree (embedded JSON) -->
     <script id="tree-data" type="application/json">
         {
-            "refactoringCandidatesByFile": [
-                {{#each refactoring_candidates_by_file}}
-                {
-                    "fileName": "{{file_name}}",
-                    "filePath": "{{file_path}}",
-                    "highestPriority": "{{highest_priority}}",
-                    "entityCount": {{entity_count}},
-                    "avgScore": {{avg_score}},
-                    "totalIssues": {{total_issues}},
-                    "entities": [
-                        {{#each entities}}
-                        {
-                            "name": "{{{name}}}",
-                            "priority": "{{priority}}",
-                            "score": {{#if score}}{{score}}{{else}}0{{/if}},
-                            "lineRange": {{#if line_range}}[{{line_range.0}}, {{line_range.1}}]{{else}}null{{/if}},
-                            "issueCount": {{#if issue_count}}{{issue_count}}{{else}}0{{/if}},
-                            "suggestionCount": {{#if suggestion_count}}{{suggestion_count}}{{else}}0{{/if}},
-                            "issueCategories": "{{#each issues}}{{category}}{{#unless @last}}, {{/unless}}{{/each}}",
-                            "suggestionTypes": "{{#each suggestions}}{{type}}{{#unless @last}}, {{/unless}}{{/each}}"
-                        }{{#unless @last}},{{/unless}}
-                        {{/each}}
-                    ]
-                }{{#unless @last}},{{/unless}}
-                {{/each}}
-            ],
-            "directoryHealthTree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}}
+            "unifiedHierarchy": {{#if unified_hierarchy}}{{{unified_hierarchy}}}{{else}}[]{{/if}},
+            "directoryHealthTree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
+            "coveragePacks": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}}
         }
     </script>
     
@@ -77,90 +76,613 @@
     <!-- Self-contained React bundle with all dependencies -->
     <script src="./react-tree-bundle.debug.js"></script>
     
+    
     <!-- Mount React Tree Component -->
     <script>
-        // Mount the React component
-        window.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 DOM loaded, attempting to mount React tree...');
+        // Transform tree data to add required properties for React Arborist
+        function transformTreeData(rawData) {
+            console.log('🔄 Raw data received:', typeof rawData);
+            console.log('🔍 Data keys:', rawData ? Object.keys(rawData) : 'null');
             
-            const container = document.getElementById('react-tree-root');
-            console.log('📦 Container found:', !!container);
-            console.log('⚛️ React available:', typeof window.React !== 'undefined');
-            console.log('🔗 ReactDOM available:', typeof window.ReactDOM !== 'undefined');
-            console.log('🌳 ReactTreeBundle available:', typeof window.ReactTreeBundle !== 'undefined');
-            console.log('🌳 CodeAnalysisTree fallback available:', typeof window.CodeAnalysisTree !== 'undefined');
+            let unifiedHierarchy;
             
-            if (!container) {
-                console.error('❌ Container #react-tree-root not found');
-                return;
+            // Handle the triple JSON parsing issue from valknut
+            if (typeof rawData === 'string') {
+                try {
+                    const parsed = JSON.parse(rawData);
+                    unifiedHierarchy = parsed.unifiedHierarchy || parsed;
+                } catch (e) {
+                    console.error('❌ Failed to parse raw data string:', e);
+                    return [];
+                }
+            } else if (rawData && rawData.unifiedHierarchy) {
+                unifiedHierarchy = rawData.unifiedHierarchy;
+            } else if (Array.isArray(rawData)) {
+                unifiedHierarchy = rawData;
+            } else {
+                console.error('❌ Unexpected data format:', rawData);
+                return [];
             }
             
-            if (typeof window.React === 'undefined') {
-                console.error('❌ React not loaded');
-                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ React not loaded</div>';
-                return;
+            // Handle case where unifiedHierarchy is still a JSON string (double encoding)
+            if (typeof unifiedHierarchy === 'string') {
+                try {
+                    unifiedHierarchy = JSON.parse(unifiedHierarchy);
+                } catch (e) {
+                    console.error('❌ Failed to parse unifiedHierarchy string:', e);
+                    return [];
+                }
             }
             
-            if (typeof window.ReactDOM === 'undefined') {
-                console.error('❌ ReactDOM not loaded');
-                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ ReactDOM not loaded</div>';
-                return;
+            if (!Array.isArray(unifiedHierarchy)) {
+                console.error('❌ unifiedHierarchy is not an array:', unifiedHierarchy);
+                return [];
             }
             
-            // Check for webpack library export first, then fallback
-            const TreeComponent = window.ReactTreeBundle || window.CodeAnalysisTree;
-            if (!TreeComponent) {
-                console.error('❌ Tree component not loaded (checked ReactTreeBundle and CodeAnalysisTree)');
-                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Tree component not loaded</div>';
-                return;
+            console.log('✅ Processing unified hierarchy:', unifiedHierarchy.length, 'items');
+            console.log('🔍 First item structure:', unifiedHierarchy[0] ? {
+                hasType: !!unifiedHierarchy[0].type,
+                hasName: !!unifiedHierarchy[0].name,
+                hasChildren: !!unifiedHierarchy[0].children,
+                childrenLength: unifiedHierarchy[0].children ? unifiedHierarchy[0].children.length : 0
+            } : 'no first item');
+            
+            // Transform the data to add required properties
+            const transformedItems = unifiedHierarchy.map(item => transformNode(item)).filter(item => item !== null);
+            console.log('✅ Transformation complete:', transformedItems.length, 'root items after filtering');
+            console.log('🔍 First transformed item:', transformedItems[0] ? {
+                id: transformedItems[0].id,
+                name: transformedItems[0].name,
+                type: transformedItems[0].type,
+                hasChildren: !!transformedItems[0].children,
+                childrenLength: transformedItems[0].children ? transformedItems[0].children.length : 0
+            } : 'no transformed items');
+            
+            return transformedItems;
+        }
+        
+        // Recursively transform a node to add required properties for React Arborist
+        function transformNode(node, parentPath = '') {
+            if (!node || typeof node !== 'object') {
+                console.warn('⚠️ Invalid node:', node);
+                return null;
             }
             
-            try {
-                // Parse the embedded tree data
-                const treeDataScript = document.getElementById('tree-data');
-                let analysisData = null;
+            console.log('🔄 Transforming node:', { 
+                hasType: !!node.type, 
+                hasName: !!node.name, 
+                hasChildren: !!node.children,
+                parentPath 
+            });
+            
+            // Handle malformed root nodes that are missing type/name (backend issue workaround)
+            let nodeType = node.type;
+            let nodeName = node.name;
+            
+            if ((!nodeType || nodeType === '') && (!nodeName || nodeName === '') && node.children && Array.isArray(node.children)) {
+                // This appears to be a malformed root directory node - infer from structure
+                nodeType = 'folder'; // React Arborist expects 'folder', not 'directory'
                 
-                if (treeDataScript) {
-                    const rawData = treeDataScript.textContent.trim();
-                    console.log('📄 Raw JSON length:', rawData.length);
-                    
-                    try {
-                        analysisData = JSON.parse(rawData);
-                        console.log('📊 Parsed analysis data successfully:', {
-                            refactoringFiles: analysisData?.refactoringCandidatesByFile?.length || 0,
-                            hasDirectoryHealth: !!analysisData?.directoryHealthTree
-                        });
-                    } catch (jsonError) {
-                        console.error('❌ JSON parse error:', jsonError);
-                        console.error('📄 Raw data sample:', rawData.substring(0, 200) + '...');
-                        container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Invalid JSON data: ' + jsonError.message + '</div>';
-                        return;
-                    }
+                // Try to infer name from first child's path
+                if (node.children.length > 0 && node.children[0].path) {
+                    const childPath = node.children[0].path;
+                    const pathParts = childPath.split('/');
+                    nodeName = pathParts.length > 1 ? pathParts[0] : 'root';
                 } else {
-                    console.warn('⚠️ No tree-data script element found');
-                    analysisData = { refactoringCandidatesByFile: [], directoryHealthTree: null };
+                    nodeName = parentPath || 'Project Root';
+                }
+                console.warn('⚠️ Inferring missing type/name for malformed node:', { inferred: { type: nodeType, name: nodeName }, original: node });
+            }
+            
+            // Generate unique ID based on path and type
+            const currentPath = parentPath ? `${parentPath}/${nodeName}` : nodeName;
+            const cleanPath = (currentPath || 'unknown').replace(/[^a-zA-Z0-9_/-]/g, '_');
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).substr(2, 5);
+            const id = `${nodeType || 'unknown'}-${cleanPath}-${timestamp}-${randomId}`;
+            
+            const transformed = {
+                id,
+                name: nodeName || 'Unknown',
+                type: nodeType || 'unknown',
+                isLeaf: !node.children || node.children.length === 0,
+                data: {
+                    // Preserve all original properties
+                    ...node,
+                    // Add computed properties
+                    path: currentPath,
+                    hasIssues: (node.issue_count || 0) > 0,
+                    hasSuggestions: (node.suggestion_count || 0) > 0,
+                    // Format score for display
+                    displayScore: node.score ? parseFloat(node.score).toFixed(1) : null,
+                    displayHealth: node.health_score ? parseFloat(node.health_score).toFixed(1) : null
+                }
+            };
+            
+            // Recursively transform children
+            if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+                transformed.children = node.children
+                    .map(child => transformNode(child, currentPath))
+                    .filter(child => child !== null);
+                
+                // Update isLeaf based on actual children after filtering
+                transformed.isLeaf = transformed.children.length === 0;
+            }
+            
+            return transformed;
+        }
+
+        // Fixed Tree Component Wrapper to handle React state timing issues
+        function FixedTreeComponent({ data }) {
+            const [isDataReady, setIsDataReady] = React.useState(false);
+            const [treeData, setTreeData] = React.useState([]);
+            const [error, setError] = React.useState(null);
+            const [validationResult, setValidationResult] = React.useState(null);
+            
+            React.useEffect(() => {
+                console.log('📡 Processing tree data...');
+                setError(null);
+                
+                try {
+                    if (data) {
+                        console.log('🔍 Raw data type:', typeof data);
+                        // Use the enhanced transformTreeData function
+                        const transformedData = transformTreeData(data);
+                        console.log('✅ Transformed data with IDs:', transformedData.length, 'items');
+                        
+                        // Validate the transformed data
+                        const validation = validateTreeData(transformedData);
+                        setValidationResult(validation);
+                        
+                        if (!validation.isValid) {
+                            console.error('❌ Data validation failed:', validation.errors);
+                            setError(`Data validation failed: ${validation.errors.join(', ')}`);
+                            setTreeData([]);
+                        } else {
+                            console.log('✅ Data validation passed:', validation.nodeCount, 'total nodes');
+                            setTreeData(transformedData);
+                        }
+                    } else {
+                        console.log('⚠️ No data provided');
+                        setTreeData([]);
+                    }
+                } catch (e) {
+                    console.error('❌ Error processing tree data:', e);
+                    setError(`Error processing data: ${e.message}`);
+                    setTreeData([]);
                 }
                 
-                // Mount React component with parsed data
+                setIsDataReady(true);
+            }, [data]);
+            
+            // Validate that transformed data meets React Arborist requirements
+            function validateTreeData(data) {
+                const errors = [];
+                
+                if (!Array.isArray(data)) {
+                    errors.push('Data must be an array');
+                    return { isValid: false, errors };
+                }
+                
+                function validateNode(node, path = '') {
+                    if (!node) {
+                        errors.push(`Null node at path: ${path}`);
+                        return;
+                    }
+                    
+                    if (!node.id) {
+                        errors.push(`Missing id at path: ${path}`);
+                    }
+                    
+                    if (!node.name) {
+                        errors.push(`Missing name at path: ${path}`);
+                    }
+                    
+                    if (typeof node.isLeaf !== 'boolean') {
+                        errors.push(`Missing or invalid isLeaf at path: ${path}`);
+                    }
+                    
+                    if (node.children) {
+                        if (!Array.isArray(node.children)) {
+                            errors.push(`Children must be array at path: ${path}`);
+                        } else {
+                            node.children.forEach((child, index) => {
+                                validateNode(child, `${path}[${index}]`);
+                            });
+                        }
+                    }
+                }
+                
+                data.forEach((node, index) => {
+                    validateNode(node, `root[${index}]`);
+                });
+                
+                return {
+                    isValid: errors.length === 0,
+                    errors,
+                    nodeCount: countNodes(data)
+                };
+            }
+            
+            // Count total nodes in the tree
+            function countNodes(data) {
+                let count = 0;
+                
+                function traverse(nodes) {
+                    if (!Array.isArray(nodes)) return;
+                    
+                    count += nodes.length;
+                    nodes.forEach(node => {
+                        if (node.children) {
+                            traverse(node.children);
+                        }
+                    });
+                }
+                
+                traverse(data);
+                return count;
+            }
+            
+            // Show loading state until data is ready
+            if (!isDataReady) {
+                return React.createElement('div', {
+                    className: 'tree-loading',
+                    style: { 
+                        textAlign: 'center', 
+                        padding: '2rem',
+                        color: 'var(--text)',
+                        backgroundColor: 'var(--background)'
+                    }
+                }, 'Loading tree data...');
+            }
+            
+            // Show error state
+            if (error) {
+                return React.createElement('div', {
+                    className: 'tree-error',
+                    style: { 
+                        textAlign: 'center', 
+                        padding: '2rem', 
+                        color: '#ff6b6b',
+                        backgroundColor: 'var(--background)',
+                        border: '1px solid #ff6b6b',
+                        borderRadius: 'var(--radius)'
+                    }
+                }, 
+                    React.createElement('h3', null, 'Tree Rendering Error'),
+                    React.createElement('p', null, error),
+                    validationResult && validationResult.errors.length > 0 && 
+                        React.createElement('details', { style: { marginTop: '1rem', textAlign: 'left' } },
+                            React.createElement('summary', null, 'Validation Errors'),
+                            React.createElement('ul', null,
+                                ...validationResult.errors.map((err, index) => 
+                                    React.createElement('li', { key: index }, err)
+                                )
+                            )
+                        )
+                );
+            }
+            
+            // Show empty state if no data
+            if (treeData.length === 0) {
+                return React.createElement('div', {
+                    className: 'tree-empty',
+                    style: { 
+                        textAlign: 'center', 
+                        padding: '2rem', 
+                        color: 'var(--muted)' 
+                    }
+                }, 
+                    React.createElement('h3', null, 'No Refactoring Candidates Found'),
+                    React.createElement('p', null, 'Your code is in excellent shape!'),
+                    React.createElement('details', { style: { marginTop: '1rem', textAlign: 'left' } },
+                        React.createElement('summary', null, 'Debug Info'),
+                        React.createElement('pre', { style: { fontSize: '12px', overflow: 'auto' } },
+                            JSON.stringify({ data, processedData: treeData }, null, 2)
+                        )
+                    )
+                );
+            }
+            
+            // Show validation info
+            const infoElement = validationResult ? React.createElement('div', {
+                className: 'tree-info',
+                style: { 
+                    fontSize: '12px', 
+                    color: 'var(--muted)', 
+                    marginBottom: '0.5rem' 
+                }
+            }, `Loaded ${validationResult.nodeCount} nodes successfully`) : null;
+            
+            // Try to use the original TreeComponent from the bundle
+            const bundle = window.ReactTreeBundle ?? window.CodeAnalysisTree ?? null;
+            const OriginalTreeComponent = (bundle && (bundle.default || bundle.TreeComponent || bundle.Tree)) || bundle;
+            
+            if (typeof OriginalTreeComponent === 'function') {
+                console.log('🌳 Rendering with original TreeComponent, data length:', treeData.length);
+                console.log('📋 Sample tree data:', JSON.stringify(treeData.slice(0, 1), null, 2));
+                
+                // React Arborist expects specific props - fix the API usage
+                const arboristProps = {
+                    data: treeData,
+                    height: 600,
+                    width: '100%',
+                    // React Arborist requires these specific callbacks
+                    onSelect: (nodes) => console.log('Selected:', nodes),
+                    onMove: (args) => console.log('Move:', args),
+                    // Critical: React Arborist needs proper render callbacks
+                    children: ({ node, style, dragHandle }) => {
+                        const { data } = node;
+                        const nodeData = data.data || data;
+                        
+                        return React.createElement('div', {
+                            style,
+                            className: `tree-node tree-node--${nodeData.type || 'unknown'}`,
+                            'data-node-id': node.id
+                        }, [
+                            dragHandle && React.createElement('span', { 
+                                key: 'handle',
+                                className: 'tree-node__handle',
+                                ...dragHandle 
+                            }),
+                            React.createElement('span', {
+                                key: 'icon',
+                                className: `tree-node__icon lucide lucide-${
+                                    nodeData.type === 'directory' ? 'folder' : 
+                                    nodeData.type === 'file' ? 'file-text' : 
+                                    nodeData.type === 'entity' ? 'code' : 'circle'
+                                }`
+                            }),
+                            React.createElement('span', {
+                                key: 'name',
+                                className: 'tree-node__name'
+                            }, node.data.name || 'Unknown'),
+                            nodeData.displayHealth && React.createElement('span', {
+                                key: 'health',
+                                className: 'tree-node__health',
+                                style: { marginLeft: 'auto', fontSize: '0.8em', color: '#666' }
+                            }, `${nodeData.displayHealth}%`)
+                        ]);
+                    }
+                };
+                
+                return React.createElement('div', { className: 'valknut-tree-container' },
+                    infoElement,
+                    React.createElement(OriginalTreeComponent, arboristProps)
+                );
+            } else {
+                console.log('🌲 Fallback: Rendering with enhanced custom tree implementation');
+                
+                // Enhanced fallback: Custom tree rendering with React Arborist-like behavior
+                const [expandedNodes, setExpandedNodes] = React.useState(new Set());
+                
+                React.useEffect(() => {
+                    // Auto-expand directories and files by default
+                    const autoExpand = new Set();
+                    const traverse = (nodes) => {
+                        nodes.forEach(node => {
+                            if (node.data && (node.data.type === 'directory' || node.data.type === 'file')) {
+                                autoExpand.add(node.id);
+                            }
+                            if (node.children) {
+                                traverse(node.children);
+                            }
+                        });
+                    };
+                    traverse(treeData);
+                    setExpandedNodes(autoExpand);
+                }, [treeData]);
+                
+                const toggleNode = (nodeId) => {
+                    setExpandedNodes(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(nodeId)) {
+                            newSet.delete(nodeId);
+                        } else {
+                            newSet.add(nodeId);
+                        }
+                        return newSet;
+                    });
+                };
+                
+                const renderTreeNode = (node, level = 0) => {
+                    const nodeData = node.data || node;
+                    const isExpanded = expandedNodes.has(node.id);
+                    const hasChildren = node.children && node.children.length > 0;
+                    
+                    const style = {
+                        paddingLeft: (level * 20) + 'px',
+                        padding: '8px 12px',
+                        borderBottom: '1px solid var(--keyline)',
+                        backgroundColor: level % 2 === 0 ? 'var(--background-secondary)' : 'var(--background)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center'
+                    };
+                    
+                    const getNodeIcon = () => {
+                        switch (nodeData.type) {
+                            case 'directory': return '📁';
+                            case 'file': return '📄';
+                            case 'entity': return '⚙️';
+                            case 'issue': return '⚠️';
+                            case 'suggestion': return '💡';
+                            default: return '📋';
+                        }
+                    };
+                    
+                    const renderNodeContent = () => {
+                        switch (nodeData.type) {
+                            case 'directory':
+                                return React.createElement('span', null,
+                                    getNodeIcon(), ' ', nodeData.name,
+                                    nodeData.displayHealth && React.createElement('span', { 
+                                        style: { marginLeft: '10px', color: '#4CAF50', fontSize: '12px' } 
+                                    }, ` (Health: ${nodeData.displayHealth})`)
+                                );
+                                
+                            case 'file':
+                                return React.createElement('span', null,
+                                    getNodeIcon(), ' ', nodeData.name
+                                );
+                                
+                            case 'entity':
+                                return React.createElement('span', null,
+                                    getNodeIcon(), ' ', nodeData.name,
+                                    nodeData.displayScore && React.createElement('span', { 
+                                        style: { 
+                                            marginLeft: '10px', 
+                                            color: parseFloat(nodeData.displayScore) > 40 ? '#ff6b6b' : parseFloat(nodeData.displayScore) > 20 ? '#ffa500' : '#4CAF50',
+                                            fontSize: '12px' 
+                                        } 
+                                    }, ` (Score: ${nodeData.displayScore})`),
+                                    nodeData.hasIssues && React.createElement('span', { 
+                                        style: { marginLeft: '10px', color: '#ff6b6b', fontSize: '12px' } 
+                                    }, ` (${nodeData.issue_count} issues)`),
+                                    nodeData.hasSuggestions && React.createElement('span', { 
+                                        style: { marginLeft: '10px', color: '#4CAF50', fontSize: '12px' } 
+                                    }, ` (${nodeData.suggestion_count} suggestions)`)
+                                );
+                                
+                            case 'issue':
+                                return React.createElement('span', { className: 'issue-node' },
+                                    getNodeIcon(), ' ', nodeData.name,
+                                    React.createElement('span', { 
+                                        style: { 
+                                            marginLeft: '10px', 
+                                            color: nodeData.priority === 'Critical' ? '#ff1744' : nodeData.priority === 'High' ? '#ff6b6b' : '#ffa500',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        } 
+                                    }, `[${nodeData.priority}]`),
+                                    nodeData.displayScore && React.createElement('span', { 
+                                        style: { marginLeft: '10px', color: '#666', fontSize: '12px' } 
+                                    }, ` (Score: ${nodeData.displayScore})`)
+                                );
+                                
+                            case 'suggestion':
+                                return React.createElement('span', { className: 'suggestion-node' },
+                                    getNodeIcon(), ' ', nodeData.name,
+                                    React.createElement('span', { 
+                                        style: { 
+                                            marginLeft: '10px', 
+                                            color: nodeData.priority === 'High' ? '#ff6b6b' : nodeData.priority === 'Medium' ? '#ffa500' : '#4CAF50',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        } 
+                                    }, `[${nodeData.priority}]`),
+                                    nodeData.refactoring_type && React.createElement('span', { 
+                                        style: { marginLeft: '10px', color: '#2196F3', fontSize: '12px' } 
+                                    }, ` [${nodeData.refactoring_type}]`)
+                                );
+                                
+                            default:
+                                return React.createElement('span', null,
+                                    getNodeIcon(), ' ', nodeData.name || 'Unknown'
+                                );
+                        }
+                    };
+                    
+                    const children = (hasChildren && isExpanded) ? 
+                        node.children.map((child, index) => renderTreeNode(child, level + 1)) : [];
+                    
+                    return React.createElement('div', { 
+                        key: node.id,
+                        'data-node-type': nodeData.type,
+                        'data-node-id': node.id
+                    }, 
+                        React.createElement('div', {
+                            style: style,
+                            onClick: () => hasChildren && toggleNode(node.id)
+                        },
+                            hasChildren && React.createElement('span', { 
+                                style: { 
+                                    marginRight: '8px', 
+                                    fontSize: '12px',
+                                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.2s'
+                                } 
+                            }, '▶'),
+                            renderNodeContent()
+                        ),
+                        ...children
+                    );
+                };
+                
+                return React.createElement('div', { className: 'valknut-tree-container' },
+                    infoElement,
+                    React.createElement('div', {
+                        style: { 
+                            height: '600px', 
+                            overflow: 'auto', 
+                            backgroundColor: 'var(--background)',
+                            border: '1px solid var(--keyline)',
+                            borderRadius: 'var(--radius)'
+                        }
+                    }, 
+                        ...treeData.map((node, index) => renderTreeNode(node, 0))
+                    )
+                );
+            }
+        }
+
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('react-tree-root');
+
+            // 1) Verify React is present (from your bundle)
+            if (!window.React || !window.ReactDOM) {
+                console.error('❌ React/ReactDOM not loaded');
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--muted);">React components not available. Please ensure the React bundle is loaded properly.</div>';
+                return;
+            }
+
+            // 2) Parse embedded data with enhanced error handling
+            let analysisData = {};
+            const treeDataScript = document.getElementById('tree-data');
+            if (treeDataScript) {
+                const rawData = treeDataScript.textContent.trim();
+                try {
+                    analysisData = JSON.parse(rawData);
+                    console.log('✅ Initial JSON parse successful');
+                    
+                } catch (e) {
+                    console.error('❌ JSON parse error:', e, '\nSample:', rawData.slice(0, 200));
+                    return;
+                }
+            } else {
+                console.warn('⚠️ No #tree-data script found; using empty defaults');
+            }
+
+            console.log('📊 Raw data shape:', {
+                unifiedHierarchy: typeof analysisData.unifiedHierarchy,
+                directoryHealthTree: !!analysisData.directoryHealthTree,
+                coveragePacks: Array.isArray(analysisData.coveragePacks) ? analysisData.coveragePacks.length : 'missing'
+            });
+
+            // 3) Mount with fixed component wrapper and error handling
+            try {
                 const { createRoot } = ReactDOM;
                 const root = createRoot(container);
-                root.render(React.createElement(TreeComponent, {
-                    data: analysisData
-                }));
-                
-                console.log('✅ React component mounted successfully');
-                
-                // Initialize Lucide icons after React renders
+                root.render(React.createElement(FixedTreeComponent, { data: analysisData }));
+
+                // 4) Sanity check: did it render *anything*?
                 setTimeout(() => {
-                    if (window.lucide) {
-                        window.lucide.createIcons();
-                        console.log('🎨 Lucide icons initialized');
+                    const rendered = container.querySelector('*');
+                    if (!rendered || container.querySelector('.error')) {
+                        console.error('❌ React rendering failed or returned empty');
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--muted);">Tree rendering failed. Please check the console for errors and refresh the page.</div>';
+                    } else {
+                        console.log('✅ React component rendered successfully');
+                        window.lucide?.createIcons?.();
                     }
-                }, 100);
+                }, 500); // Give React more time to render
                 
             } catch (error) {
-                console.error('❌ Failed to mount React tree:', error);
-                container.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">❌ Failed to mount: ' + error.message + '</div>';
+                console.error('❌ React rendering error:', error);
+                container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--muted);"><h3>React Error</h3><p>Tree component failed to load: ${error.message}</p><p>Please check the console for details and refresh the page.</p></div>`;
             }
         });
     </script>

@@ -1,23 +1,22 @@
 //! Individual analysis stages for the pipeline.
 
-use std::path::{Path, PathBuf};
-use tracing::{debug, warn, info};
 use chrono::{DateTime, Utc};
+use std::path::{Path, PathBuf};
+use tracing::{debug, info, warn};
 
-use crate::core::errors::Result;
-use crate::core::config::CoverageConfig;
-use crate::core::file_utils::{CoverageDiscovery, CoverageFile, CoverageFormat};
-use crate::core::featureset::FeatureExtractor;
-use crate::detectors::complexity::ComplexityAnalyzer;
-use crate::detectors::structure::StructureExtractor;
-use crate::detectors::refactoring::RefactoringAnalyzer;
-use crate::detectors::lsh::LshExtractor;
-use crate::detectors::coverage::CoverageExtractor;
 use super::pipeline_results::{
-    StructureAnalysisResults, ComplexityAnalysisResults, 
-    RefactoringAnalysisResults, ImpactAnalysisResults, LshAnalysisResults,
-    CoverageAnalysisResults, CoverageFileInfo
+    ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
+    LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
 };
+use crate::core::config::CoverageConfig;
+use crate::core::errors::Result;
+use crate::core::featureset::FeatureExtractor;
+use crate::core::file_utils::{CoverageDiscovery, CoverageFile, CoverageFormat};
+use crate::detectors::complexity::ComplexityAnalyzer;
+use crate::detectors::coverage::CoverageExtractor;
+use crate::detectors::lsh::LshExtractor;
+use crate::detectors::refactoring::RefactoringAnalyzer;
+use crate::detectors::structure::StructureExtractor;
 
 /// Handles all individual analysis stages
 pub struct AnalysisStages {
@@ -61,26 +60,33 @@ impl AnalysisStages {
     }
 
     /// Run structure analysis
-    pub async fn run_structure_analysis(&self, paths: &[PathBuf]) -> Result<StructureAnalysisResults> {
+    pub async fn run_structure_analysis(
+        &self,
+        paths: &[PathBuf],
+    ) -> Result<StructureAnalysisResults> {
         debug!("Running structure analysis");
-        
+
         let mut all_recommendations = Vec::new();
         let mut file_splitting_recommendations = Vec::new();
-        
+
         for path in paths {
-            match self.structure_extractor.generate_recommendations(path).await {
+            match self
+                .structure_extractor
+                .generate_recommendations(path)
+                .await
+            {
                 Ok(recommendations) => {
                     for rec in recommendations {
                         match rec.get("kind") {
                             Some(serde_json::Value::String(kind)) if kind == "file_split" => {
                                 file_splitting_recommendations.push(rec);
-                            },
+                            }
                             _ => {
                                 all_recommendations.push(rec);
                             }
                         }
                     }
-                },
+                }
                 Err(e) => warn!("Structure analysis failed for {}: {}", path.display(), e),
             }
         }
@@ -96,9 +102,12 @@ impl AnalysisStages {
     }
 
     /// Run complexity analysis
-    pub async fn run_complexity_analysis(&self, files: &[PathBuf]) -> Result<ComplexityAnalysisResults> {
+    pub async fn run_complexity_analysis(
+        &self,
+        files: &[PathBuf],
+    ) -> Result<ComplexityAnalysisResults> {
         debug!("Running complexity analysis on {} files", files.len());
-        
+
         let file_refs: Vec<&Path> = files.iter().map(|p| p.as_path()).collect();
         let detailed_results = self.complexity_analyzer.analyze_files(&file_refs).await?;
 
@@ -106,13 +115,31 @@ impl AnalysisStages {
         let count = detailed_results.len() as f64;
         let total_cyclomatic: f64 = detailed_results.iter().map(|r| r.metrics.cyclomatic).sum();
         let total_cognitive: f64 = detailed_results.iter().map(|r| r.metrics.cognitive).sum();
-        let total_debt: f64 = detailed_results.iter().map(|r| r.metrics.technical_debt_score).sum();
-        let total_maintainability: f64 = detailed_results.iter().map(|r| r.metrics.maintainability_index).sum();
+        let total_debt: f64 = detailed_results
+            .iter()
+            .map(|r| r.metrics.technical_debt_score)
+            .sum();
+        let total_maintainability: f64 = detailed_results
+            .iter()
+            .map(|r| r.metrics.maintainability_index)
+            .sum();
 
-        let average_cyclomatic_complexity = if count > 0.0 { total_cyclomatic / count } else { 0.0 };
-        let average_cognitive_complexity = if count > 0.0 { total_cognitive / count } else { 0.0 };
+        let average_cyclomatic_complexity = if count > 0.0 {
+            total_cyclomatic / count
+        } else {
+            0.0
+        };
+        let average_cognitive_complexity = if count > 0.0 {
+            total_cognitive / count
+        } else {
+            0.0
+        };
         let average_technical_debt_score = if count > 0.0 { total_debt / count } else { 0.0 };
-        let average_maintainability_index = if count > 0.0 { total_maintainability / count } else { 100.0 };
+        let average_maintainability_index = if count > 0.0 {
+            total_maintainability / count
+        } else {
+            100.0
+        };
 
         // Count issues
         let issues_count = detailed_results.iter().map(|r| r.issues.len()).sum();
@@ -129,11 +156,17 @@ impl AnalysisStages {
     }
 
     /// Run refactoring analysis
-    pub async fn run_refactoring_analysis(&self, files: &[PathBuf]) -> Result<RefactoringAnalysisResults> {
+    pub async fn run_refactoring_analysis(
+        &self,
+        files: &[PathBuf],
+    ) -> Result<RefactoringAnalysisResults> {
         debug!("Running refactoring analysis on {} files", files.len());
-        
+
         let detailed_results = self.refactoring_analyzer.analyze_files(files).await?;
-        let opportunities_count = detailed_results.iter().map(|r| r.recommendations.len()).sum();
+        let opportunities_count = detailed_results
+            .iter()
+            .map(|r| r.recommendations.len())
+            .sum();
 
         Ok(RefactoringAnalysisResults {
             enabled: true,
@@ -145,7 +178,7 @@ impl AnalysisStages {
     /// Run impact analysis (placeholder for now)
     pub async fn run_impact_analysis(&self, _files: &[PathBuf]) -> Result<ImpactAnalysisResults> {
         debug!("Running impact analysis (placeholder implementation)");
-        
+
         // TODO: Implement dependency cycle detection, chokepoint analysis, clone detection
         Ok(ImpactAnalysisResults {
             enabled: true,
@@ -157,14 +190,21 @@ impl AnalysisStages {
     }
 
     /// Run LSH analysis for clone detection
-    pub async fn run_lsh_analysis(&self, files: &[PathBuf], denoise_enabled: bool) -> Result<LshAnalysisResults> {
-        debug!("Running LSH analysis for clone detection on {} files", files.len());
-        
+    pub async fn run_lsh_analysis(
+        &self,
+        files: &[PathBuf],
+        denoise_enabled: bool,
+    ) -> Result<LshAnalysisResults> {
+        debug!(
+            "Running LSH analysis for clone detection on {} files",
+            files.len()
+        );
+
         if let Some(ref lsh_extractor) = self.lsh_extractor {
-            use crate::core::featureset::{CodeEntity, ExtractionContext};
             use crate::core::config::ValknutConfig;
-            use std::sync::Arc;
+            use crate::core::featureset::{CodeEntity, ExtractionContext};
             use std::collections::HashMap;
+            use std::sync::Arc;
 
             // Create extraction context
             let config = Arc::new(ValknutConfig::default());
@@ -181,9 +221,10 @@ impl AnalysisStages {
                         &entity_id,
                         "function", // Simplified - in real implementation would parse AST
                         &format!("file_{}", i),
-                        &file_path.to_string_lossy().to_string()
-                    ).with_source_code(&content);
-                    
+                        &file_path.to_string_lossy().to_string(),
+                    )
+                    .with_source_code(&content);
+
                     entity_index.insert(entity_id.clone(), entity.clone());
                     entities.push(entity);
                 }
@@ -206,7 +247,7 @@ impl AnalysisStages {
                         all_similarities.push(*similarity);
                         max_similarity = max_similarity.max(*similarity);
                         total_similarity += *similarity;
-                        
+
                         if *similarity > 0.8 {
                             duplicate_count += 1;
                         }
@@ -223,11 +264,11 @@ impl AnalysisStages {
             // Collect TF-IDF stats if denoising was enabled
             let tfidf_stats = if denoise_enabled {
                 use super::pipeline_results::TfIdfStats;
-                
+
                 // These would be populated by the weighted analyzer
                 Some(TfIdfStats {
-                    total_grams: 0, // TODO: Get from WeightedShingleAnalyzer
-                    unique_grams: 0, // TODO: Get from WeightedShingleAnalyzer
+                    total_grams: 0,            // TODO: Get from WeightedShingleAnalyzer
+                    unique_grams: 0,           // TODO: Get from WeightedShingleAnalyzer
                     top1pct_contribution: 0.0, // TODO: Get from WeightedShingleAnalyzer
                 })
             } else {
@@ -256,18 +297,19 @@ impl AnalysisStages {
             })
         }
     }
-    
+
     /// Run coverage analysis with automatic file discovery
     pub async fn run_coverage_analysis(
-        &self, 
-        root_path: &Path, 
-        coverage_config: &CoverageConfig
+        &self,
+        root_path: &Path,
+        coverage_config: &CoverageConfig,
     ) -> Result<CoverageAnalysisResults> {
         debug!("Running coverage analysis with auto-discovery");
-        
+
         // Discover coverage files
-        let discovered_files = CoverageDiscovery::discover_coverage_files(root_path, coverage_config)?;
-        
+        let discovered_files =
+            CoverageDiscovery::discover_coverage_files(root_path, coverage_config)?;
+
         if discovered_files.is_empty() {
             info!("No coverage files found - analysis disabled");
             return Ok(CoverageAnalysisResults {
@@ -279,7 +321,7 @@ impl AnalysisStages {
                 analysis_method: "no_coverage_files_found".to_string(),
             });
         }
-        
+
         // Convert discovered files to info structs
         let coverage_files_info: Vec<CoverageFileInfo> = discovered_files
             .iter()
@@ -290,38 +332,42 @@ impl AnalysisStages {
                 modified: format!("{:?}", file.modified),
             })
             .collect();
-        
+
         // Log which files are being used
         for file in &discovered_files {
-            info!("Using coverage file: {} (format: {:?})", 
-                  file.path.display(), file.format);
+            info!(
+                "Using coverage file: {} (format: {:?})",
+                file.path.display(),
+                file.format
+            );
         }
-        
+
         // Run comprehensive coverage analysis using CoverageExtractor
         let gaps_count = self.analyze_coverage_gaps(&discovered_files).await?;
-        
+
         // Build actual coverage packs for detailed analysis
         let mut all_coverage_packs = Vec::new();
         for file in &discovered_files {
-            let packs = self.coverage_extractor
+            let packs = self
+                .coverage_extractor
                 .build_coverage_packs(vec![file.path.clone()])
                 .await?;
             all_coverage_packs.extend(packs);
         }
-        
+
         // Calculate overall coverage percentage from LCOV data
         let overall_coverage_percentage = if !discovered_files.is_empty() {
             self.calculate_overall_coverage(&discovered_files).await?
         } else {
             None
         };
-        
+
         let analysis_method = if discovered_files.len() == 1 {
             format!("single_file_{:?}", discovered_files[0].format)
         } else {
             format!("multi_file_{}_sources", discovered_files.len())
         };
-        
+
         // Convert CoveragePacks to JSON for storage in coverage_gaps
         let coverage_gaps: Vec<serde_json::Value> = all_coverage_packs
             .iter()
@@ -337,19 +383,19 @@ impl AnalysisStages {
             analysis_method,
         })
     }
-    
+
     /// Analyze coverage gaps from discovered coverage files
     async fn analyze_coverage_gaps(&self, coverage_files: &[CoverageFile]) -> Result<usize> {
         // Basic implementation - count files that could have coverage gaps
         // This is a placeholder for the more sophisticated coverage analysis
-        
+
         let mut total_gaps = 0;
-        
+
         for coverage_file in coverage_files {
             match coverage_file.format {
-                CoverageFormat::CoveragePyXml | 
-                CoverageFormat::Cobertura | 
-                CoverageFormat::JaCoCo => {
+                CoverageFormat::CoveragePyXml
+                | CoverageFormat::Cobertura
+                | CoverageFormat::JaCoCo => {
                     // XML-based coverage files
                     total_gaps += self.analyze_xml_coverage(&coverage_file.path).await?;
                 }
@@ -358,27 +404,33 @@ impl AnalysisStages {
                     total_gaps += self.analyze_lcov_coverage(&coverage_file.path).await?;
                 }
                 CoverageFormat::IstanbulJson => {
-                    // JSON format  
+                    // JSON format
                     total_gaps += self.analyze_json_coverage(&coverage_file.path).await?;
                 }
                 CoverageFormat::Unknown => {
-                    warn!("Unknown coverage format, skipping: {}", coverage_file.path.display());
+                    warn!(
+                        "Unknown coverage format, skipping: {}",
+                        coverage_file.path.display()
+                    );
                 }
             }
         }
-        
+
         Ok(total_gaps)
     }
-    
+
     /// Calculate overall coverage percentage from coverage files
-    async fn calculate_overall_coverage(&self, coverage_files: &[CoverageFile]) -> Result<Option<f64>> {
+    async fn calculate_overall_coverage(
+        &self,
+        coverage_files: &[CoverageFile],
+    ) -> Result<Option<f64>> {
         for coverage_file in coverage_files {
             if matches!(coverage_file.format, CoverageFormat::Lcov) {
                 // Parse LCOV file to calculate coverage percentage
                 if let Ok(content) = std::fs::read_to_string(&coverage_file.path) {
                     let mut total_lines = 0;
                     let mut covered_lines = 0;
-                    
+
                     for line in content.lines() {
                         if line.starts_with("DA:") {
                             let parts: Vec<&str> = line[3..].split(',').collect();
@@ -392,11 +444,14 @@ impl AnalysisStages {
                             }
                         }
                     }
-                    
+
                     if total_lines > 0 {
-                        let coverage_percentage = (covered_lines as f64 / total_lines as f64) * 100.0;
-                        debug!("Calculated coverage: {:.2}% ({}/{} lines)", 
-                               coverage_percentage, covered_lines, total_lines);
+                        let coverage_percentage =
+                            (covered_lines as f64 / total_lines as f64) * 100.0;
+                        debug!(
+                            "Calculated coverage: {:.2}% ({}/{} lines)",
+                            coverage_percentage, covered_lines, total_lines
+                        );
                         return Ok(Some(coverage_percentage));
                     }
                 }
@@ -404,56 +459,61 @@ impl AnalysisStages {
         }
         Ok(None)
     }
-    
+
     /// Analyze XML-based coverage files
     async fn analyze_xml_coverage(&self, coverage_path: &Path) -> Result<usize> {
         use std::fs;
-        
+
         // Read and parse XML coverage file
         let xml_content = match fs::read_to_string(coverage_path) {
             Ok(content) => content,
             Err(e) => {
-                warn!("Failed to read coverage file {}: {}", coverage_path.display(), e);
+                warn!(
+                    "Failed to read coverage file {}: {}",
+                    coverage_path.display(),
+                    e
+                );
                 return Ok(0);
             }
         };
-        
+
         // Simple XML parsing to extract uncovered lines
         let mut uncovered_count = 0;
-        
+
         for line in xml_content.lines() {
             // Count lines with hits="0" (uncovered lines)
             if line.trim().contains("<line number=") && line.contains("hits=\"0\"") {
                 uncovered_count += 1;
             }
         }
-        
-        debug!("Analyzed XML coverage file: {} uncovered lines found", uncovered_count);
-        
+
+        debug!(
+            "Analyzed XML coverage file: {} uncovered lines found",
+            uncovered_count
+        );
+
         // Return a reasonable gap count - group consecutive uncovered lines into gaps
         // Assume average gap spans 2-3 lines, so divide by 2
         Ok((uncovered_count / 2).max(1))
     }
-    
+
     /// Analyze LCOV coverage files
     async fn analyze_lcov_coverage(&self, coverage_path: &Path) -> Result<usize> {
         debug!("Analyzing LCOV coverage file: {:?}", coverage_path);
-        
+
         // Use the CoverageExtractor to parse the LCOV file and build coverage packs
-        let coverage_packs = self.coverage_extractor
+        let coverage_packs = self
+            .coverage_extractor
             .build_coverage_packs(vec![coverage_path.to_path_buf()])
             .await?;
-        
+
         // Count the total gaps across all packs
-        let total_gaps: usize = coverage_packs
-            .iter()
-            .map(|pack| pack.gaps.len())
-            .sum();
-        
+        let total_gaps: usize = coverage_packs.iter().map(|pack| pack.gaps.len()).sum();
+
         info!("Found {} coverage gaps in LCOV file", total_gaps);
         Ok(total_gaps)
     }
-    
+
     /// Analyze JSON coverage files
     async fn analyze_json_coverage(&self, _coverage_path: &Path) -> Result<usize> {
         // Placeholder implementation

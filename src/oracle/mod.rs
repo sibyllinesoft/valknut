@@ -1,12 +1,12 @@
 //! AI Refactoring Oracle - Gemini 2.5 Pro integration for intelligent refactoring suggestions
 //!
-//! This module provides intelligent refactoring suggestions by using scribe-analyzer to bundle 
+//! This module provides intelligent refactoring suggestions by using scribe-analyzer to bundle
 //! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
 
+use crate::api::results::AnalysisResults;
+use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::core::errors::{Result, ValknutError, ValknutResultExt};
-use crate::api::results::AnalysisResults;
 use walkdir::WalkDir;
 
 /// Token budget for valknut analysis output (50k tokens)
@@ -34,17 +34,18 @@ pub struct OracleConfig {
 impl OracleConfig {
     /// Create configuration from environment variables
     pub fn from_env() -> Result<Self> {
-        let api_key = std::env::var("GEMINI_API_KEY")
-            .map_err(|_| ValknutError::config("GEMINI_API_KEY environment variable not set".to_string()))?;
-        
+        let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
+            ValknutError::config("GEMINI_API_KEY environment variable not set".to_string())
+        })?;
+
         Ok(Self {
             api_key,
-            max_tokens: 400_000,  // Default 400k tokens for codebase bundle
+            max_tokens: 400_000, // Default 400k tokens for codebase bundle
             api_endpoint: "https://generativelanguage.googleapis.com/v1beta/models".to_string(),
             model: "gemini-2.5-pro".to_string(),
         })
     }
-    
+
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
         self.max_tokens = max_tokens;
         self
@@ -103,7 +104,6 @@ pub struct RefactoringTask {
     pub risk_level: String,
     pub benefits: Vec<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskAssessment {
@@ -177,7 +177,7 @@ impl RefactoringOracle {
         let client = reqwest::Client::new();
         Self { config, client }
     }
-    
+
     /// Generate refactoring suggestions for the given codebase
     pub async fn generate_suggestions(
         &self,
@@ -185,14 +185,16 @@ impl RefactoringOracle {
         analysis_results: &AnalysisResults,
     ) -> Result<RefactoringOracleResponse> {
         // Use scribe-analyzer to bundle the codebase
-        let bundle = self.create_codebase_bundle(project_path, analysis_results).await?;
-        
+        let bundle = self
+            .create_codebase_bundle(project_path, analysis_results)
+            .await?;
+
         // Send to Gemini for analysis
         let response = self.query_gemini(&bundle).await?;
-        
+
         Ok(response)
     }
-    
+
     /// Create a codebase bundle with XML file tree structure and debugging
     async fn create_codebase_bundle(
         &self,
@@ -202,12 +204,12 @@ impl RefactoringOracle {
         println!("\n🔍 [ORACLE DEBUG] Starting codebase bundle creation");
         println!("   📁 Project path: {}", project_path.display());
         println!("   📊 Token budget: {} tokens", self.config.max_tokens);
-        
+
         let mut xml_files = Vec::new();
         let mut total_tokens = 0;
         let mut files_included = 0;
         let mut files_skipped = 0;
-        
+
         // First, find README at root level
         let readme_candidates = ["README.md", "readme.md", "README.txt", "README"];
         for readme_name in &readme_candidates {
@@ -224,58 +226,81 @@ impl RefactoringOracle {
                         ));
                         total_tokens += estimated_tokens;
                         files_included += 1;
-                        println!("   ✅ Included README: {} ({} tokens)", readme_name, estimated_tokens);
+                        println!(
+                            "   ✅ Included README: {} ({} tokens)",
+                            readme_name, estimated_tokens
+                        );
                         break;
                     }
                 }
             }
         }
-        
+
         // Walk through project files and collect source files
         let walker = WalkDir::new(project_path)
             .max_depth(4)
             .into_iter()
             .filter_entry(|e| {
                 let path = e.path();
-                let name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
-                
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default();
+
                 // Skip common directories and files we don't want
-                !name.starts_with('.') && 
-                name != "target" &&
-                name != "node_modules" &&
-                name != "__pycache__" &&
-                name != "dist" &&
-                name != "build" &&
-                name != "coverage" &&
-                name != "tmp" &&
-                name != "temp"
+                !name.starts_with('.')
+                    && name != "target"
+                    && name != "node_modules"
+                    && name != "__pycache__"
+                    && name != "dist"
+                    && name != "build"
+                    && name != "coverage"
+                    && name != "tmp"
+                    && name != "temp"
             });
-        
+
         let mut candidate_files = Vec::new();
-        
+
         // Collect all candidate source files with metadata
         for entry in walker {
             let entry = entry.map_generic_err("walking project directory")?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                     // Include main source files
-                    if matches!(ext, "rs" | "py" | "js" | "ts" | "tsx" | "jsx" | "go" | "java" | "cpp" | "c" | "h" | "hpp" | "cs" | "php") {
-                        let relative_path = path.strip_prefix(project_path)
+                    if matches!(
+                        ext,
+                        "rs" | "py"
+                            | "js"
+                            | "ts"
+                            | "tsx"
+                            | "jsx"
+                            | "go"
+                            | "java"
+                            | "cpp"
+                            | "c"
+                            | "h"
+                            | "hpp"
+                            | "cs"
+                            | "php"
+                    ) {
+                        let relative_path = path
+                            .strip_prefix(project_path)
                             .unwrap_or(path)
                             .to_string_lossy()
                             .to_string();
-                        
+
                         // Skip test files
                         if is_test_file(&relative_path) {
                             continue;
                         }
-                        
+
                         if let Ok(content) = std::fs::read_to_string(path) {
                             let estimated_tokens = content.len() / 4;
-                            let priority = calculate_file_priority(&relative_path, ext, content.len());
-                            
+                            let priority =
+                                calculate_file_priority(&relative_path, ext, content.len());
+
                             candidate_files.push(FileCandidate {
                                 path: relative_path,
                                 content,
@@ -288,22 +313,33 @@ impl RefactoringOracle {
                 }
             }
         }
-        
-        println!("   📋 Found {} candidate source files", candidate_files.len());
-        
+
+        println!(
+            "   📋 Found {} candidate source files",
+            candidate_files.len()
+        );
+
         // Sort by priority (higher priority first)
-        candidate_files.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
-        
+        candidate_files.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Add files until we hit token budget
         for candidate in candidate_files {
             if total_tokens + candidate.tokens > self.config.max_tokens {
                 files_skipped += 1;
-                if files_skipped <= 5 { // Only log first few skipped files
-                    println!("   ⏭️  Skipped: {} ({} tokens) - would exceed budget", candidate.path, candidate.tokens);
+                if files_skipped <= 5 {
+                    // Only log first few skipped files
+                    println!(
+                        "   ⏭️  Skipped: {} ({} tokens) - would exceed budget",
+                        candidate.path, candidate.tokens
+                    );
                 }
                 continue;
             }
-            
+
             xml_files.push(format!(
                 "    <file path=\"{}\" type=\"{}\" tokens=\"{}\" priority=\"{:.2}\">\n{}\n    </file>",
                 candidate.path,
@@ -312,17 +348,23 @@ impl RefactoringOracle {
                 candidate.priority,
                 html_escape(&candidate.content)
             ));
-            
+
             total_tokens += candidate.tokens;
             files_included += 1;
-            
-            println!("   ✅ Included: {} ({} tokens, priority: {:.2})", candidate.path, candidate.tokens, candidate.priority);
+
+            println!(
+                "   ✅ Included: {} ({} tokens, priority: {:.2})",
+                candidate.path, candidate.tokens, candidate.priority
+            );
         }
-        
+
         if files_skipped > 5 {
-            println!("   ⏭️  ... and {} more files skipped due to token budget", files_skipped - 5);
+            println!(
+                "   ⏭️  ... and {} more files skipped due to token budget",
+                files_skipped - 5
+            );
         }
-        
+
         // Create XML structure
         let xml_bundle = format!(
             "<codebase project_path=\"{}\" files_included=\"{}\" total_tokens=\"{}\">\n{}\n</codebase>",
@@ -331,12 +373,16 @@ impl RefactoringOracle {
             total_tokens,
             xml_files.join("\n")
         );
-        
+
         // Create condensed valknut analysis with token budget
         println!("\n🔍 [ORACLE DEBUG] Creating condensed valknut analysis");
-        println!("   📊 Analysis token budget: {} tokens", VALKNUT_OUTPUT_TOKEN_BUDGET);
-        let condensed_analysis = self.condense_analysis_results_with_budget(analysis_results, VALKNUT_OUTPUT_TOKEN_BUDGET)?;
-        
+        println!(
+            "   📊 Analysis token budget: {} tokens",
+            VALKNUT_OUTPUT_TOKEN_BUDGET
+        );
+        let condensed_analysis = self
+            .condense_analysis_results_with_budget(analysis_results, VALKNUT_OUTPUT_TOKEN_BUDGET)?;
+
         let final_bundle = format!(
             "# Codebase Refactoring Analysis Request\n\n\
             ## Project Codebase ({} files, ~{} tokens)\n{}\n\n\
@@ -463,16 +509,16 @@ impl RefactoringOracle {
             xml_bundle,
             condensed_analysis
         );
-        
+
         let final_tokens = final_bundle.len() / 4;
         println!("\n🎯 [ORACLE DEBUG] Bundle creation complete");
         println!("   📦 Final bundle: ~{} tokens", final_tokens);
         println!("   📁 Files included: {}", files_included);
         println!("   ⏭️  Files skipped: {}", files_skipped);
-        
+
         Ok(final_bundle)
     }
-    
+
     /// Condense valknut analysis results for AI consumption
     fn condense_analysis_results(&self, results: &AnalysisResults) -> String {
         serde_json::to_string_pretty(&serde_json::json!({
@@ -510,16 +556,14 @@ impl RefactoringOracle {
             } else { None }
         })).unwrap_or_else(|_| "Failed to serialize analysis".to_string())
     }
-    
+
     /// Query Gemini API with the bundled content
     async fn query_gemini(&self, content: &str) -> Result<RefactoringOracleResponse> {
         let url = format!(
             "{}/{}:generateContent?key={}",
-            self.config.api_endpoint,
-            self.config.model,
-            self.config.api_key
+            self.config.api_endpoint, self.config.model, self.config.api_key
         );
-        
+
         let request = GeminiRequest {
             contents: vec![GeminiContent {
                 parts: vec![GeminiPart {
@@ -534,25 +578,32 @@ impl RefactoringOracle {
                 response_mime_type: "application/json".to_string(),
             },
         };
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
             .await
             .map_generic_err("sending request to Gemini API")?;
-        
+
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(ValknutError::internal(format!("Gemini API error: {}", error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(ValknutError::internal(format!(
+                "Gemini API error: {}",
+                error_text
+            )));
         }
-        
+
         let gemini_response: GeminiResponse = response
             .json()
             .await
             .map_generic_err("parsing Gemini API response")?;
-        
+
         let response_text = gemini_response
             .candidates
             .into_iter()
@@ -564,21 +615,24 @@ impl RefactoringOracle {
             .next()
             .ok_or_else(|| ValknutError::internal("No parts in Gemini response".to_string()))?
             .text;
-        
-        let oracle_response: RefactoringOracleResponse = serde_json::from_str(&response_text)
-            .map_json_err("Oracle response")?;
-        
+
+        let oracle_response: RefactoringOracleResponse =
+            serde_json::from_str(&response_text).map_json_err("Oracle response")?;
+
         Ok(oracle_response)
     }
 
     /// Condense analysis results with a specific token budget
     fn condense_analysis_results_with_budget(
-        &self, 
-        results: &AnalysisResults, 
-        token_budget: usize
+        &self,
+        results: &AnalysisResults,
+        token_budget: usize,
     ) -> Result<String> {
-        println!("   🔄 Condensing valknut analysis with {} token budget", token_budget);
-        
+        println!(
+            "   🔄 Condensing valknut analysis with {} token budget",
+            token_budget
+        );
+
         // Start with essential summary information
         let mut condensed = format!(
             "## Core Metrics\n\
@@ -599,17 +653,17 @@ impl RefactoringOracle {
         );
 
         let mut current_tokens = condensed.len() / 4;
-        
+
         // Add top refactoring candidates by priority
         if !results.refactoring_candidates.is_empty() {
             let candidates_section = "## Top Refactoring Priorities\n";
             condensed.push_str(candidates_section);
             current_tokens += candidates_section.len() / 4;
-            
+
             for (i, candidate) in results.refactoring_candidates.iter()
                 .filter(|c| !matches!(c.priority, crate::core::scoring::Priority::None))
                 .take(15)  // Limit candidates to control size
-                .enumerate() 
+                .enumerate()
             {
                 let candidate_text = format!(
                     "{}. **{}** ({:?})\n\
@@ -623,8 +677,13 @@ impl RefactoringOracle {
                     candidate.file_path,
                     candidate.score,
                     candidate.priority,
-                    candidate.issues.iter()
-                        .map(|issue| format!("{} (severity: {:.1})", issue.category, issue.severity))
+                    candidate
+                        .issues
+                        .iter()
+                        .map(|issue| format!(
+                            "{} (severity: {:.1})",
+                            issue.category, issue.severity
+                        ))
                         .collect::<Vec<_>>()
                         .join(", "),
                     candidate.suggestions.iter()
@@ -633,13 +692,13 @@ impl RefactoringOracle {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                
+
                 let candidate_tokens = candidate_text.len() / 4;
                 if current_tokens + candidate_tokens > token_budget {
                     println!("   ⏭️  Stopping at candidate {} due to token budget", i + 1);
                     break;
                 }
-                
+
                 condensed.push_str(&candidate_text);
                 current_tokens += candidate_tokens;
             }
@@ -647,7 +706,8 @@ impl RefactoringOracle {
 
         // Add directory health information if available and within budget
         if let Some(tree) = &results.directory_health_tree {
-            if current_tokens < token_budget * 3 / 4 {  // Only if we have 25% budget left
+            if current_tokens < token_budget * 3 / 4 {
+                // Only if we have 25% budget left
                 let health_section = format!(
                     "## Directory Health Overview\n\
                     - Average Health Score: {:.2}\n\
@@ -655,13 +715,15 @@ impl RefactoringOracle {
                     - Problematic Areas: {}\n\n",
                     tree.tree_statistics.avg_health_score,
                     tree.tree_statistics.total_directories,
-                    tree.tree_statistics.hotspot_directories.iter()
+                    tree.tree_statistics
+                        .hotspot_directories
+                        .iter()
                         .take(3)
                         .map(|h| format!("{} (health: {:.2})", h.path.display(), h.health_score))
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                
+
                 let health_tokens = health_section.len() / 4;
                 if current_tokens + health_tokens <= token_budget {
                     condensed.push_str(&health_section);
@@ -671,12 +733,18 @@ impl RefactoringOracle {
         }
 
         let final_tokens = condensed.len() / 4;
-        println!("   ✅ Condensed analysis: {} tokens (budget: {})", final_tokens, token_budget);
-        
+        println!(
+            "   ✅ Condensed analysis: {} tokens (budget: {})",
+            final_tokens, token_budget
+        );
+
         if final_tokens > token_budget {
-            println!("   ⚠️  Warning: Exceeded token budget by {} tokens", final_tokens - token_budget);
+            println!(
+                "   ⚠️  Warning: Exceeded token budget by {} tokens",
+                final_tokens - token_budget
+            );
         }
-        
+
         Ok(condensed)
     }
 }
@@ -697,104 +765,103 @@ fn is_test_file(path: &str) -> bool {
     if path.contains("/test/") || path.contains("/tests/") {
         return true;
     }
-    
+
     // Test file naming patterns
-    if path.ends_with("_test.rs") || 
-       path.ends_with("_test.py") ||
-       path.ends_with("_test.js") ||
-       path.ends_with("_test.ts") ||
-       path.ends_with(".test.js") ||
-       path.ends_with(".test.ts") ||
-       path.ends_with(".test.tsx") ||
-       path.ends_with(".test.jsx") ||
-       path.ends_with("_spec.js") ||
-       path.ends_with("_spec.ts") ||
-       path.ends_with(".spec.js") ||
-       path.ends_with(".spec.ts") ||
-       path.ends_with("_test.go") ||
-       path.ends_with("_test.java") ||
-       path.ends_with("_test.cpp") ||
-       path.ends_with("_test.c") ||
-       path.ends_with("Test.java") ||
-       path.ends_with("Tests.java") {
+    if path.ends_with("_test.rs")
+        || path.ends_with("_test.py")
+        || path.ends_with("_test.js")
+        || path.ends_with("_test.ts")
+        || path.ends_with(".test.js")
+        || path.ends_with(".test.ts")
+        || path.ends_with(".test.tsx")
+        || path.ends_with(".test.jsx")
+        || path.ends_with("_spec.js")
+        || path.ends_with("_spec.ts")
+        || path.ends_with(".spec.js")
+        || path.ends_with(".spec.ts")
+        || path.ends_with("_test.go")
+        || path.ends_with("_test.java")
+        || path.ends_with("_test.cpp")
+        || path.ends_with("_test.c")
+        || path.ends_with("Test.java")
+        || path.ends_with("Tests.java")
+    {
         return true;
     }
-    
+
     // Rust test module files
     if path.contains("tests.rs") && !path.ends_with("/tests.rs") {
         return true;
     }
-    
+
     // Python test patterns
-    if path.starts_with("test_") || 
-       path.contains("/test_") ||
-       path == "conftest.py" ||
-       path.ends_with("/conftest.py") {
+    if path.starts_with("test_")
+        || path.contains("/test_")
+        || path == "conftest.py"
+        || path.ends_with("/conftest.py")
+    {
         return true;
     }
-    
+
     // JavaScript/TypeScript test patterns
-    if path.contains("/__tests__/") ||
-       path.contains("/spec/") {
+    if path.contains("/__tests__/") || path.contains("/spec/") {
         return true;
     }
-    
+
     // Common test directory patterns
-    if path.starts_with("tests/") ||
-       path.starts_with("test/") ||
-       path.starts_with("spec/") {
+    if path.starts_with("tests/") || path.starts_with("test/") || path.starts_with("spec/") {
         return true;
     }
-    
+
     false
 }
 
 /// Calculate priority score for file inclusion
 fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 {
     let mut priority = 1.0;
-    
+
     // Boost priority for important files
     if path.contains("main.rs") || path.contains("lib.rs") || path.contains("mod.rs") {
         priority += 3.0;
     }
-    
+
     if path.contains("config") || path.contains("error") || path.contains("api") {
         priority += 2.0;
     }
-    
+
     if path.contains("core") || path.contains("engine") {
         priority += 1.5;
     }
-    
+
     // Language-specific priority adjustments
     match extension {
-        "rs" => priority += 2.0,  // Boost Rust files since this is a Rust project
+        "rs" => priority += 2.0, // Boost Rust files since this is a Rust project
         "py" | "js" | "ts" => priority += 1.5,
         "go" | "java" | "cpp" => priority += 1.0,
         _ => {}
     }
-    
+
     // Penalize very large files (they consume too many tokens)
     if size > 50_000 {
         priority *= 0.5;
     } else if size > 20_000 {
         priority *= 0.7;
     }
-    
+
     // Boost smaller, focused files
     if size < 1_000 {
         priority *= 1.2;
     }
-    
+
     // Penalize test files and generated files
     if path.contains("test") || path.contains("spec") || path.contains("_test") {
         priority *= 0.3;
     }
-    
+
     if path.contains("generated") || path.contains("target/") || path.contains("build/") {
         priority *= 0.1;
     }
-    
+
     priority
 }
 

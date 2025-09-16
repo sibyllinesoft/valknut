@@ -1,0 +1,416 @@
+name: CI/CD Monitoring
+
+on:
+  schedule:
+    # Run monitoring checks every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_run:
+    workflows: ["CI", "Performance", "Quality Gates", "Security"]
+    types: [completed]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Monitor CI/CD pipeline health
+  pipeline-health:
+    name: Pipeline Health Monitor
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Monitor workflow success rates
+        id: monitor
+        run: |
+          echo "📊 Monitoring CI/CD pipeline health..."
+          
+          # Get workflow runs from the last 7 days
+          SINCE_DATE=$(date -d '7 days ago' --iso-8601)
+          
+          # Function to get workflow stats
+          get_workflow_stats() {
+            local workflow_name="$1"
+            local total=$(gh run list --workflow="$workflow_name" --created=">=$SINCE_DATE" --limit=50 --json conclusion | jq length)
+            local success=$(gh run list --workflow="$workflow_name" --created=">=$SINCE_DATE" --limit=50 --json conclusion | jq '[.[] | select(.conclusion == "success")] | length')
+            local failure=$(gh run list --workflow="$workflow_name" --created=">=$SINCE_DATE" --limit=50 --json conclusion | jq '[.[] | select(.conclusion == "failure")] | length')
+            
+            if [ "$total" -gt 0 ]; then
+              local success_rate=$(echo "scale=1; $success * 100 / $total" | bc -l)
+              echo "$workflow_name: $success/$total runs successful (${success_rate}%)"
+              
+              # Store for later processing
+              echo "${workflow_name}_total=$total" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_success=$success" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_failure=$failure" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_success_rate=$success_rate" >> $GITHUB_OUTPUT
+            else
+              echo "$workflow_name: No runs found"
+              echo "${workflow_name}_total=0" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_success=0" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_failure=0" >> $GITHUB_OUTPUT
+              echo "${workflow_name}_success_rate=0" >> $GITHUB_OUTPUT
+            fi
+          }
+          
+          # Monitor key workflows
+          get_workflow_stats "CI"
+          get_workflow_stats "Performance"
+          get_workflow_stats "Quality Gates"
+          get_workflow_stats "Security"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check for failing workflows
+        run: |
+          echo "🔍 Checking for consistently failing workflows..."
+          
+          # Check if any workflow has less than 80% success rate
+          critical_failures=""
+          
+          check_failure_rate() {
+            local workflow="$1"
+            local success_rate="$2"
+            local total="$3"
+            
+            if [ "$total" -gt 5 ] && (( $(echo "$success_rate < 80" | bc -l) )); then
+              echo "❌ $workflow has low success rate: ${success_rate}%"
+              critical_failures="$critical_failures\n- $workflow: ${success_rate}% success rate"
+            elif [ "$total" -gt 0 ]; then
+              echo "✅ $workflow success rate: ${success_rate}%"
+            fi
+          }
+          
+          check_failure_rate "CI" "${{ steps.monitor.outputs.CI_success_rate }}" "${{ steps.monitor.outputs.CI_total }}"
+          check_failure_rate "Performance" "${{ steps.monitor.outputs.Performance_success_rate }}" "${{ steps.monitor.outputs.Performance_total }}"
+          check_failure_rate "Quality Gates" "${{ steps.monitor.outputs.Quality_Gates_success_rate }}" "${{ steps.monitor.outputs.Quality_Gates_total }}"
+          check_failure_rate "Security" "${{ steps.monitor.outputs.Security_success_rate }}" "${{ steps.monitor.outputs.Security_total }}"
+          
+          # Create issue if critical failures detected
+          if [ -n "$critical_failures" ]; then
+            echo "critical_failures<<EOF" >> $GITHUB_ENV
+            echo -e "$critical_failures" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "has_critical_failures=true" >> $GITHUB_ENV
+          else
+            echo "has_critical_failures=false" >> $GITHUB_ENV
+          fi
+
+      - name: Generate health report
+        run: |
+          echo "📋 Generating CI/CD health report..."
+          
+          cat > ci-health-report.md << EOF
+          # CI/CD Pipeline Health Report
+          
+          Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ## Workflow Success Rates (Last 7 Days)
+          
+          | Workflow | Success | Total | Success Rate | Status |
+          |----------|---------|-------|--------------|--------|
+          | CI | ${{ steps.monitor.outputs.CI_success }} | ${{ steps.monitor.outputs.CI_total }} | ${{ steps.monitor.outputs.CI_success_rate }}% | $([ $(echo "${{ steps.monitor.outputs.CI_success_rate }} >= 80" | bc -l) = 1 ] && echo "✅" || echo "❌") |
+          | Performance | ${{ steps.monitor.outputs.Performance_success }} | ${{ steps.monitor.outputs.Performance_total }} | ${{ steps.monitor.outputs.Performance_success_rate }}% | $([ $(echo "${{ steps.monitor.outputs.Performance_success_rate }} >= 80" | bc -l) = 1 ] && echo "✅" || echo "❌") |
+          | Quality Gates | ${{ steps.monitor.outputs.Quality_Gates_success }} | ${{ steps.monitor.outputs.Quality_Gates_total }} | ${{ steps.monitor.outputs.Quality_Gates_success_rate }}% | $([ $(echo "${{ steps.monitor.outputs.Quality_Gates_success_rate }} >= 80" | bc -l) = 1 ] && echo "✅" || echo "❌") |
+          | Security | ${{ steps.monitor.outputs.Security_success }} | ${{ steps.monitor.outputs.Security_total }} | ${{ steps.monitor.outputs.Security_success_rate }}% | $([ $(echo "${{ steps.monitor.outputs.Security_success_rate }} >= 80" | bc -l) = 1 ] && echo "✅" || echo "❌") |
+          
+          ## Health Thresholds
+          
+          - **Success Rate**: ≥80% (Warning below 80%, Critical below 60%)
+          - **Total Runs**: ≥5 runs for meaningful statistics
+          - **Monitoring Period**: 7 days
+          
+          ## Recent Issues
+          
+          EOF
+          
+          if [ "${{ env.has_critical_failures }}" = "true" ]; then
+            echo "### Critical Issues Detected" >> ci-health-report.md
+            echo "${{ env.critical_failures }}" >> ci-health-report.md
+          else
+            echo "No critical issues detected." >> ci-health-report.md
+          fi
+          
+          echo "" >> ci-health-report.md
+          echo "## Recommendations" >> ci-health-report.md
+          echo "" >> ci-health-report.md
+          
+          if [ "${{ env.has_critical_failures }}" = "true" ]; then
+            cat >> ci-health-report.md << 'EOF'
+          - Review failing workflows and identify root causes
+          - Check for infrastructure issues or dependency problems
+          - Consider adjusting test timeouts or resource allocation
+          - Review recent code changes that may have introduced issues
+          EOF
+          else
+            echo "- Continue monitoring pipeline health" >> ci-health-report.md
+            echo "- All workflows are performing within acceptable parameters" >> ci-health-report.md
+          fi
+
+      - name: Create or update monitoring issue
+        if: env.has_critical_failures == 'true'
+        run: |
+          echo "🚨 Creating issue for critical CI/CD failures..."
+          
+          # Check if monitoring issue already exists
+          EXISTING_ISSUE=$(gh issue list --label "ci/cd-monitoring" --state open --limit 1 --json number | jq -r '.[0].number // empty')
+          
+          if [ -n "$EXISTING_ISSUE" ]; then
+            echo "Updating existing issue #$EXISTING_ISSUE"
+            gh issue comment "$EXISTING_ISSUE" --body-file ci-health-report.md
+          else
+            echo "Creating new monitoring issue"
+            gh issue create \
+              --title "🚨 CI/CD Pipeline Health Alert - $(date '+%Y-%m-%d')" \
+              --body-file ci-health-report.md \
+              --label "ci/cd-monitoring,priority:high" \
+              --assignee "@me"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload health report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-health-report
+          path: ci-health-report.md
+
+  # Monitor build performance trends
+  build-performance:
+    name: Build Performance Monitor
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Analyze build performance
+        run: |
+          echo "⏱️ Analyzing build performance trends..."
+          
+          # Get recent workflow run times
+          RECENT_RUNS=$(gh run list --workflow="CI" --limit=10 --json durationMs,conclusion,createdAt | jq -c '.[]')
+          
+          echo "Recent CI build times:"
+          echo "$RECENT_RUNS" | while read -r run; do
+            duration=$(echo "$run" | jq -r '.durationMs')
+            conclusion=$(echo "$run" | jq -r '.conclusion')
+            created=$(echo "$run" | jq -r '.createdAt')
+            
+            if [ "$duration" != "null" ] && [ "$duration" -gt 0 ]; then
+              duration_min=$(echo "scale=1; $duration / 60000" | bc -l)
+              echo "- $(date -d "$created" '+%Y-%m-%d %H:%M'): ${duration_min}m ($conclusion)"
+            fi
+          done
+          
+          # Calculate average build time
+          AVG_DURATION=$(echo "$RECENT_RUNS" | jq -s '[.[] | select(.durationMs != null and .durationMs > 0) | .durationMs] | add / length')
+          
+          if [ "$AVG_DURATION" != "null" ]; then
+            AVG_DURATION_MIN=$(echo "scale=1; $AVG_DURATION / 60000" | bc -l)
+            echo "Average build time: ${AVG_DURATION_MIN} minutes"
+            
+            # Alert if build time is unusually high
+            if (( $(echo "$AVG_DURATION_MIN > 30" | bc -l) )); then
+              echo "⚠️ Build times are higher than expected (>30min average)"
+              echo "build_time_alert=true" >> $GITHUB_ENV
+            else
+              echo "✅ Build times are within acceptable range"
+              echo "build_time_alert=false" >> $GITHUB_ENV
+            fi
+          else
+            echo "No recent successful builds found for analysis"
+            echo "build_time_alert=false" >> $GITHUB_ENV
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Monitor dependency health
+  dependency-health:
+    name: Dependency Health Monitor
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audit tools
+        run: |
+          cargo install cargo-audit cargo-outdated
+
+      - name: Check dependency security
+        run: |
+          echo "🔒 Checking dependency security..."
+          
+          # Run security audit
+          if cargo audit --format json > audit-results.json 2>/dev/null; then
+            VULNERABILITIES=$(jq '.vulnerabilities.found | length' audit-results.json)
+            echo "Security vulnerabilities found: $VULNERABILITIES"
+            
+            if [ "$VULNERABILITIES" -gt 0 ]; then
+              echo "❌ Security vulnerabilities detected"
+              echo "security_issues=true" >> $GITHUB_ENV
+              
+              # Extract vulnerability details
+              jq -r '.vulnerabilities.list[] | "- \(.advisory.title) (\(.advisory.id))"' audit-results.json > security-issues.txt
+            else
+              echo "✅ No security vulnerabilities found"
+              echo "security_issues=false" >> $GITHUB_ENV
+            fi
+          else
+            echo "⚠️ Security audit failed"
+            echo "security_issues=unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Check outdated dependencies
+        run: |
+          echo "📦 Checking for outdated dependencies..."
+          
+          # Check for outdated dependencies
+          if cargo outdated --format json > outdated-results.json 2>/dev/null; then
+            OUTDATED_COUNT=$(jq '.dependencies | length' outdated-results.json)
+            echo "Outdated dependencies: $OUTDATED_COUNT"
+            
+            if [ "$OUTDATED_COUNT" -gt 10 ]; then
+              echo "⚠️ Many outdated dependencies found"
+              echo "outdated_deps=high" >> $GITHUB_ENV
+            elif [ "$OUTDATED_COUNT" -gt 5 ]; then
+              echo "⚠️ Some outdated dependencies found"
+              echo "outdated_deps=medium" >> $GITHUB_ENV
+            else
+              echo "✅ Dependencies are mostly up to date"
+              echo "outdated_deps=low" >> $GITHUB_ENV
+            fi
+          else
+            echo "⚠️ Outdated dependency check failed"
+            echo "outdated_deps=unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Upload dependency reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-reports
+          path: |
+            audit-results.json
+            outdated-results.json
+            security-issues.txt
+
+  # Generate monitoring dashboard
+  monitoring-dashboard:
+    name: Generate Monitoring Dashboard
+    needs: [pipeline-health, build-performance, dependency-health]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Generate dashboard
+        run: |
+          echo "📊 Generating monitoring dashboard..."
+          
+          cat > monitoring-dashboard.md << EOF
+          # Valknut CI/CD Monitoring Dashboard
+          
+          Last Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ## Pipeline Health Overview
+          
+          | Metric | Status | Details |
+          |--------|--------|---------|
+          | Overall Health | ${{ (needs.pipeline-health.result == 'success' && needs.build-performance.result == 'success' && needs.dependency-health.result == 'success') && '🟢 Healthy' || '🔴 Issues Detected' }} | All monitoring checks |
+          | Build Performance | ${{ needs.build-performance.result == 'success' && '🟢 Good' || '🟡 Needs Attention' }} | Average build times and trends |
+          | Security Status | ${{ needs.dependency-health.result == 'success' && '🟢 Secure' || '🔴 Vulnerabilities' }} | Dependency security scan |
+          | Quality Gates | ${{ needs.pipeline-health.result == 'success' && '🟢 Passing' || '🟡 Some Failures' }} | Code quality and standards |
+          
+          ## Quick Actions
+          
+          EOF
+          
+          # Add recommended actions based on results
+          if [ "${{ needs.pipeline-health.result }}" != "success" ]; then
+            echo "- 🔧 **Review failing workflows** - Check CI pipeline failures" >> monitoring-dashboard.md
+          fi
+          
+          if [ "${{ needs.build-performance.result }}" != "success" ]; then
+            echo "- ⚡ **Optimize build performance** - Build times may be slow" >> monitoring-dashboard.md
+          fi
+          
+          if [ "${{ needs.dependency-health.result }}" != "success" ]; then
+            echo "- 🔒 **Address security issues** - Update vulnerable dependencies" >> monitoring-dashboard.md
+          fi
+          
+          if [[ "${{ needs.pipeline-health.result }}" == "success" && "${{ needs.build-performance.result }}" == "success" && "${{ needs.dependency-health.result }}" == "success" ]]; then
+            echo "- ✅ **All systems operational** - Continue monitoring" >> monitoring-dashboard.md
+          fi
+          
+          cat >> monitoring-dashboard.md << 'EOF'
+          
+          ## Monitoring Configuration
+          
+          - **Check Frequency**: Every 6 hours + after workflow completion
+          - **Alert Thresholds**: <80% success rate, >30min build time
+          - **Auto-Issue Creation**: Enabled for critical failures
+          - **Retention Period**: 7 days of workflow history
+          
+          ## Links
+          
+          - [Actions Dashboard](../../actions)
+          - [Security Alerts](../../security)
+          - [Dependency Graph](../../network/dependencies)
+          - [Repository Insights](../../pulse)
+          EOF
+
+      - name: Commit dashboard to repo
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "💾 Updating monitoring dashboard in repository..."
+          
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Create docs directory if it doesn't exist
+          mkdir -p docs/
+          
+          # Update dashboard
+          cp monitoring-dashboard.md docs/
+          
+          # Commit if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git add docs/monitoring-dashboard.md
+            git commit -m "Update CI/CD monitoring dashboard"
+            git push
+          else
+            echo "No changes to dashboard"
+          fi
+
+      - name: Upload dashboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-dashboard
+          path: monitoring-dashboard.md
+
+      - name: Summary
+        run: |
+          echo "## CI/CD Monitoring Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pipeline Health | ${{ needs.pipeline-health.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Performance | ${{ needs.build-performance.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Health | ${{ needs.dependency-health.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 [View Full Dashboard](docs/monitoring-dashboard.md)" >> $GITHUB_STEP_SUMMARY

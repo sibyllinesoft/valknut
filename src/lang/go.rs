@@ -78,8 +78,66 @@ impl GoAdapter {
         index: &mut ParseIndex,
         entity_id_counter: &mut usize,
     ) -> Result<()> {
-        // Check if this node represents an entity we care about
-        if let Some(entity) = self.node_to_entity(
+        // Special handling for grouped const/var declarations
+        if node.kind() == "const_declaration" || node.kind() == "var_declaration" {
+            let entity_kind = match node.kind() {
+                "const_declaration" => EntityKind::Constant,
+                "var_declaration" => EntityKind::Variable,
+                _ => unreachable!(),
+            };
+
+            // Find all identifiers in this declaration (could be grouped)
+            let identifiers = self.extract_all_identifiers_from_declaration(&node, source_code)?;
+
+            for identifier in identifiers {
+                *entity_id_counter += 1;
+                let entity_id =
+                    format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
+
+                let location = SourceLocation {
+                    file_path: file_path.to_string(),
+                    start_line: node.start_position().row + 1,
+                    end_line: node.end_position().row + 1,
+                    start_column: node.start_position().column + 1,
+                    end_column: node.end_position().column + 1,
+                };
+
+                let mut metadata = HashMap::new();
+                metadata.insert(
+                    "node_kind".to_string(),
+                    serde_json::Value::String(node.kind().to_string()),
+                );
+                metadata.insert(
+                    "byte_range".to_string(),
+                    serde_json::json!([node.start_byte(), node.end_byte()]),
+                );
+
+                let entity = ParsedEntity {
+                    id: entity_id,
+                    name: identifier,
+                    kind: entity_kind.clone(),
+                    location,
+                    parent: parent_id.clone(),
+                    children: Vec::new(),
+                    metadata,
+                };
+
+                index.add_entity(entity);
+            }
+
+            // Still process child nodes for nested entities
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.extract_entities_recursive(
+                    child,
+                    source_code,
+                    file_path,
+                    parent_id.clone(),
+                    index,
+                    entity_id_counter,
+                )?;
+            }
+        } else if let Some(entity) = self.node_to_entity(
             node,
             source_code,
             file_path,
@@ -119,6 +177,37 @@ impl GoAdapter {
         Ok(())
     }
 
+    /// Extract all identifiers from a const/var declaration (handles both single and grouped)
+    fn extract_all_identifiers_from_declaration(
+        &self,
+        node: &Node,
+        source_code: &str,
+    ) -> Result<Vec<String>> {
+        let mut identifiers = Vec::new();
+        let mut cursor = node.walk();
+
+        let spec_kind = match node.kind() {
+            "const_declaration" => "const_spec",
+            "var_declaration" => "var_spec",
+            _ => return Ok(identifiers),
+        };
+
+        // Look for all const_spec/var_spec nodes
+        for child in node.children(&mut cursor) {
+            if child.kind() == spec_kind {
+                let mut spec_cursor = child.walk();
+                for spec_child in child.children(&mut spec_cursor) {
+                    if spec_child.kind() == "identifier" {
+                        let identifier = spec_child.utf8_text(source_code.as_bytes())?;
+                        identifiers.push(identifier.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(identifiers)
+    }
+
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
     fn node_to_entity(
         &self,
@@ -142,8 +231,7 @@ impl GoAdapter {
                     EntityKind::Interface
                 }
             }
-            "const_declaration" => EntityKind::Constant,
-            "var_declaration" => EntityKind::Variable,
+            // const_declaration and var_declaration are handled separately in extract_entities_recursive
             _ => return Ok(None),
         };
 
@@ -207,7 +295,14 @@ impl GoAdapter {
 
         match node.kind() {
             "function_declaration" | "method_declaration" => {
-                // Look for the identifier child
+                // Use field name if available
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    return Ok(Some(
+                        name_node.utf8_text(source_code.as_bytes())?.to_string(),
+                    ));
+                }
+
+                // Fallback: Look for the identifier child
                 for child in node.children(&mut cursor) {
                     if child.kind() == "identifier" {
                         return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
@@ -218,6 +313,13 @@ impl GoAdapter {
                 // Look for type_spec and then identifier
                 for child in node.children(&mut cursor) {
                     if child.kind() == "type_spec" {
+                        // Use field name if available
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            return Ok(Some(
+                                name_node.utf8_text(source_code.as_bytes())?.to_string(),
+                            ));
+                        }
+
                         let mut spec_cursor = child.walk();
                         for spec_child in child.children(&mut spec_cursor) {
                             if spec_child.kind() == "type_identifier" {
@@ -229,27 +331,7 @@ impl GoAdapter {
                     }
                 }
             }
-            "const_declaration" | "var_declaration" => {
-                // Look for const_spec/var_spec and then identifier
-                for child in node.children(&mut cursor) {
-                    let spec_kind = match node.kind() {
-                        "const_declaration" => "const_spec",
-                        "var_declaration" => "var_spec",
-                        _ => continue,
-                    };
-
-                    if child.kind() == spec_kind {
-                        let mut spec_cursor = child.walk();
-                        for spec_child in child.children(&mut spec_cursor) {
-                            if spec_child.kind() == "identifier" {
-                                return Ok(Some(
-                                    spec_child.utf8_text(source_code.as_bytes())?.to_string(),
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
+            // const_declaration and var_declaration are handled separately
             _ => {}
         }
 
@@ -304,39 +386,59 @@ impl GoAdapter {
         let mut return_types = Vec::new();
         let mut receiver_type = None;
 
-        for child in node.children(&mut cursor) {
-            match child.kind() {
+        // Extract parameters using field name
+        if let Some(params_node) = node.child_by_field_name("parameters") {
+            let mut param_cursor = params_node.walk();
+            for param_child in params_node.children(&mut param_cursor) {
+                if param_child.kind() == "parameter_declaration" {
+                    let mut inner_cursor = param_child.walk();
+                    for inner_child in param_child.children(&mut inner_cursor) {
+                        if inner_child.kind() == "identifier" {
+                            let param_name = inner_child.utf8_text(source_code.as_bytes())?;
+                            parameters.push(param_name);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract return types using field name
+        if let Some(result_node) = node.child_by_field_name("result") {
+            match result_node.kind() {
                 "parameter_list" => {
-                    // Extract parameter information
-                    let mut param_cursor = child.walk();
-                    for param_child in child.children(&mut param_cursor) {
-                        if param_child.kind() == "parameter_declaration" {
-                            let mut inner_cursor = param_child.walk();
-                            for inner_child in param_child.children(&mut inner_cursor) {
-                                if inner_child.kind() == "identifier" {
-                                    let param_name =
+                    // Multiple return types: (type1, type2)
+                    let mut result_cursor = result_node.walk();
+                    for result_child in result_node.children(&mut result_cursor) {
+                        if result_child.kind() == "parameter_declaration" {
+                            // Look for type information
+                            let mut inner_cursor = result_child.walk();
+                            for inner_child in result_child.children(&mut inner_cursor) {
+                                if matches!(
+                                    inner_child.kind(),
+                                    "type_identifier" | "pointer_type" | "slice_type"
+                                ) {
+                                    let return_type =
                                         inner_child.utf8_text(source_code.as_bytes())?;
-                                    parameters.push(param_name);
+                                    return_types.push(return_type);
                                 }
                             }
                         }
                     }
                 }
                 "type_identifier" | "pointer_type" | "slice_type" => {
-                    // Return type (for functions without explicit result clause)
-                    let return_type = child.utf8_text(source_code.as_bytes())?;
+                    // Single return type
+                    let return_type = result_node.utf8_text(source_code.as_bytes())?;
                     return_types.push(return_type);
                 }
-                // For methods, extract receiver type
-                _ => {
-                    if node.kind() == "method_declaration" && child.kind() == "parameter_list" {
-                        // This might be the receiver parameter list
-                        let text = child.utf8_text(source_code.as_bytes())?;
-                        if text.starts_with('(') && !text.contains("func") {
-                            receiver_type = Some(text.to_string());
-                        }
-                    }
-                }
+                _ => {}
+            }
+        }
+
+        // For methods, extract receiver using field name
+        if node.kind() == "method_declaration" {
+            if let Some(receiver_node) = node.child_by_field_name("receiver") {
+                let receiver_text = receiver_node.utf8_text(source_code.as_bytes())?;
+                receiver_type = Some(receiver_text.to_string());
             }
         }
 
@@ -439,24 +541,19 @@ impl GoAdapter {
                     if spec_child.kind() == "interface_type" {
                         let mut interface_cursor = spec_child.walk();
                         for interface_child in spec_child.children(&mut interface_cursor) {
-                            if interface_child.kind() == "method_spec_list" {
-                                let mut method_cursor = interface_child.walk();
-                                for method_child in interface_child.children(&mut method_cursor) {
-                                    if method_child.kind() == "method_spec" {
-                                        let mut inner_cursor = method_child.walk();
-                                        for inner_child in method_child.children(&mut inner_cursor)
-                                        {
-                                            if inner_child.kind() == "field_identifier" {
-                                                let method_name = inner_child
-                                                    .utf8_text(source_code.as_bytes())?;
-                                                methods.push(method_name);
-                                            }
-                                        }
-                                    } else if method_child.kind() == "type_identifier" {
-                                        // Embedded interface
-                                        let embedded_interface =
-                                            method_child.utf8_text(source_code.as_bytes())?;
-                                        embedded_interfaces.push(embedded_interface);
+                            if interface_child.kind() == "constraint_elem" {
+                                // This is an embedded interface
+                                let embedded_interface =
+                                    interface_child.utf8_text(source_code.as_bytes())?;
+                                embedded_interfaces.push(embedded_interface.to_string());
+                            } else if interface_child.kind() == "method_spec" {
+                                // This is a method specification
+                                let mut inner_cursor = interface_child.walk();
+                                for inner_child in interface_child.children(&mut inner_cursor) {
+                                    if inner_child.kind() == "field_identifier" {
+                                        let method_name =
+                                            inner_child.utf8_text(source_code.as_bytes())?;
+                                        methods.push(method_name.to_string());
                                     }
                                 }
                             }

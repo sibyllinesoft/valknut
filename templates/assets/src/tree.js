@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import ReactDOM from 'react-dom/client';
-import { Tree } from 'react-arborist';
+const React = require('react');
+const { useState, useEffect, useCallback } = React;
+const ReactDOM = require('react-dom/client');
+const { Tree } = require('react-arborist');
 
 const TreeNode = ({ node, style, innerRef, tree }) => {
     const data = node.data;
@@ -55,24 +56,17 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
                 
                 if (scoreMatch) {
                     score = parseFloat(scoreMatch[1]);
+                } else if (data.issueSeverity !== undefined && (isComplexityIssue || isStructureIssue)) {
+                    // Use the issue's own severity score directly (it's already in the right scale)
+                    score = data.issueSeverity;
                 } else if (data.entityScore && (isComplexityIssue || isStructureIssue)) {
-                    // Use the actual entity score for complexity and structural issues
+                    // Fallback to entity score if no issue severity
                     score = data.entityScore;
-                    console.log('🔍 DEBUG: Using entity score:', score, 'for issue:', data.name);
                 } else {
-                    // Fallback scores for different issue types
-                    if (isComplexityIssue && data.name.includes('very high')) {
-                        score = 16; // Different fallback for complexity
-                    } else if (isStructureIssue && data.name.includes('very high')) {
-                        score = 18; // Different fallback for structure
-                    } else if (data.name.includes('high')) {
-                        score = 12; // Medium-high fallback
-                    }
                 }
                 
                 if (score !== null) {
-                    const scoreColor = score >= 15 ? '#dc3545' : score >= 10 ? '#fd7e14' : score >= 5 ? '#ffc107' : '#28a745';
-                    
+                    // Use the same colors as the banner (background and left border)
                     scoreElement = React.createElement('div', {
                         key: 'score-badge',
                         style: {
@@ -81,9 +75,9 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
                             borderRadius: '4px',
                             fontSize: '11px',
                             fontWeight: '500',
-                            backgroundColor: scoreColor + '20',
-                            color: scoreColor,
-                            border: `1px solid ${scoreColor}40`
+                            backgroundColor: backgroundColor,
+                            color: iconColor,
+                            border: `1px solid ${iconColor}`
                         }
                     }, score.toString());
                 }
@@ -125,13 +119,13 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
                 width: `calc(100% - ${manualIndent}px)`,
                 boxSizing: 'border-box'
             }
-        }, ...children);
+        }, children);
     }
     
     // Regular node rendering (folder, file, entity)
     // Check for children using multiple approaches to ensure chevrons show
-    // But entities (functions) should never have chevrons, even if they have children
-    const hasChildren = !isEntity && (
+    // Entities can now have children (issue/suggestion banners)
+    const hasChildren = (
         node.isInternal || 
         (node.children && node.children.length > 0) || 
         (data.children && data.children.length > 0) ||
@@ -185,7 +179,6 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Expand/collapse arrow for nodes with children
     if (hasChildren) {
-        console.log('🔽 RENDERING CHEVRON for', data.name, '- isOpen:', node.isOpen, 'chevron:', node.isOpen ? 'chevron-down' : 'chevron-right');
         const chevronIcon = node.isOpen ? 'chevron-down' : 'chevron-right';
         const fallbackSymbol = node.isOpen ? '▼' : '▶'; // Unicode fallback
         
@@ -232,7 +225,6 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
             }
         }));
     } else {
-        console.log('❌ NO CHEVRON for', data.name, '- hasChildren is false');
         // Add spacing for nodes without children to align with expandable nodes
         children.push(React.createElement('div', {
             key: 'spacer',
@@ -444,10 +436,6 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
     // Manual indentation calculation - ignore react-arborist's style to fix indentation
     const manualIndent = node.level * 24; // 24px per level
 
-    // Log folder health for debugging
-    if (isFolder) {
-        console.log('📊 Folder health for', data.name, '- health:', data.healthScore, 'fileCount:', data.fileCount, 'entityCount:', data.entityCount);
-    }
 
     // Header row (clickable part with icon, label, badges)
     return React.createElement('div', {
@@ -468,7 +456,7 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
             gap: '0.5rem'
         },
         onClick: hasChildren ? () => tree.toggle(node.id) : undefined
-    }, ...children.filter(Boolean));
+    }, children.filter(Boolean));
 };
 
 // Main tree component
@@ -486,11 +474,11 @@ const CodeAnalysisTree = ({ data }) => {
             if (p.includes('low')) return 'low';
         }
         
-        // Severity can be numeric (0-1 scale) or string
+        // Severity can be numeric (actual scale appears to be 0-20+) or string
         if (typeof severity === 'number') {
-            if (severity >= 0.8) return 'critical';
-            if (severity >= 0.6) return 'high';
-            if (severity >= 0.4) return 'medium';
+            if (severity >= 15) return 'critical';
+            if (severity >= 10) return 'high';
+            if (severity >= 5) return 'medium';
             return 'low';
         }
         
@@ -647,13 +635,16 @@ const CodeAnalysisTree = ({ data }) => {
                                 issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
                             }
                             
-                            entityChildren.push({
+                            const issueChild = {
                                 id: `issue:${entityNodeId}:${idx}`,
                                 name: issueText,
                                 type: 'issue-row',
                                 entityScore: entity.score, // Pass through entity score
+                                issueSeverity: issue.severity, // Pass through issue severity
+                                issueCategory: issue.category, // Pass through issue category
                                 children: []
-                            });
+                            };
+                            entityChildren.push(issueChild);
                         });
                     }
                     
@@ -839,12 +830,22 @@ const CodeAnalysisTree = ({ data }) => {
     useEffect(() => {
         try {
             if (data && typeof data === 'object') {
-                const treeStructure = buildTreeData(
-                    data.refactoringCandidatesByFile || [],
-                    data.directoryHealthTree,
-                    data.coveragePacks || []
-                );
-                setTreeData(treeStructure);
+                // Use unifiedHierarchy if available, fallback to refactoringCandidatesByFile for backward compatibility
+                const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
+                
+                if (data.unifiedHierarchy) {
+                    // New unified hierarchy format - use directly
+                    console.log('Using unifiedHierarchy format with', hierarchyData.length, 'root nodes');
+                    setTreeData(hierarchyData);
+                } else {
+                    // Legacy format - build tree structure
+                    const treeStructure = buildTreeData(
+                        hierarchyData,
+                        data.directoryHealthTree,
+                        data.coveragePacks || []
+                    );
+                    setTreeData(treeStructure);
+                }
             } else {
                 setTreeData([]);
             }
@@ -862,14 +863,17 @@ const CodeAnalysisTree = ({ data }) => {
                 color: 'var(--muted)'
             }
         }, 
-            React.createElement('h3', { key: 'title' }, 'No Refactoring Candidates Found'),
-            React.createElement('p', { key: 'desc' }, 'Your code is in excellent shape!')
+        React.createElement('h3', { key: 'title' }, 'No Refactoring Candidates Found'),
+        React.createElement('p', { key: 'desc' }, 'Your code is in excellent shape!')
         );
     }
     
     return React.createElement(Tree, {
         data: treeData,
-        openByDefault: true,
+        openByDefault: (node) => {
+            // Open folders and files by default, but keep entities (functions) closed
+            return node.data.type === 'folder' || node.data.type === 'file';
+        },
         width: '100%',
         height: 600,
         indent: 24, // Indentation per level
@@ -881,8 +885,8 @@ const CodeAnalysisTree = ({ data }) => {
     });
 };
 
-// Export for webpack library
-export default CodeAnalysisTree;
+// Export for CommonJS
+module.exports = CodeAnalysisTree;
 
 // Also export for global use (fallback) and expose React/ReactDOM
 if (typeof window !== 'undefined') {

@@ -1,16 +1,18 @@
 //! MCP tool implementations for valknut analysis functionality.
 
-use std::path::Path;
-use serde_json;
-use tracing::{info, error};
 use chrono;
+use serde_json;
+use std::path::Path;
+use tracing::{error, info};
 
-use valknut_rs::api::{engine::ValknutEngine, config_types::AnalysisConfig, results::AnalysisResults};
-use valknut_rs::io::reports::ReportGenerator;
+use valknut_rs::api::{
+    config_types::AnalysisConfig, engine::ValknutEngine, results::AnalysisResults,
+};
 use valknut_rs::core::config::ReportFormat;
 use valknut_rs::core::scoring::Priority;
+use valknut_rs::io::reports::ReportGenerator;
 
-use crate::mcp::protocol::{ToolResult, ContentItem, error_codes};
+use crate::mcp::protocol::{error_codes, ContentItem, ToolResult};
 // use crate::cli::config::StructureConfig;
 
 /// Parameters for analyze_code tool
@@ -66,27 +68,36 @@ fn default_max_suggestions() -> usize {
 /// Execute the analyze_code tool
 pub async fn execute_analyze_code(params: AnalyzeCodeParams) -> Result<ToolResult, (i32, String)> {
     info!("Executing analyze_code tool for path: {}", params.path);
-    
+
     // Validate path exists
     let path = Path::new(&params.path);
     if !path.exists() {
-        return Err((error_codes::INVALID_PARAMS, 
-                   format!("Path does not exist: {}", params.path)));
+        return Err((
+            error_codes::INVALID_PARAMS,
+            format!("Path does not exist: {}", params.path),
+        ));
     }
 
     // Create analysis configuration
     let analysis_config = AnalysisConfig::default()
         .with_confidence_threshold(0.75)
         .with_max_files(5000)
-        .with_languages(vec!["python".to_string(), "typescript".to_string(), "javascript".to_string(), "rust".to_string()]);
+        .with_languages(vec![
+            "python".to_string(),
+            "typescript".to_string(),
+            "javascript".to_string(),
+            "rust".to_string(),
+        ]);
 
     // Initialize the analysis engine
     let mut engine = match ValknutEngine::new(analysis_config).await {
         Ok(engine) => engine,
         Err(e) => {
             error!("Failed to initialize analysis engine: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Failed to initialize analysis engine: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Failed to initialize analysis engine: {}", e),
+            ));
         }
     };
 
@@ -95,8 +106,10 @@ pub async fn execute_analyze_code(params: AnalyzeCodeParams) -> Result<ToolResul
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Analysis failed: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Analysis failed: {}", e),
+            ));
         }
     };
 
@@ -105,8 +118,10 @@ pub async fn execute_analyze_code(params: AnalyzeCodeParams) -> Result<ToolResul
         Ok(output) => output,
         Err(e) => {
             error!("Failed to format results: {}", e);
-            return Err((error_codes::INTERNAL_ERROR,
-                       format!("Failed to format results: {}", e)));
+            return Err((
+                error_codes::INTERNAL_ERROR,
+                format!("Failed to format results: {}", e),
+            ));
         }
     };
 
@@ -119,16 +134,21 @@ pub async fn execute_analyze_code(params: AnalyzeCodeParams) -> Result<ToolResul
 }
 
 /// Execute the get_refactoring_suggestions tool
-pub async fn execute_refactoring_suggestions(params: RefactoringSuggestionsParams) -> Result<ToolResult, (i32, String)> {
-    info!("Executing get_refactoring_suggestions tool for entity: {}", params.entity_id);
-    
+pub async fn execute_refactoring_suggestions(
+    params: RefactoringSuggestionsParams,
+) -> Result<ToolResult, (i32, String)> {
+    info!(
+        "Executing get_refactoring_suggestions tool for entity: {}",
+        params.entity_id
+    );
+
     // For this implementation, we'll need to run a targeted analysis
     // Since we don't have a pre-existing analysis, we'll need to infer the path
     // from the entity_id and run a focused analysis
-    
+
     // Extract path from entity_id (assuming format like "file_path:function_name")
     let (file_path, _entity_name) = parse_entity_id(&params.entity_id)?;
-    
+
     // Create focused analysis configuration
     let analysis_config = AnalysisConfig::default()
         .with_confidence_threshold(0.5) // Lower threshold for suggestions
@@ -139,31 +159,41 @@ pub async fn execute_refactoring_suggestions(params: RefactoringSuggestionsParam
         Ok(engine) => engine,
         Err(e) => {
             error!("Failed to initialize analysis engine: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Failed to initialize analysis engine: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Failed to initialize analysis engine: {}", e),
+            ));
         }
     };
 
     // Run analysis on the specific file or directory containing the entity
     let path = Path::new(&file_path);
-    let results = match engine.analyze_directory(path.parent().unwrap_or(path)).await {
+    let results = match engine
+        .analyze_directory(path.parent().unwrap_or(path))
+        .await
+    {
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Analysis failed: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Analysis failed: {}", e),
+            ));
         }
     };
 
     // Filter and format refactoring suggestions for the specific entity
-    let suggestions = filter_refactoring_suggestions(&results, &params.entity_id, params.max_suggestions);
-    
+    let suggestions =
+        filter_refactoring_suggestions(&results, &params.entity_id, params.max_suggestions);
+
     let formatted_suggestions = match serde_json::to_string_pretty(&suggestions) {
         Ok(json) => json,
         Err(e) => {
             error!("Failed to serialize suggestions: {}", e);
-            return Err((error_codes::INTERNAL_ERROR,
-                       format!("Failed to serialize suggestions: {}", e)));
+            return Err((
+                error_codes::INTERNAL_ERROR,
+                format!("Failed to serialize suggestions: {}", e),
+            ));
         }
     };
 
@@ -176,7 +206,10 @@ pub async fn execute_refactoring_suggestions(params: RefactoringSuggestionsParam
 }
 
 /// Format analysis results according to requested format
-fn format_analysis_results(results: &AnalysisResults, format: &str) -> Result<String, Box<dyn std::error::Error>> {
+fn format_analysis_results(
+    results: &AnalysisResults,
+    format: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     match format {
         "json" => {
             // Direct JSON serialization for JSON format
@@ -186,7 +219,7 @@ fn format_analysis_results(results: &AnalysisResults, format: &str) -> Result<St
             // Use the report generator for HTML output
             let generator = ReportGenerator::new();
             let report_format = ReportFormat::Html;
-            
+
             // Create a temporary directory path for the report generation
             let temp_path = std::env::temp_dir().join("valknut_mcp_report");
             match generator.generate_report(results, &temp_path, report_format) {
@@ -195,7 +228,7 @@ fn format_analysis_results(results: &AnalysisResults, format: &str) -> Result<St
                     let report_file = temp_path.with_extension("html");
                     std::fs::read_to_string(report_file).map_err(|e| e.into())
                 }
-                Err(e) => Err(e.into())
+                Err(e) => Err(e.into()),
             }
         }
         "markdown" => {
@@ -212,9 +245,12 @@ fn format_analysis_results(results: &AnalysisResults, format: &str) -> Result<St
 /// Parse entity ID to extract file path and entity name
 fn parse_entity_id(entity_id: &str) -> Result<(String, Option<String>), (i32, String)> {
     if entity_id.is_empty() {
-        return Err((error_codes::INVALID_PARAMS, "Entity ID cannot be empty".to_string()));
+        return Err((
+            error_codes::INVALID_PARAMS,
+            "Entity ID cannot be empty".to_string(),
+        ));
     }
-    
+
     // Try to split on common delimiters
     if let Some(colon_pos) = entity_id.find(':') {
         let file_path = entity_id[..colon_pos].to_string();
@@ -234,14 +270,14 @@ fn parse_entity_id(entity_id: &str) -> Result<(String, Option<String>), (i32, St
 fn filter_refactoring_suggestions(
     results: &AnalysisResults,
     entity_id: &str,
-    max_suggestions: usize
+    max_suggestions: usize,
 ) -> serde_json::Value {
     // Find candidates that match the entity ID
-    let matching_candidates: Vec<_> = results.refactoring_candidates
+    let matching_candidates: Vec<_> = results
+        .refactoring_candidates
         .iter()
         .filter(|candidate| {
-            candidate.entity_id.contains(entity_id) || 
-            entity_id.contains(&candidate.entity_id)
+            candidate.entity_id.contains(entity_id) || entity_id.contains(&candidate.entity_id)
         })
         .take(max_suggestions)
         .collect();
@@ -272,9 +308,11 @@ fn filter_refactoring_suggestions(
 }
 
 /// Extract suggested actions from a refactoring candidate
-fn extract_suggested_actions(candidate: &valknut_rs::api::results::RefactoringCandidate) -> Vec<String> {
+fn extract_suggested_actions(
+    candidate: &valknut_rs::api::results::RefactoringCandidate,
+) -> Vec<String> {
     let mut actions = Vec::new();
-    
+
     // Add actions based on the priority and reasons
     match candidate.priority {
         valknut_rs::core::scoring::Priority::Critical => {
@@ -293,7 +331,7 @@ fn extract_suggested_actions(candidate: &valknut_rs::api::results::RefactoringCa
             actions.push("No immediate action required".to_string());
         }
     }
-    
+
     // Add specific actions based on issues
     for issue in &candidate.issues {
         if issue.category.contains("complexity") {
@@ -306,19 +344,26 @@ fn extract_suggested_actions(candidate: &valknut_rs::api::results::RefactoringCa
             actions.push("Extract common code into shared utilities".to_string());
         }
     }
-    
+
     actions
 }
 
 /// Execute the validate_quality_gates tool
-pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) -> Result<ToolResult, (i32, String)> {
-    info!("Executing validate_quality_gates tool for path: {}", params.path);
-    
+pub async fn execute_validate_quality_gates(
+    params: ValidateQualityGatesParams,
+) -> Result<ToolResult, (i32, String)> {
+    info!(
+        "Executing validate_quality_gates tool for path: {}",
+        params.path
+    );
+
     // Validate path exists
     let path = Path::new(&params.path);
     if !path.exists() {
-        return Err((error_codes::INVALID_PARAMS, 
-                   format!("Path does not exist: {}", params.path)));
+        return Err((
+            error_codes::INVALID_PARAMS,
+            format!("Path does not exist: {}", params.path),
+        ));
     }
 
     // Create analysis configuration
@@ -331,8 +376,10 @@ pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) 
         Ok(engine) => engine,
         Err(e) => {
             error!("Failed to initialize analysis engine: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Failed to initialize analysis engine: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Failed to initialize analysis engine: {}", e),
+            ));
         }
     };
 
@@ -341,8 +388,10 @@ pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) 
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Analysis failed: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Analysis failed: {}", e),
+            ));
         }
     };
 
@@ -352,8 +401,10 @@ pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) 
         Ok(json) => json,
         Err(e) => {
             error!("Failed to serialize quality gate results: {}", e);
-            return Err((error_codes::INTERNAL_ERROR,
-                       format!("Failed to serialize quality gate results: {}", e)));
+            return Err((
+                error_codes::INTERNAL_ERROR,
+                format!("Failed to serialize quality gate results: {}", e),
+            ));
         }
     };
 
@@ -366,19 +417,28 @@ pub async fn execute_validate_quality_gates(params: ValidateQualityGatesParams) 
 }
 
 /// Execute the analyze_file_quality tool
-pub async fn execute_analyze_file_quality(params: AnalyzeFileQualityParams) -> Result<ToolResult, (i32, String)> {
-    info!("Executing analyze_file_quality tool for file: {}", params.file_path);
-    
+pub async fn execute_analyze_file_quality(
+    params: AnalyzeFileQualityParams,
+) -> Result<ToolResult, (i32, String)> {
+    info!(
+        "Executing analyze_file_quality tool for file: {}",
+        params.file_path
+    );
+
     // Validate file exists
     let file_path = Path::new(&params.file_path);
     if !file_path.exists() {
-        return Err((error_codes::INVALID_PARAMS, 
-                   format!("File does not exist: {}", params.file_path)));
+        return Err((
+            error_codes::INVALID_PARAMS,
+            format!("File does not exist: {}", params.file_path),
+        ));
     }
 
     if !file_path.is_file() {
-        return Err((error_codes::INVALID_PARAMS, 
-                   format!("Path is not a file: {}", params.file_path)));
+        return Err((
+            error_codes::INVALID_PARAMS,
+            format!("Path is not a file: {}", params.file_path),
+        ));
     }
 
     // Create targeted analysis configuration
@@ -391,8 +451,10 @@ pub async fn execute_analyze_file_quality(params: AnalyzeFileQualityParams) -> R
         Ok(engine) => engine,
         Err(e) => {
             error!("Failed to initialize analysis engine: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Failed to initialize analysis engine: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Failed to initialize analysis engine: {}", e),
+            ));
         }
     };
 
@@ -402,19 +464,24 @@ pub async fn execute_analyze_file_quality(params: AnalyzeFileQualityParams) -> R
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
-            return Err((error_codes::ANALYSIS_ERROR, 
-                       format!("Analysis failed: {}", e)));
+            return Err((
+                error_codes::ANALYSIS_ERROR,
+                format!("Analysis failed: {}", e),
+            ));
         }
     };
 
     // Filter results for just this file
-    let file_quality_report = create_file_quality_report(&results, &params.file_path, params.include_suggestions);
+    let file_quality_report =
+        create_file_quality_report(&results, &params.file_path, params.include_suggestions);
     let formatted_report = match serde_json::to_string_pretty(&file_quality_report) {
         Ok(json) => json,
         Err(e) => {
             error!("Failed to serialize file quality report: {}", e);
-            return Err((error_codes::INTERNAL_ERROR,
-                       format!("Failed to serialize file quality report: {}", e)));
+            return Err((
+                error_codes::INTERNAL_ERROR,
+                format!("Failed to serialize file quality report: {}", e),
+            ));
         }
     };
 
@@ -427,19 +494,22 @@ pub async fn execute_analyze_file_quality(params: AnalyzeFileQualityParams) -> R
 }
 
 /// Evaluate quality gates against analysis results
-fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGatesParams) -> serde_json::Value {
+fn evaluate_quality_gates(
+    results: &AnalysisResults,
+    params: &ValidateQualityGatesParams,
+) -> serde_json::Value {
     let mut violations = Vec::new();
     let mut passed = true;
 
-    // Check health score threshold  
+    // Check health score threshold
     if let Some(min_health) = params.min_health {
         if results.summary.code_health_score < min_health {
             violations.push(serde_json::json!({
                 "rule": "Min Health Score",
                 "current": results.summary.code_health_score,
                 "threshold": min_health,
-                "status": "FAILED", 
-                "message": format!("Health score ({:.1}) is below minimum required ({:.1})", 
+                "status": "FAILED",
+                "message": format!("Health score ({:.1}) is below minimum required ({:.1})",
                                  results.summary.code_health_score, min_health)
             }));
             passed = false;
@@ -454,7 +524,7 @@ fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGat
                 "current": results.summary.avg_refactoring_score * 100.0,
                 "threshold": max_complexity,
                 "status": "FAILED",
-                "message": format!("Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
+                "message": format!("Complexity score ({:.1}) exceeds maximum allowed ({:.1})",
                                  results.summary.avg_refactoring_score * 100.0, max_complexity)
             }));
             passed = false;
@@ -470,7 +540,7 @@ fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGat
                 "current": total_issues,
                 "threshold": max_issues,
                 "status": "FAILED",
-                "message": format!("Total issues ({}) exceeds maximum allowed ({})", 
+                "message": format!("Total issues ({}) exceeds maximum allowed ({})",
                                  total_issues, max_issues)
             }));
             passed = false;
@@ -486,7 +556,7 @@ fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGat
                 "current": debt_score,
                 "threshold": max_debt,
                 "status": "FAILED",
-                "message": format!("Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
+                "message": format!("Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)",
                                  debt_score, max_debt)
             }));
             passed = false;
@@ -494,7 +564,7 @@ fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGat
     }
 
     let total_issues = results.summary.critical + results.summary.high_priority;
-    
+
     serde_json::json!({
         "quality_gates_passed": passed,
         "overall_health_score": results.summary.code_health_score,
@@ -511,9 +581,15 @@ fn evaluate_quality_gates(results: &AnalysisResults, params: &ValidateQualityGat
 }
 
 /// Create file-specific quality report
-fn create_file_quality_report(results: &AnalysisResults, file_path: &str, include_suggestions: bool) -> serde_json::Value {
+fn create_file_quality_report(
+    results: &AnalysisResults,
+    file_path: &str,
+    include_suggestions: bool,
+) -> serde_json::Value {
     // Find refactoring candidates for this file
-    let file_candidates: Vec<_> = results.refactoring_candidates.iter()
+    let file_candidates: Vec<_> = results
+        .refactoring_candidates
+        .iter()
         .filter(|candidate| candidate.file_path.contains(file_path))
         .collect();
 
@@ -544,19 +620,22 @@ fn create_file_quality_report(results: &AnalysisResults, file_path: &str, includ
     });
 
     if include_suggestions && !file_candidates.is_empty() {
-        let suggestions: Vec<serde_json::Value> = file_candidates.iter().map(|candidate| {
-            serde_json::json!({
-                "entity_name": candidate.name,
-                "entity_id": candidate.entity_id,
-                "priority": candidate.priority,
-                "confidence": candidate.confidence,
-                "refactoring_score": candidate.score,
-                "suggested_actions": extract_suggested_actions(candidate),
-                "line_range": candidate.line_range,
-                "issues": candidate.issues
+        let suggestions: Vec<serde_json::Value> = file_candidates
+            .iter()
+            .map(|candidate| {
+                serde_json::json!({
+                    "entity_name": candidate.name,
+                    "entity_id": candidate.entity_id,
+                    "priority": candidate.priority,
+                    "confidence": candidate.confidence,
+                    "refactoring_score": candidate.score,
+                    "suggested_actions": extract_suggested_actions(candidate),
+                    "line_range": candidate.line_range,
+                    "issues": candidate.issues
+                })
             })
-        }).collect();
-        
+            .collect();
+
         report["refactoring_suggestions"] = serde_json::Value::Array(suggestions);
     }
 
@@ -566,59 +645,88 @@ fn create_file_quality_report(results: &AnalysisResults, file_path: &str, includ
 /// Create a simple markdown report manually
 fn create_markdown_report(results: &AnalysisResults) -> Result<String, Box<dyn std::error::Error>> {
     let mut markdown = String::new();
-    
+
     // Title
     markdown.push_str("# Code Analysis Report\n\n");
-    
+
     // Summary section
     markdown.push_str("## Summary\n\n");
-    markdown.push_str(&format!("- **Files Processed**: {}\n", results.summary.files_processed));
-    markdown.push_str(&format!("- **Entities Analyzed**: {}\n", results.summary.entities_analyzed));
-    markdown.push_str(&format!("- **Refactoring Needed**: {}\n", results.summary.refactoring_needed));
-    markdown.push_str(&format!("- **High Priority**: {}\n", results.summary.high_priority));
+    markdown.push_str(&format!(
+        "- **Files Processed**: {}\n",
+        results.summary.files_processed
+    ));
+    markdown.push_str(&format!(
+        "- **Entities Analyzed**: {}\n",
+        results.summary.entities_analyzed
+    ));
+    markdown.push_str(&format!(
+        "- **Refactoring Needed**: {}\n",
+        results.summary.refactoring_needed
+    ));
+    markdown.push_str(&format!(
+        "- **High Priority**: {}\n",
+        results.summary.high_priority
+    ));
     markdown.push_str(&format!("- **Critical**: {}\n", results.summary.critical));
-    markdown.push_str(&format!("- **Average Refactoring Score**: {:.2}\n", results.summary.avg_refactoring_score));
-    markdown.push_str(&format!("- **Code Health Score**: {:.2}\n\n", results.summary.code_health_score));
-    
+    markdown.push_str(&format!(
+        "- **Average Refactoring Score**: {:.2}\n",
+        results.summary.avg_refactoring_score
+    ));
+    markdown.push_str(&format!(
+        "- **Code Health Score**: {:.2}\n\n",
+        results.summary.code_health_score
+    ));
+
     // Refactoring candidates
     if !results.refactoring_candidates.is_empty() {
         markdown.push_str("## Refactoring Candidates\n\n");
-        
+
         for (i, candidate) in results.refactoring_candidates.iter().enumerate() {
             markdown.push_str(&format!("### {}. {}\n\n", i + 1, candidate.name));
             markdown.push_str(&format!("- **File**: `{}`\n", candidate.file_path));
             markdown.push_str(&format!("- **Priority**: {:?}\n", candidate.priority));
             markdown.push_str(&format!("- **Score**: {:.2}\n", candidate.score));
             markdown.push_str(&format!("- **Confidence**: {:.2}\n", candidate.confidence));
-            
+
             if !candidate.issues.is_empty() {
                 markdown.push_str("- **Issues**:\n");
                 for issue in &candidate.issues {
                     markdown.push_str(&format!("  - {}: {}\n", issue.category, issue.description));
                 }
             }
-            
+
             if !candidate.suggestions.is_empty() {
                 markdown.push_str("- **Suggestions**:\n");
                 for suggestion in &candidate.suggestions {
-                    markdown.push_str(&format!("  - {}: {} (Priority: {:.2}, Effort: {:.2})\n", 
-                                              suggestion.refactoring_type, 
-                                              suggestion.description, 
-                                              suggestion.priority,
-                                              suggestion.effort));
+                    markdown.push_str(&format!(
+                        "  - {}: {} (Priority: {:.2}, Effort: {:.2})\n",
+                        suggestion.refactoring_type,
+                        suggestion.description,
+                        suggestion.priority,
+                        suggestion.effort
+                    ));
                 }
             }
-            
+
             markdown.push_str("\n");
         }
     }
-    
+
     // Statistics
     markdown.push_str("## Statistics\n\n");
-    markdown.push_str(&format!("- **Total Duration**: {:.2} seconds\n", results.statistics.total_duration.as_secs_f64()));
-    markdown.push_str(&format!("- **Average File Processing Time**: {:.3} seconds\n", results.statistics.avg_file_processing_time.as_secs_f64()));
-    markdown.push_str(&format!("- **Average Entity Processing Time**: {:.3} seconds\n", results.statistics.avg_entity_processing_time.as_secs_f64()));
-    
+    markdown.push_str(&format!(
+        "- **Total Duration**: {:.2} seconds\n",
+        results.statistics.total_duration.as_secs_f64()
+    ));
+    markdown.push_str(&format!(
+        "- **Average File Processing Time**: {:.3} seconds\n",
+        results.statistics.avg_file_processing_time.as_secs_f64()
+    ));
+    markdown.push_str(&format!(
+        "- **Average Entity Processing Time**: {:.3} seconds\n",
+        results.statistics.avg_entity_processing_time.as_secs_f64()
+    ));
+
     // Warnings
     if !results.warnings.is_empty() {
         markdown.push_str("\n## Warnings\n\n");
@@ -626,6 +734,6 @@ fn create_markdown_report(results: &AnalysisResults) -> Result<String, Box<dyn s
             markdown.push_str(&format!("- {}\n", warning));
         }
     }
-    
+
     Ok(markdown)
 }

@@ -1,0 +1,92 @@
+analysis:
+  enable_scoring: true
+  enable_graph_analysis: true
+  enable_lsh_analysis: true
+  enable_refactoring_analysis: true
+  enable_coverage_analysis: true
+  enable_structure_analysis: true
+  enable_names_analysis: true
+  confidence_threshold: 0.6
+  max_files: 1000
+  include_patterns: ["**/*.py", "**/*.rs", "**/*.js", "**/*.ts", "**/*.go"]
+  exclude_patterns: ["*/node_modules/*", "*/target/*", "*/__pycache__/*"]
+scoring:
+  normalization_scheme: z_score
+  use_bayesian_fallbacks: true
+  confidence_reporting: true
+  weights:
+    complexity: 1.0
+    graph: 0.9
+    structure: 0.8
+    style: 0.7
+    coverage: 0.6
+  statistical_params:
+    confidence_level: 0.99
+    min_sample_size: 20
+    outlier_threshold: 3.0
+graph:
+  enable_betweenness: true
+  enable_closeness: true
+  enable_cycle_detection: true
+  max_exact_size: 50000
+  use_approximation: true
+  approximation_sample_rate: 0.2
+lsh:
+  num_hashes: 256
+  num_bands: 32
+  shingle_size: 5
+  similarity_threshold: 0.8
+  max_candidates: 500
+  use_semantic_similarity: true
+languages:
+  python:
+    enabled: true
+    file_extensions: [".py", ".pyi"]
+    tree_sitter_language: "python"
+    max_file_size_mb: 20.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  rust:
+    enabled: true
+    file_extensions: [".rs"]
+    tree_sitter_language: "rust"
+    max_file_size_mb: 20.0
+    complexity_threshold: 20.0
+    additional_settings: {}
+  javascript:
+    enabled: true
+    file_extensions: [".js", ".jsx"]
+    tree_sitter_language: "javascript"
+    max_file_size_mb: 15.0
+    complexity_threshold: 12.0
+    additional_settings: {}
+  typescript:
+    enabled: true
+    file_extensions: [".ts", ".tsx"]
+    tree_sitter_language: "typescript"
+    max_file_size_mb: 15.0
+    complexity_threshold: 12.0
+    additional_settings: {}
+io:
+  cache_dir: "/tmp/valknut-cache"
+  enable_caching: true
+  cache_ttl_seconds: 7200
+  report_dir: "./reports"
+  report_format: json
+performance:
+  max_threads: 8
+  memory_limit_mb: 4096
+  file_timeout_seconds: 120
+  total_timeout_seconds: 3600
+  enable_simd: true
+  batch_size: 50
+structure:
+  min_branch_recommendation_gain: 0.2
+  min_files_for_split: 10
+  target_loc_per_subdir: 2000
+coverage:
+  auto_discover: true
+  search_paths: ["./coverage/", "./target/coverage/", "./htmlcov/"]
+  file_patterns: ["coverage.xml", "lcov.info", "coverage.json", ".coverage"]
+  max_age_days: 14
+  coverage_file: null

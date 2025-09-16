@@ -1,0 +1,52 @@
+{
+  "name": "valknut-tree-components",
+  "version": "1.0.0",
+  "description": "Valknut React Tree Components with Bun Testing and Bundling",
+  "type": "module",
+  "main": "src/tree-component/index.js",
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "build": "bun run build:bundle",
+    "build:bundle": "bun build src/tree-component/index.js --outfile=dist/react-tree-bundle.js --format=iife --global-name=ReactTreeBundle --minify",
+    "build:dev": "bun build src/tree-component/index.js --outfile=dist/react-tree-bundle.debug.js --format=iife --global-name=ReactTreeBundle --sourcemap",
+    "dev": "bun run build:dev --watch",
+    "clean": "rm -rf dist node_modules",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write src/ tests/"
+  },
+  "keywords": [
+    "react",
+    "tree",
+    "code-analysis",
+    "valknut",
+    "bun"
+  ],
+  "author": "Valknut",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-arborist": "^3.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/bun": "latest",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/user-event": "^14.4.3",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "happy-dom": "^12.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "trustedDependencies": [
+    "@esbuild/linux-x64"
+  ]
+}

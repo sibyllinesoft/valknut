@@ -5,30 +5,34 @@
 
 use crate::cli::args::*;
 use crate::cli::output::*;
-use std::path::PathBuf;
 use anyhow;
+use chrono;
 use console::Term;
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use owo_colors::OwoColorize;
 use serde_json;
 use serde_yaml;
 use std::path::Path;
-use tabled::{Table, Tabled, settings::Style as TableStyle};
-use owo_colors::OwoColorize;
-use tracing::{info, warn, debug};
-use chrono;
+use std::path::PathBuf;
+use tabled::{settings::Style as TableStyle, Table, Tabled};
+use tracing::{debug, info, warn};
 
-// Import comprehensive analysis pipeline  
-use valknut_rs::api::engine::ValknutEngine;
+// Import comprehensive analysis pipeline
 use valknut_rs::api::config_types::AnalysisConfig as ApiAnalysisConfig;
+use valknut_rs::api::engine::ValknutEngine;
 use valknut_rs::api::results::AnalysisResults;
-use valknut_rs::core::config::{ValknutConfig, CoverageConfig, DenoiseConfig, AnalysisConfig, DedupeConfig};
-use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, AnalysisConfig as PipelineAnalysisConfig};
-use valknut_rs::core::file_utils::CoverageDiscovery;
-use valknut_rs::detectors::structure::{StructureExtractor, StructureConfig};
-use valknut_rs::live::cli::{LiveReachConfig, LiveReachCli, LiveReachArgs};
-use valknut_rs::io::reports::ReportGenerator;
 use valknut_rs::core::config::ReportFormat;
-use valknut_rs::oracle::{RefactoringOracle, OracleConfig};
+use valknut_rs::core::config::{
+    AnalysisConfig, CoverageConfig, DedupeConfig, DenoiseConfig, ValknutConfig,
+};
+use valknut_rs::core::file_utils::CoverageDiscovery;
+use valknut_rs::core::pipeline::{
+    AnalysisConfig as PipelineAnalysisConfig, QualityGateConfig, QualityGateResult,
+};
+use valknut_rs::detectors::structure::{StructureConfig, StructureExtractor};
+use valknut_rs::io::reports::ReportGenerator;
+use valknut_rs::live::cli::{LiveReachArgs, LiveReachCli, LiveReachConfig};
+use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -36,7 +40,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub async fn analyze_command(
     args: AnalyzeArgs,
     survey: bool,
-    survey_verbosity: SurveyVerbosity
+    survey_verbosity: SurveyVerbosity,
 ) -> anyhow::Result<()> {
     // Print header
     if !args.quiet {
@@ -45,9 +49,12 @@ pub async fn analyze_command(
 
     // Build comprehensive configuration from CLI args and file
     let valknut_config = build_valknut_config(&args).await?;
-    
+
     if !args.quiet {
-        println!("{}", "✅ Configuration loaded with comprehensive analysis enabled".green());
+        println!(
+            "{}",
+            "✅ Configuration loaded with comprehensive analysis enabled".green()
+        );
         display_analysis_config_summary(&valknut_config);
     }
 
@@ -62,7 +69,11 @@ pub async fn analyze_command(
         if path.exists() {
             valid_paths.push(path.clone());
             if !args.quiet {
-                let path_type = if path.is_dir() { "📁 Directory" } else { "📄 File" };
+                let path_type = if path.is_dir() {
+                    "📁 Directory"
+                } else {
+                    "📄 File"
+                };
                 println!("  {}: {}", path_type, path.display().to_string().green());
             }
         } else {
@@ -81,8 +92,16 @@ pub async fn analyze_command(
 
     if !args.quiet {
         println!();
-        println!("{} {}", "📁 Output directory:".bold(), args.out.display().to_string().cyan());
-        println!("{} {}", "📊 Report format:".bold(), format_to_string(&args.format).to_uppercase().cyan());
+        println!(
+            "{} {}",
+            "📁 Output directory:".bold(),
+            args.out.display().to_string().cyan()
+        );
+        println!(
+            "{} {}",
+            "📊 Report format:".bold(),
+            format_to_string(&args.format).to_uppercase().cyan()
+        );
         println!();
     }
 
@@ -93,7 +112,12 @@ pub async fn analyze_command(
 
     // Run comprehensive analysis with enhanced progress tracking
     if !args.quiet {
-        println!("{}", "🔍 Starting Comprehensive Analysis Pipeline".bright_blue().bold());
+        println!(
+            "{}",
+            "🔍 Starting Comprehensive Analysis Pipeline"
+                .bright_blue()
+                .bold()
+        );
         display_enabled_analyses(&valknut_config);
         println!();
     }
@@ -107,7 +131,11 @@ pub async fn analyze_command(
     // Handle quality gates
     let quality_gate_result = if args.quality_gate || args.fail_on_issues {
         let quality_config = build_quality_gate_config(&args);
-        Some(evaluate_quality_gates(&analysis_result, &quality_config, !args.quiet)?)
+        Some(evaluate_quality_gates(
+            &analysis_result,
+            &quality_config,
+            !args.quiet,
+        )?)
     } else {
         None
     };
@@ -120,7 +148,12 @@ pub async fn analyze_command(
     // Run Oracle analysis if requested
     let oracle_response = if args.oracle {
         if !args.quiet {
-            println!("{}", "🧠 Running AI Refactoring Oracle Analysis...".bright_blue().bold());
+            println!(
+                "{}",
+                "🧠 Running AI Refactoring Oracle Analysis..."
+                    .bright_blue()
+                    .bold()
+            );
         }
         run_oracle_analysis(&valid_paths, &analysis_result, &args).await?
     } else {
@@ -155,7 +188,11 @@ async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfi
     // Start with default configuration or load from file
     let mut config = if let Some(config_path) = &args.config {
         ValknutConfig::from_yaml_file(config_path).map_err(|e| {
-            anyhow::anyhow!("Failed to load configuration from {}: {}", config_path.display(), e)
+            anyhow::anyhow!(
+                "Failed to load configuration from {}: {}",
+                config_path.display(),
+                e
+            )
         })?
     } else {
         ValknutConfig::default()
@@ -163,17 +200,17 @@ async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfi
 
     // Apply CLI overrides to analysis configuration
     apply_cli_analysis_config(&mut config.analysis, args);
-    
+
     // Apply CLI overrides to coverage configuration
     apply_cli_coverage_config(&mut config.coverage, args);
-    
+
     // Apply CLI overrides to denoising configuration
     apply_cli_denoise_config(&mut config.denoise, args);
-    
+
     // Validate final configuration
-    config.validate().map_err(|e| {
-        anyhow::anyhow!("Configuration validation failed: {}", e)
-    })?;
+    config
+        .validate()
+        .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
 
     Ok(config)
 }
@@ -184,12 +221,12 @@ fn apply_cli_analysis_config(analysis_config: &mut AnalysisConfig, args: &Analyz
     if args.semantic_clones {
         analysis_config.enable_lsh_analysis = true;
     }
-    
+
     // Enable LSH analysis for strict dedupe as well
     if args.strict_dedupe {
         analysis_config.enable_lsh_analysis = true;
     }
-    
+
     // Apply disable flags (everything else is enabled by default)
     if args.no_coverage {
         analysis_config.enable_coverage_analysis = false;
@@ -218,12 +255,12 @@ fn apply_cli_coverage_config(coverage_config: &mut CoverageConfig, args: &Analyz
         coverage_config.coverage_file = Some(coverage_file.clone());
         coverage_config.auto_discover = false; // Disable auto-discovery when explicit file is provided
     }
-    
+
     // Override auto-discovery setting
     if args.no_coverage_auto_discover {
         coverage_config.auto_discover = false;
     }
-    
+
     // Override max age if specified
     if let Some(max_age_days) = args.coverage_max_age_days {
         coverage_config.max_age_days = max_age_days;
@@ -236,65 +273,65 @@ fn apply_cli_denoise_config(denoise_config: &mut DenoiseConfig, args: &AnalyzeAr
     if args.no_denoise {
         denoise_config.enabled = false;
     }
-    
+
     // Apply auto-calibration disable flag
     if args.no_auto {
         denoise_config.auto = false;
     }
-    
+
     // Apply threshold overrides
     if let Some(min_function_tokens) = args.min_function_tokens {
         denoise_config.min_function_tokens = min_function_tokens;
     }
-    
+
     if let Some(min_match_tokens) = args.min_match_tokens {
         denoise_config.min_match_tokens = min_match_tokens;
     }
-    
+
     if let Some(require_blocks) = args.require_blocks {
         denoise_config.require_blocks = require_blocks;
     }
-    
+
     if let Some(similarity) = args.similarity {
         denoise_config.similarity = similarity;
         denoise_config.threshold_s = similarity; // Keep both in sync
     }
-    
+
     // Apply weight overrides
     if let Some(ast_weight) = args.ast_weight {
         denoise_config.weights.ast = ast_weight;
     }
-    
+
     if let Some(pdg_weight) = args.pdg_weight {
         denoise_config.weights.pdg = pdg_weight;
     }
-    
+
     if let Some(emb_weight) = args.emb_weight {
         denoise_config.weights.emb = emb_weight;
     }
-    
+
     if let Some(io_mismatch_penalty) = args.io_mismatch_penalty {
         denoise_config.io_mismatch_penalty = io_mismatch_penalty;
     }
-    
+
     // Apply auto-calibration overrides
     if let Some(quality_target) = args.quality_target {
         denoise_config.auto_calibration.quality_target = quality_target;
     }
-    
+
     if let Some(sample_size) = args.sample_size {
         denoise_config.auto_calibration.sample_size = sample_size;
     }
-    
+
     // Apply ranking overrides
     if let Some(min_saved_tokens) = args.min_saved_tokens {
         denoise_config.ranking.min_saved_tokens = min_saved_tokens;
     }
-    
+
     if let Some(min_rarity_gain) = args.min_rarity_gain {
         denoise_config.ranking.min_rarity_gain = min_rarity_gain;
     }
-    
+
     // Apply dry-run mode
     if args.denoise_dry_run {
         denoise_config.dry_run = true;
@@ -303,31 +340,42 @@ fn apply_cli_denoise_config(denoise_config: &mut DenoiseConfig, args: &AnalyzeAr
 
 /// Preview coverage file discovery to show what will be analyzed
 async fn preview_coverage_discovery(
-    paths: &[PathBuf], 
-    coverage_config: &CoverageConfig
+    paths: &[PathBuf],
+    coverage_config: &CoverageConfig,
 ) -> anyhow::Result<()> {
-    println!("{}", "📋 Coverage File Discovery Preview".bright_blue().bold());
-    
+    println!(
+        "{}",
+        "📋 Coverage File Discovery Preview".bright_blue().bold()
+    );
+
     // Use the first path as root for discovery
     let default_path = PathBuf::from(".");
     let root_path = paths.first().unwrap_or(&default_path);
-    
+
     let discovered_files = CoverageDiscovery::discover_coverage_files(root_path, coverage_config)
         .map_err(|e| anyhow::anyhow!("Coverage discovery failed: {}", e))?;
-    
+
     if discovered_files.is_empty() {
-        println!("  {} No coverage files found - coverage analysis will be skipped", "⚠️".yellow());
+        println!(
+            "  {} No coverage files found - coverage analysis will be skipped",
+            "⚠️".yellow()
+        );
         println!("  💡 Tip: Generate coverage files using your test runner, e.g.:");
         println!("    - Rust: cargo tarpaulin --out xml");
         println!("    - Python: pytest --cov --cov-report=xml");
         println!("    - JavaScript: npm test -- --coverage --coverageReporters=cobertura");
     } else {
-        println!("  {} Found {} coverage files:", "✅".green(), discovered_files.len());
+        println!(
+            "  {} Found {} coverage files:",
+            "✅".green(),
+            discovered_files.len()
+        );
         for (i, file) in discovered_files.iter().take(3).enumerate() {
-            println!("    {}. {} (format: {:?}, size: {} KB)", 
-                i + 1, 
-                file.path.display(), 
-                file.format, 
+            println!(
+                "    {}. {} (format: {:?}, size: {} KB)",
+                i + 1,
+                file.path.display(),
+                file.format,
                 file.size / 1024
             );
         }
@@ -335,7 +383,7 @@ async fn preview_coverage_discovery(
             println!("    ... and {} more files", discovered_files.len() - 3);
         }
     }
-    
+
     println!();
     Ok(())
 }
@@ -343,7 +391,7 @@ async fn preview_coverage_discovery(
 /// Display which analyses are enabled
 fn display_enabled_analyses(config: &ValknutConfig) {
     println!("  Enabled Analyses:");
-    
+
     if config.analysis.enable_scoring {
         println!("    ✅ Complexity Analysis - Cyclomatic and cognitive complexity scoring");
     }
@@ -357,14 +405,28 @@ fn display_enabled_analyses(config: &ValknutConfig) {
         println!("    ✅ Impact Analysis - Dependency graphs, cycles, and centrality");
     }
     if config.analysis.enable_lsh_analysis {
-        let denoise_status = if config.denoise.enabled { " (with denoising)" } else { "" };
-        println!("    ✅ Clone Detection - LSH-based similarity analysis{}", denoise_status);
+        let denoise_status = if config.denoise.enabled {
+            " (with denoising)"
+        } else {
+            ""
+        };
+        println!(
+            "    ✅ Clone Detection - LSH-based similarity analysis{}",
+            denoise_status
+        );
     }
     if config.analysis.enable_coverage_analysis {
-        let auto_status = if config.coverage.auto_discover { " (auto-discovery enabled)" } else { "" };
-        println!("    ✅ Coverage Analysis - Test gap analysis{}", auto_status);
+        let auto_status = if config.coverage.auto_discover {
+            " (auto-discovery enabled)"
+        } else {
+            ""
+        };
+        println!(
+            "    ✅ Coverage Analysis - Test gap analysis{}",
+            auto_status
+        );
     }
-    
+
     // Count enabled analyses
     let enabled_count = [
         config.analysis.enable_scoring,
@@ -373,24 +435,46 @@ fn display_enabled_analyses(config: &ValknutConfig) {
         config.analysis.enable_graph_analysis,
         config.analysis.enable_lsh_analysis,
         config.analysis.enable_coverage_analysis,
-    ].iter().filter(|&&enabled| enabled).count();
-    
+    ]
+    .iter()
+    .filter(|&&enabled| enabled)
+    .count();
+
     println!("  📊 Total: {} analyses enabled", enabled_count);
 }
 
 /// Display analysis configuration summary
 fn display_analysis_config_summary(config: &ValknutConfig) {
     println!("  📊 Analysis Configuration:");
-    println!("    • Confidence threshold: {:.1}%", config.analysis.confidence_threshold * 100.0);
-    println!("    • Max files: {}", if config.analysis.max_files == 0 { "unlimited".to_string() } else { config.analysis.max_files.to_string() });
-    
+    println!(
+        "    • Confidence threshold: {:.1}%",
+        config.analysis.confidence_threshold * 100.0
+    );
+    println!(
+        "    • Max files: {}",
+        if config.analysis.max_files == 0 {
+            "unlimited".to_string()
+        } else {
+            config.analysis.max_files.to_string()
+        }
+    );
+
     if config.analysis.enable_coverage_analysis {
-        println!("    • Coverage max age: {} days", config.coverage.max_age_days);
-        println!("    • Coverage patterns: {} patterns", config.coverage.file_patterns.len());
+        println!(
+            "    • Coverage max age: {} days",
+            config.coverage.max_age_days
+        );
+        println!(
+            "    • Coverage patterns: {} patterns",
+            config.coverage.file_patterns.len()
+        );
     }
-    
+
     if config.analysis.enable_lsh_analysis && config.denoise.enabled {
-        println!("    • Clone detection: denoising enabled (similarity: {:.0}%)", config.denoise.similarity * 100.0);
+        println!(
+            "    • Clone detection: denoising enabled (similarity: {:.0}%)",
+            config.denoise.similarity * 100.0
+        );
     }
 }
 
@@ -402,20 +486,20 @@ async fn run_comprehensive_analysis_with_progress(
 ) -> anyhow::Result<AnalysisResults> {
     let multi_progress = MultiProgress::new();
     let main_progress = multi_progress.add(ProgressBar::new(100));
-    main_progress.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>3}/{len:3} {msg}")
-            .unwrap()
-            .progress_chars("##-")
-    );
+    if let Ok(style) = ProgressStyle::default_bar()
+        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>3}/{len:3} {msg}")
+    {
+        main_progress.set_style(style.progress_chars("##-"));
+    }
 
     // Convert to API config
     let api_config = ApiAnalysisConfig::from_valknut_config(config)?;
-    
+
     // Create engine and run analysis
-    let mut engine = ValknutEngine::new(api_config).await
+    let mut engine = ValknutEngine::new(api_config)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create analysis engine: {}", e))?;
-    
+
     // Set up progress callback
     let progress_callback = {
         let progress = main_progress.clone();
@@ -424,27 +508,35 @@ async fn run_comprehensive_analysis_with_progress(
             progress.set_message(message.to_string());
         })
     };
-    
+
     // Run analysis for each path
     let mut all_results = Vec::new();
     for (i, path) in paths.iter().enumerate() {
-        progress_callback(&format!("Analyzing {} ({}/{})", path.display(), i + 1, paths.len()), (i as f64) / (paths.len() as f64));
-        
-        let result = engine.analyze_directory(path).await
+        progress_callback(
+            &format!("Analyzing {} ({}/{})", path.display(), i + 1, paths.len()),
+            (i as f64) / (paths.len() as f64),
+        );
+
+        let result = engine
+            .analyze_directory(path)
+            .await
             .map_err(|e| anyhow::anyhow!("Analysis failed for {}: {}", path.display(), e))?;
-        
+
         all_results.push(result);
     }
 
     main_progress.finish_with_message("Analysis complete");
-    
+
     // Combine results if multiple paths
     let combined_result = if all_results.len() == 1 {
-        all_results.into_iter().next().unwrap()
+        all_results
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected at least one analysis result"))?
     } else {
         combine_analysis_results(all_results)?
     };
-    
+
     Ok(combined_result)
 }
 
@@ -456,27 +548,33 @@ async fn run_comprehensive_analysis_without_progress(
 ) -> anyhow::Result<AnalysisResults> {
     // Convert to API config
     let api_config = ApiAnalysisConfig::from_valknut_config(config)?;
-    
+
     // Create engine and run analysis
-    let mut engine = ValknutEngine::new(api_config).await
+    let mut engine = ValknutEngine::new(api_config)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create analysis engine: {}", e))?;
-    
+
     // Run analysis for each path
     let mut all_results = Vec::new();
     for path in paths.iter() {
-        let result = engine.analyze_directory(path).await
+        let result = engine
+            .analyze_directory(path)
+            .await
             .map_err(|e| anyhow::anyhow!("Analysis failed for {}: {}", path.display(), e))?;
-        
+
         all_results.push(result);
     }
-    
+
     // Combine results if multiple paths
     let combined_result = if all_results.len() == 1 {
-        all_results.into_iter().next().unwrap()
+        all_results
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected at least one analysis result"))?
     } else {
         combine_analysis_results(all_results)?
     };
-    
+
     Ok(combined_result)
 }
 
@@ -484,10 +582,11 @@ async fn run_comprehensive_analysis_without_progress(
 fn combine_analysis_results(results: Vec<AnalysisResults>) -> anyhow::Result<AnalysisResults> {
     // For now, just return the first result
     // TODO: Implement proper result merging logic
-    results.into_iter().next()
+    results
+        .into_iter()
+        .next()
         .ok_or_else(|| anyhow::anyhow!("No analysis results to combine"))
 }
-
 
 /// Evaluate quality gates against analysis results
 fn evaluate_quality_gates(
@@ -508,10 +607,10 @@ fn evaluate_quality_gates(
 fn display_comprehensive_results(result: &AnalysisResults) {
     println!("{}", "📊 Analysis Results".bright_blue().bold());
     println!();
-    
+
     // Display summary information
     display_analysis_summary(result);
-    
+
     println!();
 }
 
@@ -524,12 +623,14 @@ fn display_analysis_summary(result: &AnalysisResults) {
 /// Display quality gate failures
 fn display_quality_failures(result: &QualityGateResult) {
     for violation in &result.violations {
-        println!("  ❌ {} - {} (current: {:.1}, threshold: {:.1})", 
-                violation.rule_name, 
-                violation.description, 
-                violation.current_value, 
-                violation.threshold);
-        
+        println!(
+            "  ❌ {} - {} (current: {:.1}, threshold: {:.1})",
+            violation.rule_name,
+            violation.description,
+            violation.current_value,
+            violation.threshold
+        );
+
         if !violation.recommended_actions.is_empty() {
             println!("     💡 Recommended actions:");
             for action in &violation.recommended_actions {
@@ -537,9 +638,12 @@ fn display_quality_failures(result: &QualityGateResult) {
             }
         }
     }
-    
+
     if !result.violations.is_empty() {
-        println!("  📊 Overall quality score: {:.1}/100", result.overall_score);
+        println!(
+            "  📊 Overall quality score: {:.1}/100",
+            result.overall_score
+        );
     }
 }
 
@@ -550,13 +654,14 @@ async fn generate_reports_with_oracle(
     args: &AnalyzeArgs,
 ) -> anyhow::Result<()> {
     println!("{}", "📝 Generating Reports".bright_blue().bold());
-    
+
     let output_file = match args.format {
         OutputFormat::Json => {
             let file_path = args.out.join("analysis-results.json");
             let json_content = serde_json::to_string_pretty(result)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))?;
-            tokio::fs::write(&file_path, json_content).await
+            tokio::fs::write(&file_path, json_content)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to write JSON report: {}", e))?;
             file_path
         }
@@ -564,7 +669,8 @@ async fn generate_reports_with_oracle(
             let file_path = args.out.join("analysis-results.jsonl");
             let json_content = serde_json::to_string(result)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize JSONL: {}", e))?;
-            tokio::fs::write(&file_path, json_content).await
+            tokio::fs::write(&file_path, json_content)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to write JSONL report: {}", e))?;
             file_path
         }
@@ -572,14 +678,26 @@ async fn generate_reports_with_oracle(
             let file_path = args.out.join("analysis-results.yaml");
             let yaml_content = serde_yaml::to_string(result)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize YAML: {}", e))?;
-            tokio::fs::write(&file_path, yaml_content).await
+            tokio::fs::write(&file_path, yaml_content)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to write YAML report: {}", e))?;
+            file_path
+        }
+        OutputFormat::Markdown => {
+            let file_path = args.out.join("team-report.md");
+            let result_json = serde_json::to_value(result)?;
+            let markdown_content = super::output::generate_markdown_report(&result_json)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to generate markdown report: {}", e))?;
+            tokio::fs::write(&file_path, markdown_content)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to write markdown report: {}", e))?;
             file_path
         }
         OutputFormat::Html => {
             let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
             let file_path = args.out.join(format!("report_{}.html", timestamp));
-            
+
             // Use the proper ReportGenerator with Sibylline theme and oracle data
             let default_config = valknut_rs::api::config_types::AnalysisConfig::default();
             let templates_dir = std::path::Path::new("templates");
@@ -588,13 +706,39 @@ async fn generate_reports_with_oracle(
                 .with_templates_dir(templates_dir)
                 .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?;
             if let Some(oracle) = oracle_response {
-                generator.generate_report_with_oracle(result, oracle, &file_path, ReportFormat::Html)
-                    .map_err(|e| anyhow::anyhow!("Failed to generate HTML report with oracle: {}", e))?
+                generator
+                    .generate_report_with_oracle(result, oracle, &file_path, ReportFormat::Html)
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to generate HTML report with oracle: {}", e)
+                    })?
             } else {
-                generator.generate_report(result, &file_path, ReportFormat::Html)
+                generator
+                    .generate_report(result, &file_path, ReportFormat::Html)
                     .map_err(|e| anyhow::anyhow!("Failed to generate HTML report: {}", e))?
             };
-            
+
+            file_path
+        }
+        OutputFormat::Sonar => {
+            let file_path = args.out.join("sonarqube-issues.json");
+            let result_json = serde_json::to_value(result)?;
+            let sonar_content = super::output::generate_sonar_report(&result_json)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to generate SonarQube report: {}", e))?;
+            tokio::fs::write(&file_path, sonar_content)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to write SonarQube report: {}", e))?;
+            file_path
+        }
+        OutputFormat::Csv => {
+            let file_path = args.out.join("analysis-data.csv");
+            let result_json = serde_json::to_value(result)?;
+            let csv_content = super::output::generate_csv_report(&result_json)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to generate CSV report: {}", e))?;
+            tokio::fs::write(&file_path, csv_content)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to write CSV report: {}", e))?;
             file_path
         }
         _ => {
@@ -611,27 +755,37 @@ async fn generate_reports_with_oracle(
             };
             let json_content = serde_json::to_string_pretty(&combined_result)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))?;
-            tokio::fs::write(&file_path, json_content).await
+            tokio::fs::write(&file_path, json_content)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to write JSON report: {}", e))?;
             file_path
         }
     };
 
-    println!("  ✅ Report saved: {}", output_file.display().to_string().cyan());
+    println!(
+        "  ✅ Report saved: {}",
+        output_file.display().to_string().cyan()
+    );
     Ok(())
 }
 
 /// Print default configuration in YAML format
 pub async fn print_default_config() -> anyhow::Result<()> {
     println!("{}", "# Default valknut configuration".dimmed());
-    println!("{}", "# Save this to a file and customize as needed".dimmed());
-    println!("{}", "# Usage: valknut analyze --config your-config.yml".dimmed());
+    println!(
+        "{}",
+        "# Save this to a file and customize as needed".dimmed()
+    );
+    println!(
+        "{}",
+        "# Usage: valknut analyze --config your-config.yml".dimmed()
+    );
     println!();
-    
+
     let config = valknut_rs::core::config::ValknutConfig::default();
     let yaml_output = serde_yaml::to_string(&config)?;
     println!("{}", yaml_output);
-    
+
     Ok(())
 }
 
@@ -639,7 +793,11 @@ pub async fn print_default_config() -> anyhow::Result<()> {
 pub async fn init_config(args: InitConfigArgs) -> anyhow::Result<()> {
     // Check if file exists and force not specified
     if args.output.exists() && !args.force {
-        eprintln!("{} {}", "❌ Configuration file already exists:".red(), args.output.display());
+        eprintln!(
+            "{} {}",
+            "❌ Configuration file already exists:".red(),
+            args.output.display()
+        );
         eprintln!("   Use --force to overwrite or choose a different name with --output");
         std::process::exit(1);
     }
@@ -648,15 +806,25 @@ pub async fn init_config(args: InitConfigArgs) -> anyhow::Result<()> {
     let yaml_content = serde_yaml::to_string(&config)?;
     tokio::fs::write(&args.output, yaml_content).await?;
 
-    println!("{} {}", "✅ Configuration saved to:".bright_green().bold(), args.output.display().to_string().cyan());
+    println!(
+        "{} {}",
+        "✅ Configuration saved to:".bright_green().bold(),
+        args.output.display().to_string().cyan()
+    );
     println!();
     println!("{}", "📝 Next steps:".bright_blue().bold());
     println!("   1. Edit the configuration file to customize analysis settings");
-    println!("   2. Run analysis with: {}", format!("valknut analyze --config {} <paths>", args.output.display()).cyan());
-    
+    println!(
+        "   2. Run analysis with: {}",
+        format!("valknut analyze --config {} <paths>", args.output.display()).cyan()
+    );
+
     println!();
-    println!("{}", "🔧 Key settings you can customize:".bright_blue().bold());
-    
+    println!(
+        "{}",
+        "🔧 Key settings you can customize:".bright_blue().bold()
+    );
+
     #[derive(Tabled)]
     struct CustomizationRow {
         setting: String,
@@ -699,12 +867,19 @@ pub async fn init_config(args: InitConfigArgs) -> anyhow::Result<()> {
 
 /// Validate a Valknut configuration file
 pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
-    println!("{} {}", "🔍 Validating configuration:".bright_blue().bold(), args.config.display().to_string().cyan());
+    println!(
+        "{} {}",
+        "🔍 Validating configuration:".bright_blue().bold(),
+        args.config.display().to_string().cyan()
+    );
     println!();
 
     let config = match load_configuration(Some(&args.config)).await {
         Ok(config) => {
-            println!("{}", "✅ Configuration file is valid!".bright_green().bold());
+            println!(
+                "{}",
+                "✅ Configuration file is valid!".bright_green().bold()
+            );
             println!();
             config
         }
@@ -716,7 +891,10 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
             println!("   • Verify all required fields are present");
             println!("   • Ensure numeric values are in valid ranges");
             println!();
-            println!("{}", "💡 Tip: Use 'valknut print-default-config' to see valid format".dimmed());
+            println!(
+                "{}",
+                "💡 Tip: Use 'valknut print-default-config' to see valid format".dimmed()
+            );
             std::process::exit(1);
         }
     };
@@ -727,7 +905,7 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
     if args.verbose {
         println!("{}", "🔧 Detailed Settings".bright_blue().bold());
         println!();
-        
+
         #[derive(Tabled)]
         struct DetailRow {
             setting: String,
@@ -762,25 +940,25 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
 }
 
 /// Run MCP server over stdio for IDE integration
-/// 
+///
 /// This command starts a full JSON-RPC 2.0 MCP (Model Context Protocol) server
 /// that exposes valknut's code analysis capabilities over stdin/stdout.
-/// 
+///
 /// Available MCP tools:
 /// - analyze_code: Analyze code for refactoring opportunities and quality metrics
 /// - get_refactoring_suggestions: Get specific refactoring suggestions for a code entity
-/// 
+///
 /// The server follows the MCP specification and can be used with Claude Code
 /// and other MCP-compatible clients.
 pub async fn mcp_stdio_command(
     args: McpStdioArgs,
     survey: bool,
-    survey_verbosity: SurveyVerbosity
+    survey_verbosity: SurveyVerbosity,
 ) -> anyhow::Result<()> {
     use crate::mcp::server::run_mcp_server;
-    
+
     eprintln!("📡 Starting MCP stdio server for IDE integration...");
-    
+
     // Load configuration
     let _config = if let Some(config_path) = args.config {
         load_configuration(Some(&config_path)).await?
@@ -796,12 +974,12 @@ pub async fn mcp_stdio_command(
 
     // Initialize and run MCP server
     eprintln!("🚀 MCP JSON-RPC 2.0 server ready for requests");
-    
+
     if let Err(e) = run_mcp_server(VERSION).await {
         eprintln!("❌ MCP server error: {}", e);
         return Err(anyhow::anyhow!("MCP server failed: {}", e));
     }
-    
+
     Ok(())
 }
 
@@ -842,7 +1020,7 @@ pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
                 },
                 {
                     "name": "validate_quality_gates",
-                    "description": "Validate code against quality gate thresholds for CI/CD integration", 
+                    "description": "Validate code against quality gate thresholds for CI/CD integration",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -856,7 +1034,7 @@ pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
                     }
                 },
                 {
-                    "name": "analyze_file_quality", 
+                    "name": "analyze_file_quality",
                     "description": "Analyze quality metrics and issues for a specific file",
                     "parameters": {
                         "type": "object",
@@ -889,7 +1067,10 @@ pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
 
 /// List supported programming languages and their status
 pub async fn list_languages() -> anyhow::Result<()> {
-    println!("{}", "🔤 Supported Programming Languages".bright_blue().bold());
+    println!(
+        "{}",
+        "🔤 Supported Programming Languages".bright_blue().bold()
+    );
     println!("   Found {} supported languages", 8); // TODO: Dynamic count
     println!();
 
@@ -962,7 +1143,10 @@ pub async fn list_languages() -> anyhow::Result<()> {
     println!("   • Experimental: Basic complexity analysis, limited features");
     println!("   • Configure languages in your config file with language-specific settings");
     println!();
-    println!("{}", "💡 Tip: Use 'valknut init-config' to create a configuration file".dimmed());
+    println!(
+        "{}",
+        "💡 Tip: Use 'valknut init-config' to create a configuration file".dimmed()
+    );
 
     Ok(())
 }
@@ -971,14 +1155,33 @@ pub async fn list_languages() -> anyhow::Result<()> {
 pub fn print_header() {
     if Term::stdout().size().1 >= 80 {
         // Full header for wide terminals
-        println!("{}", "┌".cyan().bold().to_string() + &"─".repeat(60).cyan().to_string() + &"┐".cyan().bold().to_string());
-        println!("{} {} {}", "│".cyan().bold(), 
-                 format!("⚙️  Valknut v{} - AI-Powered Code Analysis", VERSION).bright_cyan().bold(),
-                 "│".cyan().bold());
-        println!("{}", "└".cyan().bold().to_string() + &"─".repeat(60).cyan().to_string() + &"┘".cyan().bold().to_string());
+        println!(
+            "{}",
+            "┌".cyan().bold().to_string()
+                + &"─".repeat(60).cyan().to_string()
+                + &"┐".cyan().bold().to_string()
+        );
+        println!(
+            "{} {} {}",
+            "│".cyan().bold(),
+            format!("⚙️  Valknut v{} - AI-Powered Code Analysis", VERSION)
+                .bright_cyan()
+                .bold(),
+            "│".cyan().bold()
+        );
+        println!(
+            "{}",
+            "└".cyan().bold().to_string()
+                + &"─".repeat(60).cyan().to_string()
+                + &"┘".cyan().bold().to_string()
+        );
     } else {
         // Compact header for narrow terminals
-        println!("{} {}", "⚙️".bright_cyan(), format!("Valknut v{}", VERSION).bright_cyan().bold());
+        println!(
+            "{} {}",
+            "⚙️".bright_cyan(),
+            format!("Valknut v{}", VERSION).bright_cyan().bold()
+        );
     }
     println!();
 }
@@ -1025,42 +1228,46 @@ pub fn display_config_summary(config: &StructureConfig) {
 }
 
 /// Run comprehensive analysis with detailed progress tracking
-pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureConfig, args: &AnalyzeArgs) -> anyhow::Result<serde_json::Value> {
-    use valknut_rs::core::pipeline::{AnalysisPipeline, AnalysisConfig, ProgressCallback};
-    use valknut_rs::core::config::{ValknutConfig, DenoiseConfig};
-    
+pub async fn run_analysis_with_progress(
+    paths: &[PathBuf],
+    _config: StructureConfig,
+    args: &AnalyzeArgs,
+) -> anyhow::Result<serde_json::Value> {
+    use valknut_rs::core::config::{DenoiseConfig, ValknutConfig};
+    use valknut_rs::core::pipeline::{AnalysisConfig, AnalysisPipeline, ProgressCallback};
+
     let multi_progress = MultiProgress::new();
-    
+
     // Create main progress bar
     let main_pb = multi_progress.add(ProgressBar::new(100));
     main_pb.set_style(ProgressStyle::with_template(
-        "🚀 {msg} [{bar:40.bright_blue/blue}] {pos:>3}% {elapsed_precise}"
+        "🚀 {msg} [{bar:40.bright_blue/blue}] {pos:>3}% {elapsed_precise}",
     )?);
     main_pb.set_message("Comprehensive Analysis");
 
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
     let mut analysis_config = AnalysisConfig::default();
-    
+
     // LSH analysis is enabled by default unless explicitly disabled
     analysis_config.enable_lsh_analysis = true;
-    
+
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = !args.no_denoise;
     let auto_enabled = !args.no_auto;
-    
+
     if denoise_enabled {
         info!("Clone denoising enabled (default behavior)");
     } else {
         info!("Clone denoising disabled via --no-denoise flag");
     }
-    
+
     // Configure denoise settings from CLI args with defaults
     let min_function_tokens = args.min_function_tokens.unwrap_or(40);
     let min_match_tokens = args.min_match_tokens.unwrap_or(24);
     let require_blocks = args.require_blocks.unwrap_or(2);
     let similarity = args.similarity.unwrap_or(0.82);
-    
+
     // Apply advanced configuration if provided
     let mut weights = valknut_rs::core::config::DenoiseWeights::default();
     if let Some(ast_weight) = args.ast_weight {
@@ -1072,9 +1279,9 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     if let Some(emb_weight) = args.emb_weight {
         weights.emb = emb_weight;
     }
-    
+
     let io_mismatch_penalty = args.io_mismatch_penalty.unwrap_or(0.25);
-    
+
     // Configure auto-calibration settings
     let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
     auto_calibration.enabled = auto_enabled;
@@ -1084,7 +1291,7 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     if let Some(sample_size) = args.sample_size {
         auto_calibration.sample_size = sample_size;
     }
-    
+
     // Configure ranking settings
     let mut ranking = valknut_rs::core::config::RankingConfig::default();
     if let Some(min_saved_tokens) = args.min_saved_tokens {
@@ -1093,7 +1300,7 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     if let Some(min_rarity_gain) = args.min_rarity_gain {
         ranking.min_rarity_gain = min_rarity_gain;
     }
-    
+
     valknut_config.denoise = DenoiseConfig {
         enabled: denoise_enabled,
         auto: auto_enabled,
@@ -1109,32 +1316,32 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
         ranking,
         dry_run: args.denoise_dry_run,
     };
-        
+
     // Enable rarity weighting when denoise is enabled
     if denoise_enabled {
         valknut_config.dedupe.adaptive.rarity_weighting = true;
-        
+
         // Update LSH config to use k=9 for k-grams when denoising
         valknut_config.lsh.shingle_size = 9;
-        
+
         info!("Denoise config - min_function_tokens: {}, min_match_tokens: {}, require_blocks: {}, similarity: {:.2}", 
               min_function_tokens, min_match_tokens, require_blocks, similarity);
-        
+
         // Create denoise cache directories
         create_denoise_cache_directories().await?;
-        
+
         if auto_enabled {
             info!("Auto-calibration enabled (default)");
         } else {
             info!("Auto-calibration disabled via --no-auto flag");
         }
-        
+
         if args.denoise_dry_run {
             info!("DRY-RUN mode enabled");
             println!("{}", "denoise: DRY-RUN (no changes).".yellow());
         }
     }
-    
+
     // Apply CLI analysis disable/enable flags
     if args.no_coverage {
         analysis_config.enable_coverage_analysis = false;
@@ -1154,7 +1361,7 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     if args.no_lsh {
         analysis_config.enable_lsh_analysis = false;
     }
-    
+
     // Configure coverage analysis from CLI args
     let mut coverage_config = valknut_rs::core::config::CoverageConfig::default();
     if let Some(coverage_file) = &args.coverage_file {
@@ -1167,9 +1374,9 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
     if let Some(max_age_days) = args.coverage_max_age_days {
         coverage_config.max_age_days = max_age_days;
     }
-    
+
     valknut_config.coverage = coverage_config;
-    
+
     // Log analysis configuration
     let enabled_analyses = vec![
         ("Complexity", analysis_config.enable_complexity_analysis),
@@ -1179,16 +1386,20 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
         ("Clone Detection (LSH)", analysis_config.enable_lsh_analysis),
         ("Coverage", analysis_config.enable_coverage_analysis),
     ];
-    
+
     if !args.quiet {
         println!("{}", "📊 Analysis Configuration:".bright_blue().bold());
         for (name, enabled) in enabled_analyses {
-            let status = if enabled { "✅ Enabled".green().to_string() } else { "❌ Disabled".red().to_string() };
+            let status = if enabled {
+                "✅ Enabled".green().to_string()
+            } else {
+                "❌ Disabled".red().to_string()
+            };
             println!("  {}: {}", name, status);
         }
         println!();
     }
-    
+
     let pipeline = AnalysisPipeline::new_with_config(analysis_config, valknut_config);
 
     // Create progress callback
@@ -1202,7 +1413,9 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
 
     // Run comprehensive analysis
     info!("Starting comprehensive analysis for {} paths", paths.len());
-    let analysis_result = pipeline.analyze_paths(paths, Some(progress_callback)).await
+    let analysis_result = pipeline
+        .analyze_paths(paths, Some(progress_callback))
+        .await
         .map_err(|e| anyhow::anyhow!("Analysis failed: {}", e))?;
 
     // Finish progress bar
@@ -1210,43 +1423,50 @@ pub async fn run_analysis_with_progress(paths: &[PathBuf], _config: StructureCon
 
     // Convert to JSON format matching the expected structure
     let result_json = serde_json::to_value(&analysis_result)?;
-    
+
     info!("Analysis completed successfully");
     info!("Total files: {}", analysis_result.summary.total_files);
     info!("Total issues: {}", analysis_result.summary.total_issues);
-    info!("Overall health score: {:.1}", analysis_result.health_metrics.overall_health_score);
-    
+    info!(
+        "Overall health score: {:.1}",
+        analysis_result.health_metrics.overall_health_score
+    );
+
     Ok(result_json)
 }
 
 /// Run analysis without progress bars for quiet mode
-pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: StructureConfig, args: &AnalyzeArgs) -> anyhow::Result<serde_json::Value> {
-    use valknut_rs::core::pipeline::{AnalysisPipeline, AnalysisConfig};
-    use valknut_rs::core::config::{ValknutConfig, DenoiseConfig, LshConfig};
-    
+pub async fn run_analysis_without_progress(
+    paths: &[PathBuf],
+    _config: StructureConfig,
+    args: &AnalyzeArgs,
+) -> anyhow::Result<serde_json::Value> {
+    use valknut_rs::core::config::{DenoiseConfig, LshConfig, ValknutConfig};
+    use valknut_rs::core::pipeline::{AnalysisConfig, AnalysisPipeline};
+
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
     let mut analysis_config = AnalysisConfig::default();
-    
+
     // LSH analysis is enabled by default unless explicitly disabled
     analysis_config.enable_lsh_analysis = true;
-    
+
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = !args.no_denoise;
     let auto_enabled = !args.no_auto;
-    
+
     if denoise_enabled {
         info!("Clone denoising enabled (default behavior)");
     } else {
         info!("Clone denoising disabled via --no-denoise flag");
     }
-    
+
     // Configure denoise settings from CLI args with defaults
     let min_function_tokens = args.min_function_tokens.unwrap_or(40);
     let min_match_tokens = args.min_match_tokens.unwrap_or(24);
     let require_blocks = args.require_blocks.unwrap_or(2);
     let similarity = args.similarity.unwrap_or(0.82);
-    
+
     // Apply advanced configuration if provided
     let mut weights = valknut_rs::core::config::DenoiseWeights::default();
     if let Some(ast_weight) = args.ast_weight {
@@ -1258,9 +1478,9 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
     if let Some(emb_weight) = args.emb_weight {
         weights.emb = emb_weight;
     }
-    
+
     let io_mismatch_penalty = args.io_mismatch_penalty.unwrap_or(0.25);
-    
+
     // Configure auto-calibration settings
     let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
     auto_calibration.enabled = auto_enabled;
@@ -1270,7 +1490,7 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
     if let Some(sample_size) = args.sample_size {
         auto_calibration.sample_size = sample_size;
     }
-    
+
     // Configure ranking settings
     let mut ranking = valknut_rs::core::config::RankingConfig::default();
     if let Some(min_saved_tokens) = args.min_saved_tokens {
@@ -1279,7 +1499,7 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
     if let Some(min_rarity_gain) = args.min_rarity_gain {
         ranking.min_rarity_gain = min_rarity_gain;
     }
-    
+
     valknut_config.denoise = DenoiseConfig {
         enabled: denoise_enabled,
         auto: auto_enabled,
@@ -1295,32 +1515,32 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
         ranking,
         dry_run: args.denoise_dry_run,
     };
-        
+
     // Enable rarity weighting when denoise is enabled
     if denoise_enabled {
         valknut_config.dedupe.adaptive.rarity_weighting = true;
-        
+
         // Update LSH config to use k=9 for k-grams when denoising
         valknut_config.lsh.shingle_size = 9;
-        
+
         info!("Denoise config - min_function_tokens: {}, min_match_tokens: {}, require_blocks: {}, similarity: {:.2}", 
               min_function_tokens, min_match_tokens, require_blocks, similarity);
-        
+
         // Create denoise cache directories
         create_denoise_cache_directories().await?;
-        
+
         if auto_enabled {
             info!("Auto-calibration enabled (default)");
         } else {
             info!("Auto-calibration disabled via --no-auto flag");
         }
-        
+
         if args.denoise_dry_run {
             info!("DRY-RUN mode enabled");
             println!("{}", "denoise: DRY-RUN (no changes).".yellow());
         }
     }
-    
+
     // Apply CLI analysis disable/enable flags
     if args.no_coverage {
         analysis_config.enable_coverage_analysis = false;
@@ -1340,7 +1560,7 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
     if args.no_lsh {
         analysis_config.enable_lsh_analysis = false;
     }
-    
+
     // Configure coverage analysis from CLI args
     let mut coverage_config = valknut_rs::core::config::CoverageConfig::default();
     if let Some(coverage_file) = &args.coverage_file {
@@ -1353,58 +1573,74 @@ pub async fn run_analysis_without_progress(paths: &[PathBuf], _config: Structure
     if let Some(max_age_days) = args.coverage_max_age_days {
         coverage_config.max_age_days = max_age_days;
     }
-    
+
     valknut_config.coverage = coverage_config;
-    
+
     let pipeline = AnalysisPipeline::new_with_config(analysis_config, valknut_config);
-    
+
     // Run comprehensive analysis without progress callback
     info!("Starting comprehensive analysis for {} paths", paths.len());
-    let analysis_result = pipeline.analyze_paths(paths, None).await
+    let analysis_result = pipeline
+        .analyze_paths(paths, None)
+        .await
         .map_err(|e| anyhow::anyhow!("Analysis failed: {}", e))?;
-    
+
     // Convert to JSON format matching the expected structure
     let result_json = serde_json::to_value(&analysis_result)?;
-    
+
     info!("Analysis completed successfully");
     info!("Total files: {}", analysis_result.summary.total_files);
     info!("Total issues: {}", analysis_result.summary.total_issues);
-    info!("Overall health score: {:.1}", analysis_result.health_metrics.overall_health_score);
-    
+    info!(
+        "Overall health score: {:.1}",
+        analysis_result.health_metrics.overall_health_score
+    );
+
     Ok(result_json)
 }
 
 /// Create denoise cache directories if they don't exist
 async fn create_denoise_cache_directories() -> anyhow::Result<()> {
     let cache_base = std::path::Path::new(".valknut/cache/denoise");
-    
+
     // Create the denoise cache directory
     tokio::fs::create_dir_all(&cache_base).await?;
-    
+
     // Create cache files if they don't exist
     let stop_motifs_path = cache_base.join("stop_motifs.v1.json");
     let auto_calibration_path = cache_base.join("auto_calibration.v1.json");
-    
+
     if !stop_motifs_path.exists() {
         let empty_motifs = serde_json::json!({
             "version": 1,
             "created": chrono::Utc::now().to_rfc3339(),
             "stop_motifs": []
         });
-        tokio::fs::write(&stop_motifs_path, serde_json::to_string_pretty(&empty_motifs)?).await?;
+        tokio::fs::write(
+            &stop_motifs_path,
+            serde_json::to_string_pretty(&empty_motifs)?,
+        )
+        .await?;
         info!("Created denoise cache file: {}", stop_motifs_path.display());
     }
-    
+
     if !auto_calibration_path.exists() {
         let empty_calibration = serde_json::json!({
             "version": 1,
             "created": chrono::Utc::now().to_rfc3339(),
             "calibration_data": {}
         });
-        tokio::fs::write(&auto_calibration_path, serde_json::to_string_pretty(&empty_calibration)?).await?;
-        info!("Created denoise cache file: {}", auto_calibration_path.display());
+        tokio::fs::write(
+            &auto_calibration_path,
+            serde_json::to_string_pretty(&empty_calibration)?,
+        )
+        .await?;
+        info!(
+            "Created denoise cache file: {}",
+            auto_calibration_path.display()
+        );
     }
-    
+
     Ok(())
 }
 
@@ -1414,15 +1650,9 @@ pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<St
         Some(path) => {
             let content = tokio::fs::read_to_string(path).await?;
             match path.extension().and_then(|ext| ext.to_str()) {
-                Some("yaml" | "yml") => {
-                    serde_yaml::from_str(&content)?
-                }
-                Some("json") => {
-                    serde_json::from_str(&content)?
-                }
-                _ => {
-                    serde_yaml::from_str(&content)?
-                }
+                Some("yaml" | "yml") => serde_yaml::from_str(&content)?,
+                Some("json") => serde_json::from_str(&content)?,
+                _ => serde_yaml::from_str(&content)?,
             }
         }
         None => StructureConfig::default(),
@@ -1432,13 +1662,16 @@ pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<St
 }
 
 // Legacy analyzer implementations for backward compatibility
-pub async fn analyze_structure_legacy(args: StructureArgs, mut config: StructureConfig) -> anyhow::Result<()> {
+pub async fn analyze_structure_legacy(
+    args: StructureArgs,
+    mut config: StructureConfig,
+) -> anyhow::Result<()> {
     // Apply CLI overrides
     if args.branch_only {
         config.enable_branch_packs = true;
         config.enable_file_split_packs = false;
     }
-    
+
     if args.file_split_only {
         config.enable_branch_packs = false;
         config.enable_file_split_packs = true;
@@ -1450,7 +1683,7 @@ pub async fn analyze_structure_legacy(args: StructureArgs, mut config: Structure
 
     let analyzer = StructureExtractor::with_config(config);
     let recommendations = analyzer.generate_recommendations(&args.path).await?;
-    
+
     let analysis_result = serde_json::json!({
         "packs": recommendations,
         "summary": {
@@ -1476,7 +1709,6 @@ pub async fn analyze_structure_legacy(args: StructureArgs, mut config: Structure
     Ok(())
 }
 
-
 pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
     // TODO: Implement impact analysis
     println!("⚠️  Impact analysis implementation in progress");
@@ -1499,30 +1731,37 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
 }
 
 /// Handle quality gate evaluation
-async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) -> anyhow::Result<QualityGateResult> {
-    use valknut_rs::core::pipeline::{QualityGateViolation};
+async fn handle_quality_gates(
+    args: &AnalyzeArgs,
+    result: &serde_json::Value,
+) -> anyhow::Result<QualityGateResult> {
+    use valknut_rs::core::pipeline::QualityGateViolation;
 
     // Build quality gate configuration from CLI args
     let quality_gate_config = build_quality_gate_config(args);
 
     let mut violations = Vec::new();
-    
+
     // Extract summary data (this should always be present)
-    let summary = result.get("summary")
+    let summary = result
+        .get("summary")
         .ok_or_else(|| anyhow::anyhow!("Summary not found in analysis result"))?;
-    
-    let total_issues = summary.get("total_issues")
+
+    let total_issues = summary
+        .get("total_issues")
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as usize;
 
     // Check available metrics against thresholds
-    if quality_gate_config.max_critical_issues > 0 && total_issues > quality_gate_config.max_critical_issues {
+    if quality_gate_config.max_critical_issues > 0
+        && total_issues > quality_gate_config.max_critical_issues
+    {
         violations.push(QualityGateViolation {
             rule_name: "Total Issues Count".to_string(),
             current_value: total_issues as f64,
             threshold: quality_gate_config.max_critical_issues as f64,
             description: format!(
-                "Total issues ({}) exceeds maximum allowed ({})", 
+                "Total issues ({}) exceeds maximum allowed ({})",
                 total_issues, quality_gate_config.max_critical_issues
             ),
             severity: if total_issues > quality_gate_config.max_critical_issues * 2 {
@@ -1537,56 +1776,72 @@ async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) ->
 
     // Try to extract health metrics if available (for more comprehensive analysis)
     if let Some(health_metrics) = result.get("health_metrics") {
-        if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
+        if let Some(overall_health) = health_metrics
+            .get("overall_health_score")
+            .and_then(|v| v.as_f64())
+        {
             if overall_health < quality_gate_config.min_maintainability_score {
                 violations.push(QualityGateViolation {
                     rule_name: "Overall Health Score".to_string(),
                     current_value: overall_health,
                     threshold: quality_gate_config.min_maintainability_score,
                     description: format!(
-                        "Health score ({:.1}) is below minimum required ({:.1})", 
+                        "Health score ({:.1}) is below minimum required ({:.1})",
                         overall_health, quality_gate_config.min_maintainability_score
                     ),
-                    severity: if overall_health < quality_gate_config.min_maintainability_score - 20.0 {
+                    severity: if overall_health
+                        < quality_gate_config.min_maintainability_score - 20.0
+                    {
                         "Blocker".to_string()
                     } else {
                         "Critical".to_string()
                     },
                     affected_files: Vec::new(),
-                    recommended_actions: vec!["Improve code structure and reduce technical debt".to_string()],
+                    recommended_actions: vec![
+                        "Improve code structure and reduce technical debt".to_string()
+                    ],
                 });
             }
         }
 
-        if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
+        if let Some(complexity_score) = health_metrics
+            .get("complexity_score")
+            .and_then(|v| v.as_f64())
+        {
             if complexity_score > quality_gate_config.max_complexity_score {
                 violations.push(QualityGateViolation {
                     rule_name: "Complexity Score".to_string(),
                     current_value: complexity_score,
                     threshold: quality_gate_config.max_complexity_score,
                     description: format!(
-                        "Complexity score ({:.1}) exceeds maximum allowed ({:.1})", 
+                        "Complexity score ({:.1}) exceeds maximum allowed ({:.1})",
                         complexity_score, quality_gate_config.max_complexity_score
                     ),
-                    severity: if complexity_score > quality_gate_config.max_complexity_score + 10.0 {
+                    severity: if complexity_score > quality_gate_config.max_complexity_score + 10.0
+                    {
                         "Critical".to_string()
                     } else {
                         "High".to_string()
                     },
                     affected_files: Vec::new(),
-                    recommended_actions: vec!["Simplify complex functions and reduce nesting".to_string()],
+                    recommended_actions: vec![
+                        "Simplify complex functions and reduce nesting".to_string()
+                    ],
                 });
             }
         }
 
-        if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
+        if let Some(debt_ratio) = health_metrics
+            .get("technical_debt_ratio")
+            .and_then(|v| v.as_f64())
+        {
             if debt_ratio > quality_gate_config.max_technical_debt_ratio {
                 violations.push(QualityGateViolation {
                     rule_name: "Technical Debt Ratio".to_string(),
                     current_value: debt_ratio,
                     threshold: quality_gate_config.max_technical_debt_ratio,
                     description: format!(
-                        "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)", 
+                        "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)",
                         debt_ratio, quality_gate_config.max_technical_debt_ratio
                     ),
                     severity: if debt_ratio > quality_gate_config.max_technical_debt_ratio + 20.0 {
@@ -1602,7 +1857,8 @@ async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) ->
     }
 
     let passed = violations.is_empty();
-    let overall_score = result.get("health_metrics")
+    let overall_score = result
+        .get("health_metrics")
         .and_then(|hm| hm.get("overall_health_score"))
         .and_then(|v| v.as_f64())
         .unwrap_or(50.0); // Default score if not available
@@ -1617,10 +1873,10 @@ async fn handle_quality_gates(args: &AnalyzeArgs, result: &serde_json::Value) ->
 /// Build quality gate configuration from CLI arguments
 fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     let mut config = QualityGateConfig::default();
-    
+
     // Enable if quality_gate flag is set or if fail_on_issues is set
     config.enabled = args.quality_gate || args.fail_on_issues;
-    
+
     // Override defaults with CLI values if provided
     if let Some(max_complexity) = args.max_complexity {
         config.max_complexity_score = max_complexity;
@@ -1643,13 +1899,13 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     if let Some(max_high_priority) = args.max_high_priority {
         config.max_high_priority_issues = max_high_priority;
     }
-    
+
     // Handle fail_on_issues flag (sets max_issues to 0)
     if args.fail_on_issues {
         config.max_critical_issues = 0;
         config.max_high_priority_issues = 0;
     }
-    
+
     config
 }
 
@@ -1657,26 +1913,37 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
 fn display_quality_gate_violations(result: &QualityGateResult) {
     println!();
     println!("{}", "❌ Quality Gate Failed".red().bold());
-    println!("{} {:.1}", "Quality Score:".dimmed(), result.overall_score.to_string().yellow());
+    println!(
+        "{} {:.1}",
+        "Quality Score:".dimmed(),
+        result.overall_score.to_string().yellow()
+    );
     println!();
-    
+
     // Group violations by severity
-    let blockers: Vec<_> = result.violations.iter()
+    let blockers: Vec<_> = result
+        .violations
+        .iter()
         .filter(|v| v.severity == "Blocker")
         .collect();
-    let criticals: Vec<_> = result.violations.iter()
+    let criticals: Vec<_> = result
+        .violations
+        .iter()
         .filter(|v| v.severity == "Critical")
         .collect();
-    let warnings: Vec<_> = result.violations.iter()
+    let warnings: Vec<_> = result
+        .violations
+        .iter()
         .filter(|v| v.severity == "Warning" || v.severity == "High")
         .collect();
 
     if !blockers.is_empty() {
         println!("{}", "🚫 BLOCKER Issues:".red().bold());
         for violation in blockers {
-            println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.rule_name.yellow(), 
-                violation.current_value, 
+            println!(
+                "  • {}: {:.1} (threshold: {:.1})",
+                violation.rule_name.yellow(),
+                violation.current_value,
                 violation.threshold
             );
             println!("    {}", violation.description.dimmed());
@@ -1687,9 +1954,10 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
     if !criticals.is_empty() {
         println!("{}", "🔴 CRITICAL Issues:".red().bold());
         for violation in criticals {
-            println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.rule_name.yellow(), 
-                violation.current_value, 
+            println!(
+                "  • {}: {:.1} (threshold: {:.1})",
+                violation.rule_name.yellow(),
+                violation.current_value,
                 violation.threshold
             );
             println!("    {}", violation.description.dimmed());
@@ -1700,9 +1968,10 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
     if !warnings.is_empty() {
         println!("{}", "⚠️  WARNING Issues:".yellow().bold());
         for violation in warnings {
-            println!("  • {}: {:.1} (threshold: {:.1})", 
-                violation.rule_name.yellow(), 
-                violation.current_value, 
+            println!(
+                "  • {}: {:.1} (threshold: {:.1})",
+                violation.rule_name.yellow(),
+                violation.current_value,
                 violation.threshold
             );
             println!("    {}", violation.description.dimmed());
@@ -1721,10 +1990,10 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::{TempDir, NamedTempFile};
     use std::fs;
-    use valknut_rs::core::pipeline::{QualityGateViolation};
-    
+    use tempfile::{NamedTempFile, TempDir};
+    use valknut_rs::core::pipeline::QualityGateViolation;
+
     // Helper function to create default AnalyzeArgs for tests
     fn create_default_analyze_args() -> AnalyzeArgs {
         AnalyzeArgs {
@@ -1851,7 +2120,7 @@ mod tests {
     async fn test_init_config_new_file() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("test_config.yml");
-        
+
         let args = InitConfigArgs {
             output: config_path.clone(),
             force: false,
@@ -1860,7 +2129,7 @@ mod tests {
         let result = init_config(args).await;
         assert!(result.is_ok());
         assert!(config_path.exists());
-        
+
         // Verify file contains valid YAML
         let content = fs::read_to_string(&config_path).unwrap();
         let parsed: serde_yaml::Result<StructureConfig> = serde_yaml::from_str(&content);
@@ -1871,10 +2140,10 @@ mod tests {
     async fn test_init_config_force_overwrite() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("existing_config.yml");
-        
+
         // Create existing file
         fs::write(&config_path, "existing content").unwrap();
-        
+
         let args = InitConfigArgs {
             output: config_path.clone(),
             force: true,
@@ -1882,7 +2151,7 @@ mod tests {
 
         let result = init_config(args).await;
         assert!(result.is_ok());
-        
+
         // Verify file was overwritten with valid YAML
         let content = fs::read_to_string(&config_path).unwrap();
         assert_ne!(content, "existing content");
@@ -1924,10 +2193,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_stdio_command() {
-        let args = McpStdioArgs {
-            config: None,
-        };
-        
+        let args = McpStdioArgs { config: None };
+
         let result = mcp_stdio_command(args, false, SurveyVerbosity::Low).await;
         assert!(result.is_ok());
     }
@@ -1942,17 +2209,15 @@ mod tests {
         let args = McpStdioArgs {
             config: Some(temp_file.path().to_path_buf()),
         };
-        
+
         let result = mcp_stdio_command(args, true, SurveyVerbosity::High).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_mcp_manifest_command_stdout() {
-        let args = McpManifestArgs {
-            output: None,
-        };
-        
+        let args = McpManifestArgs { output: None };
+
         let result = mcp_manifest_command(args).await;
         assert!(result.is_ok());
     }
@@ -1961,20 +2226,20 @@ mod tests {
     async fn test_mcp_manifest_command_file_output() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("manifest.json");
-        
+
         let args = McpManifestArgs {
             output: Some(manifest_path.clone()),
         };
-        
+
         let result = mcp_manifest_command(args).await;
         assert!(result.is_ok());
         assert!(manifest_path.exists());
-        
+
         // Verify file contains valid JSON
         let content = fs::read_to_string(&manifest_path).unwrap();
         let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(&content);
         assert!(parsed.is_ok());
-        
+
         let manifest = parsed.unwrap();
         assert_eq!(manifest["name"], "valknut");
         assert!(manifest["capabilities"]["tools"].is_array());
@@ -1989,7 +2254,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_structure_legacy() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let args = StructureArgs {
             path: temp_dir.path().to_path_buf(),
             extensions: None,
@@ -1998,9 +2263,9 @@ mod tests {
             branch_only: false,
             file_split_only: false,
         };
-        
+
         let config = StructureConfig::default();
-        
+
         let result = analyze_structure_legacy(args, config).await;
         assert!(result.is_ok());
     }
@@ -2008,7 +2273,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_structure_legacy_branch_only() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let args = StructureArgs {
             path: temp_dir.path().to_path_buf(),
             extensions: None,
@@ -2017,9 +2282,9 @@ mod tests {
             branch_only: true,
             file_split_only: false,
         };
-        
+
         let config = StructureConfig::default();
-        
+
         let result = analyze_structure_legacy(args, config).await;
         assert!(result.is_ok());
     }
@@ -2027,7 +2292,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_structure_legacy_file_split_only() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let args = StructureArgs {
             path: temp_dir.path().to_path_buf(),
             extensions: None,
@@ -2036,9 +2301,9 @@ mod tests {
             branch_only: false,
             file_split_only: true,
         };
-        
+
         let config = StructureConfig::default();
-        
+
         let result = analyze_structure_legacy(args, config).await;
         assert!(result.is_ok());
     }
@@ -2046,7 +2311,7 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_impact_legacy() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let args = ImpactArgs {
             path: temp_dir.path().to_path_buf(),
             extensions: None,
@@ -2058,7 +2323,7 @@ mod tests {
             top: 10,
             format: OutputFormat::Json,
         };
-        
+
         let result = analyze_impact_legacy(args).await;
         assert!(result.is_ok());
     }
@@ -2066,7 +2331,7 @@ mod tests {
     #[test]
     fn test_build_quality_gate_config_defaults() {
         let args = create_default_analyze_args();
-        
+
         let config = build_quality_gate_config(&args);
         assert!(!config.enabled);
     }
@@ -2082,7 +2347,7 @@ mod tests {
         args.max_issues = Some(10);
         args.max_critical = Some(5);
         args.max_high_priority = Some(15);
-        
+
         let config = build_quality_gate_config(&args);
         assert!(config.enabled);
         assert_eq!(config.max_complexity_score, 75.0);
@@ -2096,7 +2361,7 @@ mod tests {
     fn test_build_quality_gate_config_fail_on_issues() {
         let mut args = create_default_analyze_args();
         args.fail_on_issues = true;
-        
+
         let config = build_quality_gate_config(&args);
         assert!(config.enabled);
         assert_eq!(config.max_critical_issues, 0);
@@ -2125,13 +2390,13 @@ mod tests {
                 recommended_actions: vec!["Consider fixing".to_string()],
             },
         ];
-        
+
         let result = QualityGateResult {
             passed: false,
             violations,
             overall_score: 65.0,
         };
-        
+
         // Test that display_quality_gate_violations doesn't panic
         display_quality_gate_violations(&result);
     }
@@ -2143,37 +2408,35 @@ mod tests {
             violations: vec![],
             overall_score: 85.0,
         };
-        
+
         // Test that display_quality_gate_violations doesn't panic
         display_quality_gate_violations(&result);
     }
 
     #[test]
     fn test_display_quality_gate_violations_blocker_severity() {
-        let violations = vec![
-            QualityGateViolation {
-                rule_name: "Blocker Rule".to_string(),
-                current_value: 95.0,
-                threshold: 70.0,
-                description: "Blocker violation".to_string(),
-                severity: "Blocker".to_string(),
-                affected_files: vec!["test.rs".to_string().into()],
-                recommended_actions: vec!["Immediate fix required".to_string()],
-            },
-        ];
-        
+        let violations = vec![QualityGateViolation {
+            rule_name: "Blocker Rule".to_string(),
+            current_value: 95.0,
+            threshold: 70.0,
+            description: "Blocker violation".to_string(),
+            severity: "Blocker".to_string(),
+            affected_files: vec!["test.rs".to_string().into()],
+            recommended_actions: vec!["Immediate fix required".to_string()],
+        }];
+
         let result = QualityGateResult {
             passed: false,
             violations,
             overall_score: 30.0,
         };
-        
+
         // Test that display_quality_gate_violations doesn't panic with blocker
         display_quality_gate_violations(&result);
     }
 
     // Mock test for handle_quality_gates since it requires complex analysis result structure
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_handle_quality_gates_basic() {
         let mut args = create_default_analyze_args();
         args.quality_gate = true;
@@ -2193,12 +2456,12 @@ mod tests {
 
         let result = handle_quality_gates(&args, &analysis_result).await;
         assert!(result.is_ok());
-        
+
         let quality_result = result.unwrap();
         assert!(quality_result.passed); // Should pass with default thresholds
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_handle_quality_gates_violations() {
         let mut args = create_default_analyze_args();
         args.quality_gate = true;
@@ -2221,13 +2484,13 @@ mod tests {
 
         let result = handle_quality_gates(&args, &analysis_result).await;
         assert!(result.is_ok());
-        
+
         let quality_result = result.unwrap();
         assert!(!quality_result.passed); // Should fail due to violations
         assert!(quality_result.violations.len() > 0);
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_handle_quality_gates_missing_summary() {
         let mut args = create_default_analyze_args();
         args.quality_gate = true;
@@ -2250,8 +2513,8 @@ async fn run_oracle_analysis(
     analysis_result: &AnalysisResults,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
-    use valknut_rs::oracle::{RefactoringOracle, OracleConfig};
-    
+    use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
+
     // Check if GEMINI_API_KEY is available
     let oracle_config = match OracleConfig::from_env() {
         Ok(mut config) => {
@@ -2262,48 +2525,74 @@ async fn run_oracle_analysis(
         }
         Err(e) => {
             eprintln!("{} {}", "❌ Oracle configuration failed:".red(), e);
-            eprintln!("   {}", "Set the GEMINI_API_KEY environment variable to use the oracle feature".dimmed());
+            eprintln!(
+                "   {}",
+                "Set the GEMINI_API_KEY environment variable to use the oracle feature".dimmed()
+            );
             return Ok(None);
         }
     };
-    
+
     let oracle = RefactoringOracle::new(oracle_config);
-    
+
     // Use the first path as the project root for analysis
     let project_path = paths.first().unwrap();
-    
+
     if !args.quiet {
-        println!("  🔍 Analyzing project: {}", project_path.display().to_string().cyan());
+        println!(
+            "  🔍 Analyzing project: {}",
+            project_path.display().to_string().cyan()
+        );
         println!("  🧠 Sending to Gemini 2.5 Pro for intelligent refactoring suggestions...");
     }
-    
-    match oracle.generate_suggestions(project_path, analysis_result).await {
+
+    match oracle
+        .generate_suggestions(project_path, analysis_result)
+        .await
+    {
         Ok(response) => {
             if !args.quiet {
                 println!("  ✅ Oracle analysis completed successfully!");
-                println!("  📊 Generated {} refactoring phases with {} total tasks",
-                         response.refactoring_plan.phases.len().to_string().green(),
-                         response.refactoring_plan.phases.iter()
-                             .map(|p| p.subsystems.iter().map(|s| s.tasks.len()).sum::<usize>())
-                             .sum::<usize>().to_string().green());
+                println!(
+                    "  📊 Generated {} refactoring phases with {} total tasks",
+                    response.refactoring_plan.phases.len().to_string().green(),
+                    response
+                        .refactoring_plan
+                        .phases
+                        .iter()
+                        .map(|p| p.subsystems.iter().map(|s| s.tasks.len()).sum::<usize>())
+                        .sum::<usize>()
+                        .to_string()
+                        .green()
+                );
             }
-            
+
             // Save oracle response to a separate file for review
             if let Ok(oracle_json) = serde_json::to_string_pretty(&response) {
                 let oracle_path = project_path.join(".valknut-oracle-response.json");
                 if let Err(e) = tokio::fs::write(&oracle_path, oracle_json).await {
-                    warn!("Failed to write oracle response to {}: {}", oracle_path.display(), e);
+                    warn!(
+                        "Failed to write oracle response to {}: {}",
+                        oracle_path.display(),
+                        e
+                    );
                 } else if !args.quiet {
-                    println!("  💾 Oracle recommendations saved to: {}", oracle_path.display().to_string().cyan());
+                    println!(
+                        "  💾 Oracle recommendations saved to: {}",
+                        oracle_path.display().to_string().cyan()
+                    );
                 }
             }
-            
+
             Ok(Some(response))
         }
         Err(e) => {
             if !args.quiet {
                 eprintln!("{} Oracle analysis failed: {}", "⚠️".yellow(), e);
-                eprintln!("   {}", "Analysis will continue without oracle suggestions".dimmed());
+                eprintln!(
+                    "   {}",
+                    "Analysis will continue without oracle suggestions".dimmed()
+                );
             }
             warn!("Oracle analysis failed: {}", e);
             Ok(None)
@@ -2320,11 +2609,12 @@ async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyho
 pub async fn live_reach_command(args: LiveReachArgs) -> anyhow::Result<()> {
     // Load configuration (for now use default)
     let config = LiveReachConfig::default();
-    
+
     // Create CLI executor and run command
     let cli = LiveReachCli::new(config);
-    cli.execute(args).await
+    cli.execute(args)
+        .await
         .map_err(|e| anyhow::anyhow!("Live reachability analysis failed: {}", e))?;
-    
+
     Ok(())
 }

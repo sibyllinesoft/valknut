@@ -1,0 +1,49 @@
+# Bun configuration for valknut tree components
+
+[test]
+# Use happy-dom for React component testing (faster than jsdom)
+environment = "happy-dom"
+
+# Test file patterns
+include = [
+  "tests/**/*.test.js",
+  "tests/**/*.test.jsx",
+  "src/**/*.test.js", 
+  "src/**/*.test.jsx"
+]
+
+# Coverage configuration
+coverage = true
+
+# Test timeout (30 seconds)
+timeout = 30000
+
+# Preload files for testing setup
+preload = [
+  "./tests/setup.js"
+]
+
+[install]
+# Faster installs with Bun
+cache = true
+exact = false
+production = false
+dev = true
+
+# Trust these packages for faster installs
+trusted = [
+  "react",
+  "react-dom", 
+  "react-arborist",
+  "@testing-library/react",
+  "@testing-library/jest-dom",
+  "@testing-library/user-event",
+  "happy-dom"
+]
+
+[run]
+# Use system shell for scripts
+shell = "system"
+
+# Environment variables for development
+env = { NODE_ENV = "test" }

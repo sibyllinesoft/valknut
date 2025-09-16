@@ -289,7 +289,14 @@ impl RustAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<Option<ParsedEntity>> {
         let entity_kind = match node.kind() {
-            "function_item" => EntityKind::Function,
+            "function_item" => {
+                // Skip function items that are inside traits
+                // They should be included as metadata of the trait, not separate entities
+                if self.is_inside_trait(node) {
+                    return Ok(None);
+                }
+                EntityKind::Function
+            }
             "impl_item" => return Ok(None), // Skip impl blocks themselves
             "struct_item" => EntityKind::Struct,
             "enum_item" => EntityKind::Enum,
@@ -297,7 +304,14 @@ impl RustAdapter {
             "mod_item" => EntityKind::Module,
             "const_item" => EntityKind::Constant,
             "static_item" => EntityKind::Constant,
-            "function_signature_item" => EntityKind::Function, // Trait methods
+            "function_signature_item" => {
+                // Skip function signatures that are inside traits
+                // They should be included as metadata of the trait, not separate entities
+                if self.is_inside_trait(node) {
+                    return Ok(None);
+                }
+                EntityKind::Function
+            }
             _ => return Ok(None),
         };
 
@@ -405,6 +419,30 @@ impl RustAdapter {
         let mut return_type = None;
         let mut visibility = "private".to_string();
 
+        // Check for modifiers in the function signature using AST structure
+        // Look for modifier nodes before the function keyword
+        let mut signature_cursor = node.walk();
+        for sig_child in node.children(&mut signature_cursor) {
+            match sig_child.kind() {
+                "async" => is_async = true,
+                "unsafe" => is_unsafe = true,
+                "const" => is_const = true,
+                "function_modifiers" => {
+                    // Check inside function_modifiers for async/unsafe
+                    let mut mod_cursor = sig_child.walk();
+                    for mod_child in sig_child.children(&mut mod_cursor) {
+                        match mod_child.kind() {
+                            "async" => is_async = true,
+                            "unsafe" => is_unsafe = true,
+                            "const" => is_const = true,
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "parameters" => {
@@ -424,22 +462,20 @@ impl RustAdapter {
                         }
                     }
                 }
-                "async" => {
-                    is_async = true;
-                }
-                "unsafe" => {
-                    is_unsafe = true;
-                }
-                "const" => {
-                    is_const = true;
-                }
                 "visibility_modifier" => {
                     let vis_text = child.utf8_text(source_code.as_bytes())?;
                     visibility = vis_text.to_string();
                 }
                 _ => {
-                    // Check for return type in function signature
-                    if child.kind().contains("type") {
+                    // Check for specific return type nodes in function signature
+                    if matches!(
+                        child.kind(),
+                        "type_identifier"
+                            | "reference_type"
+                            | "tuple_type"
+                            | "array_type"
+                            | "generic_type"
+                    ) {
                         return_type = Some(child.utf8_text(source_code.as_bytes())?.to_string());
                     }
                 }
@@ -673,6 +709,18 @@ impl RustAdapter {
         }
 
         Ok(code_entity)
+    }
+
+    /// Check if a node is inside a trait definition
+    fn is_inside_trait(&self, node: Node) -> bool {
+        let mut current = node.parent();
+        while let Some(parent) = current {
+            if parent.kind() == "trait_item" {
+                return true;
+            }
+            current = parent.parent();
+        }
+        false
     }
 }
 

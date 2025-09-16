@@ -1,16 +1,18 @@
-pub use pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
-pub use pipeline_results::{
-    ComprehensiveAnalysisResult, AnalysisSummary, StructureAnalysisResults,
-    ComplexityAnalysisResults, RefactoringAnalysisResults, ImpactAnalysisResults,
-    CoverageAnalysisResults, HealthMetrics, PipelineResults, PipelineStatistics, 
-    MemoryStats, ResultSummary, ScoringResults, FileScore, PipelineStatus
+pub use pipeline_config::{
+    AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
-pub use pipeline_executor::{AnalysisPipeline, ProgressCallback, ExtractorRegistry};
+pub use pipeline_executor::{AnalysisPipeline, ExtractorRegistry, ProgressCallback};
+pub use pipeline_results::{
+    AnalysisSummary, ComplexityAnalysisResults, ComprehensiveAnalysisResult,
+    CoverageAnalysisResults, FileScore, HealthMetrics, ImpactAnalysisResults, MemoryStats,
+    PipelineResults, PipelineStatistics, PipelineStatus, RefactoringAnalysisResults, ResultSummary,
+    ScoringResults, StructureAnalysisResults,
+};
 pub use pipeline_stages::AnalysisStages;
 
 mod pipeline_config;
-mod pipeline_results; 
 mod pipeline_executor;
+mod pipeline_results;
 mod pipeline_stages;
 
 /// Additional tests for pipeline modules to improve coverage
@@ -18,10 +20,10 @@ mod pipeline_stages;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    use std::fs;
-    
+
     #[tokio::test]
     async fn test_pipeline_fit_legacy_api() {
         let pipeline = AnalysisPipeline::default();
@@ -134,7 +136,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.rs");
         fs::write(&file_path, "fn main() { println!(\"Hello\"); }").unwrap();
-        
+
         let pipeline = AnalysisPipeline::default();
         let result = pipeline.analyze_directory(temp_dir.path()).await;
         assert!(result.is_ok());
@@ -145,16 +147,16 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.rs");
         fs::write(&file_path, "fn main() { println!(\"Hello\"); }").unwrap();
-        
+
         let pipeline = AnalysisPipeline::default();
         let paths = vec![temp_dir.path().to_path_buf()];
-        
+
         let progress_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let progress_called_clone = progress_called.clone();
         let progress_callback = Some(Box::new(move |_msg: &str, _progress: f64| {
             progress_called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
         }) as ProgressCallback);
-        
+
         let result = pipeline.analyze_paths(&paths, progress_callback).await;
         assert!(result.is_ok());
         assert!(progress_called.load(std::sync::atomic::Ordering::SeqCst));

@@ -5,38 +5,42 @@
 
 use crate::cli::args::OutputFormat;
 use anyhow;
+use chrono;
 use indicatif::{ProgressBar, ProgressStyle};
+use owo_colors::OwoColorize;
 use serde_json;
 use serde_yaml;
 use std::path::Path;
 use std::time::Duration;
-use tabled::{Table, Tabled, settings::Style as TableStyle};
-use owo_colors::OwoColorize;
-use chrono;
+use tabled::{settings::Style as TableStyle, Table, Tabled};
 
 // Import our proper report generator
-use valknut_rs::io::reports::ReportGenerator;
-use valknut_rs::core::config::ReportFormat;
 use valknut_rs::api::results::AnalysisResults;
+use valknut_rs::core::config::ReportFormat;
+use valknut_rs::io::reports::ReportGenerator;
 
 /// Generate outputs with progress feedback
 pub async fn generate_outputs_with_feedback(
-    result: &serde_json::Value, 
-    out_path: &Path, 
-    output_format: &OutputFormat, 
-    quiet: bool
+    result: &serde_json::Value,
+    out_path: &Path,
+    output_format: &OutputFormat,
+    quiet: bool,
 ) -> anyhow::Result<()> {
     if !quiet {
         let pb = ProgressBar::new_spinner();
-        pb.set_style(ProgressStyle::with_template(
-            "{spinner:.blue} {msg}"
-        )?);
-        pb.set_message(format!("Generating {} output...", format_to_string(output_format).to_uppercase()));
+        pb.set_style(ProgressStyle::with_template("{spinner:.blue} {msg}")?);
+        pb.set_message(format!(
+            "Generating {} output...",
+            format_to_string(output_format).to_uppercase()
+        ));
         pb.enable_steady_tick(Duration::from_millis(100));
 
         generate_outputs(result, out_path, output_format).await?;
-        
-        pb.finish_with_message(format!("{} report generated", format_to_string(output_format).to_uppercase()));
+
+        pb.finish_with_message(format!(
+            "{} report generated",
+            format_to_string(output_format).to_uppercase()
+        ));
     } else {
         generate_outputs(result, out_path, output_format).await?;
     }
@@ -48,7 +52,7 @@ pub async fn generate_outputs_with_feedback(
 pub async fn generate_outputs(
     result: &serde_json::Value,
     out_path: &Path,
-    output_format: &OutputFormat
+    output_format: &OutputFormat,
 ) -> anyhow::Result<()> {
     // Create output directory
     tokio::fs::create_dir_all(out_path).await?;
@@ -80,22 +84,23 @@ pub async fn generate_outputs(
         }
         OutputFormat::Html => {
             let report_file = out_path.join("team_report.html");
-            
+
             // Use the proper ReportGenerator with Sibylline theme
             let templates_dir = std::path::Path::new("templates");
             let generator = ReportGenerator::new()
                 .with_templates_dir(templates_dir)
                 .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?;
-            
+
             // Convert JSON back to AnalysisResults (this is not ideal but works)
-            if let Ok(analysis_results) = serde_json::from_value::<AnalysisResults>(result.clone()) {
+            if let Ok(analysis_results) = serde_json::from_value::<AnalysisResults>(result.clone())
+            {
                 generator.generate_report(&analysis_results, &report_file, ReportFormat::Html)?;
             } else {
                 // Fallback to old HTML generation if conversion fails
                 let content = generate_html_report(result).await?;
                 tokio::fs::write(&report_file, content).await?;
             }
-            
+
             println!("📊 Team report (html): {}", report_file.display());
         }
         OutputFormat::Sonar => {
@@ -146,8 +151,20 @@ pub fn display_analysis_results(result: &serde_json::Value) {
         std::cmp::max(60, 100 - (total_issues as i32 * 5))
     };
 
-    let health_emoji = if health_score >= 80 { "🟢" } else if health_score >= 60 { "🟡" } else { "🔴" };
-    let priority_emoji = if total_issues == 0 { "✅" } else if total_issues < 5 { "⚠️" } else { "❌" };
+    let health_emoji = if health_score >= 80 {
+        "🟢"
+    } else if health_score >= 60 {
+        "🟡"
+    } else {
+        "🔴"
+    };
+    let priority_emoji = if total_issues == 0 {
+        "✅"
+    } else if total_issues < 5 {
+        "⚠️"
+    } else {
+        "❌"
+    };
 
     let stats_rows = vec![
         StatsRow {
@@ -182,26 +199,37 @@ pub fn display_analysis_results(result: &serde_json::Value) {
 pub fn display_completion_summary(
     result: &serde_json::Value,
     out_path: &Path,
-    output_format: &OutputFormat
+    output_format: &OutputFormat,
 ) {
     println!("{}", "✅ Analysis Complete!".bright_green().bold());
     println!();
-    println!("{} {}", "📁 Results saved to:".bold(), out_path.display().to_string().cyan());
+    println!(
+        "{} {}",
+        "📁 Results saved to:".bold(),
+        out_path.display().to_string().cyan()
+    );
     println!();
 
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
-    
+
     if total_issues > 0 {
         println!("{}", "📊 Quick Insights:".bright_blue().bold());
         println!();
-        println!("{} {}", "🔥 Issues requiring attention:".bright_red().bold(), total_issues);
-        
+        println!(
+            "{} {}",
+            "🔥 Issues requiring attention:".bright_red().bold(),
+            total_issues
+        );
+
         // Show top issues if available
         if let Some(structure) = result["comprehensive_analysis"]["structure"].as_object() {
             if let Some(packs) = structure["packs"].as_array() {
                 if !packs.is_empty() {
                     println!();
-                    println!("{}", "🔥 Top Issues Requiring Attention:".bright_red().bold());
+                    println!(
+                        "{}",
+                        "🔥 Top Issues Requiring Attention:".bright_red().bold()
+                    );
                     for (i, pack) in packs.iter().take(3).enumerate() {
                         if let Some(kind) = pack["kind"].as_str() {
                             let issue_type = match kind {
@@ -216,13 +244,16 @@ pub fn display_completion_summary(
             }
         }
     } else {
-        println!("{}", "🎉 Great job! No significant issues found.".bright_green());
+        println!(
+            "{}",
+            "🎉 Great job! No significant issues found.".bright_green()
+        );
         println!("   Your code appears to be well-structured and maintainable.");
     }
 
     println!();
     println!("{}", "📢 Next Steps:".bright_blue().bold());
-    
+
     let format_str = format_to_string(output_format);
     match output_format {
         OutputFormat::Html => {
@@ -231,7 +262,10 @@ pub fn display_completion_summary(
             let html_file = out_path.join("team_report.html");
             if html_file.exists() {
                 println!();
-                println!("💻 Tip: Open {} in your browser", html_file.display().to_string().cyan());
+                println!(
+                    "💻 Tip: Open {} in your browser",
+                    html_file.display().to_string().cyan()
+                );
             }
         }
         OutputFormat::Sonar => {
@@ -248,7 +282,10 @@ pub fn display_completion_summary(
             println!("   3. Monitor metrics over time to track code quality trends");
         }
         _ => {
-            println!("   1. Review the generated {} report for detailed findings", format_str);
+            println!(
+                "   1. Review the generated {} report for detailed findings",
+                format_str
+            );
             println!("   2. Address high-priority issues identified in the analysis");
             println!("   3. Consider running analysis regularly to track improvements");
         }
@@ -259,46 +296,84 @@ pub fn display_completion_summary(
 pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut content = String::new();
     content.push_str("# Valknut Analysis Report\n\n");
-    
+
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
     let total_files = result["summary"]["total_files"].as_u64().unwrap_or(0);
-    
+
     content.push_str("## Summary\n\n");
     content.push_str(&format!("- **Files Analyzed**: {}\n", total_files));
     content.push_str(&format!("- **Issues Found**: {}\n", total_issues));
-    content.push_str(&format!("- **Analysis Date**: {}\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+    content.push_str(&format!(
+        "- **Analysis Date**: {}\n",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    ));
     content.push_str("\n");
-    
+
     if total_issues == 0 {
         content.push_str("✅ **Excellent!** No significant issues found in your codebase.\n");
     } else {
         content.push_str("## Issues Requiring Attention\n\n");
-        
+
         // Add health metrics
         if let Some(health_metrics) = result.get("health_metrics") {
             content.push_str("### Health Metrics\n\n");
-            if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
-                let health_emoji = if overall_health >= 80.0 { "🟢" } else if overall_health >= 60.0 { "🟡" } else { "🔴" };
-                content.push_str(&format!("- **Overall Health Score**: {} {:.1}/100\n", health_emoji, overall_health));
+            if let Some(overall_health) = health_metrics
+                .get("overall_health_score")
+                .and_then(|v| v.as_f64())
+            {
+                let health_emoji = if overall_health >= 80.0 {
+                    "🟢"
+                } else if overall_health >= 60.0 {
+                    "🟡"
+                } else {
+                    "🔴"
+                };
+                content.push_str(&format!(
+                    "- **Overall Health Score**: {} {:.1}/100\n",
+                    health_emoji, overall_health
+                ));
             }
-            if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Complexity Score**: {:.1}/100 (lower is better)\n", complexity_score));
+            if let Some(complexity_score) = health_metrics
+                .get("complexity_score")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Complexity Score**: {:.1}/100 (lower is better)\n",
+                    complexity_score
+                ));
             }
-            if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Technical Debt Ratio**: {:.1}% (lower is better)\n", debt_ratio));
+            if let Some(debt_ratio) = health_metrics
+                .get("technical_debt_ratio")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Technical Debt Ratio**: {:.1}% (lower is better)\n",
+                    debt_ratio
+                ));
             }
-            if let Some(maintainability) = health_metrics.get("maintainability_score").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Maintainability Score**: {:.1}/100\n", maintainability));
+            if let Some(maintainability) = health_metrics
+                .get("maintainability_score")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Maintainability Score**: {:.1}/100\n",
+                    maintainability
+                ));
             }
             content.push_str("\n");
         }
 
         // Add complexity analysis results
         if let Some(complexity) = result.get("complexity") {
-            if let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) {
-                let high_priority_files: Vec<_> = detailed_results.iter()
+            if let Some(detailed_results) = complexity
+                .get("detailed_results")
+                .and_then(|v| v.as_array())
+            {
+                let high_priority_files: Vec<_> = detailed_results
+                    .iter()
                     .filter(|file_result| {
-                        file_result.get("issues")
+                        file_result
+                            .get("issues")
                             .and_then(|issues| issues.as_array())
                             .map(|issues| !issues.is_empty())
                             .unwrap_or(false)
@@ -307,36 +382,59 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
 
                 if !high_priority_files.is_empty() {
                     content.push_str("### High Priority Files\n\n");
-                    content.push_str("Files with complexity issues that should be addressed first:\n\n");
-                    
+                    content.push_str(
+                        "Files with complexity issues that should be addressed first:\n\n",
+                    );
+
                     for (i, file_result) in high_priority_files.iter().take(10).enumerate() {
-                        if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                        if let Some(file_path) =
+                            file_result.get("file_path").and_then(|v| v.as_str())
+                        {
                             content.push_str(&format!("#### {}. `{}`\n\n", i + 1, file_path));
-                            
-                            if let Some(issues) = file_result.get("issues").and_then(|v| v.as_array()) {
-                                for issue in issues.iter().take(5) { // Limit to top 5 issues per file
+
+                            if let Some(issues) =
+                                file_result.get("issues").and_then(|v| v.as_array())
+                            {
+                                for issue in issues.iter().take(5) {
+                                    // Limit to top 5 issues per file
                                     if let (Some(description), Some(severity)) = (
                                         issue.get("description").and_then(|v| v.as_str()),
-                                        issue.get("severity").and_then(|v| v.as_str())
+                                        issue.get("severity").and_then(|v| v.as_str()),
                                     ) {
                                         let severity_emoji = match severity {
                                             "Critical" => "🔴",
                                             "VeryHigh" => "🟠",
-                                            "High" => "🟡", 
-                                            _ => "⚠️"
+                                            "High" => "🟡",
+                                            _ => "⚠️",
                                         };
-                                        content.push_str(&format!("- {} **{}**: {}\n", severity_emoji, severity, description));
+                                        content.push_str(&format!(
+                                            "- {} **{}**: {}\n",
+                                            severity_emoji, severity, description
+                                        ));
                                     }
                                 }
                             }
-                            
-                            if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+
+                            if let Some(recommendations) = file_result
+                                .get("recommendations")
+                                .and_then(|v| v.as_array())
+                            {
                                 if !recommendations.is_empty() {
                                     content.push_str("\n**Recommended Actions:**\n");
                                     for (j, rec) in recommendations.iter().take(3).enumerate() {
-                                        if let Some(desc) = rec.get("description").and_then(|v| v.as_str()) {
-                                            let effort = rec.get("effort").and_then(|v| v.as_u64()).unwrap_or(1);
-                                            content.push_str(&format!("{}. {} (Effort: {})\n", j + 1, desc, effort));
+                                        if let Some(desc) =
+                                            rec.get("description").and_then(|v| v.as_str())
+                                        {
+                                            let effort = rec
+                                                .get("effort")
+                                                .and_then(|v| v.as_u64())
+                                                .unwrap_or(1);
+                                            content.push_str(&format!(
+                                                "{}. {} (Effort: {})\n",
+                                                j + 1,
+                                                desc,
+                                                effort
+                                            ));
                                         }
                                     }
                                 }
@@ -346,27 +444,51 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
                     }
                 }
             }
-            
+
             // Add summary statistics
             content.push_str("### Summary Statistics\n\n");
-            if let Some(avg_cyclomatic) = complexity.get("average_cyclomatic_complexity").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Average Cyclomatic Complexity**: {:.1}\n", avg_cyclomatic));
+            if let Some(avg_cyclomatic) = complexity
+                .get("average_cyclomatic_complexity")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Average Cyclomatic Complexity**: {:.1}\n",
+                    avg_cyclomatic
+                ));
             }
-            if let Some(avg_cognitive) = complexity.get("average_cognitive_complexity").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Average Cognitive Complexity**: {:.1}\n", avg_cognitive));
+            if let Some(avg_cognitive) = complexity
+                .get("average_cognitive_complexity")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Average Cognitive Complexity**: {:.1}\n",
+                    avg_cognitive
+                ));
             }
-            if let Some(avg_debt) = complexity.get("average_technical_debt_score").and_then(|v| v.as_f64()) {
-                content.push_str(&format!("- **Average Technical Debt Score**: {:.1}\n", avg_debt));
+            if let Some(avg_debt) = complexity
+                .get("average_technical_debt_score")
+                .and_then(|v| v.as_f64())
+            {
+                content.push_str(&format!(
+                    "- **Average Technical Debt Score**: {:.1}\n",
+                    avg_debt
+                ));
             }
             content.push_str("\n");
         }
 
         // Add refactoring opportunities
         if let Some(refactoring) = result.get("refactoring") {
-            if let Some(opportunities_count) = refactoring.get("opportunities_count").and_then(|v| v.as_u64()) {
+            if let Some(opportunities_count) = refactoring
+                .get("opportunities_count")
+                .and_then(|v| v.as_u64())
+            {
                 if opportunities_count > 0 {
                     content.push_str(&format!("### Refactoring Opportunities\n\n"));
-                    content.push_str(&format!("Found **{}** refactoring opportunities across the codebase.\n\n", opportunities_count));
+                    content.push_str(&format!(
+                        "Found **{}** refactoring opportunities across the codebase.\n\n",
+                        opportunities_count
+                    ));
                 }
             }
         }
@@ -375,21 +497,23 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
         content.push_str("1. **Start with Critical Issues**: Focus on files with critical and high-severity issues first\n");
         content.push_str("2. **Reduce Complexity**: Break down large functions and simplify complex conditionals\n");
         content.push_str("3. **Improve Maintainability**: Address technical debt systematically\n");
-        content.push_str("4. **Regular Monitoring**: Run analysis regularly to track improvements\n\n");
-        
+        content.push_str(
+            "4. **Regular Monitoring**: Run analysis regularly to track improvements\n\n",
+        );
+
         content.push_str("---\n\n");
         content.push_str("*Report generated by [Valknut](https://github.com/nathanricedev/valknut) - AI-Powered Code Analysis*\n");
     }
-    
+
     Ok(content)
 }
 
 pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
     let total_files = result["summary"]["total_files"].as_u64().unwrap_or(0);
-    
+
     let mut details_html = String::new();
-    
+
     if total_issues == 0 {
         details_html.push_str("<div class='success-message'>✅ <strong>Excellent!</strong> No significant issues found in your codebase.</div>");
     } else {
@@ -397,48 +521,89 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
         if let Some(health_metrics) = result.get("health_metrics") {
             details_html.push_str("<h2>📊 Health Metrics</h2>");
             details_html.push_str("<div class='metrics-grid'>");
-            
-            if let Some(overall_health) = health_metrics.get("overall_health_score").and_then(|v| v.as_f64()) {
-                let health_class = if overall_health >= 80.0 { "metric-good" } else if overall_health >= 60.0 { "metric-warning" } else { "metric-critical" };
+
+            if let Some(overall_health) = health_metrics
+                .get("overall_health_score")
+                .and_then(|v| v.as_f64())
+            {
+                let health_class = if overall_health >= 80.0 {
+                    "metric-good"
+                } else if overall_health >= 60.0 {
+                    "metric-warning"
+                } else {
+                    "metric-critical"
+                };
                 details_html.push_str(&format!(
                     "<div class='metric-card {}'><h3>Overall Health</h3><div class='metric-value'>{:.1}/100</div></div>",
                     health_class, overall_health
                 ));
             }
-            
-            if let Some(complexity_score) = health_metrics.get("complexity_score").and_then(|v| v.as_f64()) {
-                let complexity_class = if complexity_score <= 25.0 { "metric-good" } else if complexity_score <= 50.0 { "metric-warning" } else { "metric-critical" };
+
+            if let Some(complexity_score) = health_metrics
+                .get("complexity_score")
+                .and_then(|v| v.as_f64())
+            {
+                let complexity_class = if complexity_score <= 25.0 {
+                    "metric-good"
+                } else if complexity_score <= 50.0 {
+                    "metric-warning"
+                } else {
+                    "metric-critical"
+                };
                 details_html.push_str(&format!(
                     "<div class='metric-card {}'><h3>Complexity Score</h3><div class='metric-value'>{:.1}/100</div><small>lower is better</small></div>",
                     complexity_class, complexity_score
                 ));
             }
-            
-            if let Some(debt_ratio) = health_metrics.get("technical_debt_ratio").and_then(|v| v.as_f64()) {
-                let debt_class = if debt_ratio <= 20.0 { "metric-good" } else if debt_ratio <= 40.0 { "metric-warning" } else { "metric-critical" };
+
+            if let Some(debt_ratio) = health_metrics
+                .get("technical_debt_ratio")
+                .and_then(|v| v.as_f64())
+            {
+                let debt_class = if debt_ratio <= 20.0 {
+                    "metric-good"
+                } else if debt_ratio <= 40.0 {
+                    "metric-warning"
+                } else {
+                    "metric-critical"
+                };
                 details_html.push_str(&format!(
                     "<div class='metric-card {}'><h3>Technical Debt</h3><div class='metric-value'>{:.1}%</div><small>lower is better</small></div>",
                     debt_class, debt_ratio
                 ));
             }
-            
-            if let Some(maintainability) = health_metrics.get("maintainability_score").and_then(|v| v.as_f64()) {
-                let maintainability_class = if maintainability >= 60.0 { "metric-good" } else if maintainability >= 40.0 { "metric-warning" } else { "metric-critical" };
+
+            if let Some(maintainability) = health_metrics
+                .get("maintainability_score")
+                .and_then(|v| v.as_f64())
+            {
+                let maintainability_class = if maintainability >= 60.0 {
+                    "metric-good"
+                } else if maintainability >= 40.0 {
+                    "metric-warning"
+                } else {
+                    "metric-critical"
+                };
                 details_html.push_str(&format!(
                     "<div class='metric-card {}'><h3>Maintainability</h3><div class='metric-value'>{:.1}/100</div></div>",
                     maintainability_class, maintainability
                 ));
             }
-            
+
             details_html.push_str("</div>");
         }
 
         // Add complexity analysis details
         if let Some(complexity) = result.get("complexity") {
-            if let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) {
-                let high_priority_files: Vec<_> = detailed_results.iter()
+            if let Some(detailed_results) = complexity
+                .get("detailed_results")
+                .and_then(|v| v.as_array())
+            {
+                let high_priority_files: Vec<_> = detailed_results
+                    .iter()
                     .filter(|file_result| {
-                        file_result.get("issues")
+                        file_result
+                            .get("issues")
                             .and_then(|issues| issues.as_array())
                             .map(|issues| !issues.is_empty())
                             .unwrap_or(false)
@@ -447,24 +612,34 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
 
                 if !high_priority_files.is_empty() {
                     details_html.push_str("<h2>🔥 High Priority Files</h2>");
-                    details_html.push_str("<p>Files with complexity issues that should be addressed first:</p>");
-                    
+                    details_html.push_str(
+                        "<p>Files with complexity issues that should be addressed first:</p>",
+                    );
+
                     for (i, file_result) in high_priority_files.iter().take(10).enumerate() {
-                        if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
-                            details_html.push_str(&format!("<div class='file-section'><h3>{}.&nbsp;<code>{}</code></h3>", i + 1, file_path));
-                            
-                            if let Some(issues) = file_result.get("issues").and_then(|v| v.as_array()) {
+                        if let Some(file_path) =
+                            file_result.get("file_path").and_then(|v| v.as_str())
+                        {
+                            details_html.push_str(&format!(
+                                "<div class='file-section'><h3>{}.&nbsp;<code>{}</code></h3>",
+                                i + 1,
+                                file_path
+                            ));
+
+                            if let Some(issues) =
+                                file_result.get("issues").and_then(|v| v.as_array())
+                            {
                                 details_html.push_str("<div class='issues-list'>");
                                 for issue in issues.iter().take(5) {
                                     if let (Some(description), Some(severity)) = (
                                         issue.get("description").and_then(|v| v.as_str()),
-                                        issue.get("severity").and_then(|v| v.as_str())
+                                        issue.get("severity").and_then(|v| v.as_str()),
                                     ) {
                                         let (severity_emoji, severity_class) = match severity {
                                             "Critical" => ("🔴", "severity-critical"),
                                             "VeryHigh" => ("🟠", "severity-very-high"),
-                                            "High" => ("🟡", "severity-high"), 
-                                            _ => ("⚠️", "severity-medium")
+                                            "High" => ("🟡", "severity-high"),
+                                            _ => ("⚠️", "severity-medium"),
                                         };
                                         details_html.push_str(&format!(
                                             "<div class='issue-item {}'><span class='severity-indicator'>{} {}</span><span class='issue-description'>{}</span></div>",
@@ -474,18 +649,26 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
                                 }
                                 details_html.push_str("</div>");
                             }
-                            
-                            if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+
+                            if let Some(recommendations) = file_result
+                                .get("recommendations")
+                                .and_then(|v| v.as_array())
+                            {
                                 if !recommendations.is_empty() {
                                     details_html.push_str("<div class='recommendations'><h4>💡 Recommended Actions:</h4><ol>");
                                     for rec in recommendations.iter().take(3) {
-                                        if let Some(desc) = rec.get("description").and_then(|v| v.as_str()) {
-                                            let effort = rec.get("effort").and_then(|v| v.as_u64()).unwrap_or(1);
+                                        if let Some(desc) =
+                                            rec.get("description").and_then(|v| v.as_str())
+                                        {
+                                            let effort = rec
+                                                .get("effort")
+                                                .and_then(|v| v.as_u64())
+                                                .unwrap_or(1);
                                             let effort_class = match effort {
                                                 1..=3 => "effort-low",
                                                 4..=6 => "effort-medium",
                                                 7..=10 => "effort-high",
-                                                _ => "effort-unknown"
+                                                _ => "effort-unknown",
                                             };
                                             details_html.push_str(&format!(
                                                 "<li><span class='recommendation-text'>{}</span> <span class='effort-indicator {}'>(Effort: {})</span></li>",
@@ -505,27 +688,48 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
 
         // Add refactoring opportunities
         if let Some(refactoring) = result.get("refactoring") {
-            if let Some(opportunities_count) = refactoring.get("opportunities_count").and_then(|v| v.as_u64()) {
+            if let Some(opportunities_count) = refactoring
+                .get("opportunities_count")
+                .and_then(|v| v.as_u64())
+            {
                 if opportunities_count > 0 {
                     details_html.push_str("<h2>🔧 Refactoring Opportunities</h2>");
                     details_html.push_str(&format!("<p>Found <strong>{}</strong> refactoring opportunities across the codebase.</p>", opportunities_count));
-                    
-                    if let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) {
+
+                    if let Some(detailed_results) = refactoring
+                        .get("detailed_results")
+                        .and_then(|v| v.as_array())
+                    {
                         details_html.push_str("<div class='refactoring-list'>");
                         for file_result in detailed_results.iter().take(8) {
-                            if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
-                                if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
-                                    if recommendations.is_empty() { continue; }
-                                    
-                                    details_html.push_str(&format!("<div class='refactoring-file'><h4>📄 {}</h4>", file_path));
+                            if let Some(file_path) =
+                                file_result.get("file_path").and_then(|v| v.as_str())
+                            {
+                                if let Some(recommendations) = file_result
+                                    .get("recommendations")
+                                    .and_then(|v| v.as_array())
+                                {
+                                    if recommendations.is_empty() {
+                                        continue;
+                                    }
+
+                                    details_html.push_str(&format!(
+                                        "<div class='refactoring-file'><h4>📄 {}</h4>",
+                                        file_path
+                                    ));
                                     details_html.push_str("<div class='refactoring-items'>");
-                                    
+
                                     for rec in recommendations.iter().take(3) {
-                                        if let (Some(description), Some(refactoring_type), Some(impact), Some(effort)) = (
+                                        if let (
+                                            Some(description),
+                                            Some(refactoring_type),
+                                            Some(impact),
+                                            Some(effort),
+                                        ) = (
                                             rec.get("description").and_then(|v| v.as_str()),
                                             rec.get("refactoring_type").and_then(|v| v.as_str()),
                                             rec.get("estimated_impact").and_then(|v| v.as_f64()),
-                                            rec.get("estimated_effort").and_then(|v| v.as_f64())
+                                            rec.get("estimated_effort").and_then(|v| v.as_f64()),
                                         ) {
                                             let type_emoji = match refactoring_type {
                                                 "ExtractMethod" => "⚡",
@@ -535,11 +739,14 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
                                                 "ImproveNaming" => "📝",
                                                 "SimplifyConditionals" => "🔀",
                                                 "RemoveDeadCode" => "🧹",
-                                                _ => "🔧"
+                                                _ => "🔧",
                                             };
-                                            
-                                            let priority_score = rec.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                                            
+
+                                            let priority_score = rec
+                                                .get("priority_score")
+                                                .and_then(|v| v.as_f64())
+                                                .unwrap_or(0.0);
+
                                             details_html.push_str(&format!(
                                                 "<div class='refactoring-item'><div class='refactoring-header'>{} <strong>{}</strong></div><div class='refactoring-description'>{}</div><div class='refactoring-metrics'>Impact: {:.1}/10 | Effort: {:.1}/10 | Priority: {:.2}</div></div>",
                                                 type_emoji, refactoring_type.replace("Extract", "Extract ").replace("Reduce", "Reduce ").replace("Eliminate", "Eliminate ").replace("Improve", "Improve ").replace("Simplify", "Simplify ").replace("Remove", "Remove "), description, impact, effort, priority_score
@@ -555,22 +762,31 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
                 }
             }
         }
-        
+
         // Add summary statistics
         if let Some(complexity) = result.get("complexity") {
             details_html.push_str("<h2>📈 Summary Statistics</h2>");
             details_html.push_str("<div class='stats-grid'>");
-            
-            if let Some(avg_cyclomatic) = complexity.get("average_cyclomatic_complexity").and_then(|v| v.as_f64()) {
+
+            if let Some(avg_cyclomatic) = complexity
+                .get("average_cyclomatic_complexity")
+                .and_then(|v| v.as_f64())
+            {
                 details_html.push_str(&format!("<div class='stat-item'><span class='stat-label'>Average Cyclomatic Complexity</span><span class='stat-value'>{:.1}</span></div>", avg_cyclomatic));
             }
-            if let Some(avg_cognitive) = complexity.get("average_cognitive_complexity").and_then(|v| v.as_f64()) {
+            if let Some(avg_cognitive) = complexity
+                .get("average_cognitive_complexity")
+                .and_then(|v| v.as_f64())
+            {
                 details_html.push_str(&format!("<div class='stat-item'><span class='stat-label'>Average Cognitive Complexity</span><span class='stat-value'>{:.1}</span></div>", avg_cognitive));
             }
-            if let Some(avg_debt) = complexity.get("average_technical_debt_score").and_then(|v| v.as_f64()) {
+            if let Some(avg_debt) = complexity
+                .get("average_technical_debt_score")
+                .and_then(|v| v.as_f64())
+            {
                 details_html.push_str(&format!("<div class='stat-item'><span class='stat-label'>Average Technical Debt Score</span><span class='stat-value'>{:.1}</span></div>", avg_debt));
             }
-            
+
             details_html.push_str("</div>");
         }
 
@@ -583,8 +799,9 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
         details_html.push_str("<li><strong>Regular Monitoring</strong>: Run analysis regularly to track improvements</li>");
         details_html.push_str("</ol>");
     }
-    
-    Ok(format!(r#"
+
+    Ok(format!(
+        r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -889,11 +1106,11 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
     </div>
 </body>
 </html>
-"#, 
-    total_files,
-    total_issues,
-    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-    details_html
+"#,
+        total_files,
+        total_issues,
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        details_html
     ))
 }
 
@@ -906,19 +1123,19 @@ pub async fn generate_sonar_report(result: &serde_json::Value) -> anyhow::Result
             "analysis_date": chrono::Utc::now().to_rfc3339()
         }
     });
-    
+
     Ok(serde_json::to_string_pretty(&sonar_format)?)
 }
 
 pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut content = String::new();
     content.push_str("File,Issue Type,Severity,Description\n");
-    
+
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
     if total_issues == 0 {
         content.push_str("No issues found,Info,Info,Code quality is excellent\n");
     }
-    
+
     Ok(content)
 }
 
@@ -926,7 +1143,7 @@ pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::R
     let summary = &result["summary"];
     let health_metrics = &result["health_metrics"];
     let complexity = &result["complexity"];
-    
+
     let ci_summary = serde_json::json!({
         "status": if summary["total_issues"].as_u64().unwrap_or(0) == 0 { "success" } else { "issues_found" },
         "summary": {
@@ -961,13 +1178,18 @@ pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::R
         "timestamp": result["timestamp"],
         "analysis_id": result["analysis_id"]
     });
-    
+
     Ok(serde_json::to_string_pretty(&ci_summary)?)
 }
 
 // Human-readable output functions
 pub fn print_human_readable_results(results: &serde_json::Value) {
-    println!("{}", "🏗️  Valknut Structure Analysis Results".bright_blue().bold());
+    println!(
+        "{}",
+        "🏗️  Valknut Structure Analysis Results"
+            .bright_blue()
+            .bold()
+    );
     println!("{}", "=====================================".dimmed());
     println!();
 
@@ -977,20 +1199,36 @@ pub fn print_human_readable_results(results: &serde_json::Value) {
             return;
         }
 
-        println!("{}", format!("📊 Found {} potential improvements:", packs.len()).bold());
+        println!(
+            "{}",
+            format!("📊 Found {} potential improvements:", packs.len()).bold()
+        );
         println!();
 
         for (i, pack) in packs.iter().enumerate() {
-            let kind = pack.get("kind").and_then(|k| k.as_str()).unwrap_or("unknown");
+            let kind = pack
+                .get("kind")
+                .and_then(|k| k.as_str())
+                .unwrap_or("unknown");
             let empty_vec = vec![];
-            let reasons = pack.get("reasons").and_then(|r| r.as_array()).unwrap_or(&empty_vec);
-            
-            println!("{}", format!("{}. {} Analysis", i + 1, 
-                     match kind {
-                         "branch" => "🌿 Directory Branch",
-                         "file_split" => "📄 File Split", 
-                         _ => "🔍 General",
-                     }).bold());
+            let reasons = pack
+                .get("reasons")
+                .and_then(|r| r.as_array())
+                .unwrap_or(&empty_vec);
+
+            println!(
+                "{}",
+                format!(
+                    "{}. {} Analysis",
+                    i + 1,
+                    match kind {
+                        "branch" => "🌿 Directory Branch",
+                        "file_split" => "📄 File Split",
+                        _ => "🔍 General",
+                    }
+                )
+                .bold()
+            );
 
             if let Some(file) = pack.get("file").and_then(|f| f.as_str()) {
                 println!("   📁 File: {}", file.cyan());
@@ -1015,7 +1253,10 @@ pub fn print_human_readable_results(results: &serde_json::Value) {
 }
 
 pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
-    println!("{}", "📊 Comprehensive Analysis Results".bright_blue().bold());
+    println!(
+        "{}",
+        "📊 Comprehensive Analysis Results".bright_blue().bold()
+    );
     println!("{}", "=================================".dimmed());
     println!();
 
@@ -1023,16 +1264,31 @@ pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
     let total_files = results["summary"]["total_files"].as_u64().unwrap_or(0);
 
     println!("{}", "🎯 Analysis Summary:".bold());
-    println!("   • {} total issues found", total_issues.to_string().bright_yellow());
-    println!("   • {} files analyzed", total_files.to_string().bright_green());
+    println!(
+        "   • {} total issues found",
+        total_issues.to_string().bright_yellow()
+    );
+    println!(
+        "   • {} files analyzed",
+        total_files.to_string().bright_green()
+    );
     println!();
 
     if total_issues == 0 {
-        println!("{}", "🎉 Great job! No significant issues found across all analyzers.".bright_green());
+        println!(
+            "{}",
+            "🎉 Great job! No significant issues found across all analyzers.".bright_green()
+        );
         println!("   Your code appears to be well-structured and maintainable.");
     } else {
-        println!("{}", "📈 Recommendation: Address high-priority issues first for maximum impact.".bright_blue());
-        println!("   Use detailed analyzers (structure, names, impact) for specific recommendations.");
+        println!(
+            "{}",
+            "📈 Recommendation: Address high-priority issues first for maximum impact."
+                .bright_blue()
+        );
+        println!(
+            "   Use detailed analyzers (structure, names, impact) for specific recommendations."
+        );
     }
 
     // Display refactoring suggestions prominently
@@ -1042,7 +1298,7 @@ pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
     display_complexity_recommendations(results);
 }
 
-/// Display refactoring suggestions prominently 
+/// Display refactoring suggestions prominently
 pub fn display_refactoring_suggestions(results: &serde_json::Value) {
     // Check if refactoring analysis was enabled and has results
     if let Some(refactoring) = results.get("refactoring") {
@@ -1052,7 +1308,10 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
             }
         }
 
-        if let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) {
+        if let Some(detailed_results) = refactoring
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
             if detailed_results.is_empty() {
                 return; // No refactoring opportunities found
             }
@@ -1062,41 +1321,76 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
             println!("{}", "=============================".dimmed());
             println!();
 
-            let opportunities_count = refactoring.get("opportunities_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let opportunities_count = refactoring
+                .get("opportunities_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             if opportunities_count > 0 {
-                println!("{} {}", "🎯 Total opportunities found:".bold(), opportunities_count.to_string().bright_yellow());
+                println!(
+                    "{} {}",
+                    "🎯 Total opportunities found:".bold(),
+                    opportunities_count.to_string().bright_yellow()
+                );
                 println!();
             }
 
             // Group recommendations by file and display top opportunities
             let mut _file_count = 0;
-            for file_result in detailed_results.iter().take(10) { // Show top 10 files
+            for file_result in detailed_results.iter().take(10) {
+                // Show top 10 files
                 if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
-                    if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+                    if let Some(recommendations) = file_result
+                        .get("recommendations")
+                        .and_then(|v| v.as_array())
+                    {
                         if recommendations.is_empty() {
                             continue;
                         }
 
                         _file_count += 1;
                         println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
-                        
+
                         // Sort recommendations by priority score (highest first)
                         let mut sorted_recommendations: Vec<_> = recommendations.iter().collect();
                         sorted_recommendations.sort_by(|a, b| {
-                            let priority_a = a.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            let priority_b = b.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            priority_b.partial_cmp(&priority_a).unwrap()
+                            let priority_a = a
+                                .get("priority_score")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let priority_b = b
+                                .get("priority_score")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            priority_b
+                                .partial_cmp(&priority_a)
+                                .unwrap_or(std::cmp::Ordering::Equal)
                         });
 
-                        for (i, recommendation) in sorted_recommendations.iter().take(3).enumerate() { // Top 3 per file
-                            if let (Some(description), Some(refactoring_type), Some(impact), Some(effort)) = (
+                        for (i, recommendation) in sorted_recommendations.iter().take(3).enumerate()
+                        {
+                            // Top 3 per file
+                            if let (
+                                Some(description),
+                                Some(refactoring_type),
+                                Some(impact),
+                                Some(effort),
+                            ) = (
                                 recommendation.get("description").and_then(|v| v.as_str()),
-                                recommendation.get("refactoring_type").and_then(|v| v.as_str()),
-                                recommendation.get("estimated_impact").and_then(|v| v.as_f64()),
-                                recommendation.get("estimated_effort").and_then(|v| v.as_f64())
+                                recommendation
+                                    .get("refactoring_type")
+                                    .and_then(|v| v.as_str()),
+                                recommendation
+                                    .get("estimated_impact")
+                                    .and_then(|v| v.as_f64()),
+                                recommendation
+                                    .get("estimated_effort")
+                                    .and_then(|v| v.as_f64()),
                             ) {
-                                let priority_score = recommendation.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                                
+                                let priority_score = recommendation
+                                    .get("priority_score")
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+
                                 // Format refactoring type with emoji
                                 let type_emoji = match refactoring_type {
                                     "ExtractMethod" => "⚡",
@@ -1106,13 +1400,17 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
                                     "ImproveNaming" => "📝",
                                     "SimplifyConditionals" => "🔀",
                                     "RemoveDeadCode" => "🧹",
-                                    _ => "🔧"
+                                    _ => "🔧",
                                 };
 
                                 // Get location if available
-                                let location_str = if let Some(location) = recommendation.get("location").and_then(|v| v.as_array()) {
+                                let location_str = if let Some(location) =
+                                    recommendation.get("location").and_then(|v| v.as_array())
+                                {
                                     if location.len() >= 2 {
-                                        if let (Some(start), Some(end)) = (location[0].as_u64(), location[1].as_u64()) {
+                                        if let (Some(start), Some(end)) =
+                                            (location[0].as_u64(), location[1].as_u64())
+                                        {
                                             if start == end {
                                                 format!(" (line {})", start)
                                             } else {
@@ -1128,13 +1426,25 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
                                     String::new()
                                 };
 
-                                println!("   {}. {} {} {}", 
-                                    i + 1, 
-                                    type_emoji, 
-                                    format!("{}: {}", refactoring_type.replace("Extract", "Extract ").replace("Reduce", "Reduce ").replace("Eliminate", "Eliminate ").replace("Improve", "Improve ").replace("Simplify", "Simplify ").replace("Remove", "Remove "), description).yellow(),
+                                println!(
+                                    "   {}. {} {} {}",
+                                    i + 1,
+                                    type_emoji,
+                                    format!(
+                                        "{}: {}",
+                                        refactoring_type
+                                            .replace("Extract", "Extract ")
+                                            .replace("Reduce", "Reduce ")
+                                            .replace("Eliminate", "Eliminate ")
+                                            .replace("Improve", "Improve ")
+                                            .replace("Simplify", "Simplify ")
+                                            .replace("Remove", "Remove "),
+                                        description
+                                    )
+                                    .yellow(),
                                     location_str.dimmed()
                                 );
-                                
+
                                 println!("      {} Impact: {:.1}/10 | Effort: {:.1}/10 | Priority: {:.2}", 
                                     "📊".dimmed(),
                                     impact,
@@ -1149,7 +1459,11 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
             }
 
             if _file_count == 0 {
-                println!("{}", "✅ No refactoring opportunities found - code quality looks good!".bright_green());
+                println!(
+                    "{}",
+                    "✅ No refactoring opportunities found - code quality looks good!"
+                        .bright_green()
+                );
             } else if detailed_results.len() > 10 {
                 println!("{}", format!("📋 Showing top 10 files with opportunities ({} more files have suggestions)", detailed_results.len() - 10).dimmed());
             }
@@ -1166,11 +1480,16 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
             }
         }
 
-        if let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) {
+        if let Some(detailed_results) = complexity
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
             // Collect files with recommendations
-            let files_with_recommendations: Vec<_> = detailed_results.iter()
+            let files_with_recommendations: Vec<_> = detailed_results
+                .iter()
                 .filter(|file_result| {
-                    file_result.get("recommendations")
+                    file_result
+                        .get("recommendations")
                         .and_then(|rec| rec.as_array())
                         .map(|arr| !arr.is_empty())
                         .unwrap_or(false)
@@ -1187,9 +1506,13 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
             println!();
 
             let mut _file_count = 0;
-            for file_result in files_with_recommendations.iter().take(8) { // Show top 8 files
+            for file_result in files_with_recommendations.iter().take(8) {
+                // Show top 8 files
                 if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
-                    if let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+                    if let Some(recommendations) = file_result
+                        .get("recommendations")
+                        .and_then(|v| v.as_array())
+                    {
                         if recommendations.is_empty() {
                             continue;
                         }
@@ -1197,25 +1520,24 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
                         _file_count += 1;
                         println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
 
-                        for (i, recommendation) in recommendations.iter().take(2).enumerate() { // Top 2 per file
-                            if let Some(description) = recommendation.get("description").and_then(|v| v.as_str()) {
-                                let effort = recommendation.get("effort").and_then(|v| v.as_u64()).unwrap_or(1);
+                        for (i, recommendation) in recommendations.iter().take(2).enumerate() {
+                            // Top 2 per file
+                            if let Some(description) =
+                                recommendation.get("description").and_then(|v| v.as_str())
+                            {
+                                let effort = recommendation
+                                    .get("effort")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(1);
                                 let effort_emoji = match effort {
                                     1..=3 => "🟢 Low",
-                                    4..=6 => "🟡 Medium", 
+                                    4..=6 => "🟡 Medium",
                                     7..=10 => "🔴 High",
-                                    _ => "⚪ Unknown"
+                                    _ => "⚪ Unknown",
                                 };
 
-                                println!("   {}. {} {}", 
-                                    i + 1, 
-                                    "🎯".yellow(),
-                                    description.white()
-                                );
-                                println!("      {} Effort: {}", 
-                                    "📊".dimmed(),
-                                    effort_emoji
-                                );
+                                println!("   {}. {} {}", i + 1, "🎯".yellow(), description.white());
+                                println!("      {} Effort: {}", "📊".dimmed(), effort_emoji);
                             }
                         }
                         println!();
@@ -1248,10 +1570,10 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::{TempDir, NamedTempFile};
-    use tokio;
     use serde_json::json;
     use std::fs;
+    use tempfile::{NamedTempFile, TempDir};
+    use tokio;
 
     #[test]
     fn test_format_to_string() {
@@ -1282,15 +1604,15 @@ mod tests {
             },
             "timestamp": "2024-01-15T10:30:00Z"
         });
-        
+
         // Test that display_analysis_results doesn't panic
         display_analysis_results(&result);
     }
 
-    #[test] 
+    #[test]
     fn test_display_analysis_results_minimal() {
         let result = json!({});
-        
+
         // Test that display_analysis_results handles missing fields gracefully
         display_analysis_results(&result);
     }
@@ -1305,7 +1627,7 @@ mod tests {
         });
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path();
-        
+
         // Test that display_completion_summary doesn't panic
         display_completion_summary(&result, out_path, &OutputFormat::Json);
     }
@@ -1321,7 +1643,7 @@ mod tests {
             "issues": [],
             "refactoring_opportunities": []
         });
-        
+
         let markdown = generate_markdown_report(&result).await.unwrap();
         assert!(markdown.contains("# Valknut Analysis Report"));
         assert!(markdown.contains("Files Analyzed**: 10"));
@@ -1338,7 +1660,7 @@ mod tests {
             },
             "issues": []
         });
-        
+
         let html = generate_html_report(&result).await.unwrap();
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("<title>Valknut Analysis Report</title>"));
@@ -1360,7 +1682,7 @@ mod tests {
                 }
             ]
         });
-        
+
         let sonar = generate_sonar_report(&result).await.unwrap();
         assert!(sonar.contains("\"issues\": []"));
         assert!(sonar.contains("\"version\": \"1.0\""));
@@ -1379,7 +1701,7 @@ mod tests {
                     "description": "Function too complex"
                 },
                 {
-                    "file": "utils.rs", 
+                    "file": "utils.rs",
                     "line": 35,
                     "severity": "medium",
                     "category": "maintainability",
@@ -1387,7 +1709,7 @@ mod tests {
                 }
             ]
         });
-        
+
         let csv = generate_csv_report(&result).await.unwrap();
         assert!(csv.contains("File,Issue Type,Severity,Description"));
     }
@@ -1397,7 +1719,7 @@ mod tests {
         let result = json!({
             "issues": []
         });
-        
+
         let csv = generate_csv_report(&result).await.unwrap();
         assert!(csv.contains("File,Issue Type,Severity,Description"));
         assert_eq!(csv.lines().count(), 2); // Header + "No issues found" line
@@ -1416,10 +1738,10 @@ mod tests {
                 "overall_health_score": 72.5
             }
         });
-        
+
         let summary = generate_ci_summary_report(&result).await.unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&summary).unwrap();
-        
+
         assert_eq!(parsed["status"], "success");
         assert_eq!(parsed["summary"]["total_files"], 15);
         assert_eq!(parsed["summary"]["total_issues"], 0);
@@ -1438,10 +1760,10 @@ mod tests {
                 "health_score": 45.0
             }
         });
-        
+
         let summary = generate_ci_summary_report(&result).await.unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&summary).unwrap();
-        
+
         assert_eq!(parsed["status"], "issues_found");
         assert_eq!(parsed["summary"]["total_issues"], 25);
         assert_eq!(parsed["summary"]["critical_issues"], 8);
@@ -1462,7 +1784,7 @@ mod tests {
                 }
             ]
         });
-        
+
         // Test that print_human_readable_results doesn't panic
         print_human_readable_results(&results);
     }
@@ -1478,7 +1800,7 @@ mod tests {
             },
             "issues": []
         });
-        
+
         // Test that print_comprehensive_results_pretty doesn't panic
         print_comprehensive_results_pretty(&results);
     }
@@ -1496,14 +1818,14 @@ mod tests {
                 },
                 {
                     "type": "reduce_complexity",
-                    "file": "utils.rs", 
+                    "file": "utils.rs",
                     "line": 25,
                     "description": "Simplify conditional logic",
                     "impact": "medium"
                 }
             ]
         });
-        
+
         // Test that display_refactoring_suggestions doesn't panic
         display_refactoring_suggestions(&results);
     }
@@ -1513,7 +1835,7 @@ mod tests {
         let results = json!({
             "refactoring_opportunities": []
         });
-        
+
         // Test that display_refactoring_suggestions handles empty list
         display_refactoring_suggestions(&results);
     }
@@ -1530,7 +1852,7 @@ mod tests {
                 }
             ]
         });
-        
+
         // Test that display_complexity_recommendations doesn't panic
         display_complexity_recommendations(&results);
     }
@@ -1540,7 +1862,7 @@ mod tests {
         let results = json!({
             "complexity_issues": []
         });
-        
+
         // Test that display_complexity_recommendations handles empty data
         display_complexity_recommendations(&results);
     }
@@ -1549,19 +1871,19 @@ mod tests {
     async fn test_generate_outputs_json() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 5
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Json).await;
         assert!(result.is_ok());
-        
+
         let json_file = out_path.join("analysis_results.json");
         assert!(json_file.exists());
-        
+
         let content = fs::read_to_string(&json_file).unwrap();
         assert!(content.contains("total_files"));
     }
@@ -1570,19 +1892,19 @@ mod tests {
     async fn test_generate_outputs_yaml() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "health_score": 85.5
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Yaml).await;
         assert!(result.is_ok());
-        
+
         let yaml_file = out_path.join("analysis_results.yaml");
         assert!(yaml_file.exists());
-        
+
         let content = fs::read_to_string(&yaml_file).unwrap();
         assert!(content.contains("health_score"));
     }
@@ -1591,7 +1913,7 @@ mod tests {
     async fn test_generate_outputs_markdown() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 10,
@@ -1599,13 +1921,13 @@ mod tests {
             },
             "issues": []
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Markdown).await;
         assert!(result.is_ok());
-        
+
         let md_file = out_path.join("team_report.md");
         assert!(md_file.exists());
-        
+
         let content = fs::read_to_string(&md_file).unwrap();
         assert!(content.contains("# Valknut Analysis Report"));
         assert!(content.contains("Files Analyzed**: 10"));
@@ -1615,20 +1937,20 @@ mod tests {
     async fn test_generate_outputs_html() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 8,
                 "health_score": 92.1
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Html).await;
         assert!(result.is_ok());
-        
+
         let html_file = out_path.join("team_report.html");
         assert!(html_file.exists());
-        
+
         let content = fs::read_to_string(&html_file).unwrap();
         assert!(content.contains("<!DOCTYPE html>"));
         assert!(content.contains("html"));
@@ -1638,7 +1960,7 @@ mod tests {
     async fn test_generate_outputs_csv() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "issues": [
                 {
@@ -1650,13 +1972,13 @@ mod tests {
                 }
             ]
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Csv).await;
         assert!(result.is_ok());
-        
+
         let csv_file = out_path.join("analysis_data.csv");
         assert!(csv_file.exists());
-        
+
         let content = fs::read_to_string(&csv_file).unwrap();
         assert!(content.contains("File,Issue Type,Severity,Description"));
     }
@@ -1665,7 +1987,7 @@ mod tests {
     async fn test_generate_outputs_sonar() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "issues": [
                 {
@@ -1677,13 +1999,13 @@ mod tests {
                 }
             ]
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Sonar).await;
         assert!(result.is_ok());
-        
+
         let sonar_file = out_path.join("sonarqube_issues.json");
         assert!(sonar_file.exists());
-        
+
         let content = fs::read_to_string(&sonar_file).unwrap();
         assert!(content.contains("\"issues\": []"));
         assert!(content.contains("\"version\": \"1.0\""));
@@ -1693,7 +2015,7 @@ mod tests {
     async fn test_generate_outputs_ci_summary() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 12,
@@ -1702,13 +2024,13 @@ mod tests {
                 "health_score": 88.5
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::CiSummary).await;
         assert!(result.is_ok());
-        
+
         let ci_file = out_path.join("ci_summary.json");
         assert!(ci_file.exists());
-        
+
         let content = fs::read_to_string(&ci_file).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed["status"], "issues_found");
@@ -1719,16 +2041,17 @@ mod tests {
     async fn test_generate_outputs_with_feedback_quiet() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 3
             }
         });
-        
-        let result = generate_outputs_with_feedback(&result, &out_path, &OutputFormat::Json, true).await;
+
+        let result =
+            generate_outputs_with_feedback(&result, &out_path, &OutputFormat::Json, true).await;
         assert!(result.is_ok());
-        
+
         let json_file = out_path.join("analysis_results.json");
         assert!(json_file.exists());
     }
@@ -1737,16 +2060,17 @@ mod tests {
     async fn test_generate_outputs_with_feedback_not_quiet() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 7
             }
         });
-        
-        let result = generate_outputs_with_feedback(&result, &out_path, &OutputFormat::Yaml, false).await;
+
+        let result =
+            generate_outputs_with_feedback(&result, &out_path, &OutputFormat::Yaml, false).await;
         assert!(result.is_ok());
-        
+
         let yaml_file = out_path.join("analysis_results.yaml");
         assert!(yaml_file.exists());
     }
@@ -1755,17 +2079,17 @@ mod tests {
     async fn test_generate_outputs_pretty() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 25,
                 "health_score": 78.3
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Pretty).await;
         assert!(result.is_ok());
-        
+
         // Pretty format should not create files, just display
         assert!(!out_path.join("analysis.txt").exists());
     }
@@ -1774,19 +2098,19 @@ mod tests {
     async fn test_generate_outputs_jsonl() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({
             "summary": {
                 "total_files": 6
             }
         });
-        
+
         let result = generate_outputs(&result, &out_path, &OutputFormat::Jsonl).await;
         assert!(result.is_ok());
-        
+
         let jsonl_file = out_path.join("report.jsonl");
         assert!(jsonl_file.exists());
-        
+
         let content = fs::read_to_string(&jsonl_file).unwrap();
         assert!(content.contains("total_files"));
     }
@@ -1796,9 +2120,9 @@ mod tests {
     async fn test_generate_outputs_missing_fields() {
         let temp_dir = TempDir::new().unwrap();
         let out_path = temp_dir.path().join("output");
-        
+
         let result = json!({});
-        
+
         // Should handle missing fields gracefully
         let result = generate_outputs(&result, &out_path, &OutputFormat::Json).await;
         assert!(result.is_ok());

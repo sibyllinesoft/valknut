@@ -28,7 +28,11 @@ def hello_world():
     return "Hello, World!"
 "#;
         let result = adapter.parse_source(source, "test.py");
-        assert!(result.is_ok(), "Should parse simple function");
+        assert!(
+            result.is_ok(),
+            "Should parse simple function: {:?}",
+            result.err()
+        );
 
         let index = result.unwrap();
         assert!(
@@ -294,7 +298,10 @@ impl PythonAdapter {
         let entity_kind = match node.kind() {
             "function_definition" => EntityKind::Function,
             "class_definition" => EntityKind::Class,
-            "module" => EntityKind::Module,
+            "module" => {
+                // Skip root module nodes that don't have meaningful names
+                return Ok(None);
+            }
             "assignment" => {
                 // Check if it's a constant assignment (all uppercase)
                 if let Some(name) = self.extract_name(&node, source_code)? {
@@ -368,7 +375,17 @@ impl PythonAdapter {
 
         match node.kind() {
             "function_definition" | "class_definition" => {
-                // Look for the identifier child
+                // Look for the identifier child (name field)
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    return Ok(Some(
+                        name_node.utf8_text(source_code.as_bytes())?.to_string(),
+                    ));
+                }
+
+                // Reset cursor for fallback
+                cursor = node.walk();
+
+                // Fallback: Look for the identifier child
                 for child in node.children(&mut cursor) {
                     if child.kind() == "identifier" {
                         return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
@@ -554,41 +571,63 @@ impl PythonAdapter {
         patterns: &[String],
         found_patterns: &mut Vec<String>,
     ) -> Result<()> {
-        // Get text content of current node
-        if let Ok(node_text) = node.utf8_text(source.as_bytes()) {
-            for pattern in patterns {
-                if node_text.contains(pattern) {
-                    found_patterns.push(pattern.clone());
-                }
-            }
-        }
-
         // Check specific Python boilerplate patterns based on AST structure
         match node.kind() {
-            "import_statement" | "import_from_statement" => {
-                // Common import patterns
-                if let Ok(import_text) = node.utf8_text(source.as_bytes()) {
-                    let common_imports = ["import os", "import sys", "from typing import"];
-                    for common in &common_imports {
-                        if import_text.contains(common) {
-                            found_patterns.push(common.to_string());
+            "import_statement" => {
+                // Check for common imports using AST structure
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    if let Ok(module_name) = name_node.utf8_text(source.as_bytes()) {
+                        let common_modules = ["os", "sys", "json", "logging", "datetime"];
+                        if common_modules.contains(&module_name) {
+                            found_patterns.push(format!("import {}", module_name));
+                        }
+                    }
+                }
+            }
+            "import_from_statement" => {
+                // Check for typing imports and other common patterns
+                if let Some(module_node) = node.child_by_field_name("module_name") {
+                    if let Ok(module_name) = module_node.utf8_text(source.as_bytes()) {
+                        if module_name == "typing" {
+                            found_patterns.push("from typing import".to_string());
                         }
                     }
                 }
             }
             "if_statement" => {
-                // Check for if __name__ == "__main__" pattern
-                if let Ok(if_text) = node.utf8_text(source.as_bytes()) {
-                    if if_text.contains("__name__") && if_text.contains("__main__") {
-                        found_patterns.push("if __name__ == \"__main__\"".to_string());
+                // Check for if __name__ == "__main__" pattern using AST structure
+                if let Some(condition_node) = node.child_by_field_name("condition") {
+                    if condition_node.kind() == "comparison_operator" {
+                        let mut cursor = condition_node.walk();
+                        let children: Vec<_> = condition_node.children(&mut cursor).collect();
+
+                        if children.len() >= 3 {
+                            // Check for __name__ on left side
+                            if let Ok(left_text) = children[0].utf8_text(source.as_bytes()) {
+                                if left_text == "__name__" {
+                                    // Check for "__main__" on right side
+                                    if let Ok(right_text) = children[2].utf8_text(source.as_bytes())
+                                    {
+                                        if right_text.contains("__main__") {
+                                            found_patterns
+                                                .push("if __name__ == \"__main__\"".to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             "function_definition" => {
-                // Check for common function patterns like __init__
+                // Check for dunder methods using AST field access
                 if let Some(name_node) = node.child_by_field_name("name") {
                     if let Ok(func_name) = name_node.utf8_text(source.as_bytes()) {
-                        if func_name.starts_with("__") && func_name.ends_with("__") {
+                        // Check for dunder methods (double underscore methods)
+                        if func_name.len() >= 4
+                            && func_name.starts_with("__")
+                            && func_name.ends_with("__")
+                        {
                             found_patterns.push(func_name.to_string());
                         }
                     }
@@ -597,7 +636,7 @@ impl PythonAdapter {
             _ => {}
         }
 
-        // Process children
+        // Process children recursively
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             self.check_boilerplate_patterns_recursive(child, source, patterns, found_patterns)?;

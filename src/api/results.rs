@@ -38,6 +38,9 @@ pub struct AnalysisResults {
     /// Coverage analysis results - test gap analysis with prioritized packs
     pub coverage_packs: Vec<crate::detectors::coverage::CoveragePack>,
 
+    /// Unified hierarchy for tree-based UI rendering
+    pub unified_hierarchy: Vec<serde_json::Value>,
+
     /// Any warnings or issues encountered
     pub warnings: Vec<String>,
 }
@@ -777,6 +780,9 @@ impl AnalysisResults {
         // Extract coverage packs from pipeline results
         let coverage_packs = Self::convert_coverage_to_packs(&pipeline_results.results.coverage);
 
+        // Build unified hierarchy from refactoring candidates
+        let unified_hierarchy = Self::build_unified_hierarchy(&refactoring_candidates);
+
         Self {
             summary,
             refactoring_candidates,
@@ -785,9 +791,138 @@ impl AnalysisResults {
             directory_health_tree: Some(directory_health_tree),
             // naming_results: None, // Will be populated by naming analysis
             clone_analysis,
+            unified_hierarchy,
             warnings,
             coverage_packs,
         }
+    }
+
+    /// Build unified hierarchy from flat refactoring candidates list
+    fn build_unified_hierarchy(candidates: &[RefactoringCandidate]) -> Vec<serde_json::Value> {
+        use std::collections::BTreeMap;
+        use std::path::Path;
+
+        // Group candidates by file path
+        let mut file_groups: BTreeMap<String, Vec<&RefactoringCandidate>> = BTreeMap::new();
+
+        for candidate in candidates {
+            file_groups
+                .entry(candidate.file_path.clone())
+                .or_default()
+                .push(candidate);
+        }
+
+        // Group files by directory
+        let mut dir_groups: BTreeMap<String, BTreeMap<String, Vec<&RefactoringCandidate>>> =
+            BTreeMap::new();
+
+        for (file_path, candidates) in file_groups {
+            let path = Path::new(&file_path);
+            let dir_path = path
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| ".".to_string());
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+
+            dir_groups
+                .entry(dir_path)
+                .or_default()
+                .insert(file_name, candidates);
+        }
+
+        // Build hierarchy structure
+        let mut hierarchy = Vec::new();
+
+        for (dir_path, files) in dir_groups {
+            let mut dir_children = Vec::new();
+
+            for (file_name, candidates) in files {
+                let mut file_children = Vec::new();
+
+                for candidate in candidates {
+                    let mut entity_children = Vec::new();
+
+                    // Add issues as children
+                    for issue in &candidate.issues {
+                        let issue_node = serde_json::json!({
+                            "type": "issue",
+                            "name": format!("{}: {}", issue.category, issue.description),
+                            "priority": format!("{:?}", candidate.priority),
+                            "score": issue.severity
+                        });
+                        entity_children.push(issue_node);
+                    }
+
+                    // Add suggestions as children
+                    for suggestion in &candidate.suggestions {
+                        let suggestion_node = serde_json::json!({
+                            "type": "suggestion",
+                            "name": format!("{}: {}", suggestion.refactoring_type, suggestion.description),
+                            "priority": format!("{:?}", candidate.priority),
+                            "refactoring_type": suggestion.refactoring_type
+                        });
+                        entity_children.push(suggestion_node);
+                    }
+
+                    let entity_node = serde_json::json!({
+                        "type": "entity",
+                        "entity_id": candidate.entity_id,
+                        "name": Self::extract_entity_name(&candidate.name),
+                        "score": candidate.score,
+                        "issue_count": candidate.issues.len(),
+                        "suggestion_count": candidate.suggestions.len(),
+                        "children": entity_children
+                    });
+
+                    file_children.push(entity_node);
+                }
+
+                let file_node = serde_json::json!({
+                    "type": "file",
+                    "name": file_name,
+                    "children": file_children
+                });
+
+                dir_children.push(file_node);
+            }
+
+            // Calculate directory health score (average of all entity scores in directory)
+            let mut all_scores = Vec::new();
+            for file in &dir_children {
+                if let Some(children) = file["children"].as_array() {
+                    for entity in children {
+                        if let Some(score) = entity["score"].as_f64() {
+                            all_scores.push(score);
+                        }
+                    }
+                }
+            }
+            let health_score = if all_scores.is_empty() {
+                100.0 // Perfect health for empty directories
+            } else {
+                all_scores.iter().sum::<f64>() / all_scores.len() as f64
+            };
+
+            let dir_node = serde_json::json!({
+                "type": "folder", // Use "folder" instead of "directory" for React Arborist compatibility
+                "name": dir_path,
+                "health_score": health_score,
+                "children": dir_children
+            });
+
+            hierarchy.push(dir_node);
+        }
+
+        hierarchy
+    }
+
+    /// Extract entity name from full entity ID or name
+    fn extract_entity_name(name: &str) -> String {
+        // Entity names may be in format "file_path:type:name" or just "name"
+        name.split(':').last().unwrap_or(name).to_string()
     }
 
     /// Calculate overall code health score
@@ -1057,7 +1192,11 @@ impl AnalysisResults {
             .values()
             .filter(|d| d.health_score < hotspot_threshold.min(0.6))
             .collect();
-        hotspot_candidates.sort_by(|a, b| a.health_score.partial_cmp(&b.health_score).unwrap());
+        hotspot_candidates.sort_by(|a, b| {
+            a.health_score
+                .partial_cmp(&b.health_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let hotspot_directories: Vec<DirectoryHotspot> = hotspot_candidates
             .iter()
@@ -1066,7 +1205,11 @@ impl AnalysisResults {
                 let primary_issue_category = dir
                     .issue_categories
                     .values()
-                    .max_by(|a, b| a.health_impact.partial_cmp(&b.health_impact).unwrap())
+                    .max_by(|a, b| {
+                        a.health_impact
+                            .partial_cmp(&b.health_impact)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
                     .map(|issue| issue.category.clone())
                     .unwrap_or_else(|| "complexity".to_string());
 
@@ -1309,7 +1452,11 @@ impl AnalysisResults {
     pub fn get_directories_by_health(&self) -> Vec<&DirectoryHealthScore> {
         if let Some(tree) = &self.directory_health_tree {
             let mut dirs: Vec<_> = tree.directories.values().collect();
-            dirs.sort_by(|a, b| a.health_score.partial_cmp(&b.health_score).unwrap());
+            dirs.sort_by(|a, b| {
+                a.health_score
+                    .partial_cmp(&b.health_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             dirs
         } else {
             Vec::new()
@@ -1837,6 +1984,7 @@ mod tests {
             summary,
             refactoring_candidates: vec![],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(10),
                 avg_file_processing_time: Duration::from_millis(400),
@@ -1901,6 +2049,7 @@ mod tests {
             },
             refactoring_candidates: vec![critical_candidate, high_candidate],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(5),
                 avg_file_processing_time: Duration::from_millis(2500),
@@ -1941,6 +2090,7 @@ mod tests {
             },
             refactoring_candidates: vec![],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(10),
                 avg_file_processing_time: Duration::from_millis(1000),
@@ -1974,6 +2124,7 @@ mod tests {
             },
             refactoring_candidates: vec![],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(10),
                 avg_file_processing_time: Duration::from_millis(1000),
@@ -2059,6 +2210,7 @@ mod tests {
             },
             refactoring_candidates: vec![candidate1, candidate2],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(5),
                 avg_file_processing_time: Duration::from_millis(2500),
@@ -2311,6 +2463,7 @@ mod tests {
             },
             refactoring_candidates: vec![],
             refactoring_candidates_by_file: vec![],
+            unified_hierarchy: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(10),
                 avg_file_processing_time: Duration::from_millis(2000),

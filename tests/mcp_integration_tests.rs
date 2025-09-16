@@ -1,6 +1,6 @@
 #!/usr/bin/env rust
 //! Comprehensive MCP (Model Control Protocol) integration tests for Valknut
-//! 
+//!
 //! Tests the MCP server implementation for Claude Code integration,
 //! focusing on dynamic analysis capabilities and protocol compliance.
 
@@ -23,10 +23,12 @@ fn valknut_cmd() -> Command {
 fn create_test_project() -> tempfile::TempDir {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
-    
+
     // Create a Python file with complexity issues
     let python_file = project_path.join("complex_module.py");
-    std::fs::write(&python_file, r#"
+    std::fs::write(
+        &python_file,
+        r#"
 import os
 import sys
 from typing import List, Dict, Optional
@@ -101,11 +103,15 @@ def deeply_nested_function():
                     if level5:
                         return "deeply nested"
     return "not nested"
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     // Create a JavaScript file
     let js_file = project_path.join("utils.js");
-    std::fs::write(&js_file, r#"
+    std::fs::write(
+        &js_file,
+        r#"
 // Complex JavaScript function
 function processData(data, options = {}) {
     const results = [];
@@ -156,11 +162,15 @@ function processData(data, options = {}) {
 }
 
 module.exports = { processData };
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     // Create a Rust file
     let rust_file = project_path.join("main.rs");
-    std::fs::write(&rust_file, r#"
+    std::fs::write(
+        &rust_file,
+        r#"
 use std::collections::HashMap;
 
 /// Complex struct with multiple responsibilities
@@ -251,8 +261,10 @@ fn main() {
         Err(e) => eprintln!("Processing failed: {}", e),
     }
 }
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     temp_dir
 }
 
@@ -264,50 +276,62 @@ fn main() {
 fn test_mcp_manifest_generation() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-manifest"]);
-    
+
     let result = cmd.assert().success();
     let output = std::str::from_utf8(&result.get_output().stdout).unwrap();
-    
+
     // Parse the JSON manifest
     let manifest: Value = serde_json::from_str(output).expect("Invalid JSON manifest");
-    
+
     // Validate manifest structure
     assert_eq!(manifest["name"], "valknut");
     assert!(manifest["version"].is_string());
-    assert_eq!(manifest["description"], "AI-Powered Code Analysis & Refactoring Assistant");
+    assert_eq!(
+        manifest["description"],
+        "AI-Powered Code Analysis & Refactoring Assistant"
+    );
     assert_eq!(manifest["author"], "Nathan Rice");
     assert_eq!(manifest["license"], "MIT");
-    assert_eq!(manifest["homepage"], "https://github.com/nathanricedev/valknut");
-    
+    assert_eq!(
+        manifest["homepage"],
+        "https://github.com/nathanricedev/valknut"
+    );
+
     // Validate MCP capabilities
     let capabilities = &manifest["capabilities"];
     assert!(capabilities["tools"].is_array());
-    
+
     let tools = capabilities["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 4);
-    
+
     // Validate analyze_code tool
     let analyze_tool = &tools[0];
     assert_eq!(analyze_tool["name"], "analyze_code");
-    assert_eq!(analyze_tool["description"], "Analyze code for complexity, technical debt, and refactoring opportunities");
-    
+    assert_eq!(
+        analyze_tool["description"],
+        "Analyze code for complexity, technical debt, and refactoring opportunities"
+    );
+
     let analyze_params = &analyze_tool["parameters"];
     assert_eq!(analyze_params["type"], "object");
     assert!(analyze_params["properties"]["path"].is_object());
     assert!(analyze_params["properties"]["format"].is_object());
     assert_eq!(analyze_params["required"], json!(["path"]));
-    
+
     // Validate get_refactoring_suggestions tool
     let refactor_tool = &tools[1];
     assert_eq!(refactor_tool["name"], "get_refactoring_suggestions");
-    assert_eq!(refactor_tool["description"], "Get specific refactoring suggestions for code entities");
-    
+    assert_eq!(
+        refactor_tool["description"],
+        "Get specific refactoring suggestions for code entities"
+    );
+
     let refactor_params = &refactor_tool["parameters"];
     assert_eq!(refactor_params["type"], "object");
     assert!(refactor_params["properties"]["entity_id"].is_object());
     assert!(refactor_params["properties"]["max_suggestions"].is_object());
     assert_eq!(refactor_params["required"], json!(["entity_id"]));
-    
+
     // Validate server configuration
     let server = &manifest["server"];
     assert_eq!(server["command"], "valknut");
@@ -318,46 +342,52 @@ fn test_mcp_manifest_generation() {
 fn test_mcp_manifest_file_output() {
     let temp_dir = tempdir().unwrap();
     let manifest_path = temp_dir.path().join("manifest.json");
-    
+
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-manifest", "--output", manifest_path.to_str().unwrap()]);
-    
+
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("✅ MCP manifest saved to"));
-    
+
     // Verify the file was created and contains valid JSON
     assert!(manifest_path.exists());
     let content = std::fs::read_to_string(&manifest_path).unwrap();
     let manifest: Value = serde_json::from_str(&content).expect("Invalid JSON in file");
-    
+
     assert_eq!(manifest["name"], "valknut");
     assert!(manifest["capabilities"]["tools"].is_array());
 }
 
 // ================================================================================
-// MCP STDIO SERVER TESTS 
+// MCP STDIO SERVER TESTS
 // ================================================================================
 
 #[test]
 fn test_mcp_stdio_server_stub() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-stdio"]);
-    
+
     // Should start successfully and show proper status messages
     cmd.assert()
         .success()
-        .stderr(predicate::str::contains("📡 Starting MCP stdio server for IDE integration"))
-        .stderr(predicate::str::contains("🚀 MCP JSON-RPC 2.0 server ready for requests"));
+        .stderr(predicate::str::contains(
+            "📡 Starting MCP stdio server for IDE integration",
+        ))
+        .stderr(predicate::str::contains(
+            "🚀 MCP JSON-RPC 2.0 server ready for requests",
+        ));
 }
 
 #[test]
 fn test_mcp_stdio_server_with_config() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("test-config.yml");
-    
+
     // Create a complete valid config file
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 structure:
   enable_branch_packs: true
   enable_file_split_packs: true
@@ -383,11 +413,13 @@ partitioning:
   - io
   - api
   - util
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-stdio", "--config", config_path.to_str().unwrap()]);
-    
+
     cmd.assert()
         .success()
         .stderr(predicate::str::contains("📡 Starting MCP stdio server"));
@@ -397,10 +429,10 @@ partitioning:
 fn test_mcp_stdio_server_with_survey_options() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-stdio", "--survey", "--survey-verbosity", "high"]);
-    
-    cmd.assert()
-        .success()
-        .stderr(predicate::str::contains("📊 Survey enabled with High verbosity"));
+
+    cmd.assert().success().stderr(predicate::str::contains(
+        "📊 Survey enabled with High verbosity",
+    ));
 }
 
 // ================================================================================
@@ -412,7 +444,7 @@ fn test_mcp_stdio_server_with_survey_options() {
 fn test_mcp_analyze_code_tool_structure() {
     // This tests the expected structure of MCP tool calls
     // that the eventual implementation should handle
-    
+
     let expected_request = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -425,12 +457,12 @@ fn test_mcp_analyze_code_tool_structure() {
             }
         }
     });
-    
+
     // Validate the request structure that MCP server should handle
     assert_eq!(expected_request["method"], "tools/call");
     assert_eq!(expected_request["params"]["name"], "analyze_code");
     assert!(expected_request["params"]["arguments"]["path"].is_string());
-    
+
     let expected_response = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -443,7 +475,7 @@ fn test_mcp_analyze_code_tool_structure() {
             ]
         }
     });
-    
+
     // Validate expected response structure
     assert_eq!(expected_response["jsonrpc"], "2.0");
     assert!(expected_response["result"]["content"].is_array());
@@ -464,8 +496,11 @@ fn test_mcp_refactoring_suggestions_tool_structure() {
             }
         }
     });
-    
-    assert_eq!(expected_request["params"]["name"], "get_refactoring_suggestions");
+
+    assert_eq!(
+        expected_request["params"]["name"],
+        "get_refactoring_suggestions"
+    );
     assert!(expected_request["params"]["arguments"]["entity_id"].is_string());
     assert!(expected_request["params"]["arguments"]["max_suggestions"].is_number());
 }
@@ -478,42 +513,48 @@ fn test_mcp_refactoring_suggestions_tool_structure() {
 fn test_analyze_code_tool_integration() {
     // Test that the analyze command works properly
     // This is what the MCP analyze_code tool should trigger internally
-    
+
     let test_project = create_test_project();
     let project_path = test_project.path();
     let output_dir = project_path.join(".valknut");
     std::fs::create_dir_all(&output_dir).unwrap();
-    
+
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "json",
-        "--out", output_dir.to_str().unwrap(),
-        "--quiet"
+        "--format",
+        "json",
+        "--out",
+        output_dir.to_str().unwrap(),
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
-    
+
     // Read the analysis results from the output file
     let results_file = project_path.join(".valknut").join("analysis_results.json");
-    assert!(results_file.exists(), "Analysis results file should be created");
-    
-    let output = std::fs::read_to_string(&results_file).expect("Should be able to read results file");
-    
+    assert!(
+        results_file.exists(),
+        "Analysis results file should be created"
+    );
+
+    let output =
+        std::fs::read_to_string(&results_file).expect("Should be able to read results file");
+
     // Parse the analysis results
     let analysis: Value = serde_json::from_str(&output).expect("Invalid JSON analysis output");
-    
+
     // Validate that analysis was performed
     assert!(analysis.is_object());
-    
+
     // The analysis should contain information about the files we created
     let analysis_str = analysis.to_string();
     assert!(
-        analysis_str.contains("complex_module.py") || 
-        analysis_str.contains("ComplexAnalyzer") ||
-        analysis_str.contains("main.rs") ||
-        analysis_str.contains("utils.js"),
+        analysis_str.contains("complex_module.py")
+            || analysis_str.contains("ComplexAnalyzer")
+            || analysis_str.contains("main.rs")
+            || analysis_str.contains("utils.js"),
         "Analysis should contain references to test files"
     );
 }
@@ -522,38 +563,41 @@ fn test_analyze_code_tool_integration() {
 fn test_analyze_code_with_different_formats() {
     let test_project = create_test_project();
     let project_path = test_project.path();
-    
+
     // Test JSON format
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "json",
-        "--quiet"
+        "--format",
+        "json",
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
-    
-    // Test Markdown format  
+
+    // Test Markdown format
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "markdown",
-        "--quiet"
+        "--format",
+        "markdown",
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
-    
+
     // Test HTML format
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "html",
-        "--quiet"
+        "--format",
+        "html",
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
 }
 
@@ -561,39 +605,45 @@ fn test_analyze_code_with_different_formats() {
 fn test_analysis_without_pre_existing_results() {
     // This is the key test - MCP should trigger analysis dynamically
     // without requiring pre-existing analysis results
-    
+
     let test_project = create_test_project();
     let project_path = test_project.path();
-    
+
     // Ensure no cache or previous results exist
     let cache_dir = project_path.join(".valknut-cache");
     if cache_dir.exists() {
         std::fs::remove_dir_all(&cache_dir).unwrap();
     }
-    
+
     let valknut_dir = project_path.join(".valknut");
     if valknut_dir.exists() {
         std::fs::remove_dir_all(&valknut_dir).unwrap();
     }
     std::fs::create_dir_all(&valknut_dir).unwrap();
-    
+
     // Run analysis on fresh directory
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "json",
-        "--out", valknut_dir.to_str().unwrap(),
-        "--quiet"
+        "--format",
+        "json",
+        "--out",
+        valknut_dir.to_str().unwrap(),
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
-    
+
     // Should succeed and provide analysis in output file
     let results_file = project_path.join(".valknut").join("analysis_results.json");
-    assert!(results_file.exists(), "Analysis results file should be created");
-    
-    let output = std::fs::read_to_string(&results_file).expect("Should be able to read results file");
+    assert!(
+        results_file.exists(),
+        "Analysis results file should be created"
+    );
+
+    let output =
+        std::fs::read_to_string(&results_file).expect("Should be able to read results file");
     let analysis: Value = serde_json::from_str(&output).expect("Should produce valid analysis");
     assert!(analysis.is_object());
 }
@@ -606,7 +656,7 @@ fn test_analysis_without_pre_existing_results() {
 fn test_mcp_manifest_invalid_output_path() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-manifest", "--output", "/invalid/path/manifest.json"]);
-    
+
     cmd.assert().failure();
 }
 
@@ -614,7 +664,7 @@ fn test_mcp_manifest_invalid_output_path() {
 fn test_mcp_stdio_server_invalid_config() {
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-stdio", "--config", "/nonexistent/config.yml"]);
-    
+
     cmd.assert().failure();
 }
 
@@ -623,7 +673,7 @@ fn test_analyze_tool_error_handling() {
     // Test analysis with invalid path (what MCP analyze_code should handle)
     let mut cmd = valknut_cmd();
     cmd.args(["analyze", "/totally/nonexistent/path", "--format", "json"]);
-    
+
     cmd.assert().failure();
 }
 
@@ -631,20 +681,21 @@ fn test_analyze_tool_error_handling() {
 fn test_analyze_tool_empty_directory() {
     // Test analysis with empty directory (edge case for MCP)
     let temp_dir = tempdir().unwrap();
-    
+
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         temp_dir.path().to_str().unwrap(),
-        "--format", "json",
-        "--quiet"
+        "--format",
+        "json",
+        "--quiet",
     ]);
-    
+
     cmd.assert().success();
 }
 
 // ================================================================================
-// PERFORMANCE AND SCALABILITY TESTS  
+// PERFORMANCE AND SCALABILITY TESTS
 // ================================================================================
 
 #[test]
@@ -652,15 +703,18 @@ fn test_analyze_large_codebase_simulation() {
     // Create a larger test project to simulate real-world usage
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
-    
+
     // Create multiple directories and files
     for i in 0..10 {
         let subdir = project_path.join(format!("module_{}", i));
         std::fs::create_dir(&subdir).unwrap();
-        
+
         for j in 0..5 {
             let file_path = subdir.join(format!("file_{}.py", j));
-            std::fs::write(&file_path, format!(r#"
+            std::fs::write(
+                &file_path,
+                format!(
+                    r#"
 def function_{}():
     """Test function {}"""
     if True:
@@ -672,18 +726,23 @@ def function_{}():
 class Class_{}:
     def method_{}(self):
         pass
-"#, j, j, i, j, i, j)).unwrap();
+"#,
+                    j, j, i, j, i, j
+                ),
+            )
+            .unwrap();
         }
     }
-    
+
     let mut cmd = valknut_cmd();
     cmd.args([
         "analyze",
         project_path.to_str().unwrap(),
-        "--format", "json",
-        "--quiet"
+        "--format",
+        "json",
+        "--quiet",
     ]);
-    
+
     // Should handle larger codebases without issues
     cmd.assert().success();
 }
@@ -697,32 +756,44 @@ fn test_mcp_tools_parameter_validation() {
     // Test the parameter schemas defined in the manifest
     let mut cmd = valknut_cmd();
     cmd.args(["mcp-manifest"]);
-    
+
     let result = cmd.assert().success();
     let output = std::str::from_utf8(&result.get_output().stdout).unwrap();
     let manifest: Value = serde_json::from_str(output).unwrap();
-    
+
     let tools = manifest["capabilities"]["tools"].as_array().unwrap();
-    
+
     // Validate analyze_code tool parameters
     let analyze_tool = &tools[0];
     let analyze_props = &analyze_tool["parameters"]["properties"];
-    
+
     assert_eq!(analyze_props["path"]["type"], "string");
-    assert_eq!(analyze_props["path"]["description"], "Path to code directory or file");
-    
+    assert_eq!(
+        analyze_props["path"]["description"],
+        "Path to code directory or file"
+    );
+
     assert_eq!(analyze_props["format"]["type"], "string");
-    assert_eq!(analyze_props["format"]["enum"], json!(["json", "markdown", "html"]));
-    
+    assert_eq!(
+        analyze_props["format"]["enum"],
+        json!(["json", "markdown", "html"])
+    );
+
     // Validate get_refactoring_suggestions tool parameters
     let refactor_tool = &tools[1];
     let refactor_props = &refactor_tool["parameters"]["properties"];
-    
+
     assert_eq!(refactor_props["entity_id"]["type"], "string");
-    assert_eq!(refactor_props["entity_id"]["description"], "Code entity identifier");
-    
+    assert_eq!(
+        refactor_props["entity_id"]["description"],
+        "Code entity identifier"
+    );
+
     assert_eq!(refactor_props["max_suggestions"]["type"], "integer");
-    assert_eq!(refactor_props["max_suggestions"]["description"], "Maximum number of suggestions");
+    assert_eq!(
+        refactor_props["max_suggestions"]["description"],
+        "Maximum number of suggestions"
+    );
 }
 
 // ================================================================================
@@ -735,16 +806,16 @@ fn test_mcp_tools_parameter_validation() {
 #[cfg(test)]
 mod future_mcp_tests {
     use super::*;
-    
+
     // NOTE: These tests are currently disabled because the MCP stdio server
     // is not fully implemented. They define the expected behavior.
-    
+
     #[ignore = "MCP stdio server not yet implemented"]
     #[tokio::test]
     async fn test_mcp_stdio_protocol_communication() {
         // This test would verify actual MCP protocol communication
         // over stdio when the server is fully implemented
-        
+
         let mut child = TokioCommand::new("cargo")
             .args(["run", "--bin", "valknut", "--", "mcp-stdio"])
             .stdin(Stdio::piped())
@@ -752,11 +823,11 @@ mod future_mcp_tests {
             .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to start MCP server");
-        
+
         let stdin = child.stdin.as_mut().unwrap();
         let stdout = child.stdout.as_mut().unwrap();
         let mut reader = BufReader::new(stdout);
-        
+
         // Send MCP initialization
         let init_msg = json!({
             "jsonrpc": "2.0",
@@ -773,14 +844,17 @@ mod future_mcp_tests {
                 }
             }
         });
-        
-        stdin.write_all((init_msg.to_string() + "\n").as_bytes()).await.unwrap();
+
+        stdin
+            .write_all((init_msg.to_string() + "\n").as_bytes())
+            .await
+            .unwrap();
         stdin.flush().await.unwrap();
-        
+
         // Read response
         let mut response = String::new();
         let result = timeout(Duration::from_secs(5), reader.read_line(&mut response)).await;
-        
+
         match result {
             Ok(_) => {
                 let response_json: Value = serde_json::from_str(&response).unwrap();
@@ -793,14 +867,14 @@ mod future_mcp_tests {
             }
         }
     }
-    
+
     #[ignore = "MCP stdio server not yet implemented"]
     #[tokio::test]
     async fn test_mcp_analyze_code_tool_call() {
         // This test would verify the analyze_code tool works via MCP protocol
-        
+
         let test_project = create_test_project();
-        
+
         // Start MCP server
         let mut child = TokioCommand::new("cargo")
             .args(["run", "--bin", "valknut", "--", "mcp-stdio"])
@@ -809,11 +883,11 @@ mod future_mcp_tests {
             .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to start MCP server");
-        
+
         let stdin = child.stdin.as_mut().unwrap();
         let stdout = child.stdout.as_mut().unwrap();
         let mut reader = BufReader::new(stdout);
-        
+
         // Send tool call
         let tool_call = json!({
             "jsonrpc": "2.0",
@@ -827,16 +901,19 @@ mod future_mcp_tests {
                 }
             }
         });
-        
-        stdin.write_all((tool_call.to_string() + "\n").as_bytes()).await.unwrap();
+
+        stdin
+            .write_all((tool_call.to_string() + "\n").as_bytes())
+            .await
+            .unwrap();
         stdin.flush().await.unwrap();
-        
+
         // Read response (would contain analysis results)
         let mut response = String::new();
         let result = timeout(Duration::from_secs(10), reader.read_line(&mut response)).await;
-        
+
         child.kill().await.unwrap();
-        
+
         // This would verify the tool call response when implemented
         if result.is_ok() {
             let response_json: Value = serde_json::from_str(&response).unwrap();
@@ -845,12 +922,12 @@ mod future_mcp_tests {
             assert!(response_json["result"]["content"].is_array());
         }
     }
-    
+
     #[ignore = "MCP stdio server not yet implemented"]
     #[tokio::test]
     async fn test_mcp_get_refactoring_suggestions_tool_call() {
         // This test would verify the get_refactoring_suggestions tool
-        
+
         let tool_call = json!({
             "jsonrpc": "2.0",
             "id": 3,
@@ -863,7 +940,7 @@ mod future_mcp_tests {
                 }
             }
         });
-        
+
         // Would test actual refactoring suggestions when implemented
         assert_eq!(tool_call["params"]["name"], "get_refactoring_suggestions");
     }

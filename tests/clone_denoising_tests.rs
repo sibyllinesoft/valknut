@@ -1,5 +1,5 @@
 //! Clone Denoising Integration Tests
-//! 
+//!
 //! Comprehensive test suite for the complete clone denoising system.
 //! This integration test file includes all phase-specific tests and
 //! end-to-end integration tests.

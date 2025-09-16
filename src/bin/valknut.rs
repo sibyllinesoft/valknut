@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let log_level = if cli.verbose {
         tracing::Level::DEBUG
     } else {
-        tracing::Level::INFO  
+        tracing::Level::INFO
     };
 
     tracing_subscriber::fmt()
@@ -72,9 +72,12 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use clap::Parser;
+    use cli::args::{
+        AnalyzeArgs, ImpactArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat,
+        StructureArgs, SurveyVerbosity, ValidateConfigArgs,
+    };
     use std::env;
     use std::path::PathBuf;
-    use cli::args::{AnalyzeArgs, InitConfigArgs, ValidateConfigArgs, McpStdioArgs, McpManifestArgs, StructureArgs, ImpactArgs, OutputFormat, SurveyVerbosity};
 
     #[tokio::test]
     async fn test_cli_parsing_analyze_default() {
@@ -82,7 +85,7 @@ mod tests {
         assert!(!cli.verbose);
         assert!(!cli.survey);
         assert!(matches!(cli.survey_verbosity, SurveyVerbosity::Maximum));
-        
+
         match cli.command {
             Commands::Analyze(args) => {
                 assert_eq!(args.paths, vec![PathBuf::from(".")]);
@@ -99,23 +102,29 @@ mod tests {
     #[tokio::test]
     async fn test_cli_parsing_analyze_with_options() {
         let cli = Cli::parse_from(&[
-            "valknut", "analyze", 
-            "--verbose", 
+            "valknut",
+            "analyze",
+            "--verbose",
             "--survey",
-            "--survey-verbosity", "low",
-            "--config", "test.yml",
-            "--out", "reports",
-            "--format", "html",
+            "--survey-verbosity",
+            "low",
+            "--config",
+            "test.yml",
+            "--out",
+            "reports",
+            "--format",
+            "html",
             "--quiet",
             "--quality-gate",
-            "--max-complexity", "80",
-            "src/"
+            "--max-complexity",
+            "80",
+            "src/",
         ]);
-        
+
         assert!(cli.verbose);
         assert!(cli.survey);
         assert!(matches!(cli.survey_verbosity, SurveyVerbosity::Low));
-        
+
         match cli.command {
             Commands::Analyze(args) => {
                 assert_eq!(args.paths, vec![PathBuf::from("src/")]);
@@ -134,14 +143,20 @@ mod tests {
     async fn test_cli_parsing_print_default_config() {
         let cli = Cli::parse_from(&["valknut", "print-default-config"]);
         match cli.command {
-            Commands::PrintDefaultConfig => {},
+            Commands::PrintDefaultConfig => {}
             _ => panic!("Expected PrintDefaultConfig command"),
         }
     }
 
     #[tokio::test]
     async fn test_cli_parsing_init_config() {
-        let cli = Cli::parse_from(&["valknut", "init-config", "--output", "custom.yml", "--force"]);
+        let cli = Cli::parse_from(&[
+            "valknut",
+            "init-config",
+            "--output",
+            "custom.yml",
+            "--force",
+        ]);
         match cli.command {
             Commands::InitConfig(args) => {
                 assert_eq!(args.output, PathBuf::from("custom.yml"));
@@ -153,7 +168,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_validate_config() {
-        let cli = Cli::parse_from(&["valknut", "validate-config", "--config", "test.yml", "--verbose"]);
+        let cli = Cli::parse_from(&[
+            "valknut",
+            "validate-config",
+            "--config",
+            "test.yml",
+            "--verbose",
+        ]);
         match cli.command {
             Commands::ValidateConfig(args) => {
                 assert_eq!(args.config, PathBuf::from("test.yml"));
@@ -189,7 +210,7 @@ mod tests {
     async fn test_cli_parsing_list_languages() {
         let cli = Cli::parse_from(&["valknut", "list-languages"]);
         match cli.command {
-            Commands::ListLanguages => {},
+            Commands::ListLanguages => {}
             _ => panic!("Expected ListLanguages command"),
         }
     }
@@ -197,16 +218,24 @@ mod tests {
     #[tokio::test]
     async fn test_cli_parsing_structure_legacy() {
         let cli = Cli::parse_from(&[
-            "valknut", "structure", "src/",
-            "--extensions", "rs,py",
+            "valknut",
+            "structure",
+            "src/",
+            "--extensions",
+            "rs,py",
             "--branch-only",
-            "--top", "5",
-            "--format", "yaml"
+            "--top",
+            "5",
+            "--format",
+            "yaml",
         ]);
         match cli.command {
             Commands::Structure(args) => {
                 assert_eq!(args.path, PathBuf::from("src/"));
-                assert_eq!(args.extensions, Some(vec!["rs".to_string(), "py".to_string()]));
+                assert_eq!(
+                    args.extensions,
+                    Some(vec!["rs".to_string(), "py".to_string()])
+                );
                 assert!(args.branch_only);
                 assert!(!args.file_split_only);
                 assert_eq!(args.top, Some(5));
@@ -219,15 +248,22 @@ mod tests {
     #[tokio::test]
     async fn test_cli_parsing_impact_legacy() {
         let cli = Cli::parse_from(&[
-            "valknut", "impact", "src/",
-            "--extensions", "rs",
+            "valknut",
+            "impact",
+            "src/",
+            "--extensions",
+            "rs",
             "--cycles",
-            "--clones", 
+            "--clones",
             "--chokepoints",
-            "--min-similarity", "0.9",
-            "--min-total-loc", "100",
-            "--top", "15",
-            "--format", "csv"
+            "--min-similarity",
+            "0.9",
+            "--min-total-loc",
+            "100",
+            "--top",
+            "15",
+            "--format",
+            "csv",
         ]);
         match cli.command {
             Commands::Impact(args) => {
@@ -251,13 +287,19 @@ mod tests {
         assert!(matches!(cli_low.survey_verbosity, SurveyVerbosity::Low));
 
         let cli_medium = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "medium"]);
-        assert!(matches!(cli_medium.survey_verbosity, SurveyVerbosity::Medium));
+        assert!(matches!(
+            cli_medium.survey_verbosity,
+            SurveyVerbosity::Medium
+        ));
 
         let cli_high = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "high"]);
         assert!(matches!(cli_high.survey_verbosity, SurveyVerbosity::High));
 
         let cli_maximum = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "maximum"]);
-        assert!(matches!(cli_maximum.survey_verbosity, SurveyVerbosity::Maximum));
+        assert!(matches!(
+            cli_maximum.survey_verbosity,
+            SurveyVerbosity::Maximum
+        ));
     }
 
     #[tokio::test]
@@ -278,27 +320,38 @@ mod tests {
             let cli = Cli::parse_from(&["valknut", "analyze", "--format", format_str]);
             match cli.command {
                 Commands::Analyze(args) => {
-                    assert!(std::mem::discriminant(&args.format) == std::mem::discriminant(&expected_format));
+                    assert!(
+                        std::mem::discriminant(&args.format)
+                            == std::mem::discriminant(&expected_format)
+                    );
                 }
                 _ => panic!("Expected Analyze command"),
             }
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_cli_parsing_quality_gate_options() {
         let cli = Cli::parse_from(&[
-            "valknut", "analyze",
+            "valknut",
+            "analyze",
             "--fail-on-issues",
-            "--max-complexity", "75.5",
-            "--min-health", "60.0",
-            "--max-debt", "30.0",
-            "--min-maintainability", "20.0",
-            "--max-issues", "50",
-            "--max-critical", "0",
-            "--max-high-priority", "5"
+            "--max-complexity",
+            "75.5",
+            "--min-health",
+            "60.0",
+            "--max-debt",
+            "30.0",
+            "--min-maintainability",
+            "20.0",
+            "--max-issues",
+            "50",
+            "--max-critical",
+            "0",
+            "--max-high-priority",
+            "5",
         ]);
-        
+
         match cli.command {
             Commands::Analyze(args) => {
                 assert!(args.fail_on_issues);
@@ -317,13 +370,14 @@ mod tests {
     #[tokio::test]
     async fn test_cli_global_flags() {
         let cli = Cli::parse_from(&[
-            "valknut", 
+            "valknut",
             "--verbose",
             "--survey",
-            "--survey-verbosity", "medium",
-            "analyze"
+            "--survey-verbosity",
+            "medium",
+            "analyze",
         ]);
-        
+
         assert!(cli.verbose);
         assert!(cli.survey);
         assert!(matches!(cli.survey_verbosity, SurveyVerbosity::Medium));
