@@ -8,8 +8,8 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::{json, Value};
 use std::io::Write;
-use std::process::{Command as StdCommand, Stdio};
-use tempfile::{tempdir, NamedTempFile};
+use std::process::Stdio;
+use tempfile::tempdir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
@@ -802,7 +802,6 @@ fn test_mcp_tools_parameter_validation() {
 
 /// These tests define the expected behavior for the full MCP implementation
 /// They will fail until the actual MCP protocol handling is implemented
-
 #[cfg(test)]
 mod future_mcp_tests {
     use super::*;

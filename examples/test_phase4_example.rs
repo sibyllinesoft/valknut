@@ -3,8 +3,6 @@
 //! This example demonstrates the Phase 4 clone denoising functionality
 //! using the public API to test the implementation.
 
-use std::collections::HashMap;
-
 // For now, just test that the project compiles successfully
 fn main() {
     println!("🦀 Testing Phase 4 Clone Denoising Implementation Compilation");

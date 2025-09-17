@@ -103,7 +103,7 @@ fn main() -> Result<(), DynError> {
     println!("Configuration serialized to JSON:");
     println!("{}", json_config);
 
-    let deserialized: AnalysisConfig = serde_json::from_str(&json_config)?;
+    let _deserialized: AnalysisConfig = serde_json::from_str(&json_config)?;
     println!("✅ Successfully deserialized configuration");
 
     println!("\n🎉 Configuration simplification complete!");

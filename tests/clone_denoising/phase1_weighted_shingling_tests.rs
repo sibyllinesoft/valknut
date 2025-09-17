@@ -119,7 +119,7 @@ mod weighted_shingle_analyzer_tests {
                 for kgram in &kgrams {
                     let tokens: Vec<&str> = kgram.split_whitespace().collect();
                     // For placeholder data, we expect the tokens to match k value
-                    if tokens.len() > 0 && k > 1 {
+                    if !tokens.is_empty() && k > 1 {
                         assert!(
                             tokens.len() >= 1,
                             "K-gram should have valid tokens for k={}",
@@ -129,7 +129,7 @@ mod weighted_shingle_analyzer_tests {
                 }
 
                 // Should generate overlapping k-grams
-                assert!(kgrams.len() > 0);
+                assert!(!kgrams.is_empty());
             }
         }
     }

@@ -100,7 +100,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_analyze_with_options() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "analyze",
             "--verbose",
@@ -140,7 +140,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_print_default_config() {
-        let cli = Cli::parse_from(&["valknut", "print-default-config"]);
+        let cli = Cli::parse_from(["valknut", "print-default-config"]);
         match cli.command {
             Commands::PrintDefaultConfig => {}
             _ => panic!("Expected PrintDefaultConfig command"),
@@ -149,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_init_config() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "init-config",
             "--output",
@@ -167,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_validate_config() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "validate-config",
             "--config",
@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_mcp_stdio() {
-        let cli = Cli::parse_from(&["valknut", "mcp-stdio", "--config", "test.yml"]);
+        let cli = Cli::parse_from(["valknut", "mcp-stdio", "--config", "test.yml"]);
         match cli.command {
             Commands::McpStdio(args) => {
                 assert_eq!(args.config, Some(PathBuf::from("test.yml")));
@@ -196,7 +196,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_mcp_manifest() {
-        let cli = Cli::parse_from(&["valknut", "mcp-manifest", "--output", "manifest.json"]);
+        let cli = Cli::parse_from(["valknut", "mcp-manifest", "--output", "manifest.json"]);
         match cli.command {
             Commands::McpManifest(args) => {
                 assert_eq!(args.output, Some(PathBuf::from("manifest.json")));
@@ -207,7 +207,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_list_languages() {
-        let cli = Cli::parse_from(&["valknut", "list-languages"]);
+        let cli = Cli::parse_from(["valknut", "list-languages"]);
         match cli.command {
             Commands::ListLanguages => {}
             _ => panic!("Expected ListLanguages command"),
@@ -216,7 +216,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_structure_legacy() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "structure",
             "src/",
@@ -246,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_impact_legacy() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "impact",
             "src/",
@@ -282,19 +282,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_survey_verbosity_variants() {
-        let cli_low = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "low"]);
+        let cli_low = Cli::parse_from(["valknut", "analyze", "--survey-verbosity", "low"]);
         assert!(matches!(cli_low.survey_verbosity, SurveyVerbosity::Low));
 
-        let cli_medium = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "medium"]);
+        let cli_medium = Cli::parse_from(["valknut", "analyze", "--survey-verbosity", "medium"]);
         assert!(matches!(
             cli_medium.survey_verbosity,
             SurveyVerbosity::Medium
         ));
 
-        let cli_high = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "high"]);
+        let cli_high = Cli::parse_from(["valknut", "analyze", "--survey-verbosity", "high"]);
         assert!(matches!(cli_high.survey_verbosity, SurveyVerbosity::High));
 
-        let cli_maximum = Cli::parse_from(&["valknut", "analyze", "--survey-verbosity", "maximum"]);
+        let cli_maximum = Cli::parse_from(["valknut", "analyze", "--survey-verbosity", "maximum"]);
         assert!(matches!(
             cli_maximum.survey_verbosity,
             SurveyVerbosity::Maximum
@@ -316,7 +316,7 @@ mod tests {
         ];
 
         for (format_str, expected_format) in formats {
-            let cli = Cli::parse_from(&["valknut", "analyze", "--format", format_str]);
+            let cli = Cli::parse_from(["valknut", "analyze", "--format", format_str]);
             match cli.command {
                 Commands::Analyze(args) => {
                     assert!(
@@ -331,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_quality_gate_options() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "analyze",
             "--fail-on-issues",
@@ -368,7 +368,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_global_flags() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "valknut",
             "--verbose",
             "--survey",

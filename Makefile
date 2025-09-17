@@ -34,6 +34,20 @@ help:
 	@echo "  build-simd    - Build with SIMD optimizations"
 	@echo "  build-full    - Build with all features enabled"
 	@echo "  build-minimal - Build with minimal features"
+	@echo ""
+	@echo "GitHub Actions Compatibility:"
+	@echo "  gh-check      - Run GitHub Actions 'check' job locally"
+	@echo "  gh-test       - Run GitHub Actions 'test' job locally"
+	@echo "  gh-security   - Run security audit"
+	@echo "  gh-benchmarks - Test benchmark compilation"
+	@echo "  gh-cross      - Test cross-compilation setup"
+	@echo "  gh-actions    - Run complete GitHub Actions simulation"
+	@echo "  gh-quick      - Quick GitHub Actions checks (most common failures)"
+	@echo ""
+	@echo "Act Integration:"
+	@echo "  act-check     - Run 'check' job with act"
+	@echo "  act-test      - Run 'test' job with act"
+	@echo "  act-all       - Run full CI with act"
 
 # ==============================================================================
 # Build Targets
@@ -160,6 +174,125 @@ coverage:
 		echo "📊 Coverage report generated in coverage/tarpaulin-report.html"; \
 	else \
 		echo "❌ cargo-tarpaulin not installed. Run: cargo install cargo-tarpaulin"; \
+	fi
+
+# ==============================================================================
+# GitHub Actions Compatibility Targets
+# ==============================================================================
+
+# Exact same check job as GitHub Actions
+gh-check:
+	@echo "🚀 Running GitHub Actions 'check' job locally..."
+	@echo "📋 Setting GitHub Actions environment..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	export RUSTFLAGS="-D warnings" && \
+	export CARGO_TERM_COLOR=always && \
+	echo "🎨 Checking code formatting..." && \
+	cargo fmt --all -- --check && \
+	echo "🔍 Running clippy with GitHub Actions strictness..." && \
+	cargo clippy --all-targets --all-features -- -D clippy::correctness -D clippy::suspicious -D clippy::complexity -W clippy::perf -W clippy::style && \
+	echo "📚 Checking documentation..." && \
+	cargo doc --all-features --no-deps --document-private-items && \
+	echo "✅ GitHub Actions 'check' job completed successfully!"
+
+# GitHub Actions test job equivalent
+gh-test:
+	@echo "🧪 Running GitHub Actions 'test' job locally..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	export RUSTFLAGS="-D warnings" && \
+	export CARGO_TERM_COLOR=always && \
+	echo "🧪 Running unit tests..." && \
+	cargo test --lib && \
+	echo "🔗 Running integration tests..." && \
+	cargo test --tests && \
+	echo "🎯 Running all feature tests..." && \
+	cargo test --all-features && \
+	echo "✅ GitHub Actions 'test' job completed successfully!"
+
+# Security audit matching GitHub Actions
+gh-security:
+	@echo "🔒 Running security audit..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	if command -v cargo-audit >/dev/null 2>&1; then \
+		cargo audit; \
+	else \
+		echo "📦 Installing cargo-audit..."; \
+		cargo install cargo-audit; \
+		cargo audit; \
+	fi && \
+	echo "✅ Security audit completed!"
+
+# Benchmark compilation test
+gh-benchmarks:
+	@echo "⚡ Testing benchmark compilation..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	echo "🔍 Checking benchmark compilation..." && \
+	cargo check --benches && \
+	echo "🔍 Checking benchmarks with features..." && \
+	cargo check --benches --features benchmarks && \
+	echo "✅ Benchmark compilation test completed!"
+
+# Cross-compilation simulation (native only)
+gh-cross:
+	@echo "🌐 Testing cross-compilation setup..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	echo "🎯 Installing cross-compilation targets..." && \
+	rustup target add x86_64-unknown-linux-gnu 2>/dev/null || true && \
+	rustup target add aarch64-unknown-linux-gnu 2>/dev/null || true && \
+	echo "🔨 Testing release build..." && \
+	cargo build --release && \
+	echo "✅ Cross-compilation test completed!"
+
+# Complete GitHub Actions simulation
+gh-actions: gh-check gh-security gh-benchmarks gh-test gh-cross
+	@echo "🎉 Complete GitHub Actions simulation completed successfully!"
+
+# Quick GitHub Actions check (most common failures)
+gh-quick:
+	@echo "⚡ Running quick GitHub Actions checks..."
+	@export GITHUB_ACTIONS=true && \
+	export CI=true && \
+	export RUSTFLAGS="-D warnings" && \
+	cargo fmt --all -- --check && \
+	cargo clippy --all-targets --all-features -- -D clippy::correctness -D clippy::suspicious -D clippy::complexity -W clippy::perf -W clippy::style && \
+	cargo check --benches && \
+	cargo audit && \
+	echo "✅ Quick GitHub Actions checks completed!"
+
+# Act runner targets
+act-check:
+	@echo "🎭 Running 'check' job with act..."
+	@if command -v act >/dev/null 2>&1; then \
+		act -j check; \
+	else \
+		echo "❌ act not installed. Install with:"; \
+		echo "curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash"; \
+		exit 1; \
+	fi
+
+act-test:
+	@echo "🎭 Running 'test' job with act..."
+	@if command -v act >/dev/null 2>&1; then \
+		act -j test; \
+	else \
+		echo "❌ act not installed. Install with:"; \
+		echo "curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash"; \
+		exit 1; \
+	fi
+
+act-all:
+	@echo "🎭 Running full CI with act..."
+	@if command -v act >/dev/null 2>&1; then \
+		act; \
+	else \
+		echo "❌ act not installed. Install with:"; \
+		echo "curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash"; \
+		exit 1; \
 	fi
 
 # ==============================================================================

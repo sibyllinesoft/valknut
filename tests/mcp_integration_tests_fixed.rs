@@ -923,7 +923,7 @@ mod real_mcp_protocol_tests {
                     assert!(response_json["result"]["content"].is_array());
 
                     let content = &response_json["result"]["content"];
-                    assert!(content.as_array().unwrap().len() > 0);
+                    assert!(!content.as_array().unwrap().is_empty());
 
                     let first_content = &content[0];
                     assert_eq!(first_content["type"], "text");

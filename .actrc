@@ -1,0 +1,22 @@
+# Act configuration for matching GitHub Actions strictness
+# This ensures act runs with the same environment as GitHub Actions
+
+# Use the same platform as GitHub Actions
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+
+# Enable verbose logging to see what's happening
+--verbose
+
+# Use the same secrets/environment as production
+--env-file .env.act
+
+# Set the same environment variables as GitHub Actions
+--env GITHUB_ACTIONS=true
+--env CI=true
+--env RUNNER_OS=Linux
+--env RUNNER_ARCH=X64
+
+# Enable artifact server for debugging
+--artifact-server-path /tmp/act-artifacts

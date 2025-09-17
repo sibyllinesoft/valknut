@@ -2,14 +2,11 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tempfile::TempDir;
-use tokio;
 
 use valknut_rs::core::config::{AdaptiveDenoiseConfig, DedupeConfig, ValknutConfig};
 use valknut_rs::core::featureset::{CodeEntity, ExtractionContext, FeatureExtractor};
 use valknut_rs::detectors::clone_detection::{
-    ComprehensiveCloneDetector, NormalizationConfig, PdgMotifAnalyzer, TfIdfAnalyzer,
-    WeightedMinHash,
+    ComprehensiveCloneDetector, PdgMotifAnalyzer, TfIdfAnalyzer, WeightedMinHash,
 };
 // use valknut_rs::detectors::boilerplate_learning::{
 //     BoilerplateLearningSystem, BoilerplateLearningConfig

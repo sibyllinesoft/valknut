@@ -6,7 +6,6 @@
 //! - Memory usage and scalability testing
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::time::Duration;
 
 use valknut_rs::core::config::LshConfig;
 use valknut_rs::core::featureset::CodeEntity;

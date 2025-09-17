@@ -61,7 +61,7 @@ mod end_to_end_pipeline_tests {
             "Phase 2: Filtering should not increase entity count"
         );
         assert!(
-            entities_passing_gates.len() > 0,
+            !entities_passing_gates.is_empty(),
             "Phase 2: Some entities should pass basic filtering"
         );
 

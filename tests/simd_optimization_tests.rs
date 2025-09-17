@@ -341,7 +341,6 @@ mod simd_performance_tests {
 }
 
 /// Helper functions for SIMD testing
-
 fn calculate_sum_simd(values: &[f64]) -> f64 {
     #[cfg(feature = "simd")]
     #[cfg(target_arch = "x86_64")]
@@ -479,7 +478,6 @@ mod simd_integration_tests {
 /// Benchmarks for different SIMD instruction sets
 #[cfg(test)]
 mod simd_instruction_set_tests {
-    use super::*;
 
     #[test]
     fn test_available_simd_features() {

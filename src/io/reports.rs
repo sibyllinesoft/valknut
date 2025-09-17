@@ -402,7 +402,7 @@ impl Default for ReportGenerator {
                                 "has_children helper requires an array parameter",
                             )
                         })?;
-                    out.write(&(array.len() > 0).to_string())?;
+                    out.write(&(!array.is_empty()).to_string())?;
                     Ok(())
                 },
             ),

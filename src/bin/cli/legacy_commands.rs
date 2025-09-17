@@ -53,15 +53,17 @@ pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
     warn!("The 'impact' command is deprecated. Use 'analyze --no-coverage --no-refactoring --no-structure' instead.");
 
     // Create a basic configuration for impact analysis
-    let mut valknut_config = ValknutConfig::default();
-    valknut_config.analysis = AnalysisConfig {
-        enable_scoring: false,
-        enable_graph_analysis: true, // Enable impact analysis
-        enable_lsh_analysis: false,
-        enable_refactoring_analysis: false,
-        enable_coverage_analysis: false,
-        enable_structure_analysis: false,
-        enable_names_analysis: false,
+    let valknut_config = ValknutConfig {
+        analysis: AnalysisConfig {
+            enable_scoring: false,
+            enable_graph_analysis: true, // Enable impact analysis
+            enable_lsh_analysis: false,
+            enable_refactoring_analysis: false,
+            enable_coverage_analysis: false,
+            enable_structure_analysis: false,
+            enable_names_analysis: false,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

@@ -1797,6 +1797,118 @@ fn display_quality_gate_violations(result: &QualityGateResult) {
     println!();
 }
 
+/// Run Oracle analysis to get AI refactoring suggestions
+async fn run_oracle_analysis(
+    paths: &[PathBuf],
+    analysis_result: &AnalysisResults,
+    args: &AnalyzeArgs,
+) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
+    use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
+
+    // Check if GEMINI_API_KEY is available
+    let oracle_config = match OracleConfig::from_env() {
+        Ok(mut config) => {
+            if let Some(max_tokens) = args.ai_features.oracle_max_tokens {
+                config = config.with_max_tokens(max_tokens);
+            }
+            config
+        }
+        Err(e) => {
+            eprintln!("{} {}", "❌ Oracle configuration failed:".red(), e);
+            eprintln!(
+                "   {}",
+                "Set the GEMINI_API_KEY environment variable to use the oracle feature".dimmed()
+            );
+            return Ok(None);
+        }
+    };
+
+    let oracle = RefactoringOracle::new(oracle_config);
+
+    // Use the first path as the project root for analysis
+    let project_path = paths.first().unwrap();
+
+    if !args.quiet {
+        println!(
+            "  🔍 Analyzing project: {}",
+            project_path.display().to_string().cyan()
+        );
+        println!("  🧠 Sending to Gemini 2.5 Pro for intelligent refactoring suggestions...");
+    }
+
+    match oracle
+        .generate_suggestions(project_path, analysis_result)
+        .await
+    {
+        Ok(response) => {
+            if !args.quiet {
+                println!("  ✅ Oracle analysis completed successfully!");
+                println!(
+                    "  📊 Generated {} refactoring phases with {} total tasks",
+                    response.refactoring_plan.phases.len().to_string().green(),
+                    response
+                        .refactoring_plan
+                        .phases
+                        .iter()
+                        .map(|p| p.subsystems.iter().map(|s| s.tasks.len()).sum::<usize>())
+                        .sum::<usize>()
+                        .to_string()
+                        .green()
+                );
+            }
+
+            // Save oracle response to a separate file for review
+            if let Ok(oracle_json) = serde_json::to_string_pretty(&response) {
+                let oracle_path = project_path.join(".valknut-oracle-response.json");
+                if let Err(e) = tokio::fs::write(&oracle_path, oracle_json).await {
+                    warn!(
+                        "Failed to write oracle response to {}: {}",
+                        oracle_path.display(),
+                        e
+                    );
+                } else if !args.quiet {
+                    println!(
+                        "  💾 Oracle recommendations saved to: {}",
+                        oracle_path.display().to_string().cyan()
+                    );
+                }
+            }
+
+            Ok(Some(response))
+        }
+        Err(e) => {
+            if !args.quiet {
+                eprintln!("{} Oracle analysis failed: {}", "⚠️".yellow(), e);
+                eprintln!(
+                    "   {}",
+                    "Analysis will continue without oracle suggestions".dimmed()
+                );
+            }
+            warn!("Oracle analysis failed: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Generate output reports in various formats (legacy version for compatibility)
+async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
+    generate_reports_with_oracle(result, &None, args).await
+}
+
+/// Live reachability analysis command
+pub async fn live_reach_command(args: LiveReachArgs) -> anyhow::Result<()> {
+    // Load configuration (for now use default)
+    let config = LiveReachConfig::default();
+
+    // Create CLI executor and run command
+    let cli = LiveReachCli::new(config);
+    cli.execute(args)
+        .await
+        .map_err(|e| anyhow::anyhow!("Live reachability analysis failed: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2309,7 +2421,7 @@ mod tests {
 
         let quality_result = result.unwrap();
         assert!(!quality_result.passed); // Should fail due to violations
-        assert!(quality_result.violations.len() > 0);
+        assert!(!quality_result.violations.is_empty());
     }
 
     #[tokio::test]
@@ -2327,116 +2439,4 @@ mod tests {
         let result = handle_quality_gates(&args, &analysis_result).await;
         assert!(result.is_err()); // Should fail due to missing summary
     }
-}
-
-/// Run Oracle analysis to get AI refactoring suggestions
-async fn run_oracle_analysis(
-    paths: &[PathBuf],
-    analysis_result: &AnalysisResults,
-    args: &AnalyzeArgs,
-) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
-    use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
-
-    // Check if GEMINI_API_KEY is available
-    let oracle_config = match OracleConfig::from_env() {
-        Ok(mut config) => {
-            if let Some(max_tokens) = args.ai_features.oracle_max_tokens {
-                config = config.with_max_tokens(max_tokens);
-            }
-            config
-        }
-        Err(e) => {
-            eprintln!("{} {}", "❌ Oracle configuration failed:".red(), e);
-            eprintln!(
-                "   {}",
-                "Set the GEMINI_API_KEY environment variable to use the oracle feature".dimmed()
-            );
-            return Ok(None);
-        }
-    };
-
-    let oracle = RefactoringOracle::new(oracle_config);
-
-    // Use the first path as the project root for analysis
-    let project_path = paths.first().unwrap();
-
-    if !args.quiet {
-        println!(
-            "  🔍 Analyzing project: {}",
-            project_path.display().to_string().cyan()
-        );
-        println!("  🧠 Sending to Gemini 2.5 Pro for intelligent refactoring suggestions...");
-    }
-
-    match oracle
-        .generate_suggestions(project_path, analysis_result)
-        .await
-    {
-        Ok(response) => {
-            if !args.quiet {
-                println!("  ✅ Oracle analysis completed successfully!");
-                println!(
-                    "  📊 Generated {} refactoring phases with {} total tasks",
-                    response.refactoring_plan.phases.len().to_string().green(),
-                    response
-                        .refactoring_plan
-                        .phases
-                        .iter()
-                        .map(|p| p.subsystems.iter().map(|s| s.tasks.len()).sum::<usize>())
-                        .sum::<usize>()
-                        .to_string()
-                        .green()
-                );
-            }
-
-            // Save oracle response to a separate file for review
-            if let Ok(oracle_json) = serde_json::to_string_pretty(&response) {
-                let oracle_path = project_path.join(".valknut-oracle-response.json");
-                if let Err(e) = tokio::fs::write(&oracle_path, oracle_json).await {
-                    warn!(
-                        "Failed to write oracle response to {}: {}",
-                        oracle_path.display(),
-                        e
-                    );
-                } else if !args.quiet {
-                    println!(
-                        "  💾 Oracle recommendations saved to: {}",
-                        oracle_path.display().to_string().cyan()
-                    );
-                }
-            }
-
-            Ok(Some(response))
-        }
-        Err(e) => {
-            if !args.quiet {
-                eprintln!("{} Oracle analysis failed: {}", "⚠️".yellow(), e);
-                eprintln!(
-                    "   {}",
-                    "Analysis will continue without oracle suggestions".dimmed()
-                );
-            }
-            warn!("Oracle analysis failed: {}", e);
-            Ok(None)
-        }
-    }
-}
-
-/// Generate output reports in various formats (legacy version for compatibility)
-async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
-    generate_reports_with_oracle(result, &None, args).await
-}
-
-/// Live reachability analysis command
-pub async fn live_reach_command(args: LiveReachArgs) -> anyhow::Result<()> {
-    // Load configuration (for now use default)
-    let config = LiveReachConfig::default();
-
-    // Create CLI executor and run command
-    let cli = LiveReachCli::new(config);
-    cli.execute(args)
-        .await
-        .map_err(|e| anyhow::anyhow!("Live reachability analysis failed: {}", e))?;
-
-    Ok(())
 }
