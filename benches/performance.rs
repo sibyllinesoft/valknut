@@ -82,7 +82,8 @@ fn benchmark_bayesian_normalization(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("sequential", size), size, |b, _| {
             b.iter(|| {
-                let mut test_vectors = black_box(vectors.clone());
+                let mut test_vectors = vectors.clone();
+                black_box(&mut test_vectors);
                 normalizer.normalize(&mut test_vectors).unwrap();
                 std_black_box(test_vectors);
             });
@@ -91,7 +92,8 @@ fn benchmark_bayesian_normalization(c: &mut Criterion) {
         #[cfg(feature = "parallel")]
         group.bench_with_input(BenchmarkId::new("parallel", size), size, |b, _| {
             b.iter(|| {
-                let mut test_vectors = black_box(vectors.clone());
+                let mut test_vectors = vectors.clone();
+                black_box(&mut test_vectors);
                 normalizer.normalize_parallel(&mut test_vectors).unwrap();
                 std_black_box(test_vectors);
             });
@@ -116,7 +118,8 @@ fn benchmark_simd_normalization(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("simd_batch", size), size, |b, _| {
             b.iter(|| {
-                let mut data = black_box(test_data.clone());
+                let mut data = test_data.clone();
+                black_box(&mut data);
                 // Simulate SIMD normalization with manual vectorization
                 #[cfg(feature = "simd")]
                 {
@@ -129,7 +132,12 @@ fn benchmark_simd_normalization(c: &mut Criterion) {
                     for chunk in data.chunks_exact_mut(4) {
                         let vals = f64x4::new([chunk[0], chunk[1], chunk[2], chunk[3]]);
                         let normalized = (vals - mean_vec) / std_vec;
-                        normalized.write_to_slice(chunk);
+                        // Extract values from SIMD vector and write back to slice
+                        let result = normalized.to_array();
+                        chunk[0] = result[0];
+                        chunk[1] = result[1];
+                        chunk[2] = result[2];
+                        chunk[3] = result[3];
                     }
 
                     // Handle remaining elements
@@ -144,7 +152,8 @@ fn benchmark_simd_normalization(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("scalar_batch", size), size, |b, _| {
             b.iter(|| {
-                let mut data = black_box(test_data.clone());
+                let mut data = test_data.clone();
+                black_box(&mut data);
                 // Simulate scalar normalization
                 let mean = 50.0;
                 let std_dev = 10.0;
@@ -170,7 +179,7 @@ fn benchmark_lsh_minhash(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("hash_sequential", size), size, |b, _| {
             b.iter(|| {
-                let samples = black_box(&code_samples);
+                let samples = black_box(code_samples.as_slice());
                 for code in samples {
                     // Simulate hash computation with actual string processing
                     use std::collections::hash_map::DefaultHasher;
@@ -187,7 +196,7 @@ fn benchmark_lsh_minhash(c: &mut Criterion) {
         #[cfg(feature = "simd")]
         group.bench_with_input(BenchmarkId::new("hash_simd", size), size, |b, _| {
             b.iter(|| {
-                let samples = black_box(&code_samples);
+                let samples = black_box(code_samples.as_slice());
                 for code in samples {
                     // Simulate SIMD-optimized hashing with seahash (SIMD-friendly)
                     use seahash::SeaHasher;
@@ -213,7 +222,7 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let config = AnalysisConfig::default();
-    let mut pipeline = rt.block_on(async { AnalysisPipeline::new(config).await.unwrap() });
+    let mut pipeline = AnalysisPipeline::new(config);
 
     // Prepare training data
     let training_vectors = generate_test_vectors(100, 8);
@@ -227,7 +236,8 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
             size,
             |b, _| {
                 b.iter(|| {
-                    let vectors = black_box(test_vectors.clone());
+                    let vectors = test_vectors.clone();
+                    black_box(&vectors);
                     // Simulate analysis processing without async
                     let mut total_score = 0.0;
                     for vector in &vectors {
@@ -241,7 +251,8 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
         #[cfg(feature = "parallel")]
         group.bench_with_input(BenchmarkId::new("parallel_analysis", size), size, |b, _| {
             b.iter(|| {
-                let vectors = black_box(test_vectors.clone());
+                let vectors = test_vectors.clone();
+                black_box(&vectors);
                 // Simulate parallel processing
                 use rayon::prelude::*;
                 let total_score: f64 = vectors
@@ -272,7 +283,8 @@ fn benchmark_memory_optimization(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("vector_cloning", size), size, |b, _| {
             let original_vectors = generate_test_vectors(*size, 10);
             b.iter(|| {
-                let cloned = black_box(original_vectors.clone());
+                let cloned = original_vectors.clone();
+                black_box(&cloned);
                 std_black_box(cloned);
             });
         });
@@ -294,7 +306,7 @@ fn benchmark_memory_optimization(c: &mut Criterion) {
                             vector.normalized_features.insert(key, value * 0.5);
                         }
                     }
-                    std_black_box(&vectors);
+                    std_black_box(vectors.as_slice());
                 });
             },
         );
@@ -321,7 +333,7 @@ fn benchmark_concurrent_structures(c: &mut Criterion) {
             |b, _| {
                 b.iter(|| {
                     let map = Arc::new(DashMap::new());
-                    let ids = black_box(&entity_ids);
+                    let ids = black_box(entity_ids.as_slice());
 
                     // Simulate concurrent entity insertion
                     ids.par_iter().for_each(|id| {
@@ -340,7 +352,7 @@ fn benchmark_concurrent_structures(c: &mut Criterion) {
             size,
             |b, _| {
                 b.iter(|| {
-                    let vectors = black_box(&test_vectors);
+                    let vectors = black_box(test_vectors.as_slice());
 
                     // Simulate parallel feature processing
                     let results: Vec<f64> = vectors

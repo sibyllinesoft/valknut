@@ -15,10 +15,8 @@ merge_derives = true
 use_field_init_shorthand = true
 use_try_shorthand = true
 
-# Basic formatting preferences
+# Basic formatting preferences (stable only)
 match_block_trailing_comma = false
-trailing_comma = "Vertical"
-trailing_semicolon = true
 
 # Keep unstable features for future
 # When using nightly Rust, these can be uncommented:

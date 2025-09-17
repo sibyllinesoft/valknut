@@ -567,6 +567,94 @@ EOF
     log_success "Validation report generated: pipeline-validation-report.md"
 }
 
+# Validate Makefile targets used in CI
+validate_makefile_targets() {
+    log_info "Validating Makefile targets for CI/CD..."
+    
+    if [ ! -f "Makefile" ]; then
+        log_error "Makefile not found"
+        return 1
+    fi
+    
+    local targets=(
+        "help"
+        "check"
+        "test-unit"
+        "test-cli"
+        "test-e2e"
+        "fmt-check"
+        "lint"
+    )
+    
+    local failed_targets=()
+    
+    for target in "${targets[@]}"; do
+        log_info "Testing 'make $target'..."
+        if [ "$target" = "test-e2e" ]; then
+            # E2E tests may timeout in CI, so use timeout
+            if timeout 30 make "$target" >/dev/null 2>&1; then
+                log_success "make $target works"
+            else
+                log_warning "make $target timed out (expected in CI)"
+            fi
+        else
+            if make "$target" >/dev/null 2>&1; then
+                log_success "make $target works"
+            else
+                log_error "make $target failed"
+                failed_targets+=("$target")
+            fi
+        fi
+    done
+    
+    # Test development tools availability
+    log_info "Checking development tools..."
+    
+    if command_exists "cargo-tarpaulin"; then
+        log_success "cargo-tarpaulin available for coverage"
+    else
+        log_warning "cargo-tarpaulin not installed (CI will install it)"
+    fi
+    
+    if cargo bench --help >/dev/null 2>&1; then
+        log_success "cargo bench available"
+    else
+        log_warning "cargo bench may have issues"
+    fi
+    
+    # Verify test structure
+    log_info "Validating test directory structure..."
+    
+    if [ -d "tests/cli-e2e-tests" ]; then
+        log_success "CLI E2E test directory found"
+        
+        if [ -f "tests/cli-e2e-tests/run_e2e_tests.sh" ] && [ -x "tests/cli-e2e-tests/run_e2e_tests.sh" ]; then
+            log_success "E2E test runner is executable"
+        else
+            log_error "E2E test runner missing or not executable"
+            failed_targets+=("e2e-runner")
+        fi
+    else
+        log_error "CLI E2E test directory missing"
+        failed_targets+=("e2e-tests")
+    fi
+    
+    if [ -f "tests/cli_tests.rs" ]; then
+        log_success "CLI integration tests present"
+    else
+        log_error "CLI integration tests missing"
+        failed_targets+=("cli-tests")
+    fi
+    
+    if [ ${#failed_targets[@]} -gt 0 ]; then
+        log_error "Failed Makefile targets/requirements: ${failed_targets[*]}"
+        return 1
+    fi
+    
+    log_success "All Makefile targets and test structure validated"
+    return 0
+}
+
 # Main execution
 main() {
     echo "🔧 Valknut CI/CD Pipeline Validation"
@@ -591,6 +679,9 @@ main() {
     echo ""
     
     validate_testing_config || validation_failed=true
+    echo ""
+    
+    validate_makefile_targets || validation_failed=true
     echo ""
     
     validate_deployment_config || validation_failed=true

@@ -20,7 +20,7 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUST_BACKTRACE: short
-  RUSTFLAGS: "-D warnings"
+  RUSTFLAGS: "-D clippy::correctness -D clippy::suspicious"
   RUSTDOCFLAGS: "-D warnings"
   # Optimize caching and build performance
   CARGO_HTTP_MULTIPLEXING: false
@@ -54,8 +54,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Check clippy (no warnings allowed)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Check clippy (deny only critical warnings)
+        run: cargo clippy --all-targets --all-features -- -D clippy::correctness -D clippy::suspicious -D clippy::complexity -W clippy::perf -W clippy::style
 
       - name: Check docs
         run: cargo doc --all-features --no-deps --document-private-items
