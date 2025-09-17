@@ -1,0 +1,13 @@
+{
+  "system": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "kernel": "6.14.0-29-generic",
+    "cpu_cores": 16,
+    "memory_gb": 125,
+    "rustc_version": "rustc 1.89.0 (29483883e 2025-08-04)",
+    "binary_size_mb": 9.31515
+  },
+  "timestamp": "20250917-010550",
+  "benchmarks": []
+}

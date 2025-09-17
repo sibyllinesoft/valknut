@@ -57,14 +57,14 @@ impl LiveReachReporter {
         );
 
         // Register HTML template
-        handlebars
-            .register_template_string("html_report", HTML_TEMPLATE)
-            .expect("Failed to register HTML template");
+        if let Err(e) = handlebars.register_template_string("html_report", HTML_TEMPLATE) {
+            eprintln!("Warning: Failed to register HTML template: {}", e);
+        }
 
         // Register Markdown template
-        handlebars
-            .register_template_string("markdown_report", MARKDOWN_TEMPLATE)
-            .expect("Failed to register Markdown template");
+        if let Err(e) = handlebars.register_template_string("markdown_report", MARKDOWN_TEMPLATE) {
+            eprintln!("Warning: Failed to register Markdown template: {}", e);
+        }
 
         Self { handlebars }
     }

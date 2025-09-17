@@ -1,10 +1,10 @@
 //! PDG (Program Dependence Graph) Analysis for structural clone detection
 
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+// use serde::{Deserialize, Serialize}; // Currently unused
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::types::{BasicBlock, MotifCategory, MotifType, PdgMotif, StructuralMatchInfo};
+use super::types::{BasicBlock, MotifCategory, MotifType, PdgMotif};
 
 /// PDG (Program Dependence Graph) Motif Analyzer
 #[derive(Debug)]

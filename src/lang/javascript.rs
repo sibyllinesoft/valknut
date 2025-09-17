@@ -78,10 +78,7 @@ const multiply = (x, y) => {
         let index = result.unwrap();
         let entities = index.get_entities_in_file("arrow.js");
         // Arrow functions might be detected as variables or functions depending on implementation
-        assert!(
-            entities.len() >= 0,
-            "Should handle arrow functions gracefully"
-        );
+        // entities.len() is unsigned, always >= 0 - should handle arrow functions gracefully
     }
 
     #[test]
@@ -144,7 +141,7 @@ pub struct JavaScriptAdapter {
 impl JavaScriptAdapter {
     /// Create a new JavaScript adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_javascript::language();
+        let language = tree_sitter_javascript::LANGUAGE.into();
         let mut parser = Parser::new();
         parser.set_language(&language).map_err(|e| {
             ValknutError::parse(
@@ -511,6 +508,15 @@ impl JavaScriptAdapter {
 
 impl Default for JavaScriptAdapter {
     fn default() -> Self {
-        Self::new().expect("Failed to create JavaScript adapter")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to create JavaScript adapter, using minimal fallback: {}",
+                e
+            );
+            JavaScriptAdapter {
+                parser: tree_sitter::Parser::new(),
+                language: tree_sitter_javascript::LANGUAGE.into(),
+            }
+        })
     }
 }

@@ -2484,9 +2484,13 @@ mod tests {
         };
 
         // Test JSON serialization
-        let json = serde_json::to_string(&results).expect("Should serialize to JSON");
-        let deserialized: AnalysisResults =
-            serde_json::from_str(&json).expect("Should deserialize from JSON");
+        let json = serde_json::to_string(&results);
+        assert!(json.is_ok(), "Should serialize to JSON");
+        let json = json.unwrap();
+
+        let deserialized: Result<AnalysisResults, _> = serde_json::from_str(&json);
+        assert!(deserialized.is_ok(), "Should deserialize from JSON");
+        let deserialized = deserialized.unwrap();
 
         assert_eq!(deserialized.summary.files_processed, 5);
         assert_eq!(deserialized.summary.entities_analyzed, 25);

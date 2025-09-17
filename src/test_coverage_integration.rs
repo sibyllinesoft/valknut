@@ -24,7 +24,7 @@ mod coverage_fix_tests {
         let coverage_packs = extractor
             .build_coverage_packs(vec![lcov_path])
             .await
-            .unwrap();
+            .expect("Should build coverage packs in test");
 
         println!("Coverage packs found: {}", coverage_packs.len());
 

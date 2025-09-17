@@ -1,3 +1,33 @@
+//! Analysis Pipeline Module
+//!
+//! This module provides the core analysis pipeline for valknut, which orchestrates
+//! the entire code analysis process through multiple stages.
+//!
+//! ## Key Components
+//!
+//! - **AnalysisPipeline**: Main orchestrator that coordinates all analysis stages
+//! - **ExtractorRegistry**: Manages and organizes feature extractors
+//! - **Quality Gates**: Configurable thresholds for CI/CD integration
+//! - **Pipeline Results**: Comprehensive analysis results and metrics
+//!
+//! ## Pipeline Stages
+//!
+//! 1. **File Discovery**: Identify source files to analyze
+//! 2. **Feature Extraction**: Extract features using specialized detectors
+//! 3. **Normalization**: Apply statistical normalization to features
+//! 4. **Scoring**: Calculate health metrics and technical debt scores
+//! 5. **Results Aggregation**: Combine all analysis results
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! use valknut::core::pipeline::AnalysisPipeline;
+//!
+//! let pipeline = AnalysisPipeline::default();
+//! let results = pipeline.analyze_directory("./src").await?;
+//! println!("Health score: {}", results.health_metrics.overall_health_score);
+//! ```
+
 pub use pipeline_config::{
     AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };

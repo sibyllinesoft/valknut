@@ -86,7 +86,7 @@ impl NormalizationStatistics {
 
         // Median Absolute Deviation
         let deviations: Vec<f64> = values.iter().map(|x| (x - median).abs()).collect();
-        let mad = Self::median_of_slice(&deviations);
+        let median_abs_deviation = Self::median_of_slice(&deviations);
 
         Self {
             mean,
@@ -96,7 +96,7 @@ impl NormalizationStatistics {
             max,
             n_samples: n,
             median,
-            mad,
+            mad: median_abs_deviation,
             q1,
             q3,
             iqr,

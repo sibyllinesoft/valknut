@@ -57,8 +57,7 @@ async fn main() -> anyhow::Result<()> {
         }
         // Legacy commands for backward compatibility
         Commands::Structure(args) => {
-            let config = cli::load_configuration(None).await?;
-            cli::analyze_structure_legacy(args, config).await?;
+            cli::analyze_structure_legacy(args).await?;
         }
         Commands::Impact(args) => {
             cli::analyze_impact_legacy(args).await?;
@@ -92,8 +91,8 @@ mod tests {
                 assert_eq!(args.out, PathBuf::from(".valknut"));
                 assert!(matches!(args.format, OutputFormat::Jsonl));
                 assert!(!args.quiet);
-                assert!(!args.quality_gate);
-                assert!(!args.fail_on_issues);
+                assert!(!args.quality_gate.quality_gate);
+                assert!(!args.quality_gate.fail_on_issues);
             }
             _ => panic!("Expected Analyze command"),
         }
@@ -132,8 +131,8 @@ mod tests {
                 assert_eq!(args.out, PathBuf::from("reports"));
                 assert!(matches!(args.format, OutputFormat::Html));
                 assert!(args.quiet);
-                assert!(args.quality_gate);
-                assert_eq!(args.max_complexity, Some(80.0));
+                assert!(args.quality_gate.quality_gate);
+                assert_eq!(args.quality_gate.max_complexity, Some(80.0));
             }
             _ => panic!("Expected Analyze command"),
         }
@@ -354,14 +353,14 @@ mod tests {
 
         match cli.command {
             Commands::Analyze(args) => {
-                assert!(args.fail_on_issues);
-                assert_eq!(args.max_complexity, Some(75.5));
-                assert_eq!(args.min_health, Some(60.0));
-                assert_eq!(args.max_debt, Some(30.0));
-                assert_eq!(args.min_maintainability, Some(20.0));
-                assert_eq!(args.max_issues, Some(50));
-                assert_eq!(args.max_critical, Some(0));
-                assert_eq!(args.max_high_priority, Some(5));
+                assert!(args.quality_gate.fail_on_issues);
+                assert_eq!(args.quality_gate.max_complexity, Some(75.5));
+                assert_eq!(args.quality_gate.min_health, Some(60.0));
+                assert_eq!(args.quality_gate.max_debt, Some(30.0));
+                assert_eq!(args.quality_gate.min_maintainability, Some(20.0));
+                assert_eq!(args.quality_gate.max_issues, Some(50));
+                assert_eq!(args.quality_gate.max_critical, Some(0));
+                assert_eq!(args.quality_gate.max_high_priority, Some(5));
             }
             _ => panic!("Expected Analyze command"),
         }

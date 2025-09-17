@@ -171,7 +171,7 @@ pub struct TypeScriptAdapter {
 impl TypeScriptAdapter {
     /// Create a new TypeScript adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_typescript::language_typescript();
+        let language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
         let mut parser = Parser::new();
         parser.set_language(&language).map_err(|e| {
             ValknutError::parse(
@@ -669,6 +669,15 @@ impl TypeScriptAdapter {
 
 impl Default for TypeScriptAdapter {
     fn default() -> Self {
-        Self::new().expect("Failed to create TypeScript adapter")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to create TypeScript adapter, using minimal fallback: {}",
+                e
+            );
+            TypeScriptAdapter {
+                parser: tree_sitter::Parser::new(),
+                language: tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            }
+        })
     }
 }

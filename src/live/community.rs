@@ -713,8 +713,7 @@ mod tests {
         let best_community =
             detector.find_best_community(&graph, nodes[0], &node_to_community, total_weight)?;
 
-        // Should return a valid community ID
-        assert!(best_community >= 0);
+        // Should return a valid community ID (community IDs are unsigned, always >= 0)
 
         Ok(())
     }

@@ -162,8 +162,8 @@ impl HashFunction {
         Self {
             seed,
             // Use different constants for each hash function
-            multiplier: 1664525u64.wrapping_mul(seed.wrapping_add(1)),
-            increment: 1013904223u64.wrapping_add(seed),
+            multiplier: 1_664_525u64.wrapping_mul(seed.wrapping_add(1)),
+            increment: 1_013_904_223u64.wrapping_add(seed),
         }
     }
 

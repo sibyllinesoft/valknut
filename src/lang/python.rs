@@ -186,7 +186,7 @@ pub struct PythonAdapter {
 impl PythonAdapter {
     /// Create a new Python adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_python::language();
+        let language = tree_sitter_python::LANGUAGE.into();
         let mut parser = Parser::new();
         parser.set_language(&language).map_err(|e| {
             ValknutError::parse("python", format!("Failed to set Python language: {:?}", e))
@@ -745,7 +745,16 @@ impl PythonAdapter {
 
 impl Default for PythonAdapter {
     fn default() -> Self {
-        Self::new().expect("Failed to create Python adapter")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to create Python adapter, using minimal fallback: {}",
+                e
+            );
+            PythonAdapter {
+                parser: tree_sitter::Parser::new(),
+                language: tree_sitter_python::LANGUAGE.into(),
+            }
+        })
     }
 }
 

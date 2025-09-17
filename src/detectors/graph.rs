@@ -81,7 +81,7 @@ impl FeatureExtractor for GraphExtractor {
         context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
         tracing::warn!("Graph analysis features are placeholders in v1.0 - full implementation planned for v1.1");
-        
+
         let mut features = HashMap::new();
 
         // NOTE: These are placeholder implementations for v1.0 compatibility

@@ -170,7 +170,7 @@ impl RustAdapter {
     /// Create a new Rust adapter
     pub fn new() -> Result<Self> {
         // Simple test to verify tree_sitter_rust access
-        let language = match std::panic::catch_unwind(|| tree_sitter_rust::language()) {
+        let language = match std::panic::catch_unwind(|| tree_sitter_rust::LANGUAGE.into()) {
             Ok(lang) => lang,
             Err(_) => {
                 return Err(ValknutError::parse(
@@ -726,7 +726,16 @@ impl RustAdapter {
 
 impl Default for RustAdapter {
     fn default() -> Self {
-        Self::new().expect("Failed to create Rust adapter")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to create Rust adapter, using minimal fallback: {}",
+                e
+            );
+            RustAdapter {
+                parser: tree_sitter::Parser::new(),
+                language: tree_sitter_rust::LANGUAGE.into(),
+            }
+        })
     }
 }
 

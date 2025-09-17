@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::types::{AdaptiveThresholds, CachedCalibration, NoiseMetrics, QualityMetrics};
+use super::types::{AdaptiveThresholds, CachedCalibration, QualityMetrics};
 
 /// Auto-calibration engine for adaptive threshold tuning
 #[derive(Debug)]

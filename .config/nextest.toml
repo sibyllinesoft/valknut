@@ -1,0 +1,28 @@
+# Nextest configuration for enhanced test reporting
+
+[profile.default]
+# Show output for failing tests only
+failure-output = "immediate-final"
+# Don't capture stdout for failing tests
+test-output = "never"
+
+[profile.ci]  
+# CI profile for detailed reporting
+failure-output = "final"
+test-output = "never"
+# Generate JUnit XML report
+junit-output = "target/nextest/ci/junit.xml"
+# Fail fast in CI
+fail-fast = false
+# Show execution time
+show-execution-time = true
+
+[profile.verbose]
+# Verbose profile for debugging
+failure-output = "immediate-final" 
+test-output = "immediate-final"
+show-execution-time = true
+
+[test-groups]
+serial = { max-threads = 1 }
+integration = { max-threads = 4 }

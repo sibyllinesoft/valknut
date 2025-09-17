@@ -11,6 +11,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+/// Safe JSON value creation helper
+fn safe_json_value<T: serde::Serialize>(value: T) -> Value {
+    serde_json::to_value(value).unwrap_or_else(|e| {
+        eprintln!("Warning: Failed to serialize value to JSON: {}", e);
+        Value::Null
+    })
+}
+
 #[derive(Error, Debug)]
 pub enum ReportError {
     #[error("Template error: {0}")]
@@ -798,44 +806,35 @@ impl ReportGenerator {
             "generated_at",
             serde_json::to_value(Utc::now().to_rfc3339()).unwrap(),
         );
-        data.insert("tool_name", serde_json::to_value("Valknut").unwrap());
+        data.insert("tool_name", safe_json_value("Valknut"));
         data.insert(
             "version",
             serde_json::to_value(env!("CARGO_PKG_VERSION")).unwrap(),
         );
 
         // Add theme CSS reference - Sibylline by default
-        data.insert(
-            "theme_css_url",
-            serde_json::to_value("sibylline.css").unwrap(),
-        );
+        data.insert("theme_css_url", safe_json_value("sibylline.css"));
 
         // Add animation config
         let enable_animation = true; // Always enable animation for now
-        data.insert(
-            "enable_animation",
-            serde_json::to_value(enable_animation).unwrap(),
-        );
+        data.insert("enable_animation", safe_json_value(enable_animation));
 
         // Add Oracle refactoring plan at the TOP for user requirement
         if let Some(oracle) = oracle_response {
-            data.insert(
-                "oracle_refactoring_plan",
-                serde_json::to_value(oracle).unwrap(),
-            );
-            data.insert("has_oracle_data", serde_json::to_value(true).unwrap());
+            data.insert("oracle_refactoring_plan", safe_json_value(oracle));
+            data.insert("has_oracle_data", safe_json_value(true));
         } else {
-            data.insert("has_oracle_data", serde_json::to_value(false).unwrap());
+            data.insert("has_oracle_data", safe_json_value(false));
         }
 
         // Add analysis results
-        data.insert("results", serde_json::to_value(results).unwrap());
+        data.insert("results", safe_json_value(results));
 
         // Add refactoring candidates at top level for template access (clean up paths)
         let cleaned_candidates = self.clean_path_prefixes(&results.refactoring_candidates);
         data.insert(
             "refactoring_candidates",
-            serde_json::to_value(&cleaned_candidates).unwrap(),
+            safe_json_value(&cleaned_candidates),
         );
 
         // Add hierarchical refactoring candidates by file (clean paths)
@@ -852,7 +851,7 @@ impl ReportGenerator {
             .collect();
         data.insert(
             "refactoring_candidates_by_file",
-            serde_json::to_value(&cleaned_candidates_by_file).unwrap(),
+            safe_json_value(&cleaned_candidates_by_file),
         );
         data.insert(
             "file_count",
@@ -866,17 +865,14 @@ impl ReportGenerator {
             .map(|tree| self.clean_directory_health_tree_paths(tree));
         data.insert(
             "directory_health_tree",
-            serde_json::to_value(&cleaned_directory_health_tree).unwrap(),
+            safe_json_value(&cleaned_directory_health_tree),
         );
 
         // Add unified hierarchy combining directory health with refactoring candidates
         if let Some(ref cleaned_tree) = cleaned_directory_health_tree {
             let unified_hierarchy =
                 self.build_unified_hierarchy(cleaned_tree, &cleaned_candidates_by_file);
-            data.insert(
-                "unified_hierarchy",
-                serde_json::to_value(&unified_hierarchy).unwrap(),
-            );
+            data.insert("unified_hierarchy", safe_json_value(&unified_hierarchy));
         }
 
         // Add summary statistics
@@ -886,10 +882,7 @@ impl ReportGenerator {
 
         // Add directory health tree data (with cleaned paths)
         if let Some(ref cleaned_tree) = cleaned_directory_health_tree {
-            data.insert(
-                "directory_tree",
-                serde_json::to_value(cleaned_tree).unwrap(),
-            );
+            data.insert("directory_tree", safe_json_value(cleaned_tree));
             data.insert(
                 "tree_visualization",
                 serde_json::to_value(cleaned_tree.to_tree_string()).unwrap(),
@@ -909,7 +902,7 @@ impl ReportGenerator {
         );
         summary.insert(
             "entities_analyzed".to_string(),
-            serde_json::to_value(results.summary.entities_analyzed).unwrap(),
+            safe_json_value(results.summary.entities_analyzed),
         );
         summary.insert(
             "refactoring_needed".to_string(),
@@ -917,7 +910,7 @@ impl ReportGenerator {
         );
         summary.insert(
             "code_health_score".to_string(),
-            serde_json::to_value(results.summary.code_health_score).unwrap(),
+            safe_json_value(results.summary.code_health_score),
         );
 
         // Legacy fields for backwards compatibility
@@ -1224,9 +1217,7 @@ impl ReportGenerator {
         }
 
         // JavaScript files to copy - self-contained debug bundle only
-        let js_files = vec![
-            ("react-tree-bundle.debug.js", "react-tree-bundle.debug.js"),
-        ];
+        let js_files = vec![("react-tree-bundle.debug.js", "react-tree-bundle.debug.js")];
 
         // Try to find JavaScript assets in templates/assets/dist/ directory (built files)
         let possible_base_paths = vec![

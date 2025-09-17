@@ -1,9 +1,11 @@
 //! Command Execution Logic and Analysis Operations
 //!
 //! This module contains the main command execution logic, analysis operations,
-//! configuration management, and progress tracking functionality.
+//! and progress tracking functionality.
 
 use crate::cli::args::*;
+use crate::cli::config_layer::build_layered_valknut_config;
+use crate::cli::legacy_commands;
 use crate::cli::output::*;
 use anyhow;
 use chrono;
@@ -129,7 +131,8 @@ pub async fn analyze_command(
     };
 
     // Handle quality gates
-    let quality_gate_result = if args.quality_gate || args.fail_on_issues {
+    let quality_gate_result = if args.quality_gate.quality_gate || args.quality_gate.fail_on_issues
+    {
         let quality_config = build_quality_gate_config(&args);
         Some(evaluate_quality_gates(
             &analysis_result,
@@ -146,7 +149,7 @@ pub async fn analyze_command(
     }
 
     // Run Oracle analysis if requested
-    let oracle_response = if args.oracle {
+    let oracle_response = if args.ai_features.oracle {
         if !args.quiet {
             println!(
                 "{}",
@@ -185,157 +188,8 @@ pub async fn analyze_command(
 
 /// Build comprehensive ValknutConfig from CLI arguments
 async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
-    // Start with default configuration or load from file
-    let mut config = if let Some(config_path) = &args.config {
-        ValknutConfig::from_yaml_file(config_path).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to load configuration from {}: {}",
-                config_path.display(),
-                e
-            )
-        })?
-    } else {
-        ValknutConfig::default()
-    };
-
-    // Apply CLI overrides to analysis configuration
-    apply_cli_analysis_config(&mut config.analysis, args);
-
-    // Apply CLI overrides to coverage configuration
-    apply_cli_coverage_config(&mut config.coverage, args);
-
-    // Apply CLI overrides to denoising configuration
-    apply_cli_denoise_config(&mut config.denoise, args);
-
-    // Validate final configuration
-    config
-        .validate()
-        .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
-
-    Ok(config)
-}
-
-/// Apply CLI arguments to analysis configuration
-fn apply_cli_analysis_config(analysis_config: &mut AnalysisConfig, args: &AnalyzeArgs) {
-    // Apply enable flags for features that are disabled by default
-    if args.semantic_clones {
-        analysis_config.enable_lsh_analysis = true;
-    }
-
-    // Enable LSH analysis for strict dedupe as well
-    if args.strict_dedupe {
-        analysis_config.enable_lsh_analysis = true;
-    }
-
-    // Apply disable flags (everything else is enabled by default)
-    if args.no_coverage {
-        analysis_config.enable_coverage_analysis = false;
-    }
-    if args.no_structure {
-        analysis_config.enable_structure_analysis = false;
-    }
-    if args.no_refactoring {
-        analysis_config.enable_refactoring_analysis = false;
-    }
-    if args.no_impact {
-        analysis_config.enable_graph_analysis = false;
-    }
-    if args.no_lsh {
-        analysis_config.enable_lsh_analysis = false;
-    }
-    if args.no_complexity {
-        analysis_config.enable_scoring = false;
-    }
-}
-
-/// Apply CLI arguments to coverage configuration
-fn apply_cli_coverage_config(coverage_config: &mut CoverageConfig, args: &AnalyzeArgs) {
-    // Override coverage file if specified
-    if let Some(ref coverage_file) = args.coverage_file {
-        coverage_config.coverage_file = Some(coverage_file.clone());
-        coverage_config.auto_discover = false; // Disable auto-discovery when explicit file is provided
-    }
-
-    // Override auto-discovery setting
-    if args.no_coverage_auto_discover {
-        coverage_config.auto_discover = false;
-    }
-
-    // Override max age if specified
-    if let Some(max_age_days) = args.coverage_max_age_days {
-        coverage_config.max_age_days = max_age_days;
-    }
-}
-
-/// Apply CLI arguments to denoise configuration
-fn apply_cli_denoise_config(denoise_config: &mut DenoiseConfig, args: &AnalyzeArgs) {
-    // Apply denoising disable flag
-    if args.no_denoise {
-        denoise_config.enabled = false;
-    }
-
-    // Apply auto-calibration disable flag
-    if args.no_auto {
-        denoise_config.auto = false;
-    }
-
-    // Apply threshold overrides
-    if let Some(min_function_tokens) = args.min_function_tokens {
-        denoise_config.min_function_tokens = min_function_tokens;
-    }
-
-    if let Some(min_match_tokens) = args.min_match_tokens {
-        denoise_config.min_match_tokens = min_match_tokens;
-    }
-
-    if let Some(require_blocks) = args.require_blocks {
-        denoise_config.require_blocks = require_blocks;
-    }
-
-    if let Some(similarity) = args.similarity {
-        denoise_config.similarity = similarity;
-        denoise_config.threshold_s = similarity; // Keep both in sync
-    }
-
-    // Apply weight overrides
-    if let Some(ast_weight) = args.ast_weight {
-        denoise_config.weights.ast = ast_weight;
-    }
-
-    if let Some(pdg_weight) = args.pdg_weight {
-        denoise_config.weights.pdg = pdg_weight;
-    }
-
-    if let Some(emb_weight) = args.emb_weight {
-        denoise_config.weights.emb = emb_weight;
-    }
-
-    if let Some(io_mismatch_penalty) = args.io_mismatch_penalty {
-        denoise_config.io_mismatch_penalty = io_mismatch_penalty;
-    }
-
-    // Apply auto-calibration overrides
-    if let Some(quality_target) = args.quality_target {
-        denoise_config.auto_calibration.quality_target = quality_target;
-    }
-
-    if let Some(sample_size) = args.sample_size {
-        denoise_config.auto_calibration.sample_size = sample_size;
-    }
-
-    // Apply ranking overrides
-    if let Some(min_saved_tokens) = args.min_saved_tokens {
-        denoise_config.ranking.min_saved_tokens = min_saved_tokens;
-    }
-
-    if let Some(min_rarity_gain) = args.min_rarity_gain {
-        denoise_config.ranking.min_rarity_gain = min_rarity_gain;
-    }
-
-    // Apply dry-run mode
-    if args.denoise_dry_run {
-        denoise_config.dry_run = true;
-    }
+    // Use the new layered configuration approach
+    build_layered_valknut_config(args)
 }
 
 /// Preview coverage file discovery to show what will be analyzed
@@ -1253,8 +1107,8 @@ pub async fn run_analysis_with_progress(
     analysis_config.enable_lsh_analysis = true;
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = !args.no_denoise;
-    let auto_enabled = !args.no_auto;
+    let denoise_enabled = !args.clone_detection.no_denoise;
+    let auto_enabled = !args.advanced_clone.no_auto;
 
     if denoise_enabled {
         info!("Clone denoising enabled (default behavior)");
@@ -1263,41 +1117,41 @@ pub async fn run_analysis_with_progress(
     }
 
     // Configure denoise settings from CLI args with defaults
-    let min_function_tokens = args.min_function_tokens.unwrap_or(40);
-    let min_match_tokens = args.min_match_tokens.unwrap_or(24);
-    let require_blocks = args.require_blocks.unwrap_or(2);
-    let similarity = args.similarity.unwrap_or(0.82);
+    let min_function_tokens = args.clone_detection.min_function_tokens.unwrap_or(40);
+    let min_match_tokens = args.clone_detection.min_match_tokens.unwrap_or(24);
+    let require_blocks = args.clone_detection.require_blocks.unwrap_or(2);
+    let similarity = args.clone_detection.similarity.unwrap_or(0.82);
 
     // Apply advanced configuration if provided
     let mut weights = valknut_rs::core::config::DenoiseWeights::default();
-    if let Some(ast_weight) = args.ast_weight {
+    if let Some(ast_weight) = args.advanced_clone.ast_weight {
         weights.ast = ast_weight;
     }
-    if let Some(pdg_weight) = args.pdg_weight {
+    if let Some(pdg_weight) = args.advanced_clone.pdg_weight {
         weights.pdg = pdg_weight;
     }
-    if let Some(emb_weight) = args.emb_weight {
+    if let Some(emb_weight) = args.advanced_clone.emb_weight {
         weights.emb = emb_weight;
     }
 
-    let io_mismatch_penalty = args.io_mismatch_penalty.unwrap_or(0.25);
+    let io_mismatch_penalty = args.advanced_clone.io_mismatch_penalty.unwrap_or(0.25);
 
     // Configure auto-calibration settings
     let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
     auto_calibration.enabled = auto_enabled;
-    if let Some(quality_target) = args.quality_target {
+    if let Some(quality_target) = args.advanced_clone.quality_target {
         auto_calibration.quality_target = quality_target;
     }
-    if let Some(sample_size) = args.sample_size {
+    if let Some(sample_size) = args.advanced_clone.sample_size {
         auto_calibration.sample_size = sample_size;
     }
 
     // Configure ranking settings
     let mut ranking = valknut_rs::core::config::RankingConfig::default();
-    if let Some(min_saved_tokens) = args.min_saved_tokens {
+    if let Some(min_saved_tokens) = args.advanced_clone.min_saved_tokens {
         ranking.min_saved_tokens = min_saved_tokens;
     }
-    if let Some(min_rarity_gain) = args.min_rarity_gain {
+    if let Some(min_rarity_gain) = args.advanced_clone.min_rarity_gain {
         ranking.min_rarity_gain = min_rarity_gain;
     }
 
@@ -1314,7 +1168,7 @@ pub async fn run_analysis_with_progress(
         stop_motifs: valknut_rs::core::config::StopMotifsConfig::default(),
         auto_calibration,
         ranking,
-        dry_run: args.denoise_dry_run,
+        dry_run: args.clone_detection.denoise_dry_run,
     };
 
     // Enable rarity weighting when denoise is enabled
@@ -1336,42 +1190,42 @@ pub async fn run_analysis_with_progress(
             info!("Auto-calibration disabled via --no-auto flag");
         }
 
-        if args.denoise_dry_run {
+        if args.clone_detection.denoise_dry_run {
             info!("DRY-RUN mode enabled");
             println!("{}", "denoise: DRY-RUN (no changes).".yellow());
         }
     }
 
     // Apply CLI analysis disable/enable flags
-    if args.no_coverage {
+    if args.coverage.no_coverage {
         analysis_config.enable_coverage_analysis = false;
     }
-    if args.no_complexity {
+    if args.analysis_control.no_complexity {
         analysis_config.enable_complexity_analysis = false; // Complexity is part of scoring
     }
-    if args.no_structure {
+    if args.analysis_control.no_structure {
         analysis_config.enable_structure_analysis = false;
     }
-    if args.no_refactoring {
+    if args.analysis_control.no_refactoring {
         analysis_config.enable_refactoring_analysis = false;
     }
-    if args.no_impact {
+    if args.analysis_control.no_impact {
         analysis_config.enable_impact_analysis = false; // Impact analysis uses graph analysis
     }
-    if args.no_lsh {
+    if args.analysis_control.no_lsh {
         analysis_config.enable_lsh_analysis = false;
     }
 
     // Configure coverage analysis from CLI args
     let mut coverage_config = valknut_rs::core::config::CoverageConfig::default();
-    if let Some(coverage_file) = &args.coverage_file {
+    if let Some(coverage_file) = &args.coverage.coverage_file {
         coverage_config.coverage_file = Some(coverage_file.clone());
         coverage_config.auto_discover = false; // Explicit file overrides discovery
     }
-    if args.no_coverage_auto_discover {
+    if args.coverage.no_coverage_auto_discover {
         coverage_config.auto_discover = false;
     }
-    if let Some(max_age_days) = args.coverage_max_age_days {
+    if let Some(max_age_days) = args.coverage.coverage_max_age_days {
         coverage_config.max_age_days = max_age_days;
     }
 
@@ -1452,8 +1306,8 @@ pub async fn run_analysis_without_progress(
     analysis_config.enable_lsh_analysis = true;
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = !args.no_denoise;
-    let auto_enabled = !args.no_auto;
+    let denoise_enabled = !args.clone_detection.no_denoise;
+    let auto_enabled = !args.advanced_clone.no_auto;
 
     if denoise_enabled {
         info!("Clone denoising enabled (default behavior)");
@@ -1462,41 +1316,41 @@ pub async fn run_analysis_without_progress(
     }
 
     // Configure denoise settings from CLI args with defaults
-    let min_function_tokens = args.min_function_tokens.unwrap_or(40);
-    let min_match_tokens = args.min_match_tokens.unwrap_or(24);
-    let require_blocks = args.require_blocks.unwrap_or(2);
-    let similarity = args.similarity.unwrap_or(0.82);
+    let min_function_tokens = args.clone_detection.min_function_tokens.unwrap_or(40);
+    let min_match_tokens = args.clone_detection.min_match_tokens.unwrap_or(24);
+    let require_blocks = args.clone_detection.require_blocks.unwrap_or(2);
+    let similarity = args.clone_detection.similarity.unwrap_or(0.82);
 
     // Apply advanced configuration if provided
     let mut weights = valknut_rs::core::config::DenoiseWeights::default();
-    if let Some(ast_weight) = args.ast_weight {
+    if let Some(ast_weight) = args.advanced_clone.ast_weight {
         weights.ast = ast_weight;
     }
-    if let Some(pdg_weight) = args.pdg_weight {
+    if let Some(pdg_weight) = args.advanced_clone.pdg_weight {
         weights.pdg = pdg_weight;
     }
-    if let Some(emb_weight) = args.emb_weight {
+    if let Some(emb_weight) = args.advanced_clone.emb_weight {
         weights.emb = emb_weight;
     }
 
-    let io_mismatch_penalty = args.io_mismatch_penalty.unwrap_or(0.25);
+    let io_mismatch_penalty = args.advanced_clone.io_mismatch_penalty.unwrap_or(0.25);
 
     // Configure auto-calibration settings
     let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
     auto_calibration.enabled = auto_enabled;
-    if let Some(quality_target) = args.quality_target {
+    if let Some(quality_target) = args.advanced_clone.quality_target {
         auto_calibration.quality_target = quality_target;
     }
-    if let Some(sample_size) = args.sample_size {
+    if let Some(sample_size) = args.advanced_clone.sample_size {
         auto_calibration.sample_size = sample_size;
     }
 
     // Configure ranking settings
     let mut ranking = valknut_rs::core::config::RankingConfig::default();
-    if let Some(min_saved_tokens) = args.min_saved_tokens {
+    if let Some(min_saved_tokens) = args.advanced_clone.min_saved_tokens {
         ranking.min_saved_tokens = min_saved_tokens;
     }
-    if let Some(min_rarity_gain) = args.min_rarity_gain {
+    if let Some(min_rarity_gain) = args.advanced_clone.min_rarity_gain {
         ranking.min_rarity_gain = min_rarity_gain;
     }
 
@@ -1513,7 +1367,7 @@ pub async fn run_analysis_without_progress(
         stop_motifs: valknut_rs::core::config::StopMotifsConfig::default(),
         auto_calibration,
         ranking,
-        dry_run: args.denoise_dry_run,
+        dry_run: args.clone_detection.denoise_dry_run,
     };
 
     // Enable rarity weighting when denoise is enabled
@@ -1535,42 +1389,42 @@ pub async fn run_analysis_without_progress(
             info!("Auto-calibration disabled via --no-auto flag");
         }
 
-        if args.denoise_dry_run {
+        if args.clone_detection.denoise_dry_run {
             info!("DRY-RUN mode enabled");
             println!("{}", "denoise: DRY-RUN (no changes).".yellow());
         }
     }
 
     // Apply CLI analysis disable/enable flags
-    if args.no_coverage {
+    if args.coverage.no_coverage {
         analysis_config.enable_coverage_analysis = false;
     }
-    if args.no_complexity {
+    if args.analysis_control.no_complexity {
         analysis_config.enable_complexity_analysis = false; // Complexity is part of scoring
     }
-    if args.no_structure {
+    if args.analysis_control.no_structure {
         analysis_config.enable_structure_analysis = false;
     }
-    if args.no_refactoring {
+    if args.analysis_control.no_refactoring {
         analysis_config.enable_refactoring_analysis = false;
     }
-    if args.no_impact {
+    if args.analysis_control.no_impact {
         analysis_config.enable_impact_analysis = false; // Impact analysis uses graph analysis
     }
-    if args.no_lsh {
+    if args.analysis_control.no_lsh {
         analysis_config.enable_lsh_analysis = false;
     }
 
     // Configure coverage analysis from CLI args
     let mut coverage_config = valknut_rs::core::config::CoverageConfig::default();
-    if let Some(coverage_file) = &args.coverage_file {
+    if let Some(coverage_file) = &args.coverage.coverage_file {
         coverage_config.coverage_file = Some(coverage_file.clone());
         coverage_config.auto_discover = false; // Explicit file overrides discovery
     }
-    if args.no_coverage_auto_discover {
+    if args.coverage.no_coverage_auto_discover {
         coverage_config.auto_discover = false;
     }
-    if let Some(max_age_days) = args.coverage_max_age_days {
+    if let Some(max_age_days) = args.coverage.coverage_max_age_days {
         coverage_config.max_age_days = max_age_days;
     }
 
@@ -1661,58 +1515,14 @@ pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<St
     Ok(config)
 }
 
-// Legacy analyzer implementations for backward compatibility
-pub async fn analyze_structure_legacy(
-    args: StructureArgs,
-    mut config: StructureConfig,
-) -> anyhow::Result<()> {
-    // Apply CLI overrides
-    if args.branch_only {
-        config.enable_branch_packs = true;
-        config.enable_file_split_packs = false;
-    }
-
-    if args.file_split_only {
-        config.enable_branch_packs = false;
-        config.enable_file_split_packs = true;
-    }
-
-    if let Some(top) = args.top {
-        config.top_packs = top;
-    }
-
-    let analyzer = StructureExtractor::with_config(config);
-    let recommendations = analyzer.generate_recommendations(&args.path).await?;
-
-    let analysis_result = serde_json::json!({
-        "packs": recommendations,
-        "summary": {
-            "structural_issues_found": recommendations.len(),
-            "analysis_timestamp": chrono::Utc::now().to_rfc3339()
-        }
-    });
-
-    match args.format {
-        OutputFormat::Json => {
-            let json = serde_json::to_string_pretty(&analysis_result)?;
-            println!("{}", json);
-        }
-        OutputFormat::Yaml => {
-            let yaml = serde_yaml::to_string(&analysis_result)?;
-            println!("{}", yaml);
-        }
-        _ => {
-            print_human_readable_results(&analysis_result);
-        }
-    }
-
-    Ok(())
+/// Legacy structure analysis command (delegates to legacy module)
+pub async fn analyze_structure_legacy(args: StructureArgs) -> anyhow::Result<()> {
+    legacy_commands::analyze_structure_legacy(args).await
 }
 
+/// Legacy impact analysis command (delegates to legacy module)  
 pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
-    // TODO: Implement impact analysis
-    println!("⚠️  Impact analysis implementation in progress");
-    Ok(())
+    legacy_commands::analyze_impact_legacy(args).await
 }
 
 // Helper functions
@@ -1875,33 +1685,33 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     let mut config = QualityGateConfig::default();
 
     // Enable if quality_gate flag is set or if fail_on_issues is set
-    config.enabled = args.quality_gate || args.fail_on_issues;
+    config.enabled = args.quality_gate.quality_gate || args.quality_gate.fail_on_issues;
 
     // Override defaults with CLI values if provided
-    if let Some(max_complexity) = args.max_complexity {
+    if let Some(max_complexity) = args.quality_gate.max_complexity {
         config.max_complexity_score = max_complexity;
     }
-    if let Some(min_health) = args.min_health {
+    if let Some(min_health) = args.quality_gate.min_health {
         config.min_maintainability_score = min_health;
     }
-    if let Some(max_debt) = args.max_debt {
+    if let Some(max_debt) = args.quality_gate.max_debt {
         config.max_technical_debt_ratio = max_debt;
     }
-    if let Some(min_maintainability) = args.min_maintainability {
+    if let Some(min_maintainability) = args.quality_gate.min_maintainability {
         config.min_maintainability_score = min_maintainability;
     }
-    if let Some(max_issues) = args.max_issues {
+    if let Some(max_issues) = args.quality_gate.max_issues {
         config.max_critical_issues = max_issues;
     }
-    if let Some(max_critical) = args.max_critical {
+    if let Some(max_critical) = args.quality_gate.max_critical {
         config.max_critical_issues = max_critical;
     }
-    if let Some(max_high_priority) = args.max_high_priority {
+    if let Some(max_high_priority) = args.quality_gate.max_high_priority {
         config.max_high_priority_issues = max_high_priority;
     }
 
     // Handle fail_on_issues flag (sets max_issues to 0)
-    if args.fail_on_issues {
+    if args.quality_gate.fail_on_issues {
         config.max_critical_issues = 0;
         config.max_high_priority_issues = 0;
     }
@@ -2002,47 +1812,59 @@ mod tests {
             format: OutputFormat::Json,
             config: None,
             quiet: false,
-            quality_gate: false,
-            fail_on_issues: false,
-            max_complexity: None,
-            min_health: None,
-            max_debt: None,
-            min_maintainability: None,
-            max_issues: None,
-            max_critical: None,
-            max_high_priority: None,
-            semantic_clones: false,
-            strict_dedupe: false,
-            no_auto: false,
-            loose_sweep: false,
-            rarity_weighting: false,
-            structural_validation: false,
-            live_reach_boost: false,
-            no_denoise: false,
-            min_function_tokens: None,
-            min_match_tokens: None,
-            require_blocks: None,
-            similarity: None,
-            denoise_dry_run: false,
-            ast_weight: None,
-            pdg_weight: None,
-            emb_weight: None,
-            io_mismatch_penalty: None,
-            quality_target: None,
-            sample_size: None,
-            min_saved_tokens: None,
-            min_rarity_gain: None,
-            no_coverage: false,
-            coverage_file: None,
-            no_coverage_auto_discover: false,
-            coverage_max_age_days: None,
-            no_complexity: false,
-            no_structure: false,
-            no_refactoring: false,
-            no_impact: false,
-            no_lsh: false,
-            oracle: false,
-            oracle_max_tokens: None,
+            quality_gate: QualityGateArgs {
+                quality_gate: false,
+                fail_on_issues: false,
+                max_complexity: None,
+                min_health: None,
+                max_debt: None,
+                min_maintainability: None,
+                max_issues: None,
+                max_critical: None,
+                max_high_priority: None,
+            },
+            clone_detection: CloneDetectionArgs {
+                semantic_clones: false,
+                strict_dedupe: false,
+                no_denoise: false,
+                min_function_tokens: None,
+                min_match_tokens: None,
+                require_blocks: None,
+                similarity: None,
+                denoise_dry_run: false,
+            },
+            advanced_clone: AdvancedCloneArgs {
+                no_auto: false,
+                loose_sweep: false,
+                rarity_weighting: false,
+                structural_validation: false,
+                live_reach_boost: false,
+                ast_weight: None,
+                pdg_weight: None,
+                emb_weight: None,
+                io_mismatch_penalty: None,
+                quality_target: None,
+                sample_size: None,
+                min_saved_tokens: None,
+                min_rarity_gain: None,
+            },
+            coverage: CoverageArgs {
+                no_coverage: false,
+                coverage_file: None,
+                no_coverage_auto_discover: false,
+                coverage_max_age_days: None,
+            },
+            analysis_control: AnalysisControlArgs {
+                no_complexity: false,
+                no_structure: false,
+                no_refactoring: false,
+                no_impact: false,
+                no_lsh: false,
+            },
+            ai_features: AIFeaturesArgs {
+                oracle: false,
+                oracle_max_tokens: None,
+            },
         }
     }
 
@@ -2266,7 +2088,7 @@ mod tests {
 
         let config = StructureConfig::default();
 
-        let result = analyze_structure_legacy(args, config).await;
+        let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());
     }
 
@@ -2285,7 +2107,7 @@ mod tests {
 
         let config = StructureConfig::default();
 
-        let result = analyze_structure_legacy(args, config).await;
+        let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());
     }
 
@@ -2304,7 +2126,7 @@ mod tests {
 
         let config = StructureConfig::default();
 
-        let result = analyze_structure_legacy(args, config).await;
+        let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());
     }
 
@@ -2339,14 +2161,14 @@ mod tests {
     #[test]
     fn test_build_quality_gate_config_quality_gate_enabled() {
         let mut args = create_default_analyze_args();
-        args.quality_gate = true;
-        args.max_complexity = Some(75.0);
-        args.min_health = Some(60.0);
-        args.max_debt = Some(30.0);
-        args.min_maintainability = Some(65.0);
-        args.max_issues = Some(10);
-        args.max_critical = Some(5);
-        args.max_high_priority = Some(15);
+        args.quality_gate.quality_gate = true;
+        args.quality_gate.max_complexity = Some(75.0);
+        args.quality_gate.min_health = Some(60.0);
+        args.quality_gate.max_debt = Some(30.0);
+        args.quality_gate.min_maintainability = Some(65.0);
+        args.quality_gate.max_issues = Some(10);
+        args.quality_gate.max_critical = Some(5);
+        args.quality_gate.max_high_priority = Some(15);
 
         let config = build_quality_gate_config(&args);
         assert!(config.enabled);
@@ -2360,7 +2182,7 @@ mod tests {
     #[test]
     fn test_build_quality_gate_config_fail_on_issues() {
         let mut args = create_default_analyze_args();
-        args.fail_on_issues = true;
+        args.quality_gate.fail_on_issues = true;
 
         let config = build_quality_gate_config(&args);
         assert!(config.enabled);
@@ -2439,7 +2261,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_quality_gates_basic() {
         let mut args = create_default_analyze_args();
-        args.quality_gate = true;
+        args.quality_gate.quality_gate = true;
 
         // Create a minimal analysis result
         let analysis_result = serde_json::json!({
@@ -2464,10 +2286,10 @@ mod tests {
     #[tokio::test]
     async fn test_handle_quality_gates_violations() {
         let mut args = create_default_analyze_args();
-        args.quality_gate = true;
-        args.max_complexity = Some(50.0); // Set low threshold to trigger violation
-        args.min_health = Some(80.0); // Set high threshold to trigger violation
-        args.max_issues = Some(3); // Set low threshold to trigger violation
+        args.quality_gate.quality_gate = true;
+        args.quality_gate.max_complexity = Some(50.0); // Set low threshold to trigger violation
+        args.quality_gate.min_health = Some(80.0); // Set high threshold to trigger violation
+        args.quality_gate.max_issues = Some(3); // Set low threshold to trigger violation
 
         // Create analysis result that will violate quality gates
         let analysis_result = serde_json::json!({
@@ -2493,7 +2315,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_quality_gates_missing_summary() {
         let mut args = create_default_analyze_args();
-        args.quality_gate = true;
+        args.quality_gate.quality_gate = true;
 
         // Create analysis result without summary
         let analysis_result = serde_json::json!({
@@ -2518,7 +2340,7 @@ async fn run_oracle_analysis(
     // Check if GEMINI_API_KEY is available
     let oracle_config = match OracleConfig::from_env() {
         Ok(mut config) => {
-            if let Some(max_tokens) = args.oracle_max_tokens {
+            if let Some(max_tokens) = args.ai_features.oracle_max_tokens {
                 config = config.with_max_tokens(max_tokens);
             }
             config

@@ -1,0 +1,88 @@
+# Docker Compose configuration for Valknut development and production
+version: '3.8'
+
+services:
+  # Development service with full toolchain
+  valknut-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: valknut-dev
+    volumes:
+      - .:/workspace:ro
+      - valknut-cache:/app/cache
+      - ./reports:/app/reports
+      - ./config:/app/config
+    environment:
+      - RUST_LOG=valknut=debug
+      - VALKNUT_LOG_LEVEL=debug
+    working_dir: /workspace
+    command: ["analyze", ".", "--format", "html", "--out", "/app/reports/analysis.html"]
+    
+  # Production service - optimized runtime
+  valknut:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: valknut-prod
+    volumes:
+      - ${WORKSPACE_PATH:-./}:/workspace:ro
+      - valknut-cache:/app/cache
+      - ${REPORTS_PATH:-./reports}:/app/reports
+      - ${CONFIG_PATH:-./config}:/app/config:ro
+    environment:
+      - RUST_LOG=valknut=info
+      - VALKNUT_LOG_LEVEL=info
+      - VALKNUT_CACHE_DIR=/app/cache
+      - VALKNUT_CONFIG_PATH=/app/config/valknut.toml
+    command: ["analyze", "/workspace", "--format", "html", "--out", "/app/reports/analysis.html"]
+    
+  # CI/CD service for quality gates
+  valknut-ci:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: valknut-ci
+    volumes:
+      - ${WORKSPACE_PATH:-./}:/workspace:ro
+      - ./reports:/app/reports
+    environment:
+      - RUST_LOG=valknut=warn
+      - VALKNUT_LOG_LEVEL=warn
+    command: [
+      "analyze", "/workspace",
+      "--quality-gate",
+      "--max-complexity", "75",
+      "--min-health", "60", 
+      "--fail-on-issues",
+      "--format", "json",
+      "--out", "/app/reports/quality-gate.json"
+    ]
+    
+  # Benchmark service for performance testing
+  valknut-benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: valknut-benchmark
+    volumes:
+      - ${WORKSPACE_PATH:-./}:/workspace:ro
+      - ./benchmarks:/app/benchmarks
+    environment:
+      - RUST_LOG=valknut=info
+    command: [
+      "analyze", "/workspace",
+      "--all-features",
+      "--benchmark",
+      "--format", "json",
+      "--out", "/app/benchmarks/perf-$(date +%Y%m%d-%H%M%S).json"
+    ]
+
+volumes:
+  valknut-cache:
+    driver: local
+    
+networks:
+  default:
+    name: valknut-network

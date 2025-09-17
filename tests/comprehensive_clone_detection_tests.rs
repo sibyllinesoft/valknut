@@ -205,10 +205,13 @@ async fn test_comprehensive_clone_detector() {
 
     // Note: ComprehensiveCloneDetector currently returns empty features
     // This is a placeholder implementation, so we test basic functionality
-    
+
     // Test that extraction doesn't crash and returns a valid map
-    assert!(features.is_empty() || !features.is_empty(), "Should return valid feature map");
-    
+    assert!(
+        features.is_empty() || !features.is_empty(),
+        "Should return valid feature map"
+    );
+
     // If features are present, they should have valid values
     for (feature_name, feature_value) in &features {
         assert!(
@@ -348,13 +351,19 @@ async fn test_adaptive_ranking_system() {
 
     // Note: ComprehensiveCloneDetector currently returns empty features
     // Test that both extractions work without crashing
-    assert!(high_features.is_empty() || !high_features.is_empty(), "High-value extraction should work");
-    assert!(low_features.is_empty() || !low_features.is_empty(), "Low-value extraction should work");
+    assert!(
+        high_features.is_empty() || !high_features.is_empty(),
+        "High-value extraction should work"
+    );
+    assert!(
+        low_features.is_empty() || !low_features.is_empty(),
+        "Low-value extraction should work"
+    );
 
     // Test that entity complexity difference is detectable (basic check)
     let high_complexity = high_value_entity.source_code.len();
     let low_complexity = low_value_entity.source_code.len();
-    
+
     assert!(
         high_complexity > low_complexity,
         "Complex code should have more source lines: {} vs {}",
@@ -362,8 +371,11 @@ async fn test_adaptive_ranking_system() {
         low_complexity
     );
 
-    println!("High-value entity has {} features, low-value has {}", 
-             high_features.len(), low_features.len());
+    println!(
+        "High-value entity has {} features, low-value has {}",
+        high_features.len(),
+        low_features.len()
+    );
 }
 
 /// Test structural evidence validation requirements
@@ -411,9 +423,17 @@ async fn test_structural_evidence_requirements() {
 
     // Note: ComprehensiveCloneDetector currently returns empty features
     // Test basic structural complexity via source code analysis instead
-    
-    let simple_complexity = simple_entity.source_code.chars().filter(|&c| c == '{' || c == '}' || c == '(' || c == ')').count();
-    let complex_complexity = complex_entity.source_code.chars().filter(|&c| c == '{' || c == '}' || c == '(' || c == ')').count();
+
+    let simple_complexity = simple_entity
+        .source_code
+        .chars()
+        .filter(|&c| c == '{' || c == '}' || c == '(' || c == ')')
+        .count();
+    let complex_complexity = complex_entity
+        .source_code
+        .chars()
+        .filter(|&c| c == '{' || c == '}' || c == '(' || c == ')')
+        .count();
 
     // Complex entity should have more structural elements
     assert!(
@@ -423,8 +443,11 @@ async fn test_structural_evidence_requirements() {
         simple_complexity
     );
 
-    println!("Simple entity: {} features, Complex entity: {} features", 
-             simple_features.len(), complex_features.len());
+    println!(
+        "Simple entity: {} features, Complex entity: {} features",
+        simple_features.len(),
+        complex_features.len()
+    );
 }
 
 // Integration test for end-to-end adaptive clone detection

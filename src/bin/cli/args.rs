@@ -102,29 +102,9 @@ pub enum Commands {
     Impact(ImpactArgs),
 }
 
+/// Quality gate configuration for CI/CD integration
 #[derive(Args)]
-pub struct AnalyzeArgs {
-    /// One or more directories or files to analyze (defaults to current directory)
-    #[arg(default_value = ".")]
-    pub paths: Vec<PathBuf>,
-
-    /// Configuration file path
-    #[arg(short, long)]
-    pub config: Option<PathBuf>,
-
-    /// Output directory for reports and analysis results
-    #[arg(short, long, default_value = ".valknut")]
-    pub out: PathBuf,
-
-    /// Output format: jsonl (line-delimited JSON), json (single file), markdown (team report), html (interactive report), sonar (SonarQube integration), csv (spreadsheet data)
-    #[arg(short, long, value_enum, default_value = "jsonl")]
-    pub format: OutputFormat,
-
-    /// Suppress non-essential output
-    #[arg(short, long)]
-    pub quiet: bool,
-
-    // === Quality Gate Options ===
+pub struct QualityGateArgs {
     /// Enable quality gate mode - fail with exit code 1 if thresholds are exceeded
     #[arg(long)]
     pub quality_gate: bool,
@@ -160,8 +140,11 @@ pub struct AnalyzeArgs {
     /// Maximum allowed high-priority issues count [default: 5]
     #[arg(long)]
     pub max_high_priority: Option<usize>,
+}
 
-    // === Clone Detection Options ===
+/// Clone detection and denoising configuration
+#[derive(Args)]
+pub struct CloneDetectionArgs {
     /// Enable semantic clone detection with LSH analysis
     #[arg(long)]
     pub semantic_clones: bool,
@@ -170,27 +153,6 @@ pub struct AnalyzeArgs {
     #[arg(long)]
     pub strict_dedupe: bool,
 
-    /// Disable automatic threshold calibration (denoising is enabled by default)
-    #[arg(long)]
-    pub no_auto: bool,
-
-    /// Perform loose sweep analysis on top N candidates for threshold tuning
-    #[arg(long)]
-    pub loose_sweep: bool,
-
-    /// Enable TF-IDF rarity weighting for structural analysis
-    #[arg(long)]
-    pub rarity_weighting: bool,
-
-    /// Enable structural validation with PDG motifs and basic blocks
-    #[arg(long)]
-    pub structural_validation: bool,
-
-    /// Enable live reachability boost for clone prioritization
-    #[arg(long)]
-    pub live_reach_boost: bool,
-
-    // === Clone Denoising Options ===
     /// Disable clone denoising system (enabled by default for intelligent clone detection)
     #[arg(long)]
     pub no_denoise: bool,
@@ -214,8 +176,31 @@ pub struct AnalyzeArgs {
     /// Dry-run mode - analyze but don't change behavior (for testing)
     #[arg(long)]
     pub denoise_dry_run: bool,
+}
 
-    // === Advanced Denoising Configuration ===
+/// Advanced clone detection tuning (rarely needed - use config file instead)
+#[derive(Args)]
+pub struct AdvancedCloneArgs {
+    /// Disable automatic threshold calibration (denoising is enabled by default)
+    #[arg(long)]
+    pub no_auto: bool,
+
+    /// Perform loose sweep analysis on top N candidates for threshold tuning
+    #[arg(long)]
+    pub loose_sweep: bool,
+
+    /// Enable TF-IDF rarity weighting for structural analysis
+    #[arg(long)]
+    pub rarity_weighting: bool,
+
+    /// Enable structural validation with PDG motifs and basic blocks
+    #[arg(long)]
+    pub structural_validation: bool,
+
+    /// Enable live reachability boost for clone prioritization
+    #[arg(long)]
+    pub live_reach_boost: bool,
+
     /// AST similarity weight (0.0-1.0, default: 0.35)
     #[arg(long)]
     pub ast_weight: Option<f64>,
@@ -247,8 +232,11 @@ pub struct AnalyzeArgs {
     /// Minimum rarity gain threshold (default: 1.2)
     #[arg(long)]
     pub min_rarity_gain: Option<f64>,
+}
 
-    // === Coverage Analysis Options ===
+/// Coverage analysis configuration
+#[derive(Args)]
+pub struct CoverageArgs {
     /// Disable coverage analysis (enabled by default for comprehensive analysis)
     #[arg(long)]
     pub no_coverage: bool,
@@ -264,8 +252,11 @@ pub struct AnalyzeArgs {
     /// Maximum age of coverage files in days (default: 7, 0 = no limit)
     #[arg(long)]
     pub coverage_max_age_days: Option<u32>,
+}
 
-    // === Analysis Disable Options ===
+/// Analysis module enable/disable flags
+#[derive(Args)]
+pub struct AnalysisControlArgs {
     /// Disable complexity analysis
     #[arg(long)]
     pub no_complexity: bool,
@@ -285,7 +276,11 @@ pub struct AnalyzeArgs {
     /// Disable LSH clone detection analysis
     #[arg(long)]
     pub no_lsh: bool,
+}
 
+/// AI-powered analysis features
+#[derive(Args)]
+pub struct AIFeaturesArgs {
     /// Enable AI refactoring oracle using Gemini 2.5 Pro (requires GEMINI_API_KEY env var)
     #[arg(long)]
     pub oracle: bool,
@@ -293,6 +288,47 @@ pub struct AnalyzeArgs {
     /// Maximum tokens to send to refactoring oracle (default: 500000)
     #[arg(long)]
     pub oracle_max_tokens: Option<usize>,
+}
+
+#[derive(Args)]
+pub struct AnalyzeArgs {
+    /// One or more directories or files to analyze (defaults to current directory)
+    #[arg(default_value = ".")]
+    pub paths: Vec<PathBuf>,
+
+    /// Configuration file path
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Output directory for reports and analysis results
+    #[arg(short, long, default_value = ".valknut")]
+    pub out: PathBuf,
+
+    /// Output format: jsonl (line-delimited JSON), json (single file), markdown (team report), html (interactive report), sonar (SonarQube integration), csv (spreadsheet data)
+    #[arg(short, long, value_enum, default_value = "jsonl")]
+    pub format: OutputFormat,
+
+    /// Suppress non-essential output
+    #[arg(short, long)]
+    pub quiet: bool,
+
+    #[command(flatten)]
+    pub quality_gate: QualityGateArgs,
+
+    #[command(flatten)]
+    pub clone_detection: CloneDetectionArgs,
+
+    #[command(flatten)]
+    pub advanced_clone: AdvancedCloneArgs,
+
+    #[command(flatten)]
+    pub coverage: CoverageArgs,
+
+    #[command(flatten)]
+    pub analysis_control: AnalysisControlArgs,
+
+    #[command(flatten)]
+    pub ai_features: AIFeaturesArgs,
 }
 
 #[derive(Args)]

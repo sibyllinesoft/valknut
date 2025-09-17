@@ -16,7 +16,9 @@ use valknut_rs::api::engine::ValknutEngine;
 use valknut_rs::core::config::{DedupeConfig, ValknutConfig};
 use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 use valknut_rs::detectors::clone_detection::{
-    AutoCalibrationEngine, CloneCandidate, ComprehensiveCloneDetector, PayoffRankingSystem,
+    AutoCalibrationEngine, ComprehensiveCloneDetector, PayoffRankingSystem,
+    CloneCandidate, // from types.rs - main CloneCandidate
+    RankingCloneCandidate, // from ranking_system.rs - for payoff calculations
 };
 use valknut_rs::io::cache::{CacheRefreshPolicy, StopMotifCacheManager};
 
@@ -65,10 +67,11 @@ mod end_to_end_pipeline_tests {
 
         // Phase 3: Stop-Motifs Cache Integration
         let refresh_policy = CacheRefreshPolicy {
-            auto_refresh_enabled: true,
-            max_age_hours: 24,
-            min_codebase_change_threshold: 0.1,
-            force_refresh_on_new_languages: true,
+            max_age_days: 1, // Changed from max_age_hours: 24
+            change_threshold_percent: 10.0, // Changed from min_codebase_change_threshold: 0.1 to percentage
+            stop_motif_percentile: 95.0, // New field - top 5% motifs
+            weight_multiplier: 1.0, // New field - default weight
+            k_gram_size: 3, // New field - k-gram size for analysis
         };
 
         let cache_manager = StopMotifCacheManager::new(cache_dir, refresh_policy);
@@ -277,10 +280,11 @@ def debug_log(message, level):
 
         // Create cache refresh policy
         let refresh_policy = CacheRefreshPolicy {
-            auto_refresh_enabled: true,
-            max_age_hours: 24,
-            min_codebase_change_threshold: 0.1,
-            force_refresh_on_new_languages: true,
+            max_age_days: 1, // Changed from max_age_hours: 24
+            change_threshold_percent: 10.0, // Changed from min_codebase_change_threshold: 0.1 to percentage
+            stop_motif_percentile: 95.0, // New field - top 5% motifs
+            weight_multiplier: 1.0, // New field - default weight
+            k_gram_size: 3, // New field - k-gram size for analysis
         };
 
         let cache_manager = StopMotifCacheManager::new(cache_dir.clone(), refresh_policy);

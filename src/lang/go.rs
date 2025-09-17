@@ -19,7 +19,7 @@ pub struct GoAdapter {
 impl GoAdapter {
     /// Create a new Go adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_go::language();
+        let language = tree_sitter_go::LANGUAGE.into();
         let mut parser = Parser::new();
         parser.set_language(&language).map_err(|e| {
             ValknutError::parse("go", format!("Failed to set Go language: {:?}", e))
@@ -186,15 +186,16 @@ impl GoAdapter {
         let mut identifiers = Vec::new();
         let mut cursor = node.walk();
 
-        let spec_kind = match node.kind() {
-            "const_declaration" => "const_spec",
-            "var_declaration" => "var_spec",
+        let (spec_kind, spec_list_kind) = match node.kind() {
+            "const_declaration" => ("const_spec", "const_spec_list"),
+            "var_declaration" => ("var_spec", "var_spec_list"),
             _ => return Ok(identifiers),
         };
 
-        // Look for all const_spec/var_spec nodes
+        // Look for all const_spec/var_spec nodes or spec_list nodes
         for child in node.children(&mut cursor) {
             if child.kind() == spec_kind {
+                // Single spec (e.g., const Pi = 3.14)
                 let mut spec_cursor = child.walk();
                 for spec_child in child.children(&mut spec_cursor) {
                     if spec_child.kind() == "identifier" {
@@ -202,9 +203,22 @@ impl GoAdapter {
                         identifiers.push(identifier.to_string());
                     }
                 }
+            } else if child.kind() == spec_list_kind {
+                // Grouped specs (e.g., var ( Name string; Version string = "1.0" ))
+                let mut list_cursor = child.walk();
+                for list_child in child.children(&mut list_cursor) {
+                    if list_child.kind() == spec_kind {
+                        let mut spec_cursor = list_child.walk();
+                        for spec_child in list_child.children(&mut spec_cursor) {
+                            if spec_child.kind() == "identifier" {
+                                let identifier = spec_child.utf8_text(source_code.as_bytes())?;
+                                identifiers.push(identifier.to_string());
+                            }
+                        }
+                    }
+                }
             }
         }
-
         Ok(identifiers)
     }
 
@@ -541,13 +555,29 @@ impl GoAdapter {
                     if spec_child.kind() == "interface_type" {
                         let mut interface_cursor = spec_child.walk();
                         for interface_child in spec_child.children(&mut interface_cursor) {
-                            if interface_child.kind() == "constraint_elem" {
-                                // This is an embedded interface
+                            if interface_child.kind() == "type_elem" {
+                                // This is an embedded interface (type embedding in interface)
+                                let embedded_interface =
+                                    interface_child.utf8_text(source_code.as_bytes())?;
+                                embedded_interfaces.push(embedded_interface.to_string());
+                            } else if interface_child.kind() == "method_elem" {
+                                // This is a method specification
+                                let method_text =
+                                    interface_child.utf8_text(source_code.as_bytes())?;
+                                // Extract method name (everything before the first '(')
+                                if let Some(method_name) = method_text.split('(').next() {
+                                    let method_name = method_name.trim();
+                                    if !method_name.is_empty() {
+                                        methods.push(method_name.to_string());
+                                    }
+                                }
+                            } else if interface_child.kind() == "constraint_elem" {
+                                // Alternative for embedded interfaces (generics context)
                                 let embedded_interface =
                                     interface_child.utf8_text(source_code.as_bytes())?;
                                 embedded_interfaces.push(embedded_interface.to_string());
                             } else if interface_child.kind() == "method_spec" {
-                                // This is a method specification
+                                // Alternative method specification format
                                 let mut inner_cursor = interface_child.walk();
                                 for inner_child in interface_child.children(&mut inner_cursor) {
                                     if inner_child.kind() == "field_identifier" {
@@ -609,7 +639,16 @@ impl GoAdapter {
 
 impl Default for GoAdapter {
     fn default() -> Self {
-        Self::new().expect("Failed to create Go adapter")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to create Go adapter, using minimal fallback: {}",
+                e
+            );
+            GoAdapter {
+                parser: tree_sitter::Parser::new(),
+                language: tree_sitter_go::LANGUAGE.into(),
+            }
+        })
     }
 }
 
@@ -721,6 +760,7 @@ type ReadWriter interface {
             .iter()
             .filter(|e| e.entity_type == "Interface")
             .collect();
+
         assert_eq!(interface_entities.len(), 3);
 
         let reader_interface = interface_entities

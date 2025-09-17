@@ -1904,7 +1904,7 @@ use serde::{Serialize, Deserialize};
         let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
 
         assert!(graph.node_count() > 0);
-        assert!(graph.edge_count() >= 0); // May have edges if imports are resolved
+        // Graph may have edges if imports are resolved - no need to check >= 0 for unsigned
     }
 
     #[test]
@@ -1960,7 +1960,7 @@ use serde::{Serialize, Deserialize};
             .unwrap();
 
         assert!(gain.imbalance_delta >= 0.0);
-        assert!(gain.cross_edges_reduced >= 0);
+        // cross_edges_reduced is unsigned, always >= 0
     }
 
     #[test]
@@ -2125,6 +2125,6 @@ use serde::{Serialize, Deserialize};
         let result = analyzer
             .estimate_cross_edges_reduced(&partitions, Path::new("."))
             .unwrap();
-        assert!(result >= 0);
+        // result is unsigned, always >= 0
     }
 }

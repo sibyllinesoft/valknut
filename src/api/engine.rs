@@ -416,8 +416,7 @@ mod tests {
             results.summary.entities_analyzed
         );
         // The vector analysis should analyze some entities, but the exact count may vary
-        // based on implementation details
-        assert!(results.summary.entities_analyzed >= 0); // At least no crash
+        // based on implementation details (entities_analyzed is unsigned, always >= 0)
     }
 
     #[tokio::test]
@@ -546,8 +545,7 @@ mod tests {
         assert!(result.is_ok());
 
         let results = result.unwrap();
-        // At least the engine should process something
-        assert!(results.summary.entities_analyzed >= 0);
+        // Engine should process something (entities_analyzed is unsigned, always >= 0)
     }
 
     #[tokio::test]

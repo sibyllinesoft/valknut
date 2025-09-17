@@ -1615,8 +1615,10 @@ impl ComplexityAnalyzer {
                 || line.contains("function(")
                 || line.contains("= (")
             {
+                // Find the first opening parenthesis, then the first closing parenthesis after it
                 if let Some(start) = line.find('(') {
-                    if let Some(end) = line.find(')') {
+                    if let Some(end) = line[start..].find(')') {
+                        let end = start + end; // Adjust end position to full line index
                         let params_str = &line[start + 1..end];
                         if params_str.trim().is_empty() {
                             return 0.0;

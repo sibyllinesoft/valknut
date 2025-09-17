@@ -200,12 +200,12 @@ impl FeatureVector {
     /// Compute cosine similarity with another feature vector
     pub fn cosine_similarity(&self, other: &Self) -> f64 {
         let mut dot_product = 0.0;
-        let mut norm_a_squared = 0.0;
-        let mut norm_b_squared = 0.0;
+        let mut norm_self_squared = 0.0;
+        let mut norm_other_squared = 0.0;
 
         // Compute dot product and norms over shared features
         for (name, &value_a) in &self.features {
-            norm_a_squared += value_a * value_a;
+            norm_self_squared += value_a * value_a;
 
             if let Some(&value_b) = other.features.get(name) {
                 dot_product += value_a * value_b;
@@ -213,10 +213,10 @@ impl FeatureVector {
         }
 
         for &value_b in other.features.values() {
-            norm_b_squared += value_b * value_b;
+            norm_other_squared += value_b * value_b;
         }
 
-        let denominator = (norm_a_squared * norm_b_squared).sqrt();
+        let denominator = (norm_self_squared * norm_other_squared).sqrt();
         if denominator == 0.0 {
             0.0
         } else {

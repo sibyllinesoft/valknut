@@ -1,8 +1,52 @@
-//! Live Reachability Analysis
-//! 
-//! This module implements a production-safe system for sampling runtime call edges,
-//! aggregating them into versioned call graphs, and detecting "shadow islands" -
-//! tightly coupled code communities with low live reach.
+//! Live Reachability Analysis System
+//!
+//! This module implements a production-safe runtime analysis system that samples
+//! actual call patterns in deployed applications to identify "shadow islands" -
+//! tightly coupled code communities with low live reachability.
+//!
+//! ## Key Features
+//!
+//! - **Non-intrusive Sampling**: Lightweight runtime collectors with minimal overhead
+//! - **Versioned Call Graphs**: Track call pattern evolution across deployments
+//! - **Community Detection**: Identify tightly coupled code clusters
+//! - **Shadow Island Detection**: Find dead or rarely-used code communities
+//! - **Production Safety**: Designed for zero-impact deployment monitoring
+//!
+//! ## Architecture Components
+//!
+//! - **collectors**: Runtime sampling infrastructure for call edge collection
+//! - **storage**: Versioned storage system for call graph persistence
+//! - **graph**: Call graph construction and analysis algorithms
+//! - **community**: Code community detection using graph clustering
+//! - **scoring**: Reachability scoring and shadow island ranking
+//! - **reports**: Visualization and reporting for live analysis results
+//! - **cli**: Command-line interface for live analysis operations
+//! - **stacks**: Call stack analysis and pattern recognition
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! use valknut::live::collectors::CallCollector;
+//! use valknut::live::graph::CallGraph;
+//!
+//! // Set up non-intrusive call collection
+//! let collector = CallCollector::new()
+//!     .with_sampling_rate(0.001) // 0.1% sampling
+//!     .with_buffer_size(10000);
+//!
+//! // Analyze collected call patterns
+//! let graph = CallGraph::from_samples(&collector.samples())?;
+//! let communities = graph.detect_communities()?;
+//! let shadow_islands = communities.find_shadow_islands()?;
+//! ```
+//!
+//! ## Production Integration
+//!
+//! The live analysis system is designed for safe deployment in production environments:
+//! - Configurable sampling rates to control overhead
+//! - Async collection to avoid blocking application threads
+//! - Graceful degradation on resource constraints
+//! - Optional persistence for historical trend analysis
 
 pub mod types;
 pub mod collectors;

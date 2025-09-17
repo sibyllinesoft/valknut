@@ -1712,7 +1712,7 @@ def func2():
         let graph = analyzer.build_entity_cohesion_graph(&file_path).unwrap();
 
         // Should have at least some nodes (may vary based on parsing implementation)
-        assert!(graph.node_count() >= 0);
+        // node_count() is unsigned, always >= 0
     }
 
     #[test]
