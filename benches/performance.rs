@@ -125,13 +125,13 @@ fn benchmark_simd_normalization(c: &mut Criterion) {
                     let std_dev = 10.0;
                     let mean_vec = f64x4::splat(mean);
                     let std_vec = f64x4::splat(std_dev);
-                    
+
                     for chunk in data.chunks_exact_mut(4) {
                         let vals = f64x4::new([chunk[0], chunk[1], chunk[2], chunk[3]]);
                         let normalized = (vals - mean_vec) / std_vec;
                         normalized.write_to_slice(chunk);
                     }
-                    
+
                     // Handle remaining elements
                     let remainder_start = (data.len() / 4) * 4;
                     for val in &mut data[remainder_start..] {
@@ -168,25 +168,21 @@ fn benchmark_lsh_minhash(c: &mut Criterion) {
     for size in [50, 100, 500].iter() {
         let code_samples = generate_test_code(*size);
 
-        group.bench_with_input(
-            BenchmarkId::new("hash_sequential", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    let samples = black_box(&code_samples);
-                    for code in samples {
-                        // Simulate hash computation with actual string processing
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::{Hash, Hasher};
-                        
-                        let mut hasher = DefaultHasher::new();
-                        code.hash(&mut hasher);
-                        let signature = hasher.finish();
-                        std_black_box(signature);
-                    }
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("hash_sequential", size), size, |b, _| {
+            b.iter(|| {
+                let samples = black_box(&code_samples);
+                for code in samples {
+                    // Simulate hash computation with actual string processing
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+
+                    let mut hasher = DefaultHasher::new();
+                    code.hash(&mut hasher);
+                    let signature = hasher.finish();
+                    std_black_box(signature);
+                }
+            });
+        });
 
         #[cfg(feature = "simd")]
         group.bench_with_input(BenchmarkId::new("hash_simd", size), size, |b, _| {
@@ -196,7 +192,7 @@ fn benchmark_lsh_minhash(c: &mut Criterion) {
                     // Simulate SIMD-optimized hashing with seahash (SIMD-friendly)
                     use seahash::SeaHasher;
                     use std::hash::{Hash, Hasher};
-                    
+
                     let mut hasher = SeaHasher::new();
                     code.hash(&mut hasher);
                     let signature = hasher.finish();
@@ -215,14 +211,14 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
 
     // Create a runtime for async operations
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     let config = AnalysisConfig::default();
     let mut pipeline = rt.block_on(async { AnalysisPipeline::new(config).await.unwrap() });
 
     // Prepare training data
     let training_vectors = generate_test_vectors(100, 8);
     // Note: Using simplified benchmark without training phase
-    
+
     for size in [100, 500, 1000].iter() {
         let test_vectors = generate_test_vectors(*size, 8);
 
@@ -248,7 +244,8 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
                 let vectors = black_box(test_vectors.clone());
                 // Simulate parallel processing
                 use rayon::prelude::*;
-                let total_score: f64 = vectors.par_iter()
+                let total_score: f64 = vectors
+                    .par_iter()
                     .map(|vector| vector.features.values().sum::<f64>())
                     .sum();
                 std_black_box(total_score);
@@ -309,9 +306,9 @@ fn benchmark_memory_optimization(c: &mut Criterion) {
 /// Benchmark concurrent data structure performance
 #[cfg(feature = "parallel")]
 fn benchmark_concurrent_structures(c: &mut Criterion) {
+    use dashmap::DashMap;
     use rayon::prelude::*;
     use std::sync::Arc;
-    use dashmap::DashMap;
 
     let mut group = c.benchmark_group("concurrent_structures");
 
@@ -344,12 +341,11 @@ fn benchmark_concurrent_structures(c: &mut Criterion) {
             |b, _| {
                 b.iter(|| {
                     let vectors = black_box(&test_vectors);
-                    
+
                     // Simulate parallel feature processing
-                    let results: Vec<f64> = vectors.par_iter()
-                        .map(|vector| {
-                            vector.features.values().sum::<f64>()
-                        })
+                    let results: Vec<f64> = vectors
+                        .par_iter()
+                        .map(|vector| vector.features.values().sum::<f64>())
                         .collect();
                     std_black_box(results);
                 });
