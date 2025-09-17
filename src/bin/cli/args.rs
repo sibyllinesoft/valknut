@@ -92,11 +92,13 @@ pub enum Commands {
     #[command(name = "live-reach")]
     LiveReach(valknut_rs::live::cli::LiveReachArgs),
 
-    // Legacy individual analyzers for backward compatibility
+    // Legacy individual analyzers for backward compatibility - hidden in v1.0
     /// Analyze code structure and generate refactoring recommendations
+    #[command(hide = true)]
     Structure(StructureArgs),
 
     /// Analyze dependency cycles and clone detection for impact assessment
+    #[command(hide = true)]
     Impact(ImpactArgs),
 }
 

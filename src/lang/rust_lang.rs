@@ -181,7 +181,7 @@ impl RustAdapter {
         };
 
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| {
+        parser.set_language(&language).map_err(|e| {
             ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e))
         })?;
 

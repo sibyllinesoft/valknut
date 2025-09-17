@@ -146,7 +146,7 @@ impl JavaScriptAdapter {
     pub fn new() -> Result<Self> {
         let language = tree_sitter_javascript::language();
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| {
+        parser.set_language(&language).map_err(|e| {
             ValknutError::parse(
                 "javascript",
                 format!("Failed to set JavaScript language: {:?}", e),

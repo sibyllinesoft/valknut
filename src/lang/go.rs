@@ -21,7 +21,7 @@ impl GoAdapter {
     pub fn new() -> Result<Self> {
         let language = tree_sitter_go::language();
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| {
+        parser.set_language(&language).map_err(|e| {
             ValknutError::parse("go", format!("Failed to set Go language: {:?}", e))
         })?;
 

@@ -248,7 +248,7 @@ impl Default for AnalysisConfig {
     fn default() -> Self {
         Self {
             enable_scoring: true,
-            enable_graph_analysis: true,
+            enable_graph_analysis: false, // Deferred to v1.1 - placeholder implementation
             enable_lsh_analysis: true,
             enable_refactoring_analysis: true,
             enable_coverage_analysis: true, // Now enabled by default

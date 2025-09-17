@@ -811,11 +811,7 @@ impl ReportGenerator {
         );
 
         // Add animation config
-        let enable_animation = self
-            .analysis_config
-            .as_ref()
-            .map(|config| config.enable_animation)
-            .unwrap_or(true);
+        let enable_animation = true; // Always enable animation for now
         data.insert(
             "enable_animation",
             serde_json::to_value(enable_animation).unwrap(),
@@ -2091,6 +2087,7 @@ mod tests {
                     mocks_est: 1,
                 },
             }],
+            unified_hierarchy: vec![],
         }
     }
 

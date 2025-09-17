@@ -173,7 +173,7 @@ impl TypeScriptAdapter {
     pub fn new() -> Result<Self> {
         let language = tree_sitter_typescript::language_typescript();
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| {
+        parser.set_language(&language).map_err(|e| {
             ValknutError::parse(
                 "typescript",
                 format!("Failed to set TypeScript language: {:?}", e),

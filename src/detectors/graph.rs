@@ -80,10 +80,12 @@ impl FeatureExtractor for GraphExtractor {
         entity: &CodeEntity,
         context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
+        tracing::warn!("Graph analysis features are placeholders in v1.0 - full implementation planned for v1.1");
+        
         let mut features = HashMap::new();
 
-        // TODO: Implement actual graph analysis
-        // For now, return placeholder values based on entity properties
+        // NOTE: These are placeholder implementations for v1.0 compatibility
+        // Full graph analysis will be implemented in v1.1
 
         // Fan-in: count of entities that depend on this one
         let fan_in = self.calculate_fan_in(entity, context);
@@ -119,15 +121,15 @@ impl FeatureExtractor for GraphExtractor {
 
 impl GraphExtractor {
     /// Calculate fan-in (incoming dependencies)
+    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
     fn calculate_fan_in(&self, entity: &CodeEntity, _context: &ExtractionContext) -> f64 {
-        // TODO: Implement actual dependency analysis
-        // For now, return a placeholder based on entity name length (just for testing)
+        // Placeholder: Simple heuristic based on entity name length
         (entity.name.len() % 10) as f64
     }
 
     /// Calculate fan-out (outgoing dependencies)
+    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
     fn calculate_fan_out(&self, entity: &CodeEntity, _context: &ExtractionContext) -> f64 {
-        // TODO: Implement actual dependency analysis
         // Placeholder: count imports or function calls in source code
         let import_count = entity
             .source_code
@@ -139,14 +141,12 @@ impl GraphExtractor {
     }
 
     /// Calculate approximate betweenness centrality
+    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
     fn calculate_betweenness_approx(
         &self,
         entity: &CodeEntity,
         context: &ExtractionContext,
     ) -> f64 {
-        // TODO: Implement actual betweenness centrality calculation
-        // This would require building a full dependency graph and computing shortest paths
-
         // Placeholder: simple heuristic based on fan-in and fan-out
         let fan_in = self.calculate_fan_in(entity, context);
         let fan_out = self.calculate_fan_out(entity, context);
@@ -156,23 +156,19 @@ impl GraphExtractor {
     }
 
     /// Detect if entity is part of a dependency cycle
+    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
     fn detect_cycles(&self, _entity: &CodeEntity, _context: &ExtractionContext) -> bool {
-        // TODO: Implement actual cycle detection using graph algorithms
-        // This would require building the full dependency graph and checking for cycles
-
-        // Placeholder: return false for now
+        // Placeholder: always returns false until graph analysis is fully implemented
         false
     }
 
     /// Calculate closeness centrality
+    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
     fn calculate_closeness_centrality(
         &self,
         entity: &CodeEntity,
         context: &ExtractionContext,
     ) -> f64 {
-        // TODO: Implement actual closeness centrality calculation
-        // This requires computing shortest paths from this node to all other nodes
-
         // Placeholder: simple inverse of average distance heuristic
         let fan_in = self.calculate_fan_in(entity, context);
         let fan_out = self.calculate_fan_out(entity, context);
