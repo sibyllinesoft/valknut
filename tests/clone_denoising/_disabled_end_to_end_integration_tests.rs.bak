@@ -16,8 +16,7 @@ use valknut_rs::api::engine::ValknutEngine;
 use valknut_rs::core::config::{DedupeConfig, ValknutConfig};
 use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 use valknut_rs::detectors::clone_detection::{
-    AutoCalibrationEngine, ComprehensiveCloneDetector, PayoffRankingSystem,
-    CloneCandidate,
+    AutoCalibrationEngine, CloneCandidate, ComprehensiveCloneDetector, PayoffRankingSystem,
 };
 use valknut_rs::io::cache::{CacheRefreshPolicy, StopMotifCacheManager};
 
@@ -36,13 +35,13 @@ mod end_to_end_pipeline_tests {
 
         // Phase 1: Basic clone detection setup (simplified for current API)
         let entity_refs: Vec<&CodeEntity> = test_entities.iter().collect();
-        
+
         // Basic validation that entities can be processed
         assert!(
             !entity_refs.is_empty(),
             "Phase 1: Should have entities to process"
         );
-        
+
         println!("Phase 1: Processing {} entities", entity_refs.len());
 
         // Phase 2: Basic filtering (simplified for current API)
@@ -236,13 +235,8 @@ def debug_log(message, level):
 
         // Test each case through simplified processing
         for (id, source_code, should_pass_filtering) in test_cases {
-            let entity = CodeEntity::new(
-                id,
-                "function",
-                id,
-                &format!("/test/{}.py", id),
-            )
-            .with_source_code(source_code);
+            let entity = CodeEntity::new(id, "function", id, &format!("/test/{}.py", id))
+                .with_source_code(source_code);
 
             // Phase 1: Basic entity validation
             let phase1_result = !entity.source_code.is_empty();
@@ -250,13 +244,13 @@ def debug_log(message, level):
 
             // Phase 2: Basic filtering
             let phase2_result = entity.source_code.len() > 20; // Simple size filter
-            
+
             // Phase 3: Pattern-based filtering
-            let phase3_result = !entity.source_code.contains("import os")
-                && !entity.source_code.contains("DEBUG:");
+            let phase3_result =
+                !entity.source_code.contains("import os") && !entity.source_code.contains("DEBUG:");
 
             let final_result = phase1_result && phase2_result && phase3_result;
-            
+
             if should_pass_filtering {
                 // For entities expected to pass, test feature extraction
                 let extraction_result = detector.extract(&entity, &context).await;
@@ -265,7 +259,12 @@ def debug_log(message, level):
 
             println!(
                 "Entity {}: Phase1={}, Phase2={}, Phase3={}, Final={}, Expected={}",
-                id, phase1_result, phase2_result, phase3_result, final_result, should_pass_filtering
+                id,
+                phase1_result,
+                phase2_result,
+                phase3_result,
+                final_result,
+                should_pass_filtering
             );
         }
     }
@@ -287,14 +286,14 @@ def debug_log(message, level):
         let cache_manager = StopMotifCacheManager::new(cache_dir.clone(), refresh_policy);
 
         // Test basic cache manager creation
-        assert!(
-            cache_dir.exists(),
-            "Cache directory should be created"
-        );
+        assert!(cache_dir.exists(), "Cache directory should be created");
 
         // Test cache directory structure
-        println!("Cache manager created successfully for directory: {:?}", cache_dir);
-        
+        println!(
+            "Cache manager created successfully for directory: {:?}",
+            cache_dir
+        );
+
         // For now, just verify the cache manager can be created
         // More detailed cache functionality tests would require understanding current cache API
     }
@@ -336,13 +335,13 @@ def debug_log(message, level):
         // Test quality filtering
         let mut ranking_system = PayoffRankingSystem::new();
         let filtered_candidates = ranking_system.filter_by_quality(&mock_candidates);
-        
+
         // Should filter out low quality candidates that don't meet floors
         assert!(
             filtered_candidates.len() < mock_candidates.len(),
             "Should filter some candidates based on quality floors"
         );
-        
+
         // All remaining candidates should meet minimum requirements
         for candidate in &filtered_candidates {
             assert!(
@@ -587,7 +586,7 @@ mod performance_integration_tests {
         // Test basic feature extraction performance
         let detector = ComprehensiveCloneDetector::new(DedupeConfig::default());
         let context = ExtractionContext::new();
-        
+
         let mut processed_count = 0;
         for entity in &large_test_entities {
             let result = detector.extract(entity, &context).await;
@@ -626,7 +625,7 @@ mod performance_integration_tests {
         // Test basic processing without detailed memory monitoring
         let detector = ComprehensiveCloneDetector::new(DedupeConfig::default());
         let context = ExtractionContext::new();
-        
+
         let mut successful_extractions = 0;
         for entity in &test_entities {
             if let Ok(_features) = detector.extract(entity, &context).await {
@@ -639,7 +638,7 @@ mod performance_integration_tests {
             successful_extractions > 0,
             "Should successfully extract features from some entities"
         );
-        
+
         println!(
             "Successfully processed {}/{} entities",
             successful_extractions,

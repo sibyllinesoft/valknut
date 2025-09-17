@@ -126,10 +126,7 @@ mod stop_motif_cache_tests {
         // Test AST pattern categories
         let ast_patterns = [
             ("import_statement", AstPatternCategory::NodeType),
-            (
-                "function_definition",
-                AstPatternCategory::NodeType,
-            ),
+            ("function_definition", AstPatternCategory::NodeType),
             ("if_statement", AstPatternCategory::ControlFlowPattern),
             ("assignment", AstPatternCategory::NodeType),
             ("call_expression", AstPatternCategory::SubtreePattern),
@@ -739,10 +736,7 @@ func main() {
             ("import_declaration", AstPatternCategory::Import),
             ("type_declaration", AstPatternCategory::TypeDeclaration),
             ("method_declaration", AstPatternCategory::MethodDeclaration),
-            (
-                "function_declaration",
-                AstPatternCategory::NodeType,
-            ),
+            ("function_declaration", AstPatternCategory::NodeType),
             ("if_statement", AstPatternCategory::ControlFlowPattern),
         ];
 
@@ -798,12 +792,7 @@ mod multi_language_support_tests {
         let multi_lang_patterns = vec![
             // Python patterns (high frequency)
             ("import os", 200, "python", AstPatternCategory::Import),
-            (
-                "def function",
-                180,
-                "python",
-                AstPatternCategory::NodeType,
-            ),
+            ("def function", 180, "python", AstPatternCategory::NodeType),
             (
                 "if condition",
                 160,
@@ -844,12 +833,7 @@ mod multi_language_support_tests {
             ),
             // Rust patterns (low frequency)
             ("use crate", 30, "rust", AstPatternCategory::Import),
-            (
-                "fn function",
-                25,
-                "rust",
-                AstPatternCategory::NodeType,
-            ),
+            ("fn function", 25, "rust", AstPatternCategory::NodeType),
             // Go patterns (low frequency)
             (
                 "package main",
@@ -857,12 +841,7 @@ mod multi_language_support_tests {
                 "go",
                 AstPatternCategory::PackageDeclaration,
             ),
-            (
-                "func main",
-                18,
-                "go",
-                AstPatternCategory::NodeType,
-            ),
+            ("func main", 18, "go", AstPatternCategory::NodeType),
         ];
 
         for (pattern, support, language, category) in multi_lang_patterns {
@@ -1031,16 +1010,16 @@ mod cache_refresh_tests {
             // Conservative policy
             CacheRefreshPolicy {
                 // auto_refresh_enabled: true, // Field no longer exists
-                max_age_hours: 168,                 // 1 week
+                max_age_hours: 168,            // 1 week
                 change_threshold_percent: 0.2, // 20% change required
                 force_refresh_on_new_languages: false,
             },
             // Aggressive policy
             CacheRefreshPolicy {
                 // auto_refresh_enabled: true, // Field no longer exists
-                max_age_hours: 6,                    // 6 hours
+                max_age_hours: 6, // 6 hours
                 change_threshold_percent: 0.05, // 5% change required
-                // force_refresh_on_new_languages: true, // Field no longer exists
+                                  // force_refresh_on_new_languages: true, // Field no longer exists
             },
             // Disabled policy
             CacheRefreshPolicy {
