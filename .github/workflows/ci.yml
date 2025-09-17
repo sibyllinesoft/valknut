@@ -276,10 +276,21 @@ jobs:
         with:
           key: build-${{ matrix.target }}
 
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Build for target
         run: |
           if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" || "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
             # Disable mimalloc for cross-compilation targets that need specific tools
+            cargo build --target ${{ matrix.target }} --release --no-default-features --features "simd,parallel"
+          elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            # Disable mimalloc for aarch64 cross-compilation and set cross-compiler
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+            export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
             cargo build --target ${{ matrix.target }} --release --no-default-features --features "simd,parallel"
           else
             cargo build --target ${{ matrix.target }} --release
