@@ -46,10 +46,10 @@ fn generate_test_entities(count: usize) -> Vec<CodeEntity> {
         );
 
         let entity = CodeEntity::new(
-            &format!("func_{}", i),
+            format!("func_{}", i),
             "function",
-            &format!("function_{}", i),
-            &format!("/test/file_{}.py", i),
+            format!("function_{}", i),
+            format!("/test/file_{}.py", i),
         )
         .with_source_code(&source_code);
 
@@ -129,10 +129,10 @@ impl DataProcessor_{id} {{
         };
 
         let entity = CodeEntity::new(
-            &format!("entity_{}", i),
+            format!("entity_{}", i),
             "function",
-            &format!("entity_{}", i),
-            &format!("/test/file_{}.{}", i, file_ext),
+            format!("entity_{}", i),
+            format!("/test/file_{}.{}", i, file_ext),
         )
         .with_source_code(&source_code);
 
@@ -162,7 +162,8 @@ fn bench_phase1_weighted_shingling(c: &mut Criterion) {
             |b, entities| {
                 b.iter(|| {
                     let mut analyzer = WeightedShingleAnalyzer::new(9);
-                    black_box(analyzer.build_idf_table(entities).unwrap());
+                    analyzer.build_idf_table(entities).unwrap();
+                    black_box(&analyzer);
                 });
             },
         );

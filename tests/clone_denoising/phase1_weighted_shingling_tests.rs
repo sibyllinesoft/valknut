@@ -294,10 +294,10 @@ mod weighted_shingle_analyzer_tests {
         let mut entities = Vec::new();
         for i in 0..10 {
             let entity = CodeEntity::new(
-                &format!("func_{}", i),
+                format!("func_{}", i),
                 "function",
-                &format!("func_{}", i),
-                &format!("/test/file_{}.py", i),
+                format!("func_{}", i),
+                format!("/test/file_{}.py", i),
             )
             .with_source_code(&format!(
                 "def func_{}():\n    print('hello')\n    value_{} = {}",

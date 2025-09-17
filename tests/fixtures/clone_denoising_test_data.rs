@@ -585,10 +585,10 @@ def very_complex_{}(data_stream, processors, config):
 
         entities.push(
             CodeEntity::new(
-                &format!("perf_test_{}", i),
+                format!("perf_test_{}", i),
                 "function",
-                &format!("func_{}", i),
-                &format!("/test/perf_{}.py", i % 20), // Reuse some file paths
+                format!("func_{}", i),
+                format!("/test/perf_{}.py", i % 20), // Reuse some file paths
             )
             .with_source_code(&source_code),
         );
