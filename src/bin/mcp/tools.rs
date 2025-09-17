@@ -210,10 +210,7 @@ pub async fn execute_refactoring_suggestions(
 }
 
 /// Format analysis results according to requested format
-fn format_analysis_results(
-    results: &AnalysisResults,
-    format: &str,
-) -> Result<String, DynError> {
+fn format_analysis_results(results: &AnalysisResults, format: &str) -> Result<String, DynError> {
     match format {
         "json" => {
             // Direct JSON serialization for JSON format
