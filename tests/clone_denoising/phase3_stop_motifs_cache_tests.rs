@@ -2,7 +2,6 @@
 //!
 //! Tests basic cache functionality with current API
 
-use std::collections::HashMap;
 use tempfile::TempDir;
 
 use valknut_rs::io::cache::{CacheRefreshPolicy, StopMotifCacheManager};
@@ -46,7 +45,6 @@ mod simplified_cache_tests {
         let _cache_manager = StopMotifCacheManager::new(cache_path, refresh_policy);
 
         // Basic validation - if we get here, creation succeeded
-        assert!(true);
     }
 
     /// Test different cache refresh policies

@@ -148,7 +148,7 @@ mod simd_math_tests {
             "Dot product (1000 elements)",
             || {
                 // SIMD dot product
-                let mut result = 0.0;
+                let result;
 
                 #[cfg(feature = "simd")]
                 #[cfg(target_arch = "x86_64")]
@@ -164,24 +164,28 @@ mod simd_math_tests {
 
                     // Sum the SIMD vector components
                     let sum_array = sum_vec.as_array_ref();
-                    result = sum_array[0] + sum_array[1] + sum_array[2] + sum_array[3];
+                    let mut partial_result =
+                        sum_array[0] + sum_array[1] + sum_array[2] + sum_array[3];
 
                     // Handle remaining elements
                     let remainder = vec1.len() % 4;
                     if remainder > 0 {
                         let start = vec1.len() - remainder;
                         for i in start..vec1.len() {
-                            result += vec1[i] * vec2[i];
+                            partial_result += vec1[i] * vec2[i];
                         }
                     }
+                    result = partial_result;
                 }
 
                 #[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
                 {
                     // Fallback to scalar
+                    let mut scalar_result = 0.0;
                     for (v1, v2) in vec1.iter().zip(vec2.iter()) {
-                        result += v1 * v2;
+                        scalar_result += v1 * v2;
                     }
+                    result = scalar_result;
                 }
 
                 result
@@ -436,7 +440,7 @@ mod simd_integration_tests {
     #[test]
     fn test_simd_error_handling() {
         // Test that SIMD operations handle edge cases correctly
-        let test_cases = vec![
+        let test_cases = [
             vec![],              // Empty vector
             vec![f64::NAN],      // NaN values
             vec![f64::INFINITY], // Infinite values

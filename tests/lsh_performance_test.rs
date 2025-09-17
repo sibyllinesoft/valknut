@@ -32,10 +32,10 @@ fn generate_test_entities(count: usize) -> Vec<CodeEntity> {
         );
 
         let entity = CodeEntity::new(
-            &format!("func_{}", i),
+            format!("func_{}", i),
             "function",
-            &format!("function_{}", i),
-            &format!("/test/file_{}.py", i),
+            format!("function_{}", i),
+            format!("/test/file_{}.py", i),
         )
         .with_source_code(&source_code);
 

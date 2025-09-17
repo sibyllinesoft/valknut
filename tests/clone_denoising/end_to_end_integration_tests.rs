@@ -106,6 +106,6 @@ mod simplified_end_to_end_tests {
         let _cache_manager = StopMotifCacheManager::new(cache_path, refresh_policy);
 
         // Basic validation - cache manager should be created successfully
-        assert!(true); // If we get here, creation succeeded
+        // If we get here, creation succeeded
     }
 }

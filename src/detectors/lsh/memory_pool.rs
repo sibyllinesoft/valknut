@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
-/// Memory pool for reusing Vec<String> allocations (for shingles)
+/// Memory pool for reusing `Vec<String>` allocations (for shingles)
 #[derive(Debug, Clone)]
 pub struct StringVecPool {
     pool: Arc<Mutex<VecDeque<Vec<String>>>>,
@@ -27,7 +27,7 @@ impl StringVecPool {
         }
     }
 
-    /// Get a Vec<String> from the pool or create a new one
+    /// Get a `Vec<String>` from the pool or create a new one
     pub fn get(&self) -> Vec<String> {
         if let Ok(mut pool) = self.pool.lock() {
             if let Some(mut vec) = pool.pop_front() {
@@ -48,7 +48,7 @@ impl StringVecPool {
         Vec::new()
     }
 
-    /// Return a Vec<String> to the pool
+    /// Return a `Vec<String>` to the pool
     pub fn return_vec(&self, vec: Vec<String>) {
         if let Ok(mut pool) = self.pool.lock() {
             if pool.len() < self.max_size {
@@ -75,7 +75,7 @@ impl StringVecPool {
     }
 }
 
-/// Memory pool for reusing Vec<u64> allocations (for signatures)
+/// Memory pool for reusing `Vec<u64>` allocations (for signatures)
 #[derive(Debug, Clone)]
 pub struct U64VecPool {
     pool: Arc<Mutex<VecDeque<Vec<u64>>>>,
@@ -97,7 +97,7 @@ impl U64VecPool {
         }
     }
 
-    /// Get a Vec<u64> from the pool or create a new one
+    /// Get a `Vec<u64>` from the pool or create a new one
     pub fn get(&self) -> Vec<u64> {
         if let Ok(mut pool) = self.pool.lock() {
             if let Some(mut vec) = pool.pop_front() {
@@ -122,7 +122,7 @@ impl U64VecPool {
         vec
     }
 
-    /// Return a Vec<u64> to the pool
+    /// Return a `Vec<u64>` to the pool
     pub fn return_vec(&self, vec: Vec<u64>) {
         if let Ok(mut pool) = self.pool.lock() {
             if pool.len() < self.max_size && vec.capacity() >= self.signature_size {

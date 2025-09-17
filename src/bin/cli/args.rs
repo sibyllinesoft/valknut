@@ -62,7 +62,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Analyze code repositories for refactorability
-    Analyze(AnalyzeArgs),
+    Analyze(Box<AnalyzeArgs>),
 
     /// Print default configuration in YAML format
     #[command(name = "print-default-config")]

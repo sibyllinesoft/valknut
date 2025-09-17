@@ -62,7 +62,7 @@ fn generate_test_entities(count: usize) -> Vec<CodeEntity> {
 fn generate_varied_entities(count: usize) -> Vec<CodeEntity> {
     let mut entities = Vec::new();
 
-    let patterns = vec![
+    let patterns = [
         // Python decorator pattern
         r#"
 @app.route('/api/users/<int:user_id>', methods=['GET'])
@@ -240,11 +240,10 @@ fn bench_lsh_operations(c: &mut Criterion) {
             let context = lsh_extractor.create_similarity_search_context(&entity_refs);
 
             // Perform multiple similarity searches
-            for i in 0..10.min(entities.len()) {
-                let entity_id = &entities[i].id;
-                let candidates = context.find_similar_entities(entity_id, Some(5));
+            entities.iter().take(10).for_each(|entity| {
+                let candidates = context.find_similar_entities(&entity.id, Some(5));
                 black_box(candidates);
-            }
+            });
         });
     });
 
@@ -321,11 +320,10 @@ fn bench_memory_scalability(c: &mut Criterion) {
                     let context = lsh_extractor.create_similarity_search_context(&entity_refs);
 
                     // Perform searches to stress test the index
-                    let search_count = 5.min(entities.len());
-                    for i in 0..search_count {
-                        let candidates = context.find_similar_entities(&entities[i].id, Some(3));
+                    entities.iter().take(5).for_each(|entity| {
+                        let candidates = context.find_similar_entities(&entity.id, Some(3));
                         black_box(candidates);
-                    }
+                    });
 
                     black_box(context.get_statistics());
                 });

@@ -6,7 +6,6 @@
 use crate::cli::args::*;
 use crate::cli::config_layer::build_layered_valknut_config;
 use crate::cli::legacy_commands;
-use crate::cli::output::*;
 use anyhow;
 use chrono;
 use console::Term;
@@ -17,21 +16,17 @@ use serde_yaml;
 use std::path::Path;
 use std::path::PathBuf;
 use tabled::{settings::Style as TableStyle, Table, Tabled};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 // Import comprehensive analysis pipeline
 use valknut_rs::api::config_types::AnalysisConfig as ApiAnalysisConfig;
 use valknut_rs::api::engine::ValknutEngine;
 use valknut_rs::api::results::AnalysisResults;
 use valknut_rs::core::config::ReportFormat;
-use valknut_rs::core::config::{
-    AnalysisConfig, CoverageConfig, DedupeConfig, DenoiseConfig, ValknutConfig,
-};
+use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
 use valknut_rs::core::file_utils::CoverageDiscovery;
-use valknut_rs::core::pipeline::{
-    AnalysisConfig as PipelineAnalysisConfig, QualityGateConfig, QualityGateResult,
-};
-use valknut_rs::detectors::structure::{StructureConfig, StructureExtractor};
+use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult};
+use valknut_rs::detectors::structure::StructureConfig;
 use valknut_rs::io::reports::ReportGenerator;
 use valknut_rs::live::cli::{LiveReachArgs, LiveReachCli, LiveReachConfig};
 use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
@@ -41,8 +36,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Main analyze command implementation with comprehensive analysis pipeline
 pub async fn analyze_command(
     args: AnalyzeArgs,
-    survey: bool,
-    survey_verbosity: SurveyVerbosity,
+    _survey: bool,
+    _survey_verbosity: SurveyVerbosity,
 ) -> anyhow::Result<()> {
     // Print header
     if !args.quiet {
@@ -79,14 +74,12 @@ pub async fn analyze_command(
                 println!("  {}: {}", path_type, path.display().to_string().green());
             }
         } else {
-            eprintln!("  {} {}", "❌ Path does not exist:".red(), path.display());
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("Path does not exist: {}", path.display()));
         }
     }
 
     if valid_paths.is_empty() {
-        eprintln!("{}", "❌ No valid paths provided".red());
-        std::process::exit(1);
+        return Err(anyhow::anyhow!("No valid paths provided"));
     }
 
     // Create output directory
@@ -173,7 +166,7 @@ pub async fn analyze_command(
                 println!("{}", "❌ Quality gates failed!".red().bold());
                 display_quality_failures(&quality_result);
             }
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("Quality gates failed"));
         } else if !args.quiet {
             println!("{}", "✅ All quality gates passed!".green().bold());
         }
@@ -336,7 +329,7 @@ fn display_analysis_config_summary(config: &ValknutConfig) {
 async fn run_comprehensive_analysis_with_progress(
     paths: &[PathBuf],
     config: ValknutConfig,
-    args: &AnalyzeArgs,
+    _args: &AnalyzeArgs,
 ) -> anyhow::Result<AnalysisResults> {
     let multi_progress = MultiProgress::new();
     let main_progress = multi_progress.add(ProgressBar::new(100));
@@ -398,7 +391,7 @@ async fn run_comprehensive_analysis_with_progress(
 async fn run_comprehensive_analysis_without_progress(
     paths: &[PathBuf],
     config: ValknutConfig,
-    args: &AnalyzeArgs,
+    _args: &AnalyzeArgs,
 ) -> anyhow::Result<AnalysisResults> {
     // Convert to API config
     let api_config = ApiAnalysisConfig::from_valknut_config(config)?;
@@ -444,9 +437,9 @@ fn combine_analysis_results(results: Vec<AnalysisResults>) -> anyhow::Result<Ana
 
 /// Evaluate quality gates against analysis results
 fn evaluate_quality_gates(
-    result: &AnalysisResults,
-    config: &QualityGateConfig,
-    verbose: bool,
+    _result: &AnalysisResults,
+    _config: &QualityGateConfig,
+    _verbose: bool,
 ) -> anyhow::Result<QualityGateResult> {
     // TODO: Implement actual quality gate evaluation
     // For now, return a passing result
@@ -469,7 +462,7 @@ fn display_comprehensive_results(result: &AnalysisResults) {
 }
 
 /// Display analysis summary
-fn display_analysis_summary(result: &AnalysisResults) {
+fn display_analysis_summary(_result: &AnalysisResults) {
     // TODO: Implement comprehensive results display
     println!("  ✅ Analysis completed successfully");
 }
@@ -647,13 +640,10 @@ pub async fn print_default_config() -> anyhow::Result<()> {
 pub async fn init_config(args: InitConfigArgs) -> anyhow::Result<()> {
     // Check if file exists and force not specified
     if args.output.exists() && !args.force {
-        eprintln!(
-            "{} {}",
-            "❌ Configuration file already exists:".red(),
+        return Err(anyhow::anyhow!(
+            "Configuration file already exists: {}. Use --force to overwrite or choose a different name with --output",
             args.output.display()
-        );
-        eprintln!("   Use --force to overwrite or choose a different name with --output");
-        std::process::exit(1);
+        ));
     }
 
     let config = valknut_rs::core::config::ValknutConfig::default();
@@ -749,7 +739,7 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
                 "{}",
                 "💡 Tip: Use 'valknut print-default-config' to see valid format".dimmed()
             );
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("Configuration validation failed: {}", e));
         }
     };
 
@@ -1082,6 +1072,7 @@ pub fn display_config_summary(config: &StructureConfig) {
 }
 
 /// Run comprehensive analysis with detailed progress tracking
+#[allow(dead_code)]
 pub async fn run_analysis_with_progress(
     paths: &[PathBuf],
     _config: StructureConfig,
@@ -1101,10 +1092,10 @@ pub async fn run_analysis_with_progress(
 
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
-    let mut analysis_config = AnalysisConfig::default();
-
-    // LSH analysis is enabled by default unless explicitly disabled
-    analysis_config.enable_lsh_analysis = true;
+    let mut analysis_config = AnalysisConfig {
+        enable_lsh_analysis: true,
+        ..Default::default()
+    };
 
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = !args.clone_detection.no_denoise;
@@ -1137,8 +1128,10 @@ pub async fn run_analysis_with_progress(
     let io_mismatch_penalty = args.advanced_clone.io_mismatch_penalty.unwrap_or(0.25);
 
     // Configure auto-calibration settings
-    let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
-    auto_calibration.enabled = auto_enabled;
+    let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig {
+        enabled: auto_enabled,
+        ..Default::default()
+    };
     if let Some(quality_target) = args.advanced_clone.quality_target {
         auto_calibration.quality_target = quality_target;
     }
@@ -1290,20 +1283,21 @@ pub async fn run_analysis_with_progress(
 }
 
 /// Run analysis without progress bars for quiet mode
+#[allow(dead_code)]
 pub async fn run_analysis_without_progress(
     paths: &[PathBuf],
     _config: StructureConfig,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<serde_json::Value> {
-    use valknut_rs::core::config::{DenoiseConfig, LshConfig, ValknutConfig};
+    use valknut_rs::core::config::{DenoiseConfig, ValknutConfig};
     use valknut_rs::core::pipeline::{AnalysisConfig, AnalysisPipeline};
 
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
-    let mut analysis_config = AnalysisConfig::default();
-
-    // LSH analysis is enabled by default unless explicitly disabled
-    analysis_config.enable_lsh_analysis = true;
+    let mut analysis_config = AnalysisConfig {
+        enable_lsh_analysis: true,
+        ..Default::default()
+    };
 
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = !args.clone_detection.no_denoise;
@@ -1336,8 +1330,10 @@ pub async fn run_analysis_without_progress(
     let io_mismatch_penalty = args.advanced_clone.io_mismatch_penalty.unwrap_or(0.25);
 
     // Configure auto-calibration settings
-    let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig::default();
-    auto_calibration.enabled = auto_enabled;
+    let mut auto_calibration = valknut_rs::core::config::AutoCalibrationConfig {
+        enabled: auto_enabled,
+        ..Default::default()
+    };
     if let Some(quality_target) = args.advanced_clone.quality_target {
         auto_calibration.quality_target = quality_target;
     }
@@ -1454,6 +1450,7 @@ pub async fn run_analysis_without_progress(
 }
 
 /// Create denoise cache directories if they don't exist
+#[allow(dead_code)]
 async fn create_denoise_cache_directories() -> anyhow::Result<()> {
     let cache_base = std::path::Path::new(".valknut/cache/denoise");
 
@@ -1541,6 +1538,7 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
 }
 
 /// Handle quality gate evaluation
+#[allow(dead_code)]
 async fn handle_quality_gates(
     args: &AnalyzeArgs,
     result: &serde_json::Value,
@@ -1682,10 +1680,10 @@ async fn handle_quality_gates(
 
 /// Build quality gate configuration from CLI arguments
 fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
-    let mut config = QualityGateConfig::default();
-
-    // Enable if quality_gate flag is set or if fail_on_issues is set
-    config.enabled = args.quality_gate.quality_gate || args.quality_gate.fail_on_issues;
+    let mut config = QualityGateConfig {
+        enabled: args.quality_gate.quality_gate || args.quality_gate.fail_on_issues,
+        ..Default::default()
+    };
 
     // Override defaults with CLI values if provided
     if let Some(max_complexity) = args.quality_gate.max_complexity {
@@ -1720,6 +1718,7 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
 }
 
 /// Display quality gate violations in a user-friendly format
+#[allow(dead_code)]
 fn display_quality_gate_violations(result: &QualityGateResult) {
     println!();
     println!("{}", "❌ Quality Gate Failed".red().bold());
@@ -1803,8 +1802,6 @@ async fn run_oracle_analysis(
     analysis_result: &AnalysisResults,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
-    use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
-
     // Check if GEMINI_API_KEY is available
     let oracle_config = match OracleConfig::from_env() {
         Ok(mut config) => {
@@ -1891,6 +1888,7 @@ async fn run_oracle_analysis(
 }
 
 /// Generate output reports in various formats (legacy version for compatibility)
+#[allow(dead_code)]
 async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
     generate_reports_with_oracle(result, &None, args).await
 }
@@ -2198,7 +2196,7 @@ mod tests {
             file_split_only: false,
         };
 
-        let config = StructureConfig::default();
+        let _config = StructureConfig::default();
 
         let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());
@@ -2217,7 +2215,7 @@ mod tests {
             file_split_only: false,
         };
 
-        let config = StructureConfig::default();
+        let _config = StructureConfig::default();
 
         let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());
@@ -2236,7 +2234,7 @@ mod tests {
             file_split_only: true,
         };
 
-        let config = StructureConfig::default();
+        let _config = StructureConfig::default();
 
         let result = analyze_structure_legacy(args).await;
         assert!(result.is_ok());

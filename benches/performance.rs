@@ -27,7 +27,7 @@ fn generate_test_vectors(count: usize, features_per_vector: usize) -> Vec<Featur
 
             // Add additional features to reach target count
             for j in 5..features_per_vector {
-                vector.add_feature(&format!("feature_{}", j), (i * j) as f64 * 0.1);
+                vector.add_feature(format!("feature_{}", j), (i * j) as f64 * 0.1);
             }
 
             vector
@@ -170,7 +170,7 @@ fn benchmark_simd_normalization(c: &mut Criterion) {
 fn benchmark_lsh_minhash(c: &mut Criterion) {
     let mut group = c.benchmark_group("lsh_minhash");
 
-    let extractor = LshExtractor::new(); // Use default configuration
+    let _extractor = LshExtractor::new(); // Use default configuration
 
     for size in [50, 100, 500].iter() {
         let code_samples = generate_test_code(*size);
@@ -217,13 +217,13 @@ fn benchmark_pipeline_performance(c: &mut Criterion) {
     let mut group = c.benchmark_group("pipeline_performance");
 
     // Create a runtime for async operations
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _rt = tokio::runtime::Runtime::new().unwrap();
 
     let config = AnalysisConfig::default();
-    let mut pipeline = AnalysisPipeline::new(config);
+    let _pipeline = AnalysisPipeline::new(config);
 
     // Prepare training data
-    let training_vectors = generate_test_vectors(100, 8);
+    let _training_vectors = generate_test_vectors(100, 8);
     // Note: Using simplified benchmark without training phase
 
     for size in [100, 500, 1000].iter() {

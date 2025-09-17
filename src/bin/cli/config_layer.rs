@@ -4,7 +4,6 @@
 //! seamless merging of default configurations, configuration files, and CLI overrides.
 
 use anyhow;
-use std::path::Path;
 
 use crate::cli::args::AnalyzeArgs;
 use valknut_rs::core::config::{

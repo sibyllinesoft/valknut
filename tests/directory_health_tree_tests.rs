@@ -306,7 +306,7 @@ mod directory_health_tree_tests {
         assert!(!stats.health_by_depth.is_empty());
 
         // Check that each depth has valid statistics
-        for (&depth, depth_stats) in &stats.health_by_depth {
+        for (&_depth, depth_stats) in &stats.health_by_depth {
             assert!(depth_stats.directory_count > 0);
             assert!(depth_stats.avg_health_score >= 0.0 && depth_stats.avg_health_score <= 1.0);
             assert!(depth_stats.min_health_score >= 0.0 && depth_stats.min_health_score <= 1.0);
@@ -450,7 +450,7 @@ mod directory_health_tree_tests {
         let indented_lines: Vec<&str> = lines
             .iter()
             .filter(|line| line.starts_with("  "))
-            .map(|s| *s)
+            .copied()
             .collect();
         assert!(!indented_lines.is_empty()); // Some lines should be indented for children
 
@@ -600,8 +600,8 @@ mod directory_health_tree_tests {
         // Should handle special characters and numbers in paths
         assert!(!health_tree.directories.is_empty());
 
-        let module_path = PathBuf::from("src/module-name");
-        let version_path = PathBuf::from("src/v2.0");
+        let _module_path = PathBuf::from("src/module-name");
+        let _version_path = PathBuf::from("src/v2.0");
 
         // Should be able to find directories with special characters
         let has_special_chars = health_tree
@@ -646,7 +646,7 @@ mod directory_health_tree_tests {
         assert!(problems_dir.issue_categories.contains_key("graph"));
 
         // All categories should have the same affected entities count
-        for (_, issue_summary) in &problems_dir.issue_categories {
+        for issue_summary in problems_dir.issue_categories.values() {
             assert_eq!(issue_summary.affected_entities, 1);
             assert!(issue_summary.avg_severity > 0.0);
             assert!(issue_summary.max_severity > 0.0);

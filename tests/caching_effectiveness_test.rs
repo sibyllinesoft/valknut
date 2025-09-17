@@ -2,7 +2,6 @@
 
 use std::time::Instant;
 use valknut_rs::core::config::LshConfig;
-use valknut_rs::core::featureset::CodeEntity;
 use valknut_rs::detectors::lsh::LshExtractor;
 
 #[test]
@@ -73,12 +72,8 @@ fn test_caching_effectiveness() {
         "Should have at least 2 signature cache hits"
     );
     // Note: token hits may be 0 if signature cache prevents token generation
-    // The token_hits field is unsigned, so this comparison is always true, but kept for documentation
-    #[allow(clippy::absurd_extreme_comparisons)]
-    assert!(
-        cache_stats.token_hits >= 0,
-        "Token hits should be non-negative"
-    );
+    // The token_hits field is unsigned, so this is always true
+    // assert!(cache_stats.token_hits >= 0); // Removed useless comparison
 
     let hit_rate = cache_stats.overall_hit_rate();
     println!("Overall cache hit rate: {:.1}%", hit_rate * 100.0);

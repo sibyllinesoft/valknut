@@ -7,7 +7,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::{json, Value};
-use std::io::Write;
 use std::process::Stdio;
 use tempfile::tempdir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

@@ -172,7 +172,7 @@ mod feature_vector_performance_tests {
         for i in 0..100 {
             let mut vector = FeatureVector::new(format!("entity_{}", i));
             for j in 0..50 {
-                vector.add_feature(&format!("feature_{}", j), (i + j) as f64);
+                vector.add_feature(format!("feature_{}", j), (i + j) as f64);
             }
             vectors.push(vector);
         }
@@ -205,7 +205,7 @@ mod feature_vector_performance_tests {
 
         // Add many features
         for i in 0..1000 {
-            vector.add_feature(&format!("feature_{}", i), i as f64);
+            vector.add_feature(format!("feature_{}", i), i as f64);
         }
 
         let (_, duration) = time_operation("Feature access (1000 lookups)", || {
@@ -241,7 +241,7 @@ mod memory_efficiency_tests {
 
                 // Add reasonable number of features per vector
                 for j in 0..10 {
-                    vector.add_feature(&format!("f_{}", j), (i + j) as f64);
+                    vector.add_feature(format!("f_{}", j), (i + j) as f64);
                 }
 
                 vectors.push(vector);
@@ -311,7 +311,6 @@ mod memory_efficiency_tests {
 #[cfg(test)]
 mod concurrency_tests {
     use super::*;
-    use std::sync::Arc;
     use std::thread;
 
     #[test]
@@ -434,7 +433,7 @@ mod stress_tests {
 
                 let feature_count = (i % 20) + 1; // 1 to 20 features
                 for j in 0..feature_count {
-                    vector.add_feature(&format!("feature_{}", j), (i * j) as f64);
+                    vector.add_feature(format!("feature_{}", j), (i * j) as f64);
                 }
 
                 vectors.push(vector);
@@ -470,7 +469,7 @@ mod stress_tests {
             let mut vectors = Vec::new();
 
             // Test with various Unicode entity IDs
-            let unicode_ids = vec![
+            let unicode_ids = [
                 "测试实体",
                 "файл.py",
                 "🦀_entity",

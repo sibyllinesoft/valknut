@@ -766,7 +766,7 @@ mod real_mcp_protocol_tests {
 
         match result {
             Ok(_) => {
-                let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+                let response_json: Value = serde_json::from_str(response.trim()).unwrap();
 
                 // Validate response structure
                 assert_eq!(response_json["jsonrpc"], "2.0");
@@ -830,7 +830,7 @@ mod real_mcp_protocol_tests {
 
         match result {
             Ok(_) => {
-                let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+                let response_json: Value = serde_json::from_str(response.trim()).unwrap();
 
                 assert_eq!(response_json["jsonrpc"], "2.0");
                 assert_eq!(response_json["id"], 2);
@@ -912,7 +912,7 @@ mod real_mcp_protocol_tests {
 
         match result {
             Ok(_) => {
-                let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+                let response_json: Value = serde_json::from_str(response.trim()).unwrap();
 
                 // Validate JSON-RPC response structure
                 assert_eq!(response_json["jsonrpc"], "2.0");
@@ -1002,7 +1002,7 @@ mod real_mcp_protocol_tests {
 
         match result {
             Ok(_) => {
-                let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+                let response_json: Value = serde_json::from_str(response.trim()).unwrap();
 
                 assert_eq!(response_json["jsonrpc"], "2.0");
                 assert_eq!(response_json["id"], 4);
@@ -1087,7 +1087,7 @@ mod real_mcp_protocol_tests {
 
             match result {
                 Ok(_) => {
-                    let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+                    let response_json: Value = serde_json::from_str(response.trim()).unwrap();
                     assert_eq!(response_json["jsonrpc"], "2.0");
                     assert_eq!(response_json["id"], 5);
 
@@ -1102,10 +1102,9 @@ mod real_mcp_protocol_tests {
                         match format {
                             "json" => {
                                 // Should be valid JSON
-                                let _: Value = serde_json::from_str(text).expect(&format!(
-                                    "JSON format should produce valid JSON, got: {}",
-                                    text
-                                ));
+                                let _: Value = serde_json::from_str(text).unwrap_or_else(|_| {
+                                    panic!("JSON format should produce valid JSON, got: {}", text)
+                                });
                             }
                             "markdown" => {
                                 // Should contain markdown headers
@@ -1168,11 +1167,11 @@ mod real_mcp_protocol_tests {
         stdin.flush().await.unwrap();
 
         let mut response = String::new();
-        timeout(Duration::from_secs(5), reader.read_line(&mut response))
+        let _ = timeout(Duration::from_secs(5), reader.read_line(&mut response))
             .await
             .unwrap();
 
-        let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+        let response_json: Value = serde_json::from_str(response.trim()).unwrap();
         assert!(response_json["error"].is_object());
         assert_eq!(response_json["error"]["code"], -32600); // INVALID_REQUEST
 
@@ -1190,11 +1189,11 @@ mod real_mcp_protocol_tests {
             .unwrap();
         stdin.flush().await.unwrap();
 
-        timeout(Duration::from_secs(5), reader.read_line(&mut response))
+        let _ = timeout(Duration::from_secs(5), reader.read_line(&mut response))
             .await
             .unwrap();
 
-        let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+        let response_json: Value = serde_json::from_str(response.trim()).unwrap();
         assert!(response_json["error"].is_object());
         assert_eq!(response_json["error"]["code"], -32601); // METHOD_NOT_FOUND
 
@@ -1219,11 +1218,11 @@ mod real_mcp_protocol_tests {
             .unwrap();
         stdin.flush().await.unwrap();
 
-        timeout(Duration::from_secs(10), reader.read_line(&mut response))
+        let _ = timeout(Duration::from_secs(10), reader.read_line(&mut response))
             .await
             .unwrap();
 
-        let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+        let response_json: Value = serde_json::from_str(response.trim()).unwrap();
         assert!(response_json["error"].is_object());
         assert_eq!(response_json["error"]["code"], -32602); // INVALID_PARAMS
         assert!(response_json["error"]["message"]
@@ -1249,11 +1248,11 @@ mod real_mcp_protocol_tests {
             .unwrap();
         stdin.flush().await.unwrap();
 
-        timeout(Duration::from_secs(5), reader.read_line(&mut response))
+        let _ = timeout(Duration::from_secs(5), reader.read_line(&mut response))
             .await
             .unwrap();
 
-        let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+        let response_json: Value = serde_json::from_str(response.trim()).unwrap();
         assert!(response_json["error"].is_object());
         assert_eq!(response_json["error"]["code"], -32001); // TOOL_NOT_FOUND
 
@@ -1280,11 +1279,11 @@ mod real_mcp_protocol_tests {
         stdin.flush().await.unwrap();
 
         let mut response = String::new();
-        timeout(Duration::from_secs(5), reader.read_line(&mut response))
+        let _ = timeout(Duration::from_secs(5), reader.read_line(&mut response))
             .await
             .unwrap();
 
-        let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+        let response_json: Value = serde_json::from_str(response.trim()).unwrap();
         assert!(response_json["error"].is_object());
         assert_eq!(response_json["error"]["code"], -32700); // PARSE_ERROR
 
@@ -1331,11 +1330,11 @@ mod real_mcp_protocol_tests {
 
             // Read the response for this request
             let mut response = String::new();
-            timeout(Duration::from_secs(30), reader.read_line(&mut response))
+            let _ = timeout(Duration::from_secs(30), reader.read_line(&mut response))
                 .await
                 .expect("Should receive response within timeout");
 
-            let response_json: Value = serde_json::from_str(&response.trim()).unwrap();
+            let response_json: Value = serde_json::from_str(response.trim()).unwrap();
             assert_eq!(response_json["jsonrpc"], "2.0");
             assert_eq!(response_json["id"], i);
 

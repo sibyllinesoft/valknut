@@ -2,8 +2,6 @@
 //!
 //! Tests basic calibration and ranking functionality with current API
 
-use std::collections::HashMap;
-
 use valknut_rs::detectors::clone_detection::{
     AutoCalibrationEngine, CloneCandidate, CloneType, PayoffRankingSystem,
 };
@@ -15,19 +13,17 @@ mod simplified_calibration_tests {
     /// Test auto-calibration engine creation
     #[test]
     fn test_auto_calibration_engine_creation() {
-        let engine = AutoCalibrationEngine::new();
+        let _engine = AutoCalibrationEngine::new();
 
         // Basic validation - if we get here, creation succeeded
-        assert!(true);
     }
 
     /// Test payoff ranking system creation
     #[test]
     fn test_payoff_ranking_system_creation() {
-        let ranking_system = PayoffRankingSystem::new();
+        let _ranking_system = PayoffRankingSystem::new();
 
         // Basic validation - if we get here, creation succeeded
-        assert!(true);
     }
 
     /// Test clone candidate comparison for ranking

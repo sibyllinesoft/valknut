@@ -135,7 +135,7 @@ fn test_weighted_minhash() {
 
     // Should have some similarity due to shared rare token
     // Stop motifs should contribute minimally
-    assert!(similarity >= 0.0 && similarity <= 1.0);
+    assert!((0.0..=1.0).contains(&similarity));
     assert_eq!(sig1.size(), 64);
     assert_eq!(sig2.size(), 64);
 }

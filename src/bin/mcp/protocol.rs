@@ -1,7 +1,6 @@
 //! MCP protocol types and message handling for JSON-RPC 2.0 communication.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// JSON-RPC 2.0 request structure
 #[derive(Debug, Deserialize)]
@@ -115,6 +114,7 @@ pub mod error_codes {
 
     // MCP-specific error codes
     pub const TOOL_NOT_FOUND: i32 = -32001;
+    #[allow(dead_code)]
     pub const TOOL_EXECUTION_ERROR: i32 = -32002;
     pub const ANALYSIS_ERROR: i32 = -32003;
 }

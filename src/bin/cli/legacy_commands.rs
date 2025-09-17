@@ -4,7 +4,6 @@
 //! These commands are hidden from help output and will be removed in v2.0.
 
 use crate::cli::args::{ImpactArgs, StructureArgs};
-use crate::cli::output::*;
 use anyhow;
 use std::path::Path;
 use tracing::{debug, info, warn};
@@ -53,7 +52,7 @@ pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
     warn!("The 'impact' command is deprecated. Use 'analyze --no-coverage --no-refactoring --no-structure' instead.");
 
     // Create a basic configuration for impact analysis
-    let valknut_config = ValknutConfig {
+    let _valknut_config = ValknutConfig {
         analysis: AnalysisConfig {
             enable_scoring: false,
             enable_graph_analysis: true, // Enable impact analysis

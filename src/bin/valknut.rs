@@ -6,7 +6,6 @@
 //! analysis capabilities with team-friendly reports.
 
 use clap::Parser;
-use tracing;
 
 mod cli;
 mod mcp;
@@ -32,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
     // Execute command
     match cli.command {
         Commands::Analyze(args) => {
-            cli::analyze_command(args, cli.survey, cli.survey_verbosity).await?;
+            cli::analyze_command(*args, cli.survey, cli.survey_verbosity).await?;
         }
         Commands::PrintDefaultConfig => {
             cli::print_default_config().await?;
@@ -71,11 +70,7 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use clap::Parser;
-    use cli::args::{
-        AnalyzeArgs, ImpactArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat,
-        StructureArgs, SurveyVerbosity, ValidateConfigArgs,
-    };
-    use std::env;
+    use cli::args::{OutputFormat, SurveyVerbosity};
     use std::path::PathBuf;
 
     #[tokio::test]

@@ -8,7 +8,6 @@
 
 use approx::assert_relative_eq;
 use proptest::prelude::*;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use valknut_rs::core::config::ValknutConfig;
@@ -102,10 +101,10 @@ mod weighted_shingle_analyzer_tests {
     /// Test k-gram generation with different k values
     #[test]
     fn test_kgram_generation_different_k_values() {
-        let source_code = "def function_name(param1, param2):\n    return param1 + param2";
+        let _source_code = "def function_name(param1, param2):\n    return param1 + param2";
 
         for k in [1, 3, 5, 9] {
-            let analyzer = WeightedShingleAnalyzer::new(k);
+            let _analyzer = WeightedShingleAnalyzer::new(k);
             // let kgrams = analyzer.generate_kgrams(source_code); // Private method
             // Note: Using placeholder implementation until public API is available
             let kgrams = if k <= 1 {
@@ -121,7 +120,7 @@ mod weighted_shingle_analyzer_tests {
                     // For placeholder data, we expect the tokens to match k value
                     if !tokens.is_empty() && k > 1 {
                         assert!(
-                            tokens.len() >= 1,
+                            !tokens.is_empty(),
                             "K-gram should have valid tokens for k={}",
                             k
                         );
@@ -211,7 +210,7 @@ mod weighted_shingle_analyzer_tests {
         analyzer.build_idf_table(&entities).unwrap();
         let signatures = analyzer.compute_weighted_signatures(&entities).unwrap();
 
-        let signature = signatures.get("short").unwrap();
+        let _signature = signatures.get("short").unwrap();
         // Short source may not generate k-grams if k > token count
         // This is expected behavior
     }
@@ -278,8 +277,8 @@ mod weighted_shingle_analyzer_tests {
         let e2_sig = signatures.get("e2").unwrap();
         let e3_sig = signatures.get("e3").unwrap();
 
-        let similarity_common = analyzer.weighted_jaccard_similarity(e1_sig, e2_sig);
-        let similarity_rare = analyzer.weighted_jaccard_similarity(e1_sig, e3_sig);
+        let _similarity_common = analyzer.weighted_jaccard_similarity(e1_sig, e2_sig);
+        let _similarity_rare = analyzer.weighted_jaccard_similarity(e1_sig, e3_sig);
 
         // Both have "gram" but e1,e2 share "common" which should be downweighted
         // This test verifies IDF weighting is working
@@ -299,7 +298,7 @@ mod weighted_shingle_analyzer_tests {
                 format!("func_{}", i),
                 format!("/test/file_{}.py", i),
             )
-            .with_source_code(&format!(
+            .with_source_code(format!(
                 "def func_{}():\n    print('hello')\n    value_{} = {}",
                 i, i, i
             ));
@@ -321,7 +320,7 @@ mod weighted_shingle_analyzer_tests {
 
         let similarity = analyzer.weighted_jaccard_similarity(sig0, sig1);
         assert!(
-            similarity >= 0.0 && similarity <= 1.0,
+            (0.0..=1.0).contains(&similarity),
             "Similarity should be in [0,1] range: {}",
             similarity
         );
@@ -393,7 +392,7 @@ mod property_based_tests {
 
                     // For edge cases like very short or repetitive input, similarity may be undefined
                     // Handle edge cases gracefully
-                    if source_code.trim().split_whitespace().count() < k {
+                    if source_code.split_whitespace().count() < k {
                         // Skip test for inputs too short for k-grams
                         println!("Skipping test for input too short for k={}: '{}'", k, source_code);
                         return Ok(());
@@ -454,7 +453,7 @@ mod property_based_tests {
 
             let similarity = analyzer.weighted_jaccard_similarity(&sig1, &sig2);
 
-            assert!(similarity >= 0.0 && similarity <= 1.0,
+            assert!((0.0..=1.0).contains(&similarity),
                    "Similarity should be in [0,1] range: {}", similarity);
         }
     }
@@ -469,7 +468,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_extraction_context_integration() {
         let config = Arc::new(ValknutConfig::default());
-        let context = ExtractionContext::new(config, "python");
+        let _context = ExtractionContext::new(config, "python");
 
         let mut analyzer = WeightedShingleAnalyzer::new(3);
 
@@ -492,6 +491,6 @@ mod integration_tests {
         let sig2 = signatures.get("e2").unwrap();
 
         let similarity = analyzer.weighted_jaccard_similarity(sig1, sig2);
-        assert!(similarity >= 0.0 && similarity <= 1.0);
+        assert!((0.0..=1.0).contains(&similarity));
     }
 }

@@ -20,6 +20,7 @@ use valknut_rs::core::config::ReportFormat;
 use valknut_rs::io::reports::ReportGenerator;
 
 /// Generate outputs with progress feedback
+#[allow(dead_code)]
 pub async fn generate_outputs_with_feedback(
     result: &serde_json::Value,
     out_path: &Path,
@@ -49,6 +50,7 @@ pub async fn generate_outputs_with_feedback(
 }
 
 /// Generate output files from analysis result
+#[allow(dead_code)]
 pub async fn generate_outputs(
     result: &serde_json::Value,
     out_path: &Path,
@@ -130,6 +132,7 @@ pub async fn generate_outputs(
 }
 
 /// Display analysis results with visual indicators
+#[allow(dead_code)]
 pub fn display_analysis_results(result: &serde_json::Value) {
     println!("{}", "✅ Analysis Complete".bright_green().bold());
     println!();
@@ -196,6 +199,7 @@ pub fn display_analysis_results(result: &serde_json::Value) {
 }
 
 /// Display completion summary with next steps
+#[allow(dead_code)]
 pub fn display_completion_summary(
     result: &serde_json::Value,
     out_path: &Path,
@@ -307,7 +311,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
         "- **Analysis Date**: {}\n",
         chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     ));
-    content.push_str("\n");
+    content.push('\n');
 
     if total_issues == 0 {
         content.push_str("✅ **Excellent!** No significant issues found in your codebase.\n");
@@ -360,7 +364,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
                     maintainability
                 ));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
 
         // Add complexity analysis results
@@ -439,7 +443,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
                                     }
                                 }
                             }
-                            content.push_str("\n");
+                            content.push('\n');
                         }
                     }
                 }
@@ -474,7 +478,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
                     avg_debt
                 ));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
 
         // Add refactoring opportunities
@@ -508,6 +512,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
     Ok(content)
 }
 
+#[allow(dead_code)]
 pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
     let total_files = result["summary"]["total_files"].as_u64().unwrap_or(0);
@@ -1139,6 +1144,7 @@ pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<S
     Ok(content)
 }
 
+#[allow(dead_code)]
 pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let summary = &result["summary"];
     let health_metrics = &result["health_metrics"];
@@ -1183,6 +1189,7 @@ pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::R
 }
 
 // Human-readable output functions
+#[allow(dead_code)]
 pub fn print_human_readable_results(results: &serde_json::Value) {
     println!(
         "{}",
@@ -1252,6 +1259,7 @@ pub fn print_human_readable_results(results: &serde_json::Value) {
     }
 }
 
+#[allow(dead_code)]
 pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
     println!(
         "{}",
@@ -1299,6 +1307,7 @@ pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
 }
 
 /// Display refactoring suggestions prominently
+#[allow(dead_code)]
 pub fn display_refactoring_suggestions(results: &serde_json::Value) {
     // Check if refactoring analysis was enabled and has results
     if let Some(refactoring) = results.get("refactoring") {
@@ -1472,6 +1481,7 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
 }
 
 /// Display complexity-based recommendations
+#[allow(dead_code)]
 pub fn display_complexity_recommendations(results: &serde_json::Value) {
     if let Some(complexity) = results.get("complexity") {
         if let Some(enabled) = complexity.get("enabled").and_then(|v| v.as_bool()) {
@@ -1553,6 +1563,7 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
 }
 
 // Helper function
+#[allow(dead_code)]
 pub fn format_to_string(format: &OutputFormat) -> &str {
     match format {
         OutputFormat::Jsonl => "jsonl",
@@ -1572,7 +1583,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
-    use tempfile::{NamedTempFile, TempDir};
+    use tempfile::TempDir;
     use tokio;
 
     #[test]

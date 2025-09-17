@@ -5,14 +5,10 @@
 //! - PdgMotifAnalyzer - structural motif extraction
 //! - Current API functionality
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::HashSet;
 
-use valknut_rs::core::config::{DedupeConfig, ValknutConfig};
-use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
-use valknut_rs::detectors::clone_detection::{
-    BasicBlockAnalyzer, MotifCategory, PdgMotif, PdgMotifAnalyzer,
-};
+use valknut_rs::core::featureset::CodeEntity;
+use valknut_rs::detectors::clone_detection::{BasicBlockAnalyzer, MotifCategory, PdgMotifAnalyzer};
 
 #[cfg(test)]
 mod basic_block_analyzer_tests {
@@ -41,7 +37,7 @@ return result
 "#;
         let conditional_blocks = analyzer.analyze_basic_blocks(conditional_code);
         assert!(
-            conditional_blocks.len() >= 1,
+            !conditional_blocks.is_empty(),
             "Conditional code should produce basic blocks, got {}",
             conditional_blocks.len()
         );
@@ -58,7 +54,7 @@ return result
 "#;
         let loop_blocks = analyzer.analyze_basic_blocks(loop_code);
         assert!(
-            loop_blocks.len() >= 1,
+            !loop_blocks.is_empty(),
             "Loop code should produce basic blocks, got {}",
             loop_blocks.len()
         );
@@ -136,12 +132,12 @@ else:
         let analyzer = BasicBlockAnalyzer::new();
 
         // Empty code
-        let empty_blocks = analyzer.analyze_basic_blocks("");
+        let _empty_blocks = analyzer.analyze_basic_blocks("");
         // Should handle empty code gracefully
 
         // Code with only comments
         let comment_code = "# This is a comment\n# Another comment";
-        let comment_blocks = analyzer.analyze_basic_blocks(comment_code);
+        let _comment_blocks = analyzer.analyze_basic_blocks(comment_code);
         // Should handle comment-only code
 
         // Complex nested control flow
@@ -164,7 +160,7 @@ return result
 "#;
         let nested_blocks = analyzer.analyze_basic_blocks(nested_code);
         assert!(
-            nested_blocks.len() >= 1,
+            !nested_blocks.is_empty(),
             "Deeply nested function should produce basic blocks, got {}",
             nested_blocks.len()
         );
@@ -200,7 +196,7 @@ def control_flow(x, y):
         return x
 "#;
 
-        let entity = CodeEntity::new("cf", "function", "control_flow", "/test/cf.py")
+        let _entity = CodeEntity::new("cf", "function", "control_flow", "/test/cf.py")
             .with_source_code(control_flow_code);
 
         let motifs = analyzer.extract_motifs(control_flow_code, "control_flow_test");
@@ -387,7 +383,7 @@ mod property_based_tests {
 
             code.push_str("    return x\n");
 
-            let entity = CodeEntity::new("test", "function", "test_func", "/test/test.py")
+            let _entity = CodeEntity::new("test", "function", "test_func", "/test/test.py")
                 .with_source_code(&code);
 
             let blocks = analyzer.analyze_basic_blocks(&code);
@@ -607,7 +603,7 @@ else:
         assert!(!loop_blocks.is_empty(), "Loop function should have blocks");
 
         // Test motif analysis
-        let simple_motifs = motif_analyzer.extract_motifs(simple_func, "simple");
+        let _simple_motifs = motif_analyzer.extract_motifs(simple_func, "simple");
         let conditional_motifs = motif_analyzer.extract_motifs(conditional_func, "conditional");
         let loop_motifs = motif_analyzer.extract_motifs(loop_func, "loop");
 
