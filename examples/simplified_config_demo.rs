@@ -5,7 +5,9 @@
 
 use valknut_rs::api::config_types::{AnalysisConfig, AnalysisModules};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+type DynError = Box<dyn std::error::Error>;
+
+fn main() -> Result<(), DynError> {
     println!("🔧 Valknut Configuration Simplification Demo");
     println!("============================================\n");
 
