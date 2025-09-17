@@ -72,7 +72,7 @@ fn test_caching_effectiveness() {
         cache_stats.signature_hits >= 2,
         "Should have at least 2 signature cache hits"
     );
-    // Note: token hits may be 0 if signature cache prevents token generation  
+    // Note: token hits may be 0 if signature cache prevents token generation
     // The token_hits field is unsigned, so this comparison is always true, but kept for documentation
     #[allow(clippy::absurd_extreme_comparisons)]
     assert!(
