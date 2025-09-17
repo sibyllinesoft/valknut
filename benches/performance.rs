@@ -5,12 +5,15 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::hint::black_box as std_black_box;
-use valknut_rs::core::{
-    bayesian::BayesianNormalizer,
-    config::ValknutConfig,
-    featureset::FeatureVector,
-    pipeline::{AnalysisConfig, AnalysisPipeline},
-    scoring::FeatureNormalizer,
+use valknut_rs::{
+    api::config_types::AnalysisConfig,
+    core::{
+        bayesian::BayesianNormalizer,
+        config::ValknutConfig,
+        featureset::FeatureVector,
+        pipeline::pipeline_executor::AnalysisPipeline,
+        scoring::FeatureNormalizer,
+    },
 };
 use valknut_rs::detectors::lsh::LshExtractor;
 
