@@ -9,7 +9,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
 use std::time::Duration;
-use valknut_rs::core::config::{ValknutConfig, LshConfig};
+use valknut_rs::core::config::{LshConfig, ValknutConfig};
 use valknut_rs::core::featureset::CodeEntity;
 use valknut_rs::detectors::lsh::LshExtractor;
 

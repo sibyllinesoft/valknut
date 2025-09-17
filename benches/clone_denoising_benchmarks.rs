@@ -8,9 +8,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::time::Duration;
 
+use valknut_rs::core::config::LshConfig;
 use valknut_rs::core::featureset::CodeEntity;
 use valknut_rs::detectors::lsh::{LshExtractor, WeightedShingleAnalyzer};
-use valknut_rs::core::config::LshConfig;
 
 /// Generate test entities for performance testing
 fn generate_test_entities(count: usize) -> Vec<CodeEntity> {
@@ -121,16 +121,16 @@ impl DataProcessor_{id} {{
     for i in 0..count {
         let pattern_idx = i % patterns.len();
         let source_code = patterns[pattern_idx].replace("{id}", &i.to_string());
-        
+
         let file_ext = match pattern_idx {
             0 => "py",
-            1 => "js", 
+            1 => "js",
             _ => "rs",
         };
 
         let entity = CodeEntity::new(
             &format!("entity_{}", i),
-            "function", 
+            "function",
             &format!("entity_{}", i),
             &format!("/test/file_{}.{}", i, file_ext),
         )
@@ -238,7 +238,7 @@ fn bench_lsh_operations(c: &mut Criterion) {
     group.bench_function("lsh_similarity_searches", |b| {
         b.iter(|| {
             let context = lsh_extractor.create_similarity_search_context(&entity_refs);
-            
+
             // Perform multiple similarity searches
             for i in 0..10.min(entities.len()) {
                 let entity_id = &entities[i].id;
@@ -319,7 +319,7 @@ fn bench_memory_scalability(c: &mut Criterion) {
                     });
 
                     let context = lsh_extractor.create_similarity_search_context(&entity_refs);
-                    
+
                     // Perform searches to stress test the index
                     let search_count = 5.min(entities.len());
                     for i in 0..search_count {
@@ -367,7 +367,7 @@ fn bench_memory_scalability(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark Different K-gram Sizes 
+/// Benchmark Different K-gram Sizes
 fn bench_kgram_sizes(c: &mut Criterion) {
     let mut group = c.benchmark_group("kgram_sizes");
 
@@ -405,7 +405,7 @@ fn bench_lsh_configurations(c: &mut Criterion) {
     // Test different LSH configurations
     let configs = vec![
         ("small", 32, 4),
-        ("medium", 64, 8), 
+        ("medium", 64, 8),
         ("large", 128, 16),
         ("xlarge", 256, 32),
     ];

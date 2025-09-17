@@ -62,7 +62,7 @@ return result
             "Loop code should produce basic blocks, got {}",
             loop_blocks.len()
         );
-        
+
         // Check that at least one block contains a return
         assert!(
             loop_blocks.iter().any(|b| b.contains_return),
@@ -85,13 +85,13 @@ else:
 "#;
 
         let blocks = analyzer.analyze_basic_blocks(func_with_calls);
-        
+
         // Should detect function calls
         assert!(
             blocks.iter().any(|b| b.contains_call),
             "Should detect function calls in blocks"
         );
-        
+
         // Should detect return statements
         assert!(
             blocks.iter().any(|b| b.contains_return),
@@ -103,12 +103,12 @@ else:
     #[test]
     fn test_analyzer_configuration() {
         use valknut_rs::detectors::clone_detection::pdg_analyzer::BasicBlockConfig;
-        
+
         // Test with default configuration
         let default_analyzer = BasicBlockAnalyzer::new();
         let code = "x = 1\ny = 2\nreturn x + y";
         let default_blocks = default_analyzer.analyze_basic_blocks(code);
-        
+
         // Test with custom configuration
         let custom_config = BasicBlockConfig {
             include_empty_blocks: true,
@@ -118,10 +118,16 @@ else:
         };
         let custom_analyzer = BasicBlockAnalyzer::with_config(custom_config);
         let custom_blocks = custom_analyzer.analyze_basic_blocks(code);
-        
+
         // Both should produce some blocks
-        assert!(!default_blocks.is_empty(), "Default analyzer should produce blocks");
-        assert!(!custom_blocks.is_empty(), "Custom analyzer should produce blocks");
+        assert!(
+            !default_blocks.is_empty(),
+            "Default analyzer should produce blocks"
+        );
+        assert!(
+            !custom_blocks.is_empty(),
+            "Custom analyzer should produce blocks"
+        );
     }
 
     /// Test edge cases for block analysis
@@ -132,12 +138,12 @@ else:
         // Empty code
         let empty_blocks = analyzer.analyze_basic_blocks("");
         // Should handle empty code gracefully
-        
+
         // Code with only comments
         let comment_code = "# This is a comment\n# Another comment";
         let comment_blocks = analyzer.analyze_basic_blocks(comment_code);
         // Should handle comment-only code
-        
+
         // Complex nested control flow
         let nested_code = r#"
 result = 0
@@ -162,7 +168,7 @@ return result
             "Deeply nested function should produce basic blocks, got {}",
             nested_blocks.len()
         );
-        
+
         // Should detect loop patterns
         assert!(
             nested_blocks.iter().any(|b| b.is_loop_header),
@@ -232,12 +238,22 @@ return 0"#;
         let motifs2 = analyzer.extract_motifs(func2, "similar2");
 
         // Similar structures should extract similar motifs
-        assert!(!motifs1.is_empty(), "Should extract motifs from first function");
-        assert!(!motifs2.is_empty(), "Should extract motifs from second function");
-        
+        assert!(
+            !motifs1.is_empty(),
+            "Should extract motifs from first function"
+        );
+        assert!(
+            !motifs2.is_empty(),
+            "Should extract motifs from second function"
+        );
+
         // Both should contain conditional motifs
-        assert!(motifs1.iter().any(|m| m.category == MotifCategory::Conditional));
-        assert!(motifs2.iter().any(|m| m.category == MotifCategory::Conditional));
+        assert!(motifs1
+            .iter()
+            .any(|m| m.category == MotifCategory::Conditional));
+        assert!(motifs2
+            .iter()
+            .any(|m| m.category == MotifCategory::Conditional));
     }
 
     /// Test motif detection for shared structural patterns
@@ -264,14 +280,24 @@ return output"#;
         let motifs2 = analyzer.extract_motifs(func2_code, "shared_structure2");
 
         // Both should extract similar types of motifs
-        assert!(!motifs1.is_empty(), "Should extract motifs from first function");
-        assert!(!motifs2.is_empty(), "Should extract motifs from second function");
-        
+        assert!(
+            !motifs1.is_empty(),
+            "Should extract motifs from first function"
+        );
+        assert!(
+            !motifs2.is_empty(),
+            "Should extract motifs from second function"
+        );
+
         // Both should contain loop and conditional motifs
         assert!(motifs1.iter().any(|m| m.category == MotifCategory::Loop));
-        assert!(motifs1.iter().any(|m| m.category == MotifCategory::Conditional));
+        assert!(motifs1
+            .iter()
+            .any(|m| m.category == MotifCategory::Conditional));
         assert!(motifs2.iter().any(|m| m.category == MotifCategory::Loop));
-        assert!(motifs2.iter().any(|m| m.category == MotifCategory::Conditional));
+        assert!(motifs2
+            .iter()
+            .any(|m| m.category == MotifCategory::Conditional));
 
         // Test functions with different structures
         let diff_func_code = r#"total = 0
@@ -282,10 +308,15 @@ while i < n:
 return total"#;
 
         let motifs_diff = analyzer.extract_motifs(diff_func_code, "different_structure");
-        
+
         // Should extract different pattern (while loop instead of for loop)
-        assert!(!motifs_diff.is_empty(), "Should extract motifs from different function");
-        assert!(motifs_diff.iter().any(|m| m.category == MotifCategory::Loop));
+        assert!(
+            !motifs_diff.is_empty(),
+            "Should extract motifs from different function"
+        );
+        assert!(motifs_diff
+            .iter()
+            .any(|m| m.category == MotifCategory::Loop));
     }
 
     /// Test motif categorization accuracy
@@ -309,11 +340,8 @@ return result"#;
         let categories: HashSet<MotifCategory> =
             motifs.iter().map(|m| m.category.clone()).collect();
 
-        assert!(
-            !categories.is_empty(),
-            "Should detect various motifs"
-        );
-        
+        assert!(!categories.is_empty(), "Should detect various motifs");
+
         // Should detect at least conditional and loop motifs
         assert!(
             categories.contains(&MotifCategory::Conditional),
@@ -393,7 +421,7 @@ mod property_based_tests {
             // Same code should produce same number of motifs
             assert_eq!(motifs1_a.len(), motifs1_b.len(),
                       "Same code should produce consistent motif count");
-            
+
             // Both should extract some motifs for non-trivial code
             if func1_lines > 5 {
                 assert!(!motifs1_a.is_empty(), "Non-trivial code should have motifs");
@@ -422,7 +450,7 @@ mod property_based_tests {
             // Same code should produce same number of blocks
             assert_eq!(blocks1_a.len(), blocks1_b.len(),
                       "Same code should produce consistent block count");
-            
+
             // Both should produce reasonable block counts
             assert!(!blocks1_a.is_empty(), "Should always produce at least one block");
             assert!(!blocks2.is_empty(), "Should always produce at least one block");
@@ -524,9 +552,20 @@ else:
         );
 
         // Both analyzers should detect structural complexity
-        assert!(blocks.iter().any(|b| b.contains_call), "Should detect function calls");
-        assert!(motifs.iter().any(|m| m.category == MotifCategory::Conditional), "Should detect conditionals");
-        assert!(motifs.iter().any(|m| m.category == MotifCategory::Loop), "Should detect loops");
+        assert!(
+            blocks.iter().any(|b| b.contains_call),
+            "Should detect function calls"
+        );
+        assert!(
+            motifs
+                .iter()
+                .any(|m| m.category == MotifCategory::Conditional),
+            "Should detect conditionals"
+        );
+        assert!(
+            motifs.iter().any(|m| m.category == MotifCategory::Loop),
+            "Should detect loops"
+        );
     }
 
     /// Test basic analysis functionality with simple examples
@@ -545,8 +584,14 @@ else:
         let conditional_blocks = block_analyzer.analyze_basic_blocks(conditional_func);
         let loop_blocks = block_analyzer.analyze_basic_blocks(loop_func);
 
-        assert!(!simple_blocks.is_empty(), "Simple function should have blocks");
-        assert!(!conditional_blocks.is_empty(), "Conditional function should have blocks");
+        assert!(
+            !simple_blocks.is_empty(),
+            "Simple function should have blocks"
+        );
+        assert!(
+            !conditional_blocks.is_empty(),
+            "Conditional function should have blocks"
+        );
         assert!(!loop_blocks.is_empty(), "Loop function should have blocks");
 
         // Test motif analysis
@@ -555,9 +600,17 @@ else:
         let loop_motifs = motif_analyzer.extract_motifs(loop_func, "loop");
 
         // Conditional and loop functions should have more complex motifs
-        assert!(conditional_motifs.iter().any(|m| m.category == MotifCategory::Conditional), 
-               "Conditional function should have conditional motifs");
-        assert!(loop_motifs.iter().any(|m| m.category == MotifCategory::Loop), 
-               "Loop function should have loop motifs");
+        assert!(
+            conditional_motifs
+                .iter()
+                .any(|m| m.category == MotifCategory::Conditional),
+            "Conditional function should have conditional motifs"
+        );
+        assert!(
+            loop_motifs
+                .iter()
+                .any(|m| m.category == MotifCategory::Loop),
+            "Loop function should have loop motifs"
+        );
     }
 }
