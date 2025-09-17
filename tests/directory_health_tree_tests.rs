@@ -791,7 +791,7 @@ mod directory_health_tree_tests {
         // Test directory health lookup
         let src_health = results.get_directory_health(Path::new("src"));
         if let Some(health) = src_health {
-            assert!(health >= 0.0 && health <= 1.0);
+            assert!((0.0..=1.0).contains(&health));
         }
 
         // Test directories by health sorting

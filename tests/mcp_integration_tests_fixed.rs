@@ -61,10 +61,8 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::{json, Value};
-use std::process::Stdio;
 use tempfile::tempdir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
 
 /// Test helper to get the CLI binary
@@ -718,7 +716,6 @@ fn test_mcp_integration_analysis() {
 
 /// Real MCP Protocol Integration Tests
 /// These tests verify the complete MCP implementation with actual JSON-RPC communication
-
 #[cfg(test)]
 mod real_mcp_protocol_tests {
     use super::*;

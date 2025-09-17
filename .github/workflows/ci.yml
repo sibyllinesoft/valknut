@@ -277,7 +277,13 @@ jobs:
           key: build-${{ matrix.target }}
 
       - name: Build for target
-        run: cargo build --target ${{ matrix.target }} --release
+        run: |
+          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" || "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
+            # Disable mimalloc for cross-compilation targets that need specific tools
+            cargo build --target ${{ matrix.target }} --release --no-default-features --features "simd,parallel"
+          else
+            cargo build --target ${{ matrix.target }} --release
+          fi
 
   # Integration testing with real-world scenarios
   integration:
