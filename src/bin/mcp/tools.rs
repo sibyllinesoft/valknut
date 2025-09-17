@@ -5,6 +5,10 @@ use serde_json;
 use std::path::Path;
 use tracing::{error, info};
 
+// Type aliases to reduce complexity
+type DynError = Box<dyn std::error::Error>;
+type ParseResult = Result<(String, Option<String>), (i32, String)>;
+
 use valknut_rs::api::{
     config_types::AnalysisConfig, engine::ValknutEngine, results::AnalysisResults,
 };
@@ -209,7 +213,7 @@ pub async fn execute_refactoring_suggestions(
 fn format_analysis_results(
     results: &AnalysisResults,
     format: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, DynError> {
     match format {
         "json" => {
             // Direct JSON serialization for JSON format
@@ -243,7 +247,7 @@ fn format_analysis_results(
 }
 
 /// Parse entity ID to extract file path and entity name
-fn parse_entity_id(entity_id: &str) -> Result<(String, Option<String>), (i32, String)> {
+fn parse_entity_id(entity_id: &str) -> ParseResult {
     if entity_id.is_empty() {
         return Err((
             error_codes::INVALID_PARAMS,
@@ -643,7 +647,7 @@ fn create_file_quality_report(
 }
 
 /// Create a simple markdown report manually
-fn create_markdown_report(results: &AnalysisResults) -> Result<String, Box<dyn std::error::Error>> {
+fn create_markdown_report(results: &AnalysisResults) -> Result<String, DynError> {
     let mut markdown = String::new();
 
     // Title
@@ -708,7 +712,7 @@ fn create_markdown_report(results: &AnalysisResults) -> Result<String, Box<dyn s
                 }
             }
 
-            markdown.push_str("\n");
+            markdown.push('\n');
         }
     }
 

@@ -484,7 +484,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
                 .and_then(|v| v.as_u64())
             {
                 if opportunities_count > 0 {
-                    content.push_str(&format!("### Refactoring Opportunities\n\n"));
+                    content.push_str("### Refactoring Opportunities\n\n");
                     content.push_str(&format!(
                         "Found **{}** refactoring opportunities across the codebase.\n\n",
                         opportunities_count

@@ -80,7 +80,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_parsing_analyze_default() {
-        let cli = Cli::parse_from(&["valknut", "analyze"]);
+        let cli = Cli::parse_from(["valknut", "analyze"]);
         assert!(!cli.verbose);
         assert!(!cli.survey);
         assert!(matches!(cli.survey_verbosity, SurveyVerbosity::Maximum));
