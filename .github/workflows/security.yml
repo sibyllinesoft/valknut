@@ -43,7 +43,7 @@ jobs:
       - name: Check for yanked crates
         run: |
           echo "🔍 Checking for yanked crates..."
-          cargo audit --ignore-source-errors
+          cargo audit --ignore-source
 
   # Code scanning with CodeQL
   codeql:
