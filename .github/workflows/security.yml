@@ -81,6 +81,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
+        continue-on-error: true  # Don't fail if CodeQL features aren't enabled
 
   # Supply chain security
   supply-chain:
@@ -161,6 +162,14 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
+        continue-on-error: true  # Don't fail if security features aren't enabled
+        
+      - name: Upload Trivy scan results as artifact (fallback)
+        if: failure() || success()  # Always run as fallback
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-security-scan
+          path: 'trivy-results.sarif'
 
       - name: Run OSSGADGET risk calculator
         run: |
@@ -323,6 +332,9 @@ jobs:
           echo "| Supply Chain | ${{ needs.supply-chain.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Policy | ${{ needs.security-policy.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** CodeQL Analysis and SARIF uploads require GitHub Advanced Security features." >> $GITHUB_STEP_SUMMARY
+          echo "If these features are not enabled, the scans will run but results won't be uploaded to Security tab." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Review individual job outputs for detailed findings." >> $GITHUB_STEP_SUMMARY
 
