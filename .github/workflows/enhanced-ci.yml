@@ -55,7 +55,7 @@ jobs:
     - name: Install cargo-tarpaulin
       uses: taiki-e/install-action@v2
       with:
-        tool: tarpaulin
+        tool: cargo-tarpaulin
 
     - name: Check formatting
       run: cargo fmt --all -- --check

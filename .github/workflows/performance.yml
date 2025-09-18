@@ -34,9 +34,10 @@ jobs:
 
       - name: Install benchmark tools
         run: |
-          cargo install cargo-criterion
+          cargo install cargo-criterion --force
           sudo apt-get update
-          sudo apt-get install -y perf-tools-unstable linux-perf
+          # Note: linux-perf not available in Ubuntu 24.04, using linux-tools-generic instead
+          sudo apt-get install -y perf-tools-unstable linux-tools-generic || echo "Perf tools installation failed, continuing without profiling"
 
       - name: Run benchmarks
         run: |

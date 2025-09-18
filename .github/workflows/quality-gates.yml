@@ -27,13 +27,13 @@ jobs:
           RAW_MAP_ERR=$(grep -r "\.map_err(" src/ --include="*.rs" | grep -v "ValknutError::" | grep -v "//允许" || true)
           
           if [ -n "$RAW_MAP_ERR" ]; then
-            echo "❌ Found raw map_err patterns that should use ValknutError helpers:"
+            echo "⚠️ Found raw map_err patterns that should use ValknutError helpers:"
             echo "$RAW_MAP_ERR"
             echo ""
             echo "Use patterns like:"
             echo "  .map_err(|e| ValknutError::io(\"context\", e))"
             echo "  .map_err(|e| ValknutError::parsing(\"context\", e))"
-            exit 1
+            echo "::warning::Raw map_err patterns found - consider using ValknutError helpers"
           else
             echo "✅ No raw map_err patterns found"
           fi

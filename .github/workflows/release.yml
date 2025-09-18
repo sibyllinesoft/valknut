@@ -324,9 +324,8 @@ jobs:
 
       - name: Setup cross-compilation
         if: matrix.cross
-        uses: taiki-e/setup-cross-action@v1
-        with:
-          target: ${{ matrix.target }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
