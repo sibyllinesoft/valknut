@@ -9,114 +9,14 @@ use crate::live::{
     graph::CallGraph,
     reports::LiveReachReporter,
     scoring::{LiveReachScorer, ScoringConfig},
+    stacks::{Language, StackConfig, StackProcessor, TimestampSource},
     storage::{AggregationQuery, LiveStorage},
     types::{EdgeKind, LiveReachReport},
-    // stacks::{StackProcessor, StackConfig, Language, TimestampSource},
+    CiConfig, LiveReachConfig, StorageConfig,
 };
-// Temporarily duplicate config types until module organization is fixed
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LiveReachConfig {
-    pub enabled: bool,
-    pub services: Vec<String>,
-    pub sample_rate: f64,
-    pub weight_static: f64,
-    pub window_days: u32,
-    pub island: IslandConfig,
-    pub ci: CiConfig,
-    pub storage: StorageConfig,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct IslandConfig {
-    pub min_size: usize,
-    pub min_score: f64,
-    pub resolution: f64,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CiConfig {
-    pub warn: bool,
-    pub hard_fail: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct StorageConfig {
-    pub bucket: String,
-    pub layout: String,
-}
-
-impl Default for LiveReachConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            services: vec!["api".to_string(), "worker".to_string()],
-            sample_rate: 0.02,
-            weight_static: 0.1,
-            window_days: 30,
-            island: IslandConfig {
-                min_size: 5,
-                min_score: 0.6,
-                resolution: 0.8,
-            },
-            ci: CiConfig {
-                warn: true,
-                hard_fail: false,
-            },
-            storage: StorageConfig {
-                bucket: "s3://company-valknut/live".to_string(),
-                layout: "edges/date={date}/svc={svc}/ver={ver}/part-*.parquet".to_string(),
-            },
-        }
-    }
-}
-
-impl LiveReachConfig {
-    pub fn validate(&self) -> crate::core::errors::Result<()> {
-        use crate::core::errors::ValknutError;
-
-        if self.sample_rate < 0.0 || self.sample_rate > 1.0 {
-            return Err(ValknutError::validation(
-                "Sample rate must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.weight_static < 0.0 {
-            return Err(ValknutError::validation(
-                "Static weight must be non-negative",
-            ));
-        }
-
-        if self.window_days == 0 {
-            return Err(ValknutError::validation(
-                "Window days must be greater than 0",
-            ));
-        }
-
-        if self.island.min_size == 0 {
-            return Err(ValknutError::validation(
-                "Minimum island size must be greater than 0",
-            ));
-        }
-
-        if self.island.min_score < 0.0 || self.island.min_score > 1.0 {
-            return Err(ValknutError::validation(
-                "Island score threshold must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.island.resolution <= 0.0 {
-            return Err(ValknutError::validation(
-                "Louvain resolution must be positive",
-            ));
-        }
-
-        Ok(())
-    }
-}
 
 use chrono::{DateTime, Duration, Utc};
 use clap::{Args, Subcommand};
-use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -567,34 +467,60 @@ impl LiveReachCli {
 
     /// Ingest collapsed stack files from profilers
     async fn ingest_stacks_command(&self, args: IngestStacksArgs) -> Result<()> {
-        println!("📥 Ingesting stack traces (placeholder implementation)");
+        println!("📥 Ingesting stack traces");
         println!("   Service: {}", args.svc);
         println!("   Version: {}", args.ver);
         println!("   Language: {}", args.lang);
         println!("   Pattern: {}", args.from);
         println!("   Output: {}", args.out.display());
 
-        println!("📊 Processing complete (placeholder):");
-        println!("   Files processed: 0");
-        println!("   Stack samples: 0");
-        println!("   Edges before filtering: 0");
-        println!("   Edges after filtering: 0");
-        println!("   Final aggregated edges: 0");
+        let lang = Language::from_str(&args.lang)?;
+        let ts_source = TimestampSource::from_str(&args.ts_source)?;
+        let ns_allow = args
+            .ns_allow
+            .unwrap_or_default()
+            .into_iter()
+            .map(|prefix| prefix.trim().to_string())
+            .filter(|prefix| !prefix.is_empty())
+            .collect();
 
-        println!("⚠️ Warnings:");
-        println!("   Stack processor integration is not yet complete");
-        println!("   This command provides a placeholder implementation");
+        let config = StackConfig {
+            svc: args.svc.clone(),
+            ver: args.ver.clone(),
+            lang,
+            ns_allow,
+            from: args.from.clone(),
+            out: args.out.clone(),
+            upload: args.upload.clone(),
+            fail_if_empty: args.fail_if_empty,
+            dry_run: args.dry_run,
+            ts_source,
+            strip_prefix: args.strip_prefix.clone(),
+            dedupe: args.dedupe,
+        };
+
+        let result = StackProcessor::new(config)?.process().await?;
+
+        println!("📊 Processing complete:");
+        println!("   Files processed: {}", result.files_processed);
+        println!("   Stack samples: {}", result.samples_processed);
+        println!("   Edges before filtering: {}", result.edges_before_filter);
+        println!("   Edges after filtering: {}", result.edges_after_filter);
+
+        if !result.warnings.is_empty() {
+            println!("⚠️ Warnings:");
+            for warning in &result.warnings {
+                println!("   • {}", warning);
+            }
+        }
 
         if args.dry_run {
             println!("🔍 Dry run - no data written");
         } else {
-            println!(
-                "🚧 Stack profiler integration framework created, full implementation pending"
-            );
-        }
-
-        if let Some(upload_uri) = args.upload {
-            println!("📤 Upload URI (not implemented yet): {}", upload_uri);
+            println!("💾 Wrote aggregated edges to {}", args.out.display());
+            if let Some(upload_uri) = args.upload {
+                println!("📤 Upload URI (not implemented yet): {}", upload_uri);
+            }
         }
 
         Ok(())

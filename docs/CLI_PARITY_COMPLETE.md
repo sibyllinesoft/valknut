@@ -76,7 +76,7 @@ I have successfully implemented **complete CLI feature parity** with the Python 
 - **Optimized compilation** - Release builds with full optimization
 
 ### **Developer Experience**  
-- **Backward compatibility** - Legacy commands still work (structure, names, impact)
+- **Streamlined interface** - Legacy `structure`/`impact` commands retired in favor of unified `analyze`
 - **Multiple format support** - 8 different output formats
 - **Configuration flexibility** - YAML/JSON config file support
 
@@ -210,7 +210,7 @@ valknut
 ├── mcp-stdio (matches Python exactly)
 ├── mcp-manifest (matches Python exactly)
 ├── list-languages (matches Python exactly)
-└── [legacy: structure, names, impact] (backward compatibility)
+└── experimental modules exposed via `valknut_rs::experimental` (enable Cargo feature `experimental`)
 ```
 
 ## ✅ VERIFICATION CHECKLIST

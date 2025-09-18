@@ -91,15 +91,6 @@ pub enum Commands {
     /// Live reachability analysis for production call graphs
     #[command(name = "live-reach")]
     LiveReach(valknut_rs::live::cli::LiveReachArgs),
-
-    // Legacy individual analyzers for backward compatibility - hidden in v1.0
-    /// Analyze code structure and generate refactoring recommendations
-    #[command(hide = true)]
-    Structure(StructureArgs),
-
-    /// Analyze dependency cycles and clone detection for impact assessment
-    #[command(hide = true)]
-    Impact(ImpactArgs),
 }
 
 /// Quality gate configuration for CI/CD integration
@@ -365,73 +356,6 @@ pub struct McpManifestArgs {
     /// Output file (default: stdout)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
-}
-
-// Legacy analyzer args (backward compatibility)
-#[derive(Args)]
-pub struct StructureArgs {
-    /// Path to the code directory to analyze
-    #[arg(value_name = "PATH")]
-    pub path: PathBuf,
-
-    /// Analyze specific file types (extensions separated by commas)
-    #[arg(short = 'e', long, value_delimiter = ',')]
-    pub extensions: Option<Vec<String>>,
-
-    /// Enable only branch reorganization analysis
-    #[arg(long)]
-    pub branch_only: bool,
-
-    /// Enable only file splitting analysis  
-    #[arg(long)]
-    pub file_split_only: bool,
-
-    /// Maximum number of top recommendations to show
-    #[arg(short = 'n', long)]
-    pub top: Option<usize>,
-
-    /// Output format for results
-    #[arg(short = 'f', long, value_enum, default_value = "json")]
-    pub format: OutputFormat,
-}
-
-#[derive(Args)]
-pub struct ImpactArgs {
-    /// Path to the code directory to analyze
-    #[arg(value_name = "PATH")]
-    pub path: PathBuf,
-
-    /// Analyze specific file types (extensions separated by commas)
-    #[arg(short = 'e', long, value_delimiter = ',')]
-    pub extensions: Option<Vec<String>>,
-
-    /// Enable cycle detection and breaking recommendations
-    #[arg(long)]
-    pub cycles: bool,
-
-    /// Enable clone detection and consolidation recommendations
-    #[arg(long)]
-    pub clones: bool,
-
-    /// Enable chokepoint detection (high-centrality modules)
-    #[arg(long)]
-    pub chokepoints: bool,
-
-    /// Minimum similarity threshold for clone detection (0.0-1.0)
-    #[arg(long, default_value = "0.85")]
-    pub min_similarity: f64,
-
-    /// Minimum total lines of code for clone groups
-    #[arg(long, default_value = "60")]
-    pub min_total_loc: usize,
-
-    /// Maximum number of recommendations to show
-    #[arg(short = 'n', long, default_value = "10")]
-    pub top: usize,
-
-    /// Output format for results
-    #[arg(short = 'f', long, value_enum, default_value = "json")]
-    pub format: OutputFormat,
 }
 
 #[derive(Clone, ValueEnum)]

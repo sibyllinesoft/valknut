@@ -154,6 +154,9 @@ pub struct LshExtractor {
 
     /// Cache key to detect when weighted signatures need to be invalidated
     weighted_signatures_cache_key: std::sync::RwLock<Option<String>>,
+
+    /// Cached similarity context built from the last extraction pass
+    similarity_context_cache: std::sync::RwLock<Option<(String, Arc<LshSimilarityContext>)>>,
 }
 
 impl LshExtractor {
@@ -171,6 +174,7 @@ impl LshExtractor {
             performance_metrics: LshPerformanceMetrics::new(),
             cached_weighted_signatures: std::sync::RwLock::new(None),
             weighted_signatures_cache_key: std::sync::RwLock::new(None),
+            similarity_context_cache: std::sync::RwLock::new(None),
         };
 
         extractor.initialize_features();
@@ -191,6 +195,7 @@ impl LshExtractor {
             performance_metrics: LshPerformanceMetrics::new(),
             cached_weighted_signatures: std::sync::RwLock::new(None),
             weighted_signatures_cache_key: std::sync::RwLock::new(None),
+            similarity_context_cache: std::sync::RwLock::new(None),
         };
 
         extractor.initialize_features();
@@ -211,6 +216,7 @@ impl LshExtractor {
             performance_metrics: LshPerformanceMetrics::new(),
             cached_weighted_signatures: std::sync::RwLock::new(None),
             weighted_signatures_cache_key: std::sync::RwLock::new(None),
+            similarity_context_cache: std::sync::RwLock::new(None),
         };
 
         extractor.initialize_features();
@@ -293,6 +299,9 @@ impl LshExtractor {
         if let Ok(mut cache_key) = self.weighted_signatures_cache_key.write() {
             *cache_key = None;
         }
+        if let Ok(mut similarity_cache) = self.similarity_context_cache.write() {
+            *similarity_cache = None;
+        }
     }
 
     /// Generate a cache key for the current context
@@ -320,6 +329,33 @@ impl LshExtractor {
         } else {
             self.shingle_size
         }
+    }
+
+    fn get_similarity_context(
+        &self,
+        context: &ExtractionContext,
+    ) -> Option<Arc<LshSimilarityContext>> {
+        if context.entity_index.is_empty() {
+            return None;
+        }
+
+        let entity_refs: Vec<&CodeEntity> = context.entity_index.values().collect();
+        let cache_key = self.generate_cache_key(&entity_refs);
+
+        if let Ok(cache_guard) = self.similarity_context_cache.read() {
+            if let Some((ref existing_key, ref cached_context)) = *cache_guard {
+                if *existing_key == cache_key {
+                    return Some(cached_context.clone());
+                }
+            }
+        }
+
+        let context_instance = Arc::new(self.create_similarity_search_context(&entity_refs));
+        if let Ok(mut cache_guard) = self.similarity_context_cache.write() {
+            *cache_guard = Some((cache_key, context_instance.clone()));
+        }
+
+        Some(context_instance)
     }
 
     /// Get cached weighted signatures or compute them if not cached
@@ -1011,62 +1047,66 @@ impl LshExtractor {
         context: &ExtractionContext,
         signature: &[u64],
     ) -> (f64, f64, f64) {
-        // PERFORMANCE CRITICAL: Use LSH index for O(n) candidate search instead of O(n²) brute force
+        if let Some(similarity_context) = self.get_similarity_context(context) {
+            let max_results = if self.lsh_config.max_candidates == 0 {
+                None
+            } else {
+                Some(self.lsh_config.max_candidates)
+            };
 
-        // For LSH-based comparison, we need the entity to be in an index
-        // Since this method is called per entity, we'll use a simplified approach:
-        // 1. If weighted analysis is available, use it with all entities (still O(n²) but more accurate)
-        // 2. Otherwise, use LSH candidate search with a threshold
+            let mut similarities: Vec<f64> = similarity_context
+                .find_similar_entities(&entity.id, max_results)
+                .into_iter()
+                .map(|(_, similarity)| similarity)
+                .filter(|similarity| *similarity >= self.lsh_config.similarity_threshold)
+                .collect();
 
+            if !similarities.is_empty() {
+                debug!(
+                    "LSH index similarity search found {} candidates for {}",
+                    similarities.len(),
+                    entity.id
+                );
+                return summarise_similarities(&similarities);
+            }
+        }
+
+        self.compare_with_others_bruteforce(entity, context, signature)
+    }
+
+    fn compare_with_others_bruteforce(
+        &self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+        signature: &[u64],
+    ) -> (f64, f64, f64) {
         let mut similarities = Vec::new();
         let comparison_start = std::time::Instant::now();
 
-        // Use weighted analysis if available and enabled
         if let Some(ref analyzer) = self.weighted_analyzer {
-            debug!(
-                "Using weighted similarity analysis for entity: {}",
-                entity.id
-            );
-
-            // We need to include ALL entities (context + current) for IDF computation but use stable cache key
             let context_entities: Vec<&CodeEntity> = context.entity_index.values().collect();
-
-            // Use cached weighted signatures with stable cache key (context only)
             if let Ok(weighted_signatures) =
                 self.get_or_compute_weighted_signatures_with_current(&context_entities, entity)
             {
-                // Find this entity's weighted signature
                 if let Some(entity_sig) = weighted_signatures.get(&entity.id) {
-                    // Compare with other entities using weighted similarity
-                    for (other_id, _other_entity) in &context.entity_index {
+                    for (other_id, _) in &context.entity_index {
                         if other_id == &entity.id {
-                            continue; // Skip self-comparison
+                            continue;
                         }
 
                         if let Some(other_sig) = weighted_signatures.get(other_id) {
                             let similarity =
                                 analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                            similarities.push(similarity);
-                            debug!(
-                                "Weighted similarity {}<->{}: {:.3}",
-                                entity.id, other_id, similarity
-                            );
+                            if similarity >= self.lsh_config.similarity_threshold {
+                                similarities.push(similarity);
+                            }
                         }
                     }
                 }
-            } else {
-                debug!("Failed to compute weighted signatures, falling back to LSH candidates");
             }
         }
 
-        // Use LSH-based candidate search if weighted analysis is not available or failed
         if similarities.is_empty() {
-            debug!("Using LSH candidate search for entity: {}", entity.id);
-
-            // For a more efficient approach, we would build the LSH index once for the entire context
-            // and then query it for each entity. For now, we'll use a hybrid approach.
-
-            // Apply similarity threshold to reduce comparisons
             let mut comparison_count = 0;
             let max_comparisons = self
                 .lsh_config
@@ -1075,12 +1115,10 @@ impl LshExtractor {
 
             for (other_id, other_entity) in &context.entity_index {
                 if other_id == &entity.id {
-                    continue; // Skip self-comparison
+                    continue;
                 }
 
-                // Early termination if we've compared enough candidates
                 if comparison_count >= max_comparisons {
-                    debug!("Reached max comparisons limit: {}", max_comparisons);
                     break;
                 }
 
@@ -1088,40 +1126,22 @@ impl LshExtractor {
                     self.generate_minhash_signature_internal(&other_entity.source_code);
                 let similarity = self.jaccard_similarity(signature, &other_signature);
 
-                // Only consider similarities above threshold
                 if similarity >= self.lsh_config.similarity_threshold {
                     similarities.push(similarity);
-                    debug!(
-                        "LSH similarity {}<->{}: {:.3}",
-                        entity.id, other_id, similarity
-                    );
                 }
 
                 comparison_count += 1;
             }
         }
 
-        let elapsed = comparison_start.elapsed();
         debug!(
-            "Similarity comparison completed in {:?} with {} comparisons",
-            elapsed,
+            "Fallback similarity comparison for {} completed in {:?} with {} matches",
+            entity.id,
+            comparison_start.elapsed(),
             similarities.len()
         );
 
-        if similarities.is_empty() {
-            return (0.0, 0.0, 0.0);
-        }
-
-        let max_similarity = similarities.iter().fold(0.0_f64, |a, &b| a.max(b));
-        let avg_similarity = similarities.iter().sum::<f64>() / similarities.len() as f64;
-        let duplicate_count = similarities.iter().filter(|&&s| s > 0.8).count() as f64;
-
-        debug!(
-            "Results - max: {:.3}, avg: {:.3}, duplicates: {}",
-            max_similarity, avg_similarity, duplicate_count
-        );
-
-        (max_similarity, avg_similarity, duplicate_count)
+        summarise_similarities(&similarities)
     }
 
     /// Calculate Jaccard similarity between two MinHash signatures
@@ -1133,6 +1153,20 @@ impl LshExtractor {
         let matching = sig1.iter().zip(sig2.iter()).filter(|(a, b)| a == b).count();
         matching as f64 / sig1.len() as f64
     }
+}
+
+fn summarise_similarities(similarities: &[f64]) -> (f64, f64, f64) {
+    if similarities.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+
+    let max_similarity = similarities
+        .iter()
+        .fold(0.0_f64, |acc, &value| acc.max(value));
+    let avg_similarity = similarities.iter().copied().sum::<f64>() / similarities.len() as f64;
+    let duplicate_count = similarities.iter().filter(|&&s| s > 0.8).count() as f64;
+
+    (max_similarity, avg_similarity, duplicate_count)
 }
 
 /// O(n) similarity search context with prebuilt LSH index

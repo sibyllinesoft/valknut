@@ -9,7 +9,6 @@
 pub mod args;
 pub mod commands;
 pub mod config_layer;
-pub mod legacy_commands;
 pub mod output;
 
 // Re-export commonly used items for convenience

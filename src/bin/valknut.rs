@@ -54,13 +54,6 @@ async fn main() -> anyhow::Result<()> {
         Commands::LiveReach(args) => {
             cli::live_reach_command(args).await?;
         }
-        // Legacy commands for backward compatibility
-        Commands::Structure(args) => {
-            cli::analyze_structure_legacy(args).await?;
-        }
-        Commands::Impact(args) => {
-            cli::analyze_impact_legacy(args).await?;
-        }
     }
 
     Ok(())
@@ -206,72 +199,6 @@ mod tests {
         match cli.command {
             Commands::ListLanguages => {}
             _ => panic!("Expected ListLanguages command"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_cli_parsing_structure_legacy() {
-        let cli = Cli::parse_from([
-            "valknut",
-            "structure",
-            "src/",
-            "--extensions",
-            "rs,py",
-            "--branch-only",
-            "--top",
-            "5",
-            "--format",
-            "yaml",
-        ]);
-        match cli.command {
-            Commands::Structure(args) => {
-                assert_eq!(args.path, PathBuf::from("src/"));
-                assert_eq!(
-                    args.extensions,
-                    Some(vec!["rs".to_string(), "py".to_string()])
-                );
-                assert!(args.branch_only);
-                assert!(!args.file_split_only);
-                assert_eq!(args.top, Some(5));
-                assert!(matches!(args.format, OutputFormat::Yaml));
-            }
-            _ => panic!("Expected Structure command"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_cli_parsing_impact_legacy() {
-        let cli = Cli::parse_from([
-            "valknut",
-            "impact",
-            "src/",
-            "--extensions",
-            "rs",
-            "--cycles",
-            "--clones",
-            "--chokepoints",
-            "--min-similarity",
-            "0.9",
-            "--min-total-loc",
-            "100",
-            "--top",
-            "15",
-            "--format",
-            "csv",
-        ]);
-        match cli.command {
-            Commands::Impact(args) => {
-                assert_eq!(args.path, PathBuf::from("src/"));
-                assert_eq!(args.extensions, Some(vec!["rs".to_string()]));
-                assert!(args.cycles);
-                assert!(args.clones);
-                assert!(args.chokepoints);
-                assert_eq!(args.min_similarity, 0.9);
-                assert_eq!(args.min_total_loc, 100);
-                assert_eq!(args.top, 15);
-                assert!(matches!(args.format, OutputFormat::Csv));
-            }
-            _ => panic!("Expected Impact command"),
         }
     }
 

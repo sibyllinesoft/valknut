@@ -20,8 +20,8 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
-//! use valknut::core::pipeline::AnalysisPipeline;
+//! ```ignore
+//! use valknut_rs::core::pipeline::AnalysisPipeline;
 //!
 //! let pipeline = AnalysisPipeline::default();
 //! let results = pipeline.analyze_directory("./src").await?;

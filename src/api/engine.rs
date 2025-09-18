@@ -1,6 +1,6 @@
 //! Main analysis engine implementation.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tracing::info;
@@ -95,53 +95,26 @@ impl ValknutEngine {
     pub async fn analyze_files<P: AsRef<Path>>(&mut self, files: &[P]) -> Result<AnalysisResults> {
         info!("Starting analysis of {} specific files", files.len());
 
-        // TODO: Implement file-specific analysis
-        // For now, delegate to directory analysis of parent directories
-
         if files.is_empty() {
-            return Ok(AnalysisResults {
-                summary: crate::api::results::AnalysisSummary {
-                    files_processed: 0,
-                    entities_analyzed: 0,
-                    refactoring_needed: 0,
-                    high_priority: 0,
-                    critical: 0,
-                    avg_refactoring_score: 0.0,
-                    code_health_score: 1.0,
-                },
-                refactoring_candidates: Vec::new(),
-                refactoring_candidates_by_file: Vec::new(),
-                statistics: crate::api::results::AnalysisStatistics {
-                    total_duration: std::time::Duration::from_secs(0),
-                    avg_file_processing_time: std::time::Duration::from_secs(0),
-                    avg_entity_processing_time: std::time::Duration::from_secs(0),
-                    features_per_entity: std::collections::HashMap::new(),
-                    priority_distribution: std::collections::HashMap::new(),
-                    issue_distribution: std::collections::HashMap::new(),
-                    memory_stats: crate::api::results::MemoryStats {
-                        peak_memory_bytes: 0,
-                        final_memory_bytes: 0,
-                        efficiency_score: 1.0,
-                    },
-                },
-                directory_health_tree: None,
-                // naming_results: None,
-                clone_analysis: None,
-                unified_hierarchy: Vec::new(),
-                warnings: Vec::new(),
-                coverage_packs: Vec::new(),
-            });
+            return Ok(AnalysisResults::empty());
         }
 
-        // For now, analyze the parent directory of the first file
-        let first_file = files[0].as_ref();
-        if let Some(parent) = first_file.parent() {
-            self.analyze_directory(parent).await
-        } else {
-            Err(ValknutError::validation(
-                "Cannot determine parent directory for analysis",
-            ))
-        }
+        let paths: Vec<PathBuf> = files
+            .iter()
+            .map(|file| file.as_ref().to_path_buf())
+            .collect();
+
+        let comprehensive = self
+            .pipeline
+            .analyze_paths(&paths, None)
+            .await
+            .map_err(|err| {
+                ValknutError::pipeline("file_analysis", format!("File analysis failed: {}", err))
+            })?;
+
+        let pipeline_results = self.pipeline.wrap_results(comprehensive);
+
+        Ok(AnalysisResults::from_pipeline_results(pipeline_results))
     }
 
     /// Analyze pre-extracted feature vectors (for testing and advanced usage)
@@ -506,16 +479,14 @@ mod tests {
         let config = AnalysisConfig::default();
         let mut engine = ValknutEngine::new(config).await.unwrap();
 
-        // Try to analyze a root path with no parent
-        let files = vec![std::path::Path::new("/")];
+        // Try to analyze a relative path with no parent directory
+        let files = vec![std::path::Path::new("file_with_no_parent.rs")];
         let result = engine.analyze_files(&files).await;
-        assert!(result.is_err());
+        assert!(result.is_ok());
 
-        if let Err(ValknutError::Validation { .. }) = result {
-            // Expected error type
-        } else {
-            panic!("Expected Validation error for path with no parent");
-        }
+        let results = result.unwrap();
+        assert_eq!(results.summary.files_processed, 0);
+        assert_eq!(results.summary.entities_analyzed, 0);
     }
 
     #[tokio::test]

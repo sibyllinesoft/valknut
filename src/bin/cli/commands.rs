@@ -5,7 +5,6 @@
 
 use crate::cli::args::*;
 use crate::cli::config_layer::build_layered_valknut_config;
-use crate::cli::legacy_commands;
 use anyhow;
 use chrono;
 use console::Term;
@@ -13,6 +12,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use serde_json;
 use serde_yaml;
+use std::cmp::Ordering;
 use std::path::Path;
 use std::path::PathBuf;
 use tabled::{settings::Style as TableStyle, Table, Tabled};
@@ -21,14 +21,16 @@ use tracing::{info, warn};
 // Import comprehensive analysis pipeline
 use valknut_rs::api::config_types::AnalysisConfig as ApiAnalysisConfig;
 use valknut_rs::api::engine::ValknutEngine;
-use valknut_rs::api::results::AnalysisResults;
+use valknut_rs::api::results::{AnalysisResults, RefactoringCandidate};
 use valknut_rs::core::config::ReportFormat;
 use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
 use valknut_rs::core::file_utils::CoverageDiscovery;
-use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult};
+use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, QualityGateViolation};
+use valknut_rs::core::scoring::Priority;
 use valknut_rs::detectors::structure::StructureConfig;
 use valknut_rs::io::reports::ReportGenerator;
-use valknut_rs::live::cli::{LiveReachArgs, LiveReachCli, LiveReachConfig};
+use valknut_rs::live::cli::{LiveReachArgs, LiveReachCli};
+use valknut_rs::live::LiveReachConfig;
 use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -427,26 +429,195 @@ async fn run_comprehensive_analysis_without_progress(
 
 /// Combine multiple analysis results into one
 fn combine_analysis_results(results: Vec<AnalysisResults>) -> anyhow::Result<AnalysisResults> {
-    // For now, just return the first result
-    // TODO: Implement proper result merging logic
-    results
-        .into_iter()
+    let mut iter = results.into_iter();
+    let mut combined = iter
         .next()
-        .ok_or_else(|| anyhow::anyhow!("No analysis results to combine"))
+        .ok_or_else(|| anyhow::anyhow!("No analysis results to combine"))?;
+
+    for result in iter {
+        combined.merge_in_place(result);
+    }
+
+    Ok(combined)
 }
 
 /// Evaluate quality gates against analysis results
 fn evaluate_quality_gates(
-    _result: &AnalysisResults,
-    _config: &QualityGateConfig,
-    _verbose: bool,
+    result: &AnalysisResults,
+    config: &QualityGateConfig,
+    verbose: bool,
 ) -> anyhow::Result<QualityGateResult> {
-    // TODO: Implement actual quality gate evaluation
-    // For now, return a passing result
+    let default_score = (result.summary.code_health_score * 100.0).clamp(0.0, 100.0);
+
+    if !config.enabled {
+        let score = result
+            .health_metrics
+            .as_ref()
+            .map(|metrics| metrics.overall_health_score)
+            .unwrap_or(default_score);
+
+        return Ok(QualityGateResult {
+            passed: true,
+            violations: Vec::new(),
+            overall_score: score,
+        });
+    }
+
+    let mut violations = Vec::new();
+
+    if let Some(metrics) = result.health_metrics.as_ref() {
+        if metrics.complexity_score > config.max_complexity_score {
+            violations.push(QualityGateViolation {
+                rule_name: "Complexity Threshold".to_string(),
+                description: format!(
+                    "Average complexity score ({:.1}) exceeds configured limit ({:.1})",
+                    metrics.complexity_score, config.max_complexity_score
+                ),
+                current_value: metrics.complexity_score,
+                threshold: config.max_complexity_score,
+                severity: severity_for_excess(
+                    metrics.complexity_score,
+                    config.max_complexity_score,
+                )
+                .to_string(),
+                affected_files: top_issue_files(
+                    result,
+                    |candidate| matches!(candidate.priority, Priority::High | Priority::Critical),
+                    5,
+                ),
+                recommended_actions: vec![
+                    "Break down the highest complexity functions highlighted above".to_string(),
+                    "Introduce guard clauses or helper methods to reduce nesting".to_string(),
+                ],
+            });
+        }
+
+        if metrics.technical_debt_ratio > config.max_technical_debt_ratio {
+            violations.push(QualityGateViolation {
+                rule_name: "Technical Debt Ratio".to_string(),
+                description: format!(
+                    "Technical debt ratio ({:.1}%) exceeds maximum allowed ({:.1}%)",
+                    metrics.technical_debt_ratio, config.max_technical_debt_ratio
+                ),
+                current_value: metrics.technical_debt_ratio,
+                threshold: config.max_technical_debt_ratio,
+                severity: severity_for_excess(
+                    metrics.technical_debt_ratio,
+                    config.max_technical_debt_ratio,
+                )
+                .to_string(),
+                affected_files: top_issue_files(
+                    result,
+                    |candidate| matches!(candidate.priority, Priority::High | Priority::Critical),
+                    5,
+                ),
+                recommended_actions: vec![
+                    "Triage the listed hotspots and schedule debt paydown work".to_string(),
+                    "Ensure tests cover recent refactors to prevent regression".to_string(),
+                ],
+            });
+        }
+
+        if metrics.maintainability_score < config.min_maintainability_score {
+            violations.push(QualityGateViolation {
+                rule_name: "Maintainability Score".to_string(),
+                description: format!(
+                    "Maintainability score ({:.1}) fell below required minimum ({:.1})",
+                    metrics.maintainability_score, config.min_maintainability_score
+                ),
+                current_value: metrics.maintainability_score,
+                threshold: config.min_maintainability_score,
+                severity: severity_for_shortfall(
+                    metrics.maintainability_score,
+                    config.min_maintainability_score,
+                )
+                .to_string(),
+                affected_files: top_issue_files(
+                    result,
+                    |candidate| matches!(candidate.priority, Priority::High | Priority::Critical),
+                    5,
+                ),
+                recommended_actions: vec![
+                    "Refactor low-cohesion modules to improve readability".to_string(),
+                    "Document intent for complex code paths flagged in the report".to_string(),
+                ],
+            });
+        }
+    } else if verbose {
+        println!(
+            "{}",
+            "⚠️ Quality gate metrics unavailable; skipping maintainability and complexity checks."
+                .yellow()
+        );
+    }
+
+    let summary = &result.summary;
+
+    if summary.critical as usize > config.max_critical_issues {
+        let affected_files = top_issue_files(
+            result,
+            |candidate| matches!(candidate.priority, Priority::Critical),
+            5,
+        );
+        violations.push(QualityGateViolation {
+            rule_name: "Critical Issues".to_string(),
+            description: format!(
+                "{} critical issues detected (limit: {})",
+                summary.critical, config.max_critical_issues
+            ),
+            current_value: summary.critical as f64,
+            threshold: config.max_critical_issues as f64,
+            severity: severity_for_excess(
+                summary.critical as f64,
+                config.max_critical_issues as f64,
+            )
+            .to_string(),
+            affected_files,
+            recommended_actions: vec![
+                "Prioritise fixes for the critical hotspots above".to_string(),
+                "Add regression tests before merging related fixes".to_string(),
+            ],
+        });
+    }
+
+    if summary.high_priority as usize > config.max_high_priority_issues {
+        let affected_files = top_issue_files(
+            result,
+            |candidate| matches!(candidate.priority, Priority::High | Priority::Critical),
+            5,
+        );
+        violations.push(QualityGateViolation {
+            rule_name: "High Priority Issues".to_string(),
+            description: format!(
+                "{} high-priority issues detected (limit: {})",
+                summary.high_priority, config.max_high_priority_issues
+            ),
+            current_value: summary.high_priority as f64,
+            threshold: config.max_high_priority_issues as f64,
+            severity: severity_for_excess(
+                summary.high_priority as f64,
+                config.max_high_priority_issues as f64,
+            )
+            .to_string(),
+            affected_files,
+            recommended_actions: vec![
+                "Address the highlighted high-priority candidates before release".to_string(),
+                "Break work into smaller refactors to keep velocity high".to_string(),
+            ],
+        });
+    }
+
+    let overall_score = result
+        .health_metrics
+        .as_ref()
+        .map(|metrics| metrics.overall_health_score)
+        .unwrap_or(default_score)
+        .clamp(0.0, 100.0);
+
     Ok(QualityGateResult {
-        passed: true,
-        violations: Vec::new(),
-        overall_score: 85.0,
+        passed: violations.is_empty(),
+        violations,
+        overall_score,
     })
 }
 
@@ -462,9 +633,85 @@ fn display_comprehensive_results(result: &AnalysisResults) {
 }
 
 /// Display analysis summary
-fn display_analysis_summary(_result: &AnalysisResults) {
-    // TODO: Implement comprehensive results display
-    println!("  ✅ Analysis completed successfully");
+fn display_analysis_summary(result: &AnalysisResults) {
+    let summary = &result.summary;
+
+    println!(
+        "  Files analyzed: {} | Entities: {} | Candidates: {}",
+        summary.files_processed, summary.entities_analyzed, summary.refactoring_needed
+    );
+    println!(
+        "  High priority issues: {} ({} critical)",
+        summary.high_priority, summary.critical
+    );
+    println!(
+        "  Code health score: {:.1}% | Avg refactor score: {:.1}",
+        summary.code_health_score * 100.0,
+        summary.avg_refactoring_score
+    );
+
+    if let Some(metrics) = result.health_metrics.as_ref() {
+        println!(
+            "  Maintainability: {:.1} | Technical debt: {:.1}% | Complexity: {:.1} | Structure: {:.1}",
+            metrics.maintainability_score,
+            metrics.technical_debt_ratio,
+            metrics.complexity_score,
+            metrics.structure_quality_score
+        );
+    }
+
+    if let Some(clone_analysis) = result.clone_analysis.as_ref() {
+        println!(
+            "  Clone candidates after denoising: {}",
+            clone_analysis.candidates_after_denoising
+        );
+        if let Some(avg_similarity) = clone_analysis.avg_similarity {
+            println!("  Avg clone similarity: {:.2}", avg_similarity);
+        }
+        if let Some(max_similarity) = clone_analysis.max_similarity {
+            println!("  Max clone similarity: {:.2}", max_similarity);
+        }
+    }
+
+    let mut hotspots: Vec<&RefactoringCandidate> = result
+        .refactoring_candidates
+        .iter()
+        .filter(|candidate| matches!(candidate.priority, Priority::High | Priority::Critical))
+        .collect();
+
+    hotspots.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then_with(|| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal))
+    });
+    hotspots.truncate(3);
+
+    if !hotspots.is_empty() {
+        println!();
+        println!("  Top hotspots:");
+        for candidate in hotspots {
+            let file_name = Path::new(&candidate.file_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&candidate.file_path);
+
+            println!(
+                "    • {} ({}) — score {:.1} • {}",
+                candidate.name,
+                priority_label(candidate.priority),
+                candidate.score,
+                file_name
+            );
+        }
+    }
+
+    if !result.warnings.is_empty() {
+        println!();
+        println!("  ⚠️ Warnings:");
+        for warning in &result.warnings {
+            println!("    • {}", warning.yellow());
+        }
+    }
 }
 
 /// Display quality gate failures
@@ -491,6 +738,81 @@ fn display_quality_failures(result: &QualityGateResult) {
             "  📊 Overall quality score: {:.1}/100",
             result.overall_score
         );
+    }
+}
+
+fn severity_for_excess(current: f64, threshold: f64) -> &'static str {
+    let delta = current - threshold;
+    if threshold == 0.0 {
+        if delta >= 5.0 {
+            "Critical"
+        } else if delta >= 1.0 {
+            "High"
+        } else {
+            "Medium"
+        }
+    } else if delta >= threshold * 0.5 || delta >= 20.0 {
+        "Critical"
+    } else if delta >= threshold * 0.25 || delta >= 10.0 {
+        "High"
+    } else {
+        "Medium"
+    }
+}
+
+fn severity_for_shortfall(current: f64, threshold: f64) -> &'static str {
+    let delta = threshold - current;
+    if delta >= 20.0 {
+        "Critical"
+    } else if delta >= 10.0 {
+        "High"
+    } else {
+        "Medium"
+    }
+}
+
+fn top_issue_files<F>(result: &AnalysisResults, filter: F, limit: usize) -> Vec<PathBuf>
+where
+    F: Fn(&RefactoringCandidate) -> bool,
+{
+    let mut ranked: Vec<_> = result
+        .refactoring_candidates
+        .iter()
+        .filter(|candidate| filter(candidate))
+        .map(|candidate| {
+            (
+                candidate.priority,
+                candidate.score,
+                PathBuf::from(&candidate.file_path),
+            )
+        })
+        .collect();
+
+    ranked.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal))
+    });
+
+    let mut files = Vec::new();
+    for (_, _, path) in ranked {
+        if !files.iter().any(|existing| existing == &path) {
+            files.push(path);
+        }
+        if files.len() >= limit {
+            break;
+        }
+    }
+
+    files
+}
+
+fn priority_label(priority: Priority) -> &'static str {
+    match priority {
+        Priority::None => "none",
+        Priority::Low => "low",
+        Priority::Medium => "medium",
+        Priority::High => "high",
+        Priority::Critical => "critical",
     }
 }
 
@@ -547,11 +869,7 @@ async fn generate_reports_with_oracle(
 
             // Use the proper ReportGenerator with Sibylline theme and oracle data
             let default_config = valknut_rs::api::config_types::AnalysisConfig::default();
-            let templates_dir = std::path::Path::new("templates");
-            let generator = ReportGenerator::new()
-                .with_config(default_config)
-                .with_templates_dir(templates_dir)
-                .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?;
+            let generator = ReportGenerator::new().with_config(default_config);
             if let Some(oracle) = oracle_response {
                 generator
                     .generate_report_with_oracle(result, oracle, &file_path, ReportFormat::Html)
@@ -1512,16 +1830,6 @@ pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<St
     Ok(config)
 }
 
-/// Legacy structure analysis command (delegates to legacy module)
-pub async fn analyze_structure_legacy(args: StructureArgs) -> anyhow::Result<()> {
-    legacy_commands::analyze_structure_legacy(args).await
-}
-
-/// Legacy impact analysis command (delegates to legacy module)  
-pub async fn analyze_impact_legacy(args: ImpactArgs) -> anyhow::Result<()> {
-    legacy_commands::analyze_impact_legacy(args).await
-}
-
 // Helper functions
 pub fn format_to_string(format: &OutputFormat) -> &str {
     match format {
@@ -2064,7 +2372,8 @@ mod tests {
 
         // Verify file contains valid YAML
         let content = fs::read_to_string(&config_path).unwrap();
-        let parsed: serde_yaml::Result<StructureConfig> = serde_yaml::from_str(&content);
+        let parsed: serde_yaml::Result<valknut_rs::core::config::ValknutConfig> =
+            serde_yaml::from_str(&content);
         assert!(parsed.is_ok());
     }
 
@@ -2087,7 +2396,8 @@ mod tests {
         // Verify file was overwritten with valid YAML
         let content = fs::read_to_string(&config_path).unwrap();
         assert_ne!(content, "existing content");
-        let parsed: serde_yaml::Result<StructureConfig> = serde_yaml::from_str(&content);
+        let parsed: serde_yaml::Result<valknut_rs::core::config::ValknutConfig> =
+            serde_yaml::from_str(&content);
         assert!(parsed.is_ok());
     }
 
@@ -2180,83 +2490,6 @@ mod tests {
     #[tokio::test]
     async fn test_list_languages() {
         let result = list_languages().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_analyze_structure_legacy() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let args = StructureArgs {
-            path: temp_dir.path().to_path_buf(),
-            extensions: None,
-            format: OutputFormat::Json,
-            top: Some(5),
-            branch_only: false,
-            file_split_only: false,
-        };
-
-        let _config = StructureConfig::default();
-
-        let result = analyze_structure_legacy(args).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_analyze_structure_legacy_branch_only() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let args = StructureArgs {
-            path: temp_dir.path().to_path_buf(),
-            extensions: None,
-            format: OutputFormat::Yaml,
-            top: None,
-            branch_only: true,
-            file_split_only: false,
-        };
-
-        let _config = StructureConfig::default();
-
-        let result = analyze_structure_legacy(args).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_analyze_structure_legacy_file_split_only() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let args = StructureArgs {
-            path: temp_dir.path().to_path_buf(),
-            extensions: None,
-            format: OutputFormat::Pretty,
-            top: None,
-            branch_only: false,
-            file_split_only: true,
-        };
-
-        let _config = StructureConfig::default();
-
-        let result = analyze_structure_legacy(args).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_analyze_impact_legacy() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let args = ImpactArgs {
-            path: temp_dir.path().to_path_buf(),
-            extensions: None,
-            cycles: true,
-            clones: false,
-            chokepoints: false,
-            min_similarity: 0.85,
-            min_total_loc: 60,
-            top: 10,
-            format: OutputFormat::Json,
-        };
-
-        let result = analyze_impact_legacy(args).await;
         assert!(result.is_ok());
     }
 

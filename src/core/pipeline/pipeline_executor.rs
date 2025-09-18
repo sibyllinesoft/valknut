@@ -8,12 +8,15 @@ use tokio::fs;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::core::config::ValknutConfig;
+use crate::core::ast_service::AstService;
+use crate::core::config::{ScoringConfig, ValknutConfig};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::FeatureVector;
+use crate::core::scoring::{FeatureScorer, ScoringResult};
 use crate::detectors::complexity::{ComplexityAnalyzer, ComplexityConfig, ComplexitySeverity};
 use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use crate::detectors::structure::{StructureConfig, StructureExtractor};
+use std::sync::Arc;
 
 use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
 use super::pipeline_results::{
@@ -30,6 +33,7 @@ pub struct AnalysisPipeline {
     config: AnalysisConfig,
     valknut_config: Option<ValknutConfig>,
     stages: AnalysisStages,
+    feature_scorer: FeatureScorer,
 }
 
 impl AnalysisPipeline {
@@ -38,17 +42,25 @@ impl AnalysisPipeline {
         let complexity_config = ComplexityConfig::default();
         let structure_config = StructureConfig::default();
         let refactoring_config = RefactoringConfig::default();
+        let ast_service = Arc::new(AstService::new());
+
+        let refactoring_analyzer =
+            RefactoringAnalyzer::new(refactoring_config, ast_service.clone());
 
         let stages = AnalysisStages::new(
             StructureExtractor::with_config(structure_config),
-            ComplexityAnalyzer::new(complexity_config),
-            RefactoringAnalyzer::new(refactoring_config),
+            ComplexityAnalyzer::new(complexity_config, ast_service.clone()),
+            refactoring_analyzer,
+            ast_service,
         );
+
+        let feature_scorer = FeatureScorer::new(ScoringConfig::default());
 
         Self {
             config,
             valknut_config: None,
             stages,
+            feature_scorer,
         }
     }
 
@@ -56,11 +68,8 @@ impl AnalysisPipeline {
     pub fn new_with_config(analysis_config: AnalysisConfig, valknut_config: ValknutConfig) -> Self {
         // Debug output removed - LSH integration is working
 
-        let complexity_config = ComplexityConfig::default();
-        let structure_config = StructureConfig::default();
-        let refactoring_config = RefactoringConfig::default();
+        let ast_service = Arc::new(AstService::new());
 
-        // Configure LSH extractor with denoising (enabled by default)
         let stages = if valknut_config.denoise.enabled && analysis_config.enable_lsh_analysis {
             use crate::core::config::DedupeConfig;
             use crate::detectors::lsh::LshExtractor;
@@ -80,11 +89,18 @@ impl AnalysisPipeline {
                 valknut_config.lsh.shingle_size
             );
 
+            let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
+            let complexity_analyzer =
+                ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            let refactoring_analyzer =
+                RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
+
             AnalysisStages::new_with_lsh(
-                StructureExtractor::with_config(structure_config),
-                ComplexityAnalyzer::new(complexity_config),
-                RefactoringAnalyzer::new(refactoring_config),
+                structure_extractor,
+                complexity_analyzer,
+                refactoring_analyzer,
                 lsh_extractor,
+                ast_service.clone(),
             )
         } else if analysis_config.enable_lsh_analysis {
             use crate::detectors::lsh::LshExtractor;
@@ -93,25 +109,43 @@ impl AnalysisPipeline {
             let lsh_extractor = LshExtractor::new();
             info!("LSH extractor configured without denoising");
 
+            let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
+            let complexity_analyzer =
+                ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            let refactoring_analyzer =
+                RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
+
             AnalysisStages::new_with_lsh(
-                StructureExtractor::with_config(structure_config),
-                ComplexityAnalyzer::new(complexity_config),
-                RefactoringAnalyzer::new(refactoring_config),
+                structure_extractor,
+                complexity_analyzer,
+                refactoring_analyzer,
                 lsh_extractor,
+                ast_service.clone(),
             )
         } else {
             // No LSH analysis
+            let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
+            let complexity_analyzer =
+                ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            let refactoring_analyzer =
+                RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
+
             AnalysisStages::new(
-                StructureExtractor::with_config(structure_config),
-                ComplexityAnalyzer::new(complexity_config),
-                RefactoringAnalyzer::new(refactoring_config),
+                structure_extractor,
+                complexity_analyzer,
+                refactoring_analyzer,
+                ast_service,
             )
         };
+
+        let scoring_config = valknut_config.scoring.clone();
+        let feature_scorer = FeatureScorer::new(scoring_config);
 
         Self {
             config: analysis_config,
             valknut_config: Some(valknut_config),
             stages,
+            feature_scorer,
         }
     }
 
@@ -416,30 +450,11 @@ impl AnalysisPipeline {
         false
     }
 
-    /// Simple glob pattern matching
+    /// Glob pattern matching using the `glob` crate
     fn matches_glob_pattern(&self, path: &str, pattern: &str) -> bool {
-        // Simple implementation - could be enhanced with proper glob matching
-        if pattern.ends_with("/**") {
-            let prefix = &pattern[..pattern.len() - 3];
-            path.starts_with(prefix)
-        } else if pattern.contains("**/") {
-            let parts: Vec<&str> = pattern.split("**/").collect();
-            if parts.len() == 2 {
-                path.starts_with(parts[0]) && path.contains(parts[1])
-            } else {
-                path.contains(&pattern.replace("**/", ""))
-            }
-        } else if pattern.contains('*') {
-            // Simple wildcard matching
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                path.starts_with(parts[0]) && path.ends_with(parts[1])
-            } else {
-                // More complex patterns - use basic string matching for now
-                path.contains(&pattern.replace('*', ""))
-            }
-        } else {
-            path.contains(pattern)
+        match glob::Pattern::new(pattern) {
+            Ok(glob) => glob.matches(path),
+            Err(_) => false,
         }
     }
 
@@ -485,10 +500,10 @@ impl AnalysisPipeline {
 
         for result in &complexity.detailed_results {
             for issue in &result.issues {
-                match issue.severity {
-                    ComplexitySeverity::High => high_priority_issues += 1,
-                    ComplexitySeverity::VeryHigh => high_priority_issues += 1,
-                    ComplexitySeverity::Critical => critical_issues += 1,
+                match issue.severity.as_str() {
+                    "High" => high_priority_issues += 1,
+                    "VeryHigh" => high_priority_issues += 1,
+                    "Critical" => critical_issues += 1,
                     _ => {}
                 }
             }
@@ -587,47 +602,59 @@ impl AnalysisPipeline {
     pub async fn analyze_directory(&self, path: &Path) -> Result<PipelineResults> {
         let paths = vec![path.to_path_buf()];
         let results = self.analyze_paths(&paths, None).await?;
-
-        // Convert analysis results to scoring results
-        let scoring_files = Self::convert_to_scoring_results(&results);
-
-        Ok(PipelineResults {
-            analysis_id: results.analysis_id.clone(),
-            timestamp: results.timestamp,
-            statistics: PipelineStatistics {
-                memory_stats: MemoryStats {
-                    current_memory_bytes: 0,
-                    peak_memory_bytes: 0,
-                },
-                files_processed: results.summary.total_files,
-                total_duration_ms: (results.processing_time * 1000.0) as u64,
-            },
-            results,
-            errors: Vec::new(),
-            scoring_results: ScoringResults {
-                files: scoring_files,
-            },
-            feature_vectors: Vec::new(),
-        })
+        Ok(self.wrap_results(results))
     }
 
     /// Legacy API - analyze feature vectors
-    pub async fn analyze_vectors(&self, _vectors: Vec<FeatureVector>) -> Result<PipelineResults> {
-        // For now, create empty results
-        let results = ComprehensiveAnalysisResult {
-            analysis_id: "placeholder".to_string(),
-            timestamp: Utc::now(),
+    pub async fn analyze_vectors(&self, vectors: Vec<FeatureVector>) -> Result<PipelineResults> {
+        let analysis_id = Uuid::new_v4().to_string();
+        let timestamp = Utc::now();
+        let mut feature_vectors = vectors;
+        let scoring_files: Vec<ScoringResult> = if feature_vectors.is_empty() {
+            Vec::new()
+        } else {
+            self.feature_scorer
+                .score(&mut feature_vectors)
+                .map_err(|err| {
+                    ValknutError::internal(format!("Failed to score feature vectors: {}", err))
+                })?
+        };
+
+        let health_metrics = Self::health_from_scores(&scoring_files);
+        let total_entities = scoring_files.len();
+        let priority_counts = scoring_files
+            .iter()
+            .filter(|result| result.priority != crate::core::scoring::Priority::None)
+            .count();
+        let high_priority = scoring_files
+            .iter()
+            .filter(|result| {
+                matches!(
+                    result.priority,
+                    crate::core::scoring::Priority::High | crate::core::scoring::Priority::Critical
+                )
+            })
+            .count();
+
+        let summary = AnalysisSummary {
+            total_files: total_entities,
+            total_entities,
+            total_lines_of_code: 0,
+            languages: Vec::new(),
+            total_issues: priority_counts,
+            high_priority_issues: high_priority,
+            critical_issues: scoring_files
+                .iter()
+                .filter(|result| result.priority == crate::core::scoring::Priority::Critical)
+                .count(),
+        };
+
+        let placeholder = ComprehensiveAnalysisResult {
+            analysis_id: analysis_id.clone(),
+            timestamp,
             processing_time: 0.0,
             config: self.config.clone(),
-            summary: AnalysisSummary {
-                total_files: 0,
-                total_entities: 0,
-                total_lines_of_code: 0,
-                languages: Vec::new(),
-                total_issues: 0,
-                high_priority_issues: 0,
-                critical_issues: 0,
-            },
+            summary,
             structure: super::pipeline_results::StructureAnalysisResults {
                 enabled: false,
                 directory_recommendations: Vec::new(),
@@ -646,7 +673,7 @@ impl AnalysisPipeline {
             refactoring: super::pipeline_results::RefactoringAnalysisResults {
                 enabled: false,
                 detailed_results: Vec::new(),
-                opportunities_count: 0,
+                opportunities_count: priority_counts,
             },
             impact: super::pipeline_results::ImpactAnalysisResults {
                 enabled: false,
@@ -672,42 +699,97 @@ impl AnalysisPipeline {
                 overall_coverage_percentage: None,
                 analysis_method: "disabled".to_string(),
             },
-            health_metrics: HealthMetrics {
-                overall_health_score: 100.0,
-                maintainability_score: 100.0,
-                technical_debt_ratio: 0.0,
-                complexity_score: 0.0,
-                structure_quality_score: 100.0,
-            },
+            health_metrics,
         };
 
         Ok(PipelineResults {
-            analysis_id: "placeholder".to_string(),
-            timestamp: Utc::now(),
-            results,
+            analysis_id,
+            timestamp,
+            results: placeholder,
             statistics: PipelineStatistics {
                 memory_stats: MemoryStats {
                     current_memory_bytes: 0,
                     peak_memory_bytes: 0,
                 },
-                files_processed: 0,
+                files_processed: total_entities,
                 total_duration_ms: 0,
             },
             errors: Vec::new(),
-            scoring_results: ScoringResults { files: Vec::new() },
-            feature_vectors: Vec::new(),
+            scoring_results: ScoringResults {
+                files: scoring_files,
+            },
+            feature_vectors,
         })
     }
 
     /// Fit the pipeline (legacy API compatibility)
-    pub async fn fit(&mut self, _vectors: &[FeatureVector]) -> Result<()> {
-        // Legacy API - no-op for now
+    pub async fn fit(&mut self, vectors: &[FeatureVector]) -> Result<()> {
+        if vectors.is_empty() {
+            return Ok(());
+        }
+
+        self.feature_scorer.fit(vectors)?;
         Ok(())
     }
 
     /// Get extractor registry (legacy API compatibility)
     pub fn extractor_registry(&self) -> ExtractorRegistry {
         ExtractorRegistry::new()
+    }
+
+    pub fn wrap_results(&self, results: ComprehensiveAnalysisResult) -> PipelineResults {
+        let scoring_files = Self::convert_to_scoring_results(&results);
+
+        PipelineResults {
+            analysis_id: results.analysis_id.clone(),
+            timestamp: results.timestamp,
+            statistics: PipelineStatistics {
+                memory_stats: MemoryStats {
+                    current_memory_bytes: 0,
+                    peak_memory_bytes: 0,
+                },
+                files_processed: results.summary.total_files,
+                total_duration_ms: (results.processing_time * 1000.0) as u64,
+            },
+            results,
+            errors: Vec::new(),
+            scoring_results: ScoringResults {
+                files: scoring_files,
+            },
+            feature_vectors: Vec::new(),
+        }
+    }
+
+    fn health_from_scores(scoring: &[ScoringResult]) -> HealthMetrics {
+        if scoring.is_empty() {
+            return HealthMetrics {
+                overall_health_score: 100.0,
+                maintainability_score: 100.0,
+                technical_debt_ratio: 0.0,
+                complexity_score: 0.0,
+                structure_quality_score: 100.0,
+            };
+        }
+
+        let avg_abs_score = scoring
+            .iter()
+            .map(|result| result.overall_score.abs())
+            .sum::<f64>()
+            / scoring.len() as f64;
+
+        let overall_health = (100.0 - avg_abs_score * 20.0).clamp(0.0, 100.0);
+        let maintainability = (100.0 - avg_abs_score * 18.0).clamp(0.0, 100.0);
+        let technical_debt = (avg_abs_score * 25.0).clamp(0.0, 100.0);
+        let complexity = (avg_abs_score * 30.0).clamp(0.0, 100.0);
+        let structure_quality = (100.0 - avg_abs_score * 12.0).clamp(0.0, 100.0);
+
+        HealthMetrics {
+            overall_health_score: overall_health,
+            maintainability_score: maintainability,
+            technical_debt_ratio: technical_debt,
+            complexity_score: complexity,
+            structure_quality_score: structure_quality,
+        }
     }
 
     /// Evaluate quality gates against analysis results
@@ -746,7 +828,8 @@ impl AnalysisPipeline {
             let mut category_scores = HashMap::new();
             category_scores.insert(
                 "complexity".to_string(),
-                (complexity_result.metrics.cyclomatic + complexity_result.metrics.cognitive) / 2.0,
+                (complexity_result.metrics.cyclomatic() + complexity_result.metrics.cognitive())
+                    / 2.0,
             );
 
             if complexity_result.metrics.max_nesting_depth > 0.0 {
@@ -760,11 +843,11 @@ impl AnalysisPipeline {
             let mut feature_contributions = HashMap::new();
             feature_contributions.insert(
                 "cyclomatic_complexity".to_string(),
-                complexity_result.metrics.cyclomatic,
+                complexity_result.metrics.cyclomatic(),
             );
             feature_contributions.insert(
                 "cognitive_complexity".to_string(),
-                complexity_result.metrics.cognitive,
+                complexity_result.metrics.cognitive(),
             );
             feature_contributions.insert(
                 "nesting_depth".to_string(),
@@ -784,8 +867,9 @@ impl AnalysisPipeline {
             );
 
             // Calculate overall score based on complexity
-            let complexity_avg =
-                (complexity_result.metrics.cyclomatic + complexity_result.metrics.cognitive) / 2.0;
+            let complexity_avg = (complexity_result.metrics.cyclomatic()
+                + complexity_result.metrics.cognitive())
+                / 2.0;
             let overall_score =
                 complexity_avg + (complexity_result.metrics.max_nesting_depth * 0.5);
 
@@ -797,6 +881,7 @@ impl AnalysisPipeline {
                     ComplexitySeverity::Critical => Priority::Critical,
                     ComplexitySeverity::VeryHigh => Priority::High,
                     ComplexitySeverity::High => Priority::High,
+                    ComplexitySeverity::Medium => Priority::Medium,
                     ComplexitySeverity::Moderate => Priority::Medium,
                     ComplexitySeverity::Low => Priority::Low,
                 }

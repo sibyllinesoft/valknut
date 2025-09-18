@@ -1,44 +1,50 @@
-//! Graph analysis features - centrality, cycles, fan-in/fan-out.
+//! Graph-based dependency analysis using AST-derived call graphs.
 //!
-//! This module provides graph-based feature extraction for analyzing code dependencies,
-//! call graphs, and structural relationships between code entities.
+//! This module exposes two primary abstractions:
+//! - [`GraphExtractor`], a feature extractor that surfaces dependency metrics for
+//!   individual code entities.
+//! - [`DependencyGraph`], a lightweight helper that can be used in tests and tools to
+//!   construct and inspect dependency structures programmatically.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use dashmap::DashMap;
-use petgraph::algo::kosaraju_scc;
-use petgraph::graph::NodeIndex;
-use petgraph::{Directed, Graph};
-use rayon::prelude::*;
+use once_cell::sync::Lazy;
+use tracing::debug;
 
+use crate::core::dependency::{
+    canonicalize_path, DependencyMetrics as DepMetrics, EntityKey, ProjectDependencyAnalysis,
+};
 use crate::core::errors::Result;
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
 
-/// Graph-based feature extractor
+/// Cache of file-level dependency analyses keyed by canonical file paths.
+static FILE_ANALYSIS_CACHE: Lazy<DashMap<PathBuf, Arc<ProjectDependencyAnalysis>>> =
+    Lazy::new(DashMap::new);
+
+/// Graph-based feature extractor deriving metrics from AST-backed dependency graphs.
 #[derive(Debug)]
 pub struct GraphExtractor {
-    /// Feature definitions for this extractor
     features: Vec<FeatureDefinition>,
 }
 
 impl GraphExtractor {
-    /// Create a new graph extractor
+    /// Create a new graph extractor instance.
     pub fn new() -> Self {
         let mut extractor = Self {
             features: Vec::new(),
         };
-
         extractor.initialize_features();
         extractor
     }
 
-    /// Initialize graph-based feature definitions
     fn initialize_features(&mut self) {
         self.features = vec![
             FeatureDefinition::new("betweenness_approx", "Approximate betweenness centrality")
-                .with_range(0.0, 1.0)
+                .with_range(0.0, 100.0)
                 .with_default(0.0),
             FeatureDefinition::new("fan_in", "Number of incoming dependencies")
                 .with_range(0.0, 100.0)
@@ -46,12 +52,15 @@ impl GraphExtractor {
             FeatureDefinition::new("fan_out", "Number of outgoing dependencies")
                 .with_range(0.0, 100.0)
                 .with_default(0.0),
-            FeatureDefinition::new("in_cycle", "Whether entity is part of a dependency cycle")
-                .with_range(0.0, 1.0)
-                .with_default(0.0),
+            FeatureDefinition::new(
+                "in_cycle",
+                "Whether entity participates in a dependency cycle",
+            )
+            .with_range(0.0, 1.0)
+            .with_default(0.0),
             FeatureDefinition::new(
                 "closeness_centrality",
-                "Closeness centrality in dependency graph",
+                "Closeness centrality within the call graph",
             )
             .with_range(0.0, 1.0)
             .with_default(0.0),
@@ -78,40 +87,26 @@ impl FeatureExtractor for GraphExtractor {
     async fn extract(
         &self,
         entity: &CodeEntity,
-        context: &ExtractionContext,
+        _context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
-        tracing::warn!("Graph analysis features are placeholders in v1.0 - full implementation planned for v1.1");
-
         let mut features = HashMap::new();
 
-        // NOTE: These are placeholder implementations for v1.0 compatibility
-        // Full graph analysis will be implemented in v1.1
-
-        // Fan-in: count of entities that depend on this one
-        let fan_in = self.calculate_fan_in(entity, context);
-        features.insert("fan_in".to_string(), fan_in);
-
-        // Fan-out: count of entities this one depends on
-        let fan_out = self.calculate_fan_out(entity, context);
-        features.insert("fan_out".to_string(), fan_out);
-
-        // Betweenness centrality (approximated)
-        let betweenness = self.calculate_betweenness_approx(entity, context);
-        features.insert("betweenness_approx".to_string(), betweenness);
-
-        // Cycle detection
-        let in_cycle = self.detect_cycles(entity, context);
-        features.insert("in_cycle".to_string(), if in_cycle { 1.0 } else { 0.0 });
-
-        // Closeness centrality
-        let closeness = self.calculate_closeness_centrality(entity, context);
-        features.insert("closeness_centrality".to_string(), closeness);
+        if let Some(metrics) = lookup_metrics(entity)? {
+            features.insert("fan_in".into(), metrics.fan_in);
+            features.insert("fan_out".into(), metrics.fan_out);
+            features.insert("betweenness_approx".into(), metrics.choke_score);
+            features.insert("closeness_centrality".into(), metrics.closeness);
+            features.insert("in_cycle".into(), if metrics.in_cycle { 1.0 } else { 0.0 });
+        } else {
+            for feature in &self.features {
+                features.insert(feature.name.clone(), feature.default_value);
+            }
+        }
 
         Ok(features)
     }
 
     fn supports_entity(&self, entity: &CodeEntity) -> bool {
-        // Support functions, classes, and modules
         matches!(
             entity.entity_type.as_str(),
             "function" | "method" | "class" | "module" | "interface"
@@ -119,293 +114,208 @@ impl FeatureExtractor for GraphExtractor {
     }
 }
 
-impl GraphExtractor {
-    /// Calculate fan-in (incoming dependencies)
-    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
-    fn calculate_fan_in(&self, entity: &CodeEntity, _context: &ExtractionContext) -> f64 {
-        // Placeholder: Simple heuristic based on entity name length
-        (entity.name.len() % 10) as f64
+/// Retrieve cached dependency metrics for the file containing `entity`.
+fn lookup_metrics(entity: &CodeEntity) -> Result<Option<DepMetrics>> {
+    let file_path = Path::new(&entity.file_path);
+    if !file_path.exists() {
+        debug!(
+            "Skipping dependency metrics for {} - file not found",
+            entity.file_path
+        );
+        return Ok(None);
     }
 
-    /// Calculate fan-out (outgoing dependencies)
-    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
-    fn calculate_fan_out(&self, entity: &CodeEntity, _context: &ExtractionContext) -> f64 {
-        // Placeholder: count imports or function calls in source code
-        let import_count = entity
-            .source_code
-            .lines()
-            .filter(|line| line.trim().starts_with("import") || line.trim().starts_with("from"))
-            .count();
+    let canonical = canonicalize_path(file_path);
+    let analysis = get_or_build_analysis(&canonical)?;
 
-        import_count as f64
-    }
+    let key = EntityKey::new(
+        canonical.clone(),
+        entity.name.clone(),
+        entity.line_range.map(|(start, _)| start),
+    );
 
-    /// Calculate approximate betweenness centrality
-    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
-    fn calculate_betweenness_approx(
-        &self,
-        entity: &CodeEntity,
-        context: &ExtractionContext,
-    ) -> f64 {
-        // Placeholder: simple heuristic based on fan-in and fan-out
-        let fan_in = self.calculate_fan_in(entity, context);
-        let fan_out = self.calculate_fan_out(entity, context);
-
-        let centrality_score = (fan_in * fan_out) / (fan_in + fan_out + 1.0);
-        centrality_score / 10.0 // Normalize to [0, 1] range approximately
-    }
-
-    /// Detect if entity is part of a dependency cycle
-    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
-    fn detect_cycles(&self, _entity: &CodeEntity, _context: &ExtractionContext) -> bool {
-        // Placeholder: always returns false until graph analysis is fully implemented
-        false
-    }
-
-    /// Calculate closeness centrality
-    /// NOTE: Placeholder implementation - actual dependency graph analysis deferred to v1.1
-    fn calculate_closeness_centrality(
-        &self,
-        entity: &CodeEntity,
-        context: &ExtractionContext,
-    ) -> f64 {
-        // Placeholder: simple inverse of average distance heuristic
-        let fan_in = self.calculate_fan_in(entity, context);
-        let fan_out = self.calculate_fan_out(entity, context);
-
-        if fan_in + fan_out == 0.0 {
-            0.0
-        } else {
-            1.0 / (1.0 + (fan_in + fan_out) / 2.0)
-        }
-    }
+    Ok(analysis.metrics_for(&key).cloned())
 }
 
-/// Dependency graph representation for analysis
+fn get_or_build_analysis(path: &Path) -> Result<Arc<ProjectDependencyAnalysis>> {
+    if let Some(entry) = FILE_ANALYSIS_CACHE.get(path) {
+        return Ok(entry.value().clone());
+    }
+
+    let analysis = ProjectDependencyAnalysis::analyze(&[path.to_path_buf()])?;
+    let arc = Arc::new(analysis);
+    FILE_ANALYSIS_CACHE.insert(path.to_path_buf(), arc.clone());
+    Ok(arc)
+}
+
+/// Small helper structure for constructing dependency graphs programmatically.
 #[derive(Debug)]
 pub struct DependencyGraph {
-    /// The underlying petgraph structure
-    graph: Graph<String, f64, Directed>,
-
-    /// Mapping from entity IDs to node indices
-    entity_to_node: HashMap<String, NodeIndex>,
+    graph: petgraph::Graph<String, (), petgraph::Directed>,
+    node_indices: HashMap<String, NodeIndex>,
 }
+
+use petgraph::graph::NodeIndex;
 
 impl DependencyGraph {
-    /// Create a new empty dependency graph
+    /// Create a new, empty dependency graph.
     pub fn new() -> Self {
         Self {
-            graph: Graph::new(),
-            entity_to_node: HashMap::new(),
+            graph: petgraph::Graph::new(),
+            node_indices: HashMap::new(),
         }
     }
 
-    /// Add an entity to the graph
-    pub fn add_entity(&mut self, entity_id: String) -> NodeIndex {
-        if let Some(&node_index) = self.entity_to_node.get(&entity_id) {
-            return node_index;
-        }
-
-        let node_index = self.graph.add_node(entity_id.clone());
-        self.entity_to_node.insert(entity_id, node_index);
-        node_index
+    /// Add a dependency edge (`from` -> `to`).
+    pub fn add_dependency(&mut self, from: &str, to: &str, _weight: f64) {
+        let from_index = self.get_or_add_node(from);
+        let to_index = self.get_or_add_node(to);
+        self.graph.add_edge(from_index, to_index, ());
     }
 
-    /// Add a dependency edge between two entities
-    pub fn add_dependency(&mut self, from_entity: &str, to_entity: &str, weight: f64) {
-        let from_node = self.add_entity(from_entity.to_string());
-        let to_node = self.add_entity(to_entity.to_string());
-
-        self.graph.add_edge(from_node, to_node, weight);
-    }
-
-    /// Get the node index for an entity
-    pub fn get_node(&self, entity_id: &str) -> Option<NodeIndex> {
-        self.entity_to_node.get(entity_id).copied()
-    }
-
-    /// Calculate betweenness centrality for all nodes
-    pub fn calculate_betweenness_centrality(&self) -> HashMap<String, f64> {
-        // TODO: Implement Brandes' algorithm for betweenness centrality
-        // For now, return empty map
-        HashMap::new()
-    }
-
-    /// Detect strongly connected components (cycles)
-    pub fn detect_cycles(&self) -> Vec<Vec<String>> {
-        // TODO: Implement cycle detection using Tarjan's or Kosaraju's algorithm
-        // For now, return empty vector
-        Vec::new()
-    }
-}
-
-/// High-performance concurrent dependency graph using lock-free data structures
-#[derive(Debug)]
-pub struct ConcurrentDependencyGraph {
-    /// Thread-safe graph representation
-    graph: ArcSwap<Graph<String, f64, Directed>>,
-
-    /// Lock-free mapping from entity IDs to node indices
-    entity_to_node: DashMap<String, NodeIndex>,
-}
-
-impl ConcurrentDependencyGraph {
-    /// Create a new concurrent dependency graph
-    pub fn new() -> Self {
-        Self {
-            graph: ArcSwap::new(std::sync::Arc::new(Graph::new())),
-            entity_to_node: DashMap::new(),
-        }
-    }
-
-    /// Add entities in parallel
-    #[cfg(feature = "parallel")]
-    pub fn add_entities_parallel(&self, entity_ids: &[String]) {
-        entity_ids.par_iter().for_each(|entity_id| {
-            self.add_entity_atomic(entity_id.clone());
-        });
-    }
-
-    /// Thread-safe entity addition
-    fn add_entity_atomic(&self, entity_id: String) -> NodeIndex {
-        if let Some(node_index) = self.entity_to_node.get(&entity_id) {
-            return *node_index;
-        }
-
-        // Create new graph with the added node
-        let current_graph = self.graph.load();
-        let mut new_graph = (**current_graph).clone();
-        let node_index = new_graph.add_node(entity_id.clone());
-
-        // Update the atomic graph
-        self.graph.store(std::sync::Arc::new(new_graph));
-        self.entity_to_node.insert(entity_id, node_index);
-
-        node_index
-    }
-
-    /// Parallel dependency analysis
-    #[cfg(feature = "parallel")]
-    pub fn analyze_dependencies_parallel(&self, entities: &[CodeEntity]) -> Vec<(String, f64)> {
-        entities
-            .par_iter()
-            .map(|entity| {
-                let centrality = self.calculate_node_centrality(&entity.id);
-                (entity.id.clone(), centrality)
-            })
-            .collect()
-    }
-
-    /// Fast cycle detection using Kosaraju's algorithm
-    pub fn detect_cycles_fast(&self) -> Vec<Vec<String>> {
-        let graph = self.graph.load();
-        let sccs = kosaraju_scc(&**graph);
-
-        sccs.into_iter()
-            .filter(|scc| scc.len() > 1) // Only cycles with more than one node
-            .map(|scc| {
-                scc.into_iter()
-                    .map(|node_idx| graph[node_idx].clone())
-                    .collect()
-            })
-            .collect()
-    }
-
-    /// Calculate centrality for a single node (optimized)
-    fn calculate_node_centrality(&self, entity_id: &str) -> f64 {
-        let graph = self.graph.load();
-        if let Some(node_idx) = self.entity_to_node.get(entity_id) {
-            let in_degree = graph
-                .neighbors_directed(*node_idx, petgraph::Direction::Incoming)
-                .count();
-            let out_degree = graph
-                .neighbors_directed(*node_idx, petgraph::Direction::Outgoing)
-                .count();
-
-            // Simple centrality measure: (in_degree + out_degree) / total_nodes
-            (in_degree + out_degree) as f64 / graph.node_count() as f64
+    fn get_or_add_node(&mut self, id: &str) -> NodeIndex {
+        if let Some(index) = self.node_indices.get(id) {
+            *index
         } else {
-            0.0
+            let index = self.graph.add_node(id.to_string());
+            self.node_indices.insert(id.to_string(), index);
+            index
         }
     }
 
-    /// Memory-efficient batch processing
-    #[cfg(feature = "parallel")]
-    pub fn process_batch<T, F, R>(&self, items: &[T], processor: F) -> Vec<R>
-    where
-        T: Sync,
-        F: Fn(&T) -> R + Sync + Send,
-        R: Send,
-    {
-        items.par_iter().map(processor).collect()
+    /// Retrieve the node index for a given identifier.
+    pub fn get_node(&self, id: &str) -> Option<NodeIndex> {
+        self.node_indices.get(id).copied()
+    }
+
+    /// Calculate betweenness-like scores using simple fan-in/out heuristics.
+    pub fn calculate_betweenness_centrality(&self) -> HashMap<String, f64> {
+        let mut scores = HashMap::new();
+
+        for (id, index) in &self.node_indices {
+            let fan_in = self
+                .graph
+                .neighbors_directed(*index, petgraph::Direction::Incoming)
+                .count() as f64;
+            let fan_out = self
+                .graph
+                .neighbors_directed(*index, petgraph::Direction::Outgoing)
+                .count() as f64;
+            scores.insert(id.clone(), fan_in * fan_out);
+        }
+
+        scores
+    }
+
+    /// Detect dependency cycles using strongly connected components.
+    pub fn detect_cycles(&self) -> Vec<Vec<String>> {
+        kosaraju_scc(&self.graph)
+            .into_iter()
+            .filter_map(|component| {
+                if component.len() > 1 {
+                    Some(
+                        component
+                            .into_iter()
+                            .filter_map(|index| self.graph.node_weight(index))
+                            .cloned()
+                            .collect::<Vec<String>>(),
+                    )
+                } else {
+                    let index = component[0];
+                    if self.graph.find_edge(index, index).is_some() {
+                        self.graph.node_weight(index).map(|id| vec![id.clone()])
+                    } else {
+                        None
+                    }
+                }
+            })
+            .collect()
     }
 }
 
-impl Default for DependencyGraph {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use petgraph::algo::kosaraju_scc;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::config::ValknutConfig;
-    use std::sync::Arc;
+    use crate::core::featureset::ExtractionContext;
+    use tempfile::TempDir;
+
+    fn create_context() -> ExtractionContext {
+        ExtractionContext::new(Arc::new(ValknutConfig::default()), "python")
+    }
 
     #[tokio::test]
-    async fn test_graph_extractor() {
+    async fn graph_extractor_reports_dependency_metrics() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("module.py");
+        std::fs::write(
+            &file_path,
+            r#"def helper():
+    return 42
+
+def caller():
+    return helper()
+"#,
+        )
+        .unwrap();
+
+        let mut entity = CodeEntity::new(
+            "module::caller",
+            "function",
+            "caller",
+            file_path.to_string_lossy(),
+        )
+        .with_line_range(4, 6);
+        entity.source_code = std::fs::read_to_string(&file_path).unwrap();
+
         let extractor = GraphExtractor::new();
+        let features = extractor.extract(&entity, &create_context()).await.unwrap();
 
-        assert_eq!(extractor.name(), "graph");
-        assert!(!extractor.features().is_empty());
+        assert_eq!(features.get("fan_out").copied().unwrap_or_default(), 1.0);
+        assert!(features.get("fan_in").copied().unwrap_or_default() >= 0.0);
+        assert_eq!(features.get("in_cycle").copied().unwrap_or_default(), 0.0);
+    }
 
-        // Create test entity and context
-        let entity = CodeEntity::new("test_function", "function", "test_func", "/test/file.py")
-            .with_source_code("import os\nimport sys\ndef test_func():\n    pass");
+    #[tokio::test]
+    async fn graph_extractor_detects_self_cycle() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("recursive.py");
+        std::fs::write(
+            &file_path,
+            r#"def recurse(n):
+    if n <= 0:
+        return 0
+    return recurse(n - 1)
+"#,
+        )
+        .unwrap();
 
-        let config = Arc::new(ValknutConfig::default());
-        let context = ExtractionContext::new(config, "python");
+        let mut entity = CodeEntity::new(
+            "recursive::recurse",
+            "function",
+            "recurse",
+            file_path.to_string_lossy(),
+        )
+        .with_line_range(1, 4);
+        entity.source_code = std::fs::read_to_string(&file_path).unwrap();
 
-        let features = extractor.extract(&entity, &context).await.unwrap();
+        let extractor = GraphExtractor::new();
+        let features = extractor.extract(&entity, &create_context()).await.unwrap();
 
-        // Check that all expected features are present
-        assert!(features.contains_key("fan_in"));
-        assert!(features.contains_key("fan_out"));
-        assert!(features.contains_key("betweenness_approx"));
-        assert!(features.contains_key("in_cycle"));
-        assert!(features.contains_key("closeness_centrality"));
-
-        // Check that fan_out is positive (should detect imports)
-        assert!(features["fan_out"] >= 2.0); // Should detect 2 imports
+        assert_eq!(features.get("in_cycle").copied().unwrap_or_default(), 1.0);
     }
 
     #[test]
-    fn test_dependency_graph() {
+    fn dependency_graph_cycle_detection() {
         let mut graph = DependencyGraph::new();
-
-        // Add entities and dependencies
         graph.add_dependency("A", "B", 1.0);
         graph.add_dependency("B", "C", 1.0);
-        graph.add_dependency("A", "C", 1.0);
+        graph.add_dependency("C", "A", 1.0);
 
-        // Check that nodes were created
-        assert!(graph.get_node("A").is_some());
-        assert!(graph.get_node("B").is_some());
-        assert!(graph.get_node("C").is_some());
-        assert!(graph.get_node("D").is_none());
-    }
-
-    #[tokio::test]
-    async fn test_entity_support() {
-        let extractor = GraphExtractor::new();
-
-        let function_entity = CodeEntity::new("test", "function", "test", "/test.py");
-        let class_entity = CodeEntity::new("test", "class", "Test", "/test.py");
-        let variable_entity = CodeEntity::new("test", "variable", "x", "/test.py");
-
-        assert!(extractor.supports_entity(&function_entity));
-        assert!(extractor.supports_entity(&class_entity));
-        assert!(!extractor.supports_entity(&variable_entity));
+        let cycles = graph.detect_cycles();
+        assert_eq!(cycles.len(), 1);
+        assert_eq!(cycles[0].len(), 3);
     }
 }

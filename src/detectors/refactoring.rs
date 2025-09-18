@@ -1,14 +1,35 @@
 //! Refactoring analysis detector for identifying code improvement opportunities.
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+use crate::core::ast_service::AstService;
 use crate::core::errors::Result;
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
 use crate::core::file_utils::FileReader;
+use crate::detectors::complexity::{
+    AstComplexityAnalyzer, ComplexityAnalysisResult, ComplexityConfig,
+    ComplexityMetrics as AnalyzerComplexityMetrics,
+};
+use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
+
+/// Minimum tokens required before we consider a block a meaningful duplication target
+const DUPLICATE_MIN_TOKEN_COUNT: usize = 10;
+/// Minimum lines required to consider a block large enough for duplication checks
+const DUPLICATE_MIN_LINE_COUNT: usize = 4;
+/// Threshold for marking a function as long
+const LONG_METHOD_LINE_THRESHOLD: usize = 50;
+/// Threshold for marking a class as too large
+const LARGE_CLASS_LINE_THRESHOLD: usize = 200;
+/// Threshold for number of member entities in a class before recommending extraction
+const LARGE_CLASS_MEMBER_THRESHOLD: usize = 12;
+/// Logical operator count that suggests a complex conditional
+const COMPLEX_CONDITIONAL_THRESHOLD: usize = 4;
 
 /// Configuration for refactoring analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +50,7 @@ impl Default for RefactoringConfig {
 }
 
 /// Type of refactoring opportunity
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RefactoringType {
     ExtractMethod,
     ExtractClass,
@@ -68,20 +89,69 @@ pub struct RefactoringAnalysisResult {
     pub refactoring_score: f64,
 }
 
+/// Summary representation of an entity extracted from the AST/parse index
+#[derive(Debug, Clone)]
+struct EntitySummary {
+    id: String,
+    name: String,
+    kind: EntityKind,
+    start_line: usize,
+    end_line: usize,
+    snippet: String,
+    duplicate_fingerprint: Option<u64>,
+    fingerprint_complexity: Option<usize>,
+    member_count: usize,
+    complexity: Option<AnalyzerComplexityMetrics>,
+}
+
+impl EntitySummary {
+    fn line_count(&self) -> usize {
+        if self.end_line >= self.start_line {
+            self.end_line - self.start_line + 1
+        } else {
+            1
+        }
+    }
+
+    fn location(&self) -> (usize, usize) {
+        (self.start_line, self.end_line.max(self.start_line))
+    }
+
+    fn is_function_like(&self) -> bool {
+        matches!(self.kind, EntityKind::Function | EntityKind::Method)
+    }
+
+    fn is_type_like(&self) -> bool {
+        matches!(
+            self.kind,
+            EntityKind::Class | EntityKind::Struct | EntityKind::Interface | EntityKind::Enum
+        )
+    }
+}
+
 /// Main refactoring analyzer
 pub struct RefactoringAnalyzer {
     config: RefactoringConfig,
+    ast_service: Arc<AstService>,
+    complexity_analyzer: AstComplexityAnalyzer,
 }
 
 impl RefactoringAnalyzer {
     /// Create new refactoring analyzer
-    pub fn new(config: RefactoringConfig) -> Self {
-        Self { config }
+    pub fn new(config: RefactoringConfig, ast_service: Arc<AstService>) -> Self {
+        let complexity_analyzer =
+            AstComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+
+        Self {
+            config,
+            ast_service,
+            complexity_analyzer,
+        }
     }
 
     /// Create with default configuration
     pub fn default() -> Self {
-        Self::new(RefactoringConfig::default())
+        Self::new(RefactoringConfig::default(), Arc::new(AstService::new()))
     }
 
     /// Analyze files for refactoring opportunities
@@ -126,192 +196,299 @@ impl RefactoringAnalyzer {
         );
 
         let content = FileReader::read_to_string(file_path)?;
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        let complexity_results = match self
+            .complexity_analyzer
+            .analyze_file_with_results(&file_path_str, &content)
+            .await
+        {
+            Ok(results) => results,
+            Err(err) => {
+                warn!(
+                    "Complexity analysis failed for {}: {}",
+                    file_path.display(),
+                    err
+                );
+                Vec::new()
+            }
+        };
+        let complexity_by_id: HashMap<String, ComplexityAnalysisResult> = complexity_results
+            .into_iter()
+            .map(|res| (res.entity_id.clone(), res))
+            .collect();
+
+        let mut adapter = match adapter_for_file(file_path) {
+            Ok(adapter) => adapter,
+            Err(err) => {
+                warn!("No language adapter for {}: {}", file_path.display(), err);
+                return Ok(RefactoringAnalysisResult {
+                    file_path: file_path_str,
+                    recommendations: Vec::new(),
+                    refactoring_score: 0.0,
+                });
+            }
+        };
+
+        let parse_index = adapter.parse_source(&content, &file_path_str)?;
+        let entity_summaries =
+            self.collect_entity_summaries(&parse_index, &content, &complexity_by_id);
+
+        if entity_summaries.is_empty() {
+            return Ok(RefactoringAnalysisResult {
+                file_path: file_path_str,
+                recommendations: Vec::new(),
+                refactoring_score: 0.0,
+            });
+        }
+
+        let functions: Vec<_> = entity_summaries
+            .iter()
+            .filter(|e| e.is_function_like())
+            .cloned()
+            .collect();
+
+        let type_like_entities: Vec<_> = entity_summaries
+            .iter()
+            .filter(|e| e.is_type_like())
+            .cloned()
+            .collect();
 
         let mut recommendations = Vec::new();
+        recommendations.extend(self.detect_long_methods(&functions));
+        recommendations.extend(self.detect_complex_conditionals(&functions));
+        recommendations.extend(self.detect_duplicate_code(&functions));
+        recommendations.extend(self.detect_large_types(&type_like_entities));
 
-        // Analyze for various refactoring opportunities
-        recommendations.extend(self.detect_long_methods(&content));
-        recommendations.extend(self.detect_complex_conditionals(&content));
-        recommendations.extend(self.detect_duplicate_code(&content));
-        recommendations.extend(self.detect_large_classes(&content));
-        recommendations.extend(self.detect_dead_code(&content));
-
-        // Filter by minimum impact threshold
         recommendations.retain(|rec| rec.estimated_impact >= self.config.min_impact_threshold);
-
-        // Sort by priority (highest first)
         recommendations.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
 
-        // Calculate overall refactoring score
         let refactoring_score = self.calculate_refactoring_score(&recommendations, &content);
 
         Ok(RefactoringAnalysisResult {
-            file_path: file_path.to_string_lossy().to_string(),
+            file_path: file_path_str,
             recommendations,
             refactoring_score,
         })
     }
 
-    /// Detect long methods that should be extracted
-    fn detect_long_methods(&self, content: &str) -> Vec<RefactoringRecommendation> {
-        let mut recommendations = Vec::new();
+    /// Collect entity summaries from the parse index for later analysis
+    fn collect_entity_summaries(
+        &self,
+        index: &ParseIndex,
+        content: &str,
+        complexity: &HashMap<String, ComplexityAnalysisResult>,
+    ) -> Vec<EntitySummary> {
         let lines: Vec<&str> = content.lines().collect();
+        let child_function_counts = self.count_child_functions(index);
 
-        let mut current_method_start = None;
-        let mut brace_count = 0;
+        index
+            .entities
+            .values()
+            .filter_map(|entity| {
+                let start_line = entity.location.start_line;
+                let end_line = entity.location.end_line;
 
-        for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
-
-            // Simple method detection (language-agnostic)
-            if self.is_method_start(trimmed) && current_method_start.is_none() {
-                current_method_start = Some(line_num + 1);
-                brace_count = 0;
-            }
-
-            // Count braces to track method end
-            brace_count += trimmed.matches('{').count() as i32;
-            brace_count -= trimmed.matches('}').count() as i32;
-
-            // Method ended
-            if current_method_start.is_some() && brace_count == 0 && trimmed.contains('}') {
-                let start_line = current_method_start.unwrap();
-                let end_line = line_num + 1;
-                let method_length = end_line - start_line;
-
-                if method_length > 30 {
-                    // Long method threshold
-                    let impact = (method_length as f64 / 10.0).min(10.0);
-                    let effort = 6.0; // Medium effort
-
-                    recommendations.push(RefactoringRecommendation {
-                        refactoring_type: RefactoringType::ExtractMethod,
-                        description: format!(
-                            "Long method ({} lines) should be broken down into smaller methods",
-                            method_length
-                        ),
-                        estimated_impact: impact,
-                        estimated_effort: effort,
-                        priority_score: impact / effort,
-                        location: (start_line, end_line),
-                    });
+                if start_line == 0 || end_line == 0 || start_line > lines.len() + 1 {
+                    return None;
                 }
 
-                current_method_start = None;
+                let end_line = end_line.min(lines.len());
+                let snippet = extract_lines(&lines, start_line, end_line);
+                let (fingerprint, complexity_score) =
+                    compute_duplicate_fingerprint(entity.kind, &snippet);
+                let complexity_metrics =
+                    self.lookup_complexity_metrics(entity, start_line, complexity);
+
+                Some(EntitySummary {
+                    id: entity.id.clone(),
+                    name: entity.name.clone(),
+                    kind: entity.kind,
+                    start_line,
+                    end_line,
+                    snippet,
+                    duplicate_fingerprint: fingerprint,
+                    fingerprint_complexity: complexity_score,
+                    member_count: *child_function_counts.get(&entity.id).unwrap_or(&0),
+                    complexity: complexity_metrics,
+                })
+            })
+            .collect()
+    }
+
+    /// Count child functions for each entity to help with class size detection
+    fn count_child_functions(&self, index: &ParseIndex) -> HashMap<String, usize> {
+        let mut counts: HashMap<String, usize> = HashMap::new();
+
+        for entity in index.entities.values() {
+            for child_id in &entity.children {
+                if let Some(child) = index.entities.get(child_id) {
+                    if matches!(child.kind, EntityKind::Function | EntityKind::Method) {
+                        *counts.entry(entity.id.clone()).or_insert(0) += 1;
+                    }
+                }
             }
+        }
+
+        counts
+    }
+
+    fn lookup_complexity_metrics(
+        &self,
+        entity: &ParsedEntity,
+        start_line: usize,
+        complexity: &HashMap<String, ComplexityAnalysisResult>,
+    ) -> Option<AnalyzerComplexityMetrics> {
+        if let Some(result) = complexity.get(&entity.id) {
+            return Some(result.metrics.clone());
+        }
+
+        complexity
+            .values()
+            .find(|result| result.entity_name == entity.name && result.start_line == start_line)
+            .map(|result| result.metrics.clone())
+    }
+
+    fn detect_long_methods(&self, functions: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
+        let mut recommendations = Vec::new();
+
+        for function in functions {
+            let loc = function
+                .complexity
+                .as_ref()
+                .map(|metrics| metrics.lines_of_code.max(function.line_count() as f64))
+                .unwrap_or(function.line_count() as f64);
+
+            if loc < LONG_METHOD_LINE_THRESHOLD as f64 {
+                continue;
+            }
+
+            let cyclomatic = function
+                .complexity
+                .as_ref()
+                .map(|metrics| metrics.cyclomatic_complexity)
+                .unwrap_or(0.0);
+
+            let impact = ((loc / 8.0) + (cyclomatic / 2.0)).min(10.0);
+            let effort = 4.0 + (loc / 70.0).min(4.0);
+            let priority = (impact / effort).max(0.1);
+            let loc_display = loc.round() as usize;
+            let complexity_note = if cyclomatic > 0.0 {
+                format!(" with cyclomatic {:.1}", cyclomatic)
+            } else {
+                String::new()
+            };
+
+            recommendations.push(RefactoringRecommendation {
+                refactoring_type: RefactoringType::ExtractMethod,
+                description: format!(
+                    "Function `{}` spans {} lines{}. Extract helper functions to improve cohesion.",
+                    function.name, loc_display, complexity_note
+                ),
+                estimated_impact: impact,
+                estimated_effort: effort,
+                priority_score: priority,
+                location: function.location(),
+            });
         }
 
         recommendations
     }
 
-    /// Detect complex conditional statements
-    fn detect_complex_conditionals(&self, content: &str) -> Vec<RefactoringRecommendation> {
+    fn detect_complex_conditionals(
+        &self,
+        functions: &[EntitySummary],
+    ) -> Vec<RefactoringRecommendation> {
         let mut recommendations = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
 
-        for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
+        for function in functions {
+            let fallback_complexity = count_logical_operators(&function.snippet);
+            let (logical_complexity, cognitive_complexity) = if let Some(metrics) = &function.complexity {
+                let logical = if metrics.decision_points.is_empty() {
+                    fallback_complexity
+                } else {
+                    metrics.decision_points.len()
+                };
+                let cognitive = if metrics.cognitive_complexity > 0.0 {
+                    metrics.cognitive_complexity
+                } else {
+                    fallback_complexity as f64
+                };
+                (logical, cognitive)
+            } else {
+                (fallback_complexity, fallback_complexity as f64)
+            };
 
-            // Count logical operators in conditional statements
-            if trimmed.starts_with("if ") || trimmed.contains(" if ") {
-                let and_count = trimmed.matches("&&").count() + trimmed.matches(" and ").count();
-                let or_count = trimmed.matches("||").count() + trimmed.matches(" or ").count();
-                let total_operators = and_count + or_count;
-
-                if total_operators >= 3 {
-                    let impact = (total_operators as f64 * 2.0).min(10.0);
-                    let effort = 4.0;
-
-                    recommendations.push(RefactoringRecommendation {
-                        refactoring_type: RefactoringType::SimplifyConditionals,
-                        description: format!(
-                            "Complex conditional with {} logical operators should be simplified",
-                            total_operators
-                        ),
-                        estimated_impact: impact,
-                        estimated_effort: effort,
-                        priority_score: impact / effort,
-                        location: (line_num + 1, line_num + 1),
-                    });
-                }
+            if logical_complexity < COMPLEX_CONDITIONAL_THRESHOLD {
+                continue;
             }
+
+            let impact = (cognitive_complexity * 1.5).min(10.0).max(5.0);
+            let effort = 3.5;
+            let priority = (impact / effort).max(0.1);
+
+            recommendations.push(RefactoringRecommendation {
+                refactoring_type: RefactoringType::SimplifyConditionals,
+                description: format!(
+                    "Function `{}` contains {} decision points (cognitive {:.1}). Consider guard clauses or breaking the logic into smaller helpers.",
+                    function.name, logical_complexity, cognitive_complexity
+                ),
+                estimated_impact: impact,
+                estimated_effort: effort,
+                priority_score: priority,
+                location: function.location(),
+            });
         }
 
         recommendations
     }
 
-    /// Detect duplicate code patterns (simplified)
-    fn detect_duplicate_code(&self, content: &str) -> Vec<RefactoringRecommendation> {
+    fn detect_duplicate_code(&self, functions: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
+        let mut buckets: HashMap<u64, Vec<&EntitySummary>> = HashMap::new();
+
+        for function in functions {
+            if function.line_count() < DUPLICATE_MIN_LINE_COUNT {
+                continue;
+            }
+
+            match (
+                function.duplicate_fingerprint,
+                function.fingerprint_complexity,
+            ) {
+                (Some(fingerprint), Some(complexity))
+                    if complexity >= DUPLICATE_MIN_TOKEN_COUNT =>
+                {
+                    buckets.entry(fingerprint).or_default().push(function);
+                }
+                _ => {}
+            }
+        }
+
         let mut recommendations = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
 
-        // Look for repeated blocks of code (simplified detection)
-        let mut line_groups: HashMap<String, Vec<usize>> = HashMap::new();
-
-        for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.len() > 10 && !trimmed.starts_with("//") && !trimmed.starts_with("#") {
-                // Also check for repeated string literals (a common duplication pattern)
-                if let Some(string_literal) = extract_string_literal(trimmed) {
-                    if string_literal.len() > 15 {
-                        // Only long strings are worth deduplicating
-                        line_groups
-                            .entry(format!("STRING_LITERAL: {}", string_literal))
-                            .or_insert_with(Vec::new)
-                            .push(line_num + 1);
-                    }
-                }
-                line_groups
-                    .entry(trimmed.to_string())
-                    .or_insert_with(Vec::new)
-                    .push(line_num + 1);
-                if trimmed.contains("this appears multiple times") {
-                    println!(
-                        "Found potential duplicate line {}: '{}'",
-                        line_num + 1,
-                        trimmed
-                    );
-                }
+        for duplicates in buckets.values() {
+            if duplicates.len() < 2 {
+                continue;
             }
-        }
 
-        // Helper function to extract string literals from a line
-        fn extract_string_literal(line: &str) -> Option<String> {
-            // Look for quoted strings
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line.rfind('"') {
-                    if start != end {
-                        return Some(line[start + 1..end].to_string());
-                    }
-                }
-            }
-            if let Some(start) = line.find('\'') {
-                if let Some(end) = line.rfind('\'') {
-                    if start != end {
-                        return Some(line[start + 1..end].to_string());
-                    }
-                }
-            }
-            None
-        }
+            let names: Vec<String> = duplicates.iter().map(|f| f.name.clone()).collect();
+            let names_display = names.join(", ");
 
-        for (line_content, occurrences) in line_groups {
-            if occurrences.len() >= 3 {
-                // 3+ occurrences indicate duplication
-                let impact = (occurrences.len() as f64).min(10.0);
-                let effort = 5.0;
+            for function in duplicates {
+                let impact = (function.line_count() as f64 / 8.0).min(10.0).max(6.0);
+                let effort = 5.5;
+                let priority = (impact / effort).max(0.1);
 
                 recommendations.push(RefactoringRecommendation {
                     refactoring_type: RefactoringType::EliminateDuplication,
                     description: format!(
-                        "Duplicate code pattern found {} times: '{}'",
-                        occurrences.len(),
-                        line_content.chars().take(50).collect::<String>()
+                        "Function `{}` shares near-identical implementation with [{}]. Consolidate shared logic into a reusable helper.",
+                        function.name, names_display
                     ),
                     estimated_impact: impact,
                     estimated_effort: effort,
-                    priority_score: impact / effort,
-                    location: (occurrences[0], occurrences[occurrences.len() - 1]),
+                    priority_score: priority,
+                    location: function.location(),
                 });
             }
         }
@@ -319,113 +496,39 @@ impl RefactoringAnalyzer {
         recommendations
     }
 
-    /// Detect large classes that should be split
-    fn detect_large_classes(&self, content: &str) -> Vec<RefactoringRecommendation> {
+    fn detect_large_types(&self, types: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
         let mut recommendations = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
 
-        let mut current_class_start = None;
-        let mut brace_count = 0;
+        for entity in types {
+            let line_count = entity.line_count();
+            let member_count = entity.member_count;
 
-        for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
-
-            if self.is_class_start(trimmed) && current_class_start.is_none() {
-                current_class_start = Some(line_num + 1);
-                brace_count = 0;
+            if line_count < LARGE_CLASS_LINE_THRESHOLD
+                && member_count < LARGE_CLASS_MEMBER_THRESHOLD
+            {
+                continue;
             }
 
-            brace_count += trimmed.matches('{').count() as i32;
-            brace_count -= trimmed.matches('}').count() as i32;
+            let impact = ((line_count as f64 / 20.0) + member_count as f64 * 0.5)
+                .min(10.0)
+                .max(5.0);
+            let effort = 7.5;
+            let priority = (impact / effort).max(0.1);
 
-            if current_class_start.is_some() && brace_count == 0 && trimmed.contains('}') {
-                let start_line = current_class_start.unwrap();
-                let end_line = line_num + 1;
-                let class_length = end_line - start_line;
-
-                if class_length > 100 {
-                    // Large class threshold
-                    let impact = (class_length as f64 / 20.0).min(10.0);
-                    let effort = 8.0; // High effort
-
-                    recommendations.push(RefactoringRecommendation {
-                        refactoring_type: RefactoringType::ExtractClass,
-                        description: format!(
-                            "Large class ({} lines) should be split into smaller classes",
-                            class_length
-                        ),
-                        estimated_impact: impact,
-                        estimated_effort: effort,
-                        priority_score: impact / effort,
-                        location: (start_line, end_line),
-                    });
-                }
-
-                current_class_start = None;
-            }
+            recommendations.push(RefactoringRecommendation {
+                refactoring_type: RefactoringType::ExtractClass,
+                description: format!(
+                    "Type `{}` spans {} lines with {} members. Split responsibilities into focused components.",
+                    entity.name, line_count, member_count
+                ),
+                estimated_impact: impact,
+                estimated_effort: effort,
+                priority_score: priority,
+                location: entity.location(),
+            });
         }
 
         recommendations
-    }
-
-    /// Detect potential dead code
-    fn detect_dead_code(&self, content: &str) -> Vec<RefactoringRecommendation> {
-        let mut recommendations = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
-
-        for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
-
-            // Look for commented-out code
-            if (trimmed.starts_with("//") || trimmed.starts_with("#")) && trimmed.len() > 20 {
-                // Check if it looks like code (has parentheses, operators, etc.)
-                if trimmed.contains('(')
-                    && (trimmed.contains('=')
-                        || trimmed.contains("def ")
-                        || trimmed.contains("function"))
-                {
-                    recommendations.push(RefactoringRecommendation {
-                        refactoring_type: RefactoringType::RemoveDeadCode,
-                        description: "Commented-out code should be removed".to_string(),
-                        estimated_impact: 3.0,
-                        estimated_effort: 1.0, // Very low effort
-                        priority_score: 3.0,
-                        location: (line_num + 1, line_num + 1),
-                    });
-                }
-            }
-        }
-
-        recommendations
-    }
-
-    /// Check if a line starts a method
-    fn is_method_start(&self, line: &str) -> bool {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with("//") || trimmed.starts_with("#") {
-            return false;
-        }
-
-        trimmed.contains("def ") || // Python
-        trimmed.contains("function ") || // JavaScript
-        (trimmed.contains("fn ") && !trimmed.contains("->")) || // Rust function declaration
-        (trimmed.contains("func ") && trimmed.contains("(")) // Go
-    }
-
-    /// Check if a line starts a class
-    fn is_class_start(&self, line: &str) -> bool {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with("//") || trimmed.starts_with("#") {
-            return false;
-        }
-
-        trimmed.starts_with("class ") || // Python, JavaScript
-        trimmed.starts_with("struct ") || // Rust, Go
-        trimmed.starts_with("type ") // Go
     }
 
     /// Calculate overall refactoring score for the file
@@ -434,19 +537,149 @@ impl RefactoringAnalyzer {
         recommendations: &[RefactoringRecommendation],
         content: &str,
     ) -> f64 {
-        let total_lines = content.lines().count() as f64;
+        if recommendations.is_empty() {
+            return 0.0;
+        }
+
+        let total_lines = content.lines().count().max(1) as f64;
         let total_impact: f64 = recommendations.iter().map(|r| r.estimated_impact).sum();
 
-        // Normalize by file size
-        let base_score = total_impact / (total_lines / 100.0).max(1.0);
-
-        // Cap at 100
+        // Normalize by file size and cap at 100
+        let base_score = (total_impact / total_lines) * 120.0;
         base_score.min(100.0)
     }
 }
 
-#[derive(Debug, Default)]
-pub struct RefactoringExtractor;
+pub struct RefactoringExtractor {
+    analyzer: Arc<RefactoringAnalyzer>,
+    feature_definitions: Vec<FeatureDefinition>,
+    file_cache: DashMap<String, Arc<RefactoringAnalysisResult>>,
+}
+
+impl RefactoringExtractor {
+    /// Create a refactoring extractor backed by the provided analyzer
+    pub fn new(analyzer: RefactoringAnalyzer) -> Self {
+        let feature_definitions = vec![
+            FeatureDefinition::new(
+                "refactoring_recommendation_count",
+                "Number of refactoring opportunities detected for this entity",
+            )
+            .with_range(0.0, 50.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_total_impact",
+                "Sum of estimated impact values for matching refactoring recommendations",
+            )
+            .with_range(0.0, 200.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_avg_impact",
+                "Average estimated impact for matching refactoring recommendations",
+            )
+            .with_range(0.0, 10.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_avg_priority",
+                "Average priority score for matching refactoring recommendations",
+            )
+            .with_range(0.0, 10.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_max_priority",
+                "Highest priority score among matching refactoring recommendations",
+            )
+            .with_range(0.0, 10.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_file_score",
+                "Overall refactoring score for the containing file",
+            )
+            .with_range(0.0, 100.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_extract_method_count",
+                "Occurrences of extract-method opportunities",
+            )
+            .with_range(0.0, 50.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_extract_class_count",
+                "Occurrences of extract-class opportunities",
+            )
+            .with_range(0.0, 50.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_duplicate_code_count",
+                "Occurrences of duplicate-code elimination opportunities",
+            )
+            .with_range(0.0, 50.0)
+            .with_default(0.0),
+            FeatureDefinition::new(
+                "refactoring_simplify_conditionals_count",
+                "Occurrences of complex conditional simplification opportunities",
+            )
+            .with_range(0.0, 50.0)
+            .with_default(0.0),
+        ];
+
+        Self {
+            analyzer: Arc::new(analyzer),
+            feature_definitions,
+            file_cache: DashMap::new(),
+        }
+    }
+
+    /// Construct an extractor with explicit configuration and AST service
+    pub fn with_config(config: RefactoringConfig, ast_service: Arc<AstService>) -> Self {
+        Self::new(RefactoringAnalyzer::new(config, ast_service))
+    }
+
+    /// Fetch (and cache) the refactoring analysis for a file
+    async fn file_analysis(&self, file_path: &str) -> Result<Arc<RefactoringAnalysisResult>> {
+        let key = normalize_path(file_path);
+
+        if let Some(entry) = self.file_cache.get(&key) {
+            return Ok(entry.clone());
+        }
+
+        let path = PathBuf::from(file_path);
+        match self.analyzer.analyze_file(&path).await {
+            Ok(result) => {
+                let arc = Arc::new(result);
+                self.file_cache.insert(key, arc.clone());
+                Ok(arc)
+            }
+            Err(error) => {
+                warn!(
+                    "Refactoring extractor failed to analyze {}: {}",
+                    file_path, error
+                );
+                let placeholder = Arc::new(RefactoringAnalysisResult {
+                    file_path: file_path.to_string(),
+                    recommendations: Vec::new(),
+                    refactoring_score: 0.0,
+                });
+                self.file_cache.insert(key, placeholder.clone());
+                Ok(placeholder)
+            }
+        }
+    }
+
+    /// Initialise the feature vector with configured defaults
+    fn initialise_feature_map(&self) -> HashMap<String, f64> {
+        let mut map = HashMap::with_capacity(self.feature_definitions.len());
+        for definition in &self.feature_definitions {
+            map.insert(definition.name.clone(), definition.default_value);
+        }
+        map
+    }
+}
+
+impl Default for RefactoringExtractor {
+    fn default() -> Self {
+        Self::new(RefactoringAnalyzer::default())
+    }
+}
 
 #[async_trait]
 impl FeatureExtractor for RefactoringExtractor {
@@ -454,22 +687,197 @@ impl FeatureExtractor for RefactoringExtractor {
         "refactoring"
     }
     fn features(&self) -> &[FeatureDefinition] {
-        &[]
+        &self.feature_definitions
     }
     async fn extract(
         &self,
-        _entity: &CodeEntity,
+        entity: &CodeEntity,
         _context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
-        Ok(HashMap::new())
+        let mut features = self.initialise_feature_map();
+
+        // Attempt to load analysis for the containing file
+        let analysis = self.file_analysis(&entity.file_path).await?;
+
+        let entity_range = entity.line_range.unwrap_or_else(|| {
+            let lines = entity.line_count().max(1);
+            (1, lines)
+        });
+
+        let mut total_impact = 0.0_f64;
+        let mut total_priority = 0.0_f64;
+        let mut recommendations_considered = 0.0_f64;
+        let mut max_priority = 0.0_f64;
+        let mut extract_method = 0.0_f64;
+        let mut extract_class = 0.0_f64;
+        let mut eliminate_duplication = 0.0_f64;
+        let mut simplify_conditionals = 0.0_f64;
+
+        for recommendation in &analysis.recommendations {
+            let location = recommendation.location;
+            if !ranges_overlap(entity_range, location) {
+                continue;
+            }
+
+            recommendations_considered += 1.0;
+            total_impact += recommendation.estimated_impact;
+            total_priority += recommendation.priority_score;
+            max_priority = max_priority.max(recommendation.priority_score);
+
+            match recommendation.refactoring_type {
+                RefactoringType::ExtractMethod => extract_method += 1.0,
+                RefactoringType::ExtractClass => extract_class += 1.0,
+                RefactoringType::EliminateDuplication => {
+                    eliminate_duplication += 1.0;
+                }
+                RefactoringType::SimplifyConditionals => simplify_conditionals += 1.0,
+                RefactoringType::ReduceComplexity
+                | RefactoringType::ImproveNaming
+                | RefactoringType::RemoveDeadCode => {
+                    // Keep hook for future detailed features
+                }
+            }
+        }
+
+        if recommendations_considered > 0.0 {
+            let avg_impact = total_impact / recommendations_considered;
+            let avg_priority = total_priority / recommendations_considered;
+
+            features.insert(
+                "refactoring_recommendation_count".to_string(),
+                recommendations_considered,
+            );
+            features.insert("refactoring_total_impact".to_string(), total_impact);
+            features.insert("refactoring_avg_impact".to_string(), avg_impact);
+            features.insert("refactoring_avg_priority".to_string(), avg_priority);
+            features.insert("refactoring_max_priority".to_string(), max_priority);
+            features.insert(
+                "refactoring_extract_method_count".to_string(),
+                extract_method,
+            );
+            features.insert("refactoring_extract_class_count".to_string(), extract_class);
+            features.insert(
+                "refactoring_duplicate_code_count".to_string(),
+                eliminate_duplication,
+            );
+            features.insert(
+                "refactoring_simplify_conditionals_count".to_string(),
+                simplify_conditionals,
+            );
+        }
+
+        // Propagate the file-level refactoring score regardless of overlap results
+        features.insert(
+            "refactoring_file_score".to_string(),
+            analysis.refactoring_score,
+        );
+
+        Ok(features)
     }
+}
+
+fn ranges_overlap(lhs: (usize, usize), rhs: (usize, usize)) -> bool {
+    let (lhs_start, lhs_end) = lhs;
+    let (rhs_start, rhs_end) = rhs;
+
+    lhs_start <= rhs_end && rhs_start <= lhs_end
+}
+
+fn normalize_path(path: &str) -> String {
+    Path::new(path).to_string_lossy().into_owned()
+}
+
+fn extract_lines(lines: &[&str], start_line: usize, end_line: usize) -> String {
+    let start_idx = start_line.saturating_sub(1);
+    let end_idx = end_line
+        .saturating_sub(1)
+        .min(lines.len().saturating_sub(1));
+
+    if start_idx > end_idx || start_idx >= lines.len() {
+        return String::new();
+    }
+
+    lines[start_idx..=end_idx].join("\n")
+}
+
+fn strip_first_line(snippet: &str) -> String {
+    snippet.lines().skip(1).collect::<Vec<&str>>().join("\n")
+}
+
+fn compute_duplicate_fingerprint(kind: EntityKind, snippet: &str) -> (Option<u64>, Option<usize>) {
+    let body = if matches!(kind, EntityKind::Function | EntityKind::Method) {
+        strip_first_line(snippet)
+    } else {
+        snippet.to_string()
+    };
+
+    let tokens: Vec<String> = body
+        .lines()
+        .map(|line| {
+            line.split('#')
+                .next()
+                .unwrap_or("")
+                .split("//")
+                .next()
+                .unwrap_or("")
+                .split_whitespace()
+                .map(|token| {
+                    token
+                        .trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
+                        .to_lowercase()
+                })
+                .filter(|token| !token.is_empty())
+                .collect::<Vec<String>>()
+        })
+        .flatten()
+        .collect();
+
+    if tokens.is_empty() {
+        return (None, None);
+    }
+
+    let token_count = tokens.len();
+    if token_count < DUPLICATE_MIN_TOKEN_COUNT {
+        return (None, Some(token_count));
+    }
+
+    let normalized = tokens.join(" ");
+    let hash = blake3::hash(normalized.as_bytes());
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&hash.as_bytes()[..8]);
+
+    (Some(u64::from_le_bytes(bytes)), Some(token_count))
+}
+
+fn count_logical_operators(snippet: &str) -> usize {
+    let mut count = 0;
+
+    let lowered = snippet.to_lowercase();
+    count += lowered.matches("&&").count();
+    count += lowered.matches("||").count();
+    count += lowered.matches(" and ").count();
+    count += lowered.matches(" or ").count();
+    count += lowered.matches(" elif ").count();
+    count += lowered.matches(" else if ").count();
+    count += lowered.matches(" when ").count();
+    count += lowered.matches(" match ").count();
+
+    count
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::Arc;
     use tempfile::TempDir;
+
+    use crate::core::config::ValknutConfig;
+    use crate::core::featureset::{CodeEntity, ExtractionContext};
+
+    fn analyzer() -> RefactoringAnalyzer {
+        RefactoringAnalyzer::new(RefactoringConfig::default(), Arc::new(AstService::new()))
+    }
 
     #[test]
     fn test_refactoring_config_default() {
@@ -480,16 +888,9 @@ mod tests {
 
     #[test]
     fn test_refactoring_analyzer_creation() {
-        let analyzer = RefactoringAnalyzer::default();
+        let ast_service = Arc::new(AstService::new());
+        let analyzer = RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service);
         assert!(analyzer.config.enabled);
-
-        let custom_config = RefactoringConfig {
-            enabled: false,
-            min_impact_threshold: 8.0,
-        };
-        let analyzer = RefactoringAnalyzer::new(custom_config);
-        assert!(!analyzer.config.enabled);
-        assert_eq!(analyzer.config.min_impact_threshold, 8.0);
     }
 
     #[tokio::test]
@@ -498,7 +899,7 @@ mod tests {
             enabled: false,
             min_impact_threshold: 5.0,
         };
-        let analyzer = RefactoringAnalyzer::new(config);
+        let analyzer = RefactoringAnalyzer::new(config, Arc::new(AstService::new()));
 
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.py");
@@ -509,288 +910,171 @@ mod tests {
         assert!(results.is_empty());
     }
 
-    #[test]
-    fn test_is_method_start() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        // Python
-        assert!(analyzer.is_method_start("def test_function():"));
-        assert!(analyzer.is_method_start("    def inner_function():"));
-
-        // JavaScript
-        assert!(analyzer.is_method_start("function testFunction() {"));
-
-        // Rust
-        assert!(analyzer.is_method_start("fn test_function() {"));
-        assert!(!analyzer.is_method_start("fn test() -> bool {")); // Has return type
-
-        // Go
-        assert!(analyzer.is_method_start("func testFunction() {"));
-
-        // Not methods
-        assert!(!analyzer.is_method_start("if condition {"));
-        assert!(!analyzer.is_method_start("// def commented_function():"));
-    }
-
-    #[test]
-    fn test_is_class_start() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        // Python
-        assert!(analyzer.is_class_start("class TestClass:"));
-        assert!(analyzer.is_class_start("class TestClass(BaseClass):"));
-
-        // Rust/Go structs
-        assert!(analyzer.is_class_start("struct TestStruct {"));
-        assert!(analyzer.is_class_start("type TestType struct {"));
-
-        // Not classes
-        assert!(!analyzer.is_class_start("def function():"));
-        assert!(!analyzer.is_class_start("if class_name:"));
-    }
-
-    #[test]
-    fn test_detect_long_methods() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        // Create a long method with JavaScript syntax (uses braces)
-        let mut content = String::from("function long_method() {\n");
-        for i in 1..=35 {
-            content.push_str(&format!("    line_{};\n", i));
+    #[tokio::test]
+    async fn test_detects_long_method() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("long_function.py");
+        let mut content = String::from("def long_function():\n");
+        for i in 0..65 {
+            content.push_str(&format!("    value = {}\n", i));
         }
-        content.push_str("}\n");
+        fs::write(&file_path, content).unwrap();
 
-        let recommendations = analyzer.detect_long_methods(&content);
-        assert!(!recommendations.is_empty());
-
-        let long_method_rec = &recommendations[0];
-        assert!(matches!(
-            long_method_rec.refactoring_type,
-            RefactoringType::ExtractMethod
-        ));
-        assert!(long_method_rec.description.contains("Long method"));
-        assert!(long_method_rec.estimated_impact > 0.0);
-    }
-
-    #[test]
-    fn test_detect_complex_conditionals() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        let content =
-            "if condition1 && condition2 || condition3 && condition4 || condition5:\n    pass";
-
-        let recommendations = analyzer.detect_complex_conditionals(content);
-        assert!(!recommendations.is_empty());
-
-        let complex_conditional = &recommendations[0];
-        assert!(matches!(
-            complex_conditional.refactoring_type,
-            RefactoringType::SimplifyConditionals
-        ));
-        assert!(complex_conditional
-            .description
-            .contains("Complex conditional"));
-        assert!(complex_conditional.estimated_impact > 0.0);
-    }
-
-    #[test]
-    fn test_detect_duplicate_code() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        let content = r#"
-        result = calculate_something(param1, param2)
-        some_other_line = different
-        result = calculate_something(param1, param2)
-        another_line = also_different
-        result = calculate_something(param1, param2)
-        "#;
-
-        let recommendations = analyzer.detect_duplicate_code(content);
-        assert!(!recommendations.is_empty());
-
-        let duplicate_rec = &recommendations[0];
-        assert!(matches!(
-            duplicate_rec.refactoring_type,
-            RefactoringType::EliminateDuplication
-        ));
-        assert!(duplicate_rec.description.contains("Duplicate code pattern"));
-        assert!(duplicate_rec.estimated_impact > 0.0);
-    }
-
-    #[test]
-    fn test_detect_large_classes() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        // Create a large class with JavaScript syntax (uses braces)
-        let mut content = String::from("class LargeClass {\n");
-        for i in 1..=105 {
-            content.push_str(&format!("    line_{};\n", i));
-        }
-        content.push_str("}\n");
-
-        let recommendations = analyzer.detect_large_classes(&content);
-        assert!(!recommendations.is_empty());
-
-        let large_class_rec = &recommendations[0];
-        assert!(matches!(
-            large_class_rec.refactoring_type,
-            RefactoringType::ExtractClass
-        ));
-        assert!(large_class_rec.description.contains("Large class"));
-        assert!(large_class_rec.estimated_impact > 0.0);
-    }
-
-    #[test]
-    fn test_detect_dead_code() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        let content = r#"
-        active_line = "this is active code"
-        // def commented_out_function(param1, param2):
-        //     return param1 + param2
-        # def another_commented_function():
-        #     some_variable = calculate_value()
-        "#;
-
-        let recommendations = analyzer.detect_dead_code(content);
-        assert!(!recommendations.is_empty());
-
-        let dead_code_rec = &recommendations[0];
-        assert!(matches!(
-            dead_code_rec.refactoring_type,
-            RefactoringType::RemoveDeadCode
-        ));
-        assert!(dead_code_rec.description.contains("Commented-out code"));
-        assert_eq!(dead_code_rec.estimated_impact, 3.0);
-        assert_eq!(dead_code_rec.estimated_effort, 1.0);
+        let analyzer = analyzer();
+        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
+        assert_eq!(results.len(), 1);
+        let has_extract_method = results[0]
+            .recommendations
+            .iter()
+            .any(|rec| rec.refactoring_type == RefactoringType::ExtractMethod);
+        assert!(has_extract_method, "Expected long method recommendation");
     }
 
     #[tokio::test]
-    async fn test_analyze_file_integration() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.js");
-
-        // Create a file with multiple refactoring opportunities using JavaScript syntax
+    async fn test_detects_complex_conditionals() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("complex_condition.py");
         let content = r#"
-class LargeClass {
-    longMethodWithIssues() {
-        // This is a very long method that should be refactored
-        if (condition1 && condition2 && condition3 && condition4) {
-            return;
-        }
-        let duplicate_line = "this appears multiple times";
-        for (let i = 0; i < 50; i++) {
-            console.log("Line " + i);
-        }
-        let duplicate_line2 = "this appears multiple times";
-        // function commented_out_function() {
-        //     return "should be removed";
-        // }
-        let duplicate_line3 = "this appears multiple times";
-        return result;
-    }
-}
+def complex_condition(a, b, c, d):
+    if (a and b) or (c and d) or (a and c and d):
+        return True
+    return False
 "#;
         fs::write(&file_path, content).unwrap();
 
-        let config = RefactoringConfig {
-            enabled: true,
-            min_impact_threshold: 2.0, // Lower threshold for test
-        };
-        let analyzer = RefactoringAnalyzer::new(config);
-        let result = analyzer.analyze_file(&file_path).await.unwrap();
-
-        assert!(result.refactoring_score > 0.0);
-        assert!(!result.recommendations.is_empty());
-
-        // Should find multiple types of issues
-        let types: Vec<_> = result
+        let analyzer = analyzer();
+        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
+        assert_eq!(results.len(), 1);
+        let has_complexity = results[0]
             .recommendations
             .iter()
-            .map(|r| &r.refactoring_type)
-            .collect();
-
-        // We should find at least some of these types
-        println!("Found types: {:?}", types);
-        println!("Recommendations: {:?}", result.recommendations);
-        assert!(types
-            .iter()
-            .any(|t| matches!(t, RefactoringType::SimplifyConditionals)));
-        assert!(types
-            .iter()
-            .any(|t| matches!(t, RefactoringType::EliminateDuplication)));
-    }
-
-    #[test]
-    fn test_calculate_refactoring_score() {
-        let analyzer = RefactoringAnalyzer::default();
-
-        let recommendations = vec![
-            RefactoringRecommendation {
-                refactoring_type: RefactoringType::ExtractMethod,
-                description: "Test".to_string(),
-                estimated_impact: 8.0,
-                estimated_effort: 4.0,
-                priority_score: 2.0,
-                location: (1, 10),
-            },
-            RefactoringRecommendation {
-                refactoring_type: RefactoringType::SimplifyConditionals,
-                description: "Test".to_string(),
-                estimated_impact: 6.0,
-                estimated_effort: 3.0,
-                priority_score: 2.0,
-                location: (15, 15),
-            },
-        ];
-
-        let content = "line1\nline2\nline3\n"; // 3 lines
-        let score = analyzer.calculate_refactoring_score(&recommendations, content);
-
-        // Total impact: 8.0 + 6.0 = 14.0
-        // Normalized by file size: 14.0 / (3/100).max(1) = 14.0 / 1 = 14.0
-        assert_eq!(score, 14.0);
-
-        // Test with empty recommendations
-        let empty_recommendations = vec![];
-        let empty_score = analyzer.calculate_refactoring_score(&empty_recommendations, content);
-        assert_eq!(empty_score, 0.0);
-    }
-
-    #[test]
-    fn test_refactoring_type_variants() {
-        // Test all RefactoringType variants can be created
-        let _extract_method = RefactoringType::ExtractMethod;
-        let _extract_class = RefactoringType::ExtractClass;
-        let _reduce_complexity = RefactoringType::ReduceComplexity;
-        let _eliminate_duplication = RefactoringType::EliminateDuplication;
-        let _improve_naming = RefactoringType::ImproveNaming;
-        let _simplify_conditionals = RefactoringType::SimplifyConditionals;
-        let _remove_dead_code = RefactoringType::RemoveDeadCode;
-    }
-
-    #[test]
-    fn test_feature_extractor_implementation() {
-        let extractor = RefactoringExtractor::default();
-        assert_eq!(extractor.name(), "refactoring");
-        assert!(extractor.features().is_empty());
+            .any(|rec| rec.refactoring_type == RefactoringType::SimplifyConditionals);
+        assert!(
+            has_complexity,
+            "Expected complex conditional recommendation"
+        );
     }
 
     #[tokio::test]
-    async fn test_feature_extractor_extract() {
-        let extractor = RefactoringExtractor::default();
-        let entity = CodeEntity::new(
-            "test_id".to_string(),
-            "Function".to_string(),
-            "test_func".to_string(),
-            "test.py".to_string(),
-        );
-        let context = ExtractionContext::new(
-            std::sync::Arc::new(crate::core::config::ValknutConfig::default()),
-            "rust".to_string(),
+    async fn test_detects_duplicate_functions() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("duplicates.py");
+        let content = r#"
+def helper():
+    total = 0
+    for i in range(10):
+        total += i * 2
+        if total % 3 == 0:
+            total -= 1
+        else:
+            total += 1
+    return total
+
+def helper_copy():
+    total = 0
+    for i in range(10):
+        total += i * 2
+        if total % 3 == 0:
+            total -= 1
+        else:
+            total += 1
+    return total
+"#;
+        fs::write(&file_path, content).unwrap();
+
+        let analyzer = analyzer();
+        let source = fs::read_to_string(&file_path).unwrap();
+        let mut adapter = crate::lang::python::PythonAdapter::new().unwrap();
+        let parse_index = adapter
+            .parse_source(&source, file_path.to_string_lossy().as_ref())
+            .unwrap();
+        let summaries = analyzer.collect_entity_summaries(&parse_index, &source, &HashMap::new());
+        assert!(summaries.iter().filter(|s| s.is_function_like()).count() >= 2);
+        let duplicate_ready = summaries
+            .iter()
+            .filter(|s| s.is_function_like())
+            .filter(|s| s.duplicate_fingerprint.is_some())
+            .count();
+        assert!(
+            duplicate_ready >= 2,
+            "expected duplicate fingerprints to be present"
         );
 
-        let result = extractor.extract(&entity, &context).await.unwrap();
-        assert!(result.is_empty());
+        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
+        assert_eq!(results.len(), 1);
+        let has_duplicate = results[0]
+            .recommendations
+            .iter()
+            .any(|rec| rec.refactoring_type == RefactoringType::EliminateDuplication);
+        assert!(has_duplicate, "Expected duplicate code recommendation");
+    }
+
+    #[tokio::test]
+    async fn test_detects_large_class() {
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("large_class.py");
+        let mut content = String::from("class HugeClass:\n");
+        for i in 0..30 {
+            content.push_str(&format!("    def method_{}(self):\n", i));
+            content.push_str("        result = 0\n");
+            for j in 0..10 {
+                content.push_str(&format!("        result += {}\n", j));
+            }
+            content.push_str("        return result\n\n");
+        }
+        fs::write(&file_path, content).unwrap();
+
+        let analyzer = analyzer();
+        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
+        assert_eq!(results.len(), 1);
+        let has_large_class = results[0]
+            .recommendations
+            .iter()
+            .any(|rec| rec.refactoring_type == RefactoringType::ExtractClass);
+        assert!(has_large_class, "Expected large class recommendation");
+    }
+
+    #[tokio::test]
+    async fn test_refactoring_extractor_produces_features() {
+        use crate::core::config::ValknutConfig;
+        use crate::core::featureset::{CodeEntity, ExtractionContext};
+
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("long_refactor.py");
+
+        let mut content = String::from("def long_function():\n");
+        for i in 0..70 {
+            content.push_str(&format!("    value = {}\n", i));
+        }
+        tokio::fs::write(&file_path, &content).await.unwrap();
+
+        let entity = CodeEntity::new(
+            "entity::long_function",
+            "function",
+            "long_function",
+            file_path.to_string_lossy(),
+        )
+        .with_line_range(1, content.lines().count())
+        .with_source_code(content.clone());
+
+        let mut context = ExtractionContext::new(Arc::new(ValknutConfig::default()), "python");
+        context.add_entity(entity.clone());
+
+        let extractor = RefactoringExtractor::default();
+        let features = extractor.extract(&entity, &context).await.unwrap();
+
+        let recommendation_count = features
+            .get("refactoring_recommendation_count")
+            .copied()
+            .unwrap_or_default();
+        assert!(recommendation_count >= 1.0);
+
+        assert!(
+            features
+                .get("refactoring_file_score")
+                .copied()
+                .unwrap_or_default()
+                >= 0.0
+        );
     }
 }

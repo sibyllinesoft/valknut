@@ -1,14 +1,16 @@
 #[cfg(test)]
 mod coverage_fix_tests {
     use super::*;
+    use crate::core::ast_service::AstService;
     use crate::detectors::coverage::{CoverageConfig, CoverageExtractor};
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_coverage_analysis_uses_real_data_not_fake() {
         // Set up coverage extractor
         let config = CoverageConfig::default();
-        let extractor = CoverageExtractor::new(config);
+        let extractor = CoverageExtractor::new(config, Arc::new(AstService::new()));
 
         // Test with our real LCOV file
         let lcov_path = PathBuf::from("coverage.lcov");

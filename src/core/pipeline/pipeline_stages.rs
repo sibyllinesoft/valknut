@@ -8,23 +8,28 @@ use super::pipeline_results::{
     ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
     LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
 };
+use crate::core::ast_service::AstService;
 use crate::core::config::CoverageConfig;
+use crate::core::dependency::ProjectDependencyAnalysis;
 use crate::core::errors::Result;
 use crate::core::featureset::FeatureExtractor;
 use crate::core::file_utils::{CoverageDiscovery, CoverageFile, CoverageFormat};
-use crate::detectors::complexity::ComplexityAnalyzer;
+use crate::detectors::complexity::{AstComplexityAnalyzer, ComplexityAnalyzer};
 use crate::detectors::coverage::CoverageExtractor;
 use crate::detectors::lsh::LshExtractor;
 use crate::detectors::refactoring::RefactoringAnalyzer;
 use crate::detectors::structure::StructureExtractor;
+use std::sync::Arc;
 
 /// Handles all individual analysis stages
 pub struct AnalysisStages {
     pub structure_extractor: StructureExtractor,
     pub complexity_analyzer: ComplexityAnalyzer,
+    pub ast_complexity_analyzer: AstComplexityAnalyzer,
     pub refactoring_analyzer: RefactoringAnalyzer,
     pub lsh_extractor: Option<LshExtractor>,
     pub coverage_extractor: CoverageExtractor,
+    pub ast_service: Arc<AstService>,
 }
 
 impl AnalysisStages {
@@ -33,13 +38,21 @@ impl AnalysisStages {
         structure_extractor: StructureExtractor,
         complexity_analyzer: ComplexityAnalyzer,
         refactoring_analyzer: RefactoringAnalyzer,
+        ast_service: Arc<AstService>,
     ) -> Self {
+        let ast_complexity_analyzer = AstComplexityAnalyzer::new(
+            crate::detectors::complexity::ComplexityConfig::default(),
+            ast_service.clone(),
+        );
+
         Self {
             structure_extractor,
             complexity_analyzer,
+            ast_complexity_analyzer,
             refactoring_analyzer,
             lsh_extractor: None,
-            coverage_extractor: CoverageExtractor::new(Default::default()),
+            coverage_extractor: CoverageExtractor::new(Default::default(), ast_service.clone()),
+            ast_service,
         }
     }
 
@@ -49,13 +62,21 @@ impl AnalysisStages {
         complexity_analyzer: ComplexityAnalyzer,
         refactoring_analyzer: RefactoringAnalyzer,
         lsh_extractor: LshExtractor,
+        ast_service: Arc<AstService>,
     ) -> Self {
+        let ast_complexity_analyzer = AstComplexityAnalyzer::new(
+            crate::detectors::complexity::ComplexityConfig::default(),
+            ast_service.clone(),
+        );
+
         Self {
             structure_extractor,
             complexity_analyzer,
+            ast_complexity_analyzer,
             refactoring_analyzer,
             lsh_extractor: Some(lsh_extractor),
-            coverage_extractor: CoverageExtractor::new(Default::default()),
+            coverage_extractor: CoverageExtractor::new(Default::default(), ast_service.clone()),
+            ast_service,
         }
     }
 
@@ -109,12 +130,19 @@ impl AnalysisStages {
         debug!("Running complexity analysis on {} files", files.len());
 
         let file_refs: Vec<&Path> = files.iter().map(|p| p.as_path()).collect();
-        let detailed_results = self.complexity_analyzer.analyze_files(&file_refs).await?;
+        // Use AST-based complexity analyzer instead of text-based one
+        let detailed_results = self
+            .ast_complexity_analyzer
+            .analyze_files(&file_refs)
+            .await?;
 
         // Calculate averages
         let count = detailed_results.len() as f64;
-        let total_cyclomatic: f64 = detailed_results.iter().map(|r| r.metrics.cyclomatic).sum();
-        let total_cognitive: f64 = detailed_results.iter().map(|r| r.metrics.cognitive).sum();
+        let total_cyclomatic: f64 = detailed_results
+            .iter()
+            .map(|r| r.metrics.cyclomatic())
+            .sum();
+        let total_cognitive: f64 = detailed_results.iter().map(|r| r.metrics.cognitive()).sum();
         let total_debt: f64 = detailed_results
             .iter()
             .map(|r| r.metrics.technical_debt_score)
@@ -175,17 +203,76 @@ impl AnalysisStages {
         })
     }
 
-    /// Run impact analysis (placeholder for now)
-    pub async fn run_impact_analysis(&self, _files: &[PathBuf]) -> Result<ImpactAnalysisResults> {
-        debug!("Running impact analysis (placeholder implementation)");
+    /// Run impact analysis powered by the dependency graph
+    pub async fn run_impact_analysis(&self, files: &[PathBuf]) -> Result<ImpactAnalysisResults> {
+        debug!(
+            "Running dependency impact analysis across {} files",
+            files.len()
+        );
 
-        // TODO: Implement dependency cycle detection, chokepoint analysis, clone detection
+        if files.is_empty() {
+            return Ok(ImpactAnalysisResults {
+                enabled: false,
+                dependency_cycles: Vec::new(),
+                chokepoints: Vec::new(),
+                clone_groups: Vec::new(),
+                issues_count: 0,
+            });
+        }
+
+        let analysis = match ProjectDependencyAnalysis::analyze(files) {
+            Ok(analysis) => analysis,
+            Err(err) => {
+                warn!("Impact analysis failed: {}", err);
+                return Ok(ImpactAnalysisResults {
+                    enabled: false,
+                    dependency_cycles: Vec::new(),
+                    chokepoints: Vec::new(),
+                    clone_groups: Vec::new(),
+                    issues_count: 0,
+                });
+            }
+        };
+
+        let dependency_cycles = analysis
+            .cycles()
+            .iter()
+            .map(|cycle| {
+                serde_json::json!({
+                    "size": cycle.len(),
+                    "members": cycle
+                        .iter()
+                        .map(|node| serde_json::json!({
+                            "name": node.name,
+                            "file": node.file_path,
+                            "start_line": node.start_line,
+                        }))
+                        .collect::<Vec<_>>(),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let chokepoints = analysis
+            .chokepoints()
+            .iter()
+            .map(|chokepoint| {
+                serde_json::json!({
+                    "name": chokepoint.node.name,
+                    "file": chokepoint.node.file_path,
+                    "start_line": chokepoint.node.start_line,
+                    "score": chokepoint.score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let issues_count = dependency_cycles.len() + chokepoints.len();
+
         Ok(ImpactAnalysisResults {
             enabled: true,
-            dependency_cycles: Vec::new(),
-            chokepoints: Vec::new(),
+            dependency_cycles,
+            chokepoints,
             clone_groups: Vec::new(),
-            issues_count: 0,
+            issues_count,
         })
     }
 

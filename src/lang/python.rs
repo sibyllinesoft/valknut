@@ -417,6 +417,7 @@ impl PythonAdapter {
         let mut parameters = Vec::new();
         let mut has_decorators = false;
         let mut return_annotation = None;
+        let mut function_calls = Vec::new();
 
         for child in node.children(&mut cursor) {
             match child.kind() {
@@ -441,6 +442,9 @@ impl PythonAdapter {
             }
         }
 
+        // Collect function calls within this definition for dependency analysis
+        self.extract_function_calls_recursive(*node, source_code, &mut function_calls)?;
+
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
         metadata.insert(
             "has_decorators".to_string(),
@@ -452,6 +456,15 @@ impl PythonAdapter {
                 serde_json::Value::String(return_type),
             );
         }
+        metadata.insert(
+            "function_calls".to_string(),
+            serde_json::Value::Array(
+                function_calls
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
 
         Ok(())
     }

@@ -59,6 +59,16 @@ pub async fn generate_outputs(
     // Create output directory
     tokio::fs::create_dir_all(out_path).await?;
 
+    let analysis_results = serde_json::from_value::<AnalysisResults>(result.clone()).ok();
+    let templates_dir = std::path::Path::new("templates");
+    let generator = if templates_dir.exists() {
+        ReportGenerator::new()
+            .with_templates_dir(templates_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?
+    } else {
+        ReportGenerator::new()
+    };
+
     match output_format {
         OutputFormat::Jsonl => {
             let report_file = out_path.join("report.jsonl");
@@ -68,35 +78,38 @@ pub async fn generate_outputs(
         }
         OutputFormat::Json => {
             let report_file = out_path.join("analysis_results.json");
-            let content = serde_json::to_string_pretty(result)?;
-            tokio::fs::write(&report_file, content).await?;
+            if let Some(results) = &analysis_results {
+                generator.generate_report(results, &report_file, ReportFormat::Json)?;
+            } else {
+                let content = serde_json::to_string_pretty(result)?;
+                tokio::fs::write(&report_file, content).await?;
+            }
             println!("📄 Analysis results: {}", report_file.display());
         }
         OutputFormat::Yaml => {
             let report_file = out_path.join("analysis_results.yaml");
-            let content = serde_yaml::to_string(result)?;
-            tokio::fs::write(&report_file, content).await?;
+            if let Some(results) = &analysis_results {
+                generator.generate_report(results, &report_file, ReportFormat::Yaml)?;
+            } else {
+                let content = serde_yaml::to_string(result)?;
+                tokio::fs::write(&report_file, content).await?;
+            }
             println!("📄 Analysis results: {}", report_file.display());
         }
         OutputFormat::Markdown => {
             let report_file = out_path.join("team_report.md");
-            let content = generate_markdown_report(result).await?;
-            tokio::fs::write(&report_file, content).await?;
+            if let Some(results) = &analysis_results {
+                generator.generate_markdown_report(results, &report_file)?;
+            } else {
+                let content = generate_markdown_report(result).await?;
+                tokio::fs::write(&report_file, content).await?;
+            }
             println!("📊 Team report (markdown): {}", report_file.display());
         }
         OutputFormat::Html => {
             let report_file = out_path.join("team_report.html");
-
-            // Use the proper ReportGenerator with Sibylline theme
-            let templates_dir = std::path::Path::new("templates");
-            let generator = ReportGenerator::new()
-                .with_templates_dir(templates_dir)
-                .map_err(|e| anyhow::anyhow!("Failed to load templates: {}", e))?;
-
-            // Convert JSON back to AnalysisResults (this is not ideal but works)
-            if let Ok(analysis_results) = serde_json::from_value::<AnalysisResults>(result.clone())
-            {
-                generator.generate_report(&analysis_results, &report_file, ReportFormat::Html)?;
+            if let Some(results) = &analysis_results {
+                generator.generate_report(results, &report_file, ReportFormat::Html)?;
             } else {
                 // Fallback to old HTML generation if conversion fails
                 let content = generate_html_report(result).await?;
@@ -107,14 +120,22 @@ pub async fn generate_outputs(
         }
         OutputFormat::Sonar => {
             let report_file = out_path.join("sonarqube_issues.json");
-            let content = generate_sonar_report(result).await?;
-            tokio::fs::write(&report_file, content).await?;
+            if let Some(results) = &analysis_results {
+                generator.generate_sonar_report(results, &report_file)?;
+            } else {
+                let content = generate_sonar_report(result).await?;
+                tokio::fs::write(&report_file, content).await?;
+            }
             println!("📊 SonarQube report: {}", report_file.display());
         }
         OutputFormat::Csv => {
             let report_file = out_path.join("analysis_data.csv");
-            let content = generate_csv_report(result).await?;
-            tokio::fs::write(&report_file, content).await?;
+            if let Some(results) = &analysis_results {
+                generator.generate_csv_table(results, &report_file)?;
+            } else {
+                let content = generate_csv_report(result).await?;
+                tokio::fs::write(&report_file, content).await?;
+            }
             println!("📊 CSV report: {}", report_file.display());
         }
         OutputFormat::CiSummary => {
@@ -1120,12 +1141,133 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
 }
 
 pub async fn generate_sonar_report(result: &serde_json::Value) -> anyhow::Result<String> {
+    let mut issues = Vec::new();
+
+    // Extract complexity issues for SonarQube format
+    if let Some(complexity) = result.get("complexity") {
+        if let Some(detailed_results) = complexity
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
+            for file_result in detailed_results {
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(file_issues) = file_result.get("issues").and_then(|v| v.as_array())
+                    {
+                        for issue in file_issues {
+                            let severity = match issue.get("severity").and_then(|v| v.as_str()) {
+                                Some("Critical") => "BLOCKER",
+                                Some("VeryHigh") => "CRITICAL",
+                                Some("High") => "MAJOR",
+                                Some("Medium") => "MINOR",
+                                _ => "INFO",
+                            };
+
+                            let rule_key = issue
+                                .get("category")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("complexity");
+                            let description = issue
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Complexity issue");
+                            let line = issue.get("line").and_then(|v| v.as_u64()).unwrap_or(1);
+
+                            let sonar_issue = serde_json::json!({
+                                "engineId": "valknut",
+                                "ruleId": format!("valknut:{}", rule_key),
+                                "severity": severity,
+                                "type": "CODE_SMELL",
+                                "primaryLocation": {
+                                    "message": description,
+                                    "filePath": file_path,
+                                    "textRange": {
+                                        "startLine": line,
+                                        "endLine": line
+                                    }
+                                }
+                            });
+
+                            issues.push(sonar_issue);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract refactoring opportunities
+    if let Some(refactoring) = result.get("refactoring") {
+        if let Some(detailed_results) = refactoring
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
+            for file_result in detailed_results {
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(recommendations) = file_result
+                        .get("recommendations")
+                        .and_then(|v| v.as_array())
+                    {
+                        for rec in recommendations {
+                            let priority_score = rec
+                                .get("priority_score")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let severity = if priority_score > 0.8 {
+                                "MAJOR"
+                            } else if priority_score > 0.5 {
+                                "MINOR"
+                            } else {
+                                "INFO"
+                            };
+
+                            let refactoring_type = rec
+                                .get("refactoring_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("refactoring");
+                            let description = rec
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Refactoring opportunity");
+                            let location = rec.get("location").and_then(|v| v.as_array());
+                            let line = if let Some(loc) = location {
+                                loc.get(0).and_then(|v| v.as_u64()).unwrap_or(1)
+                            } else {
+                                1
+                            };
+
+                            let sonar_issue = serde_json::json!({
+                                "engineId": "valknut",
+                                "ruleId": format!("valknut:{}", refactoring_type.to_lowercase()),
+                                "severity": severity,
+                                "type": "CODE_SMELL",
+                                "primaryLocation": {
+                                    "message": description,
+                                    "filePath": file_path,
+                                    "textRange": {
+                                        "startLine": line,
+                                        "endLine": line
+                                    }
+                                }
+                            });
+
+                            issues.push(sonar_issue);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let sonar_format = serde_json::json!({
+        "issues": issues,
         "version": "1.0",
-        "issues": [],
         "summary": {
-            "total_issues": result["summary"]["total_issues"],
-            "analysis_date": chrono::Utc::now().to_rfc3339()
+            "total_issues": issues.len(),
+            "analysis_date": chrono::Utc::now().to_rfc3339(),
+            "rules_used": issues.iter()
+                .filter_map(|issue| issue.get("ruleId").and_then(|v| v.as_str()))
+                .collect::<std::collections::HashSet<_>>()
+                .len()
         }
     });
 
@@ -1134,11 +1276,164 @@ pub async fn generate_sonar_report(result: &serde_json::Value) -> anyhow::Result
 
 pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut content = String::new();
-    content.push_str("File,Issue Type,Severity,Description\n");
+    content.push_str("File,Issue Type,Severity,Description,Line,Impact,Effort\n");
 
-    let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
-    if total_issues == 0 {
-        content.push_str("No issues found,Info,Info,Code quality is excellent\n");
+    let mut has_issues = false;
+
+    // Extract complexity issues
+    if let Some(complexity) = result.get("complexity") {
+        if let Some(detailed_results) = complexity
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
+            for file_result in detailed_results {
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(file_issues) = file_result.get("issues").and_then(|v| v.as_array())
+                    {
+                        for issue in file_issues {
+                            has_issues = true;
+                            let issue_type = issue
+                                .get("category")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Complexity");
+                            let severity = issue
+                                .get("severity")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Medium");
+                            let description = issue
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Complexity issue");
+                            let line = issue.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                            // Escape CSV content
+                            let escaped_description = description.replace("\"", "\"\"");
+                            let escaped_file_path = file_path.replace("\"", "\"\"");
+
+                            content.push_str(&format!(
+                                "\"{}\",\"{}\",\"{}\",\"{}\",{},\"\",\"\"\n",
+                                escaped_file_path, issue_type, severity, escaped_description, line
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract refactoring opportunities
+    if let Some(refactoring) = result.get("refactoring") {
+        if let Some(detailed_results) = refactoring
+            .get("detailed_results")
+            .and_then(|v| v.as_array())
+        {
+            for file_result in detailed_results {
+                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
+                    if let Some(recommendations) = file_result
+                        .get("recommendations")
+                        .and_then(|v| v.as_array())
+                    {
+                        for rec in recommendations {
+                            has_issues = true;
+                            let refactoring_type = rec
+                                .get("refactoring_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Refactoring");
+                            let description = rec
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Refactoring opportunity");
+                            let priority_score = rec
+                                .get("priority_score")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let impact = rec
+                                .get("estimated_impact")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let effort = rec
+                                .get("estimated_effort")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+
+                            let severity = if priority_score > 0.8 {
+                                "High"
+                            } else if priority_score > 0.5 {
+                                "Medium"
+                            } else {
+                                "Low"
+                            };
+
+                            let location = rec.get("location").and_then(|v| v.as_array());
+                            let line = if let Some(loc) = location {
+                                loc.get(0).and_then(|v| v.as_u64()).unwrap_or(0)
+                            } else {
+                                0
+                            };
+
+                            // Escape CSV content
+                            let escaped_description = description.replace("\"", "\"\"");
+                            let escaped_file_path = file_path.replace("\"", "\"\"");
+
+                            content.push_str(&format!(
+                                "\"{}\",\"{}\",\"{}\",\"{}\",{},\"{:.1}\",\"{:.1}\"\n",
+                                escaped_file_path,
+                                refactoring_type,
+                                severity,
+                                escaped_description,
+                                line,
+                                impact,
+                                effort
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract structure issues if available
+    if let Some(structure) = result.get("structure") {
+        if let Some(packs) = structure.get("packs").and_then(|v| v.as_array()) {
+            for pack in packs {
+                has_issues = true;
+                let kind = pack
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Structure");
+                let file_or_dir = pack
+                    .get("file")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| pack.get("directory").and_then(|v| v.as_str()))
+                    .unwrap_or("Unknown");
+
+                let reasons = pack
+                    .get("reasons")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|r| r.as_str())
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    })
+                    .unwrap_or_else(|| "Structure issue".to_string());
+
+                let escaped_reasons = reasons.replace("\"", "\"\"");
+                let escaped_file_path = file_or_dir.replace("\"", "\"\"");
+
+                content.push_str(&format!(
+                    "\"{}\",\"{}\",\"Medium\",\"{}\",0,\"\",\"\"\n",
+                    escaped_file_path, kind, escaped_reasons
+                ));
+            }
+        }
+    }
+
+    // If no issues found, add a summary line
+    if !has_issues {
+        content.push_str(
+            "\"No issues found\",\"Info\",\"Info\",\"Code quality is excellent\",0,\"\",\"\"\n",
+        );
     }
 
     Ok(content)

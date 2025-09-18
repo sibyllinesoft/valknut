@@ -6,9 +6,8 @@
 use anyhow;
 
 use crate::cli::args::AnalyzeArgs;
-use valknut_rs::core::config::{
-    AnalysisConfig, CoverageConfig, DenoiseConfig, ReportFormat, ValknutConfig,
-};
+use valknut_rs::api::config_types as api_config;
+use valknut_rs::core::config::{CoverageConfig, DenoiseConfig, ValknutConfig};
 
 /// Trait for merging configuration layers
 pub trait ConfigMerge<T> {
@@ -22,14 +21,61 @@ pub trait FromCliArgs<T> {
     fn from_cli_args(args: &T) -> Self;
 }
 
+fn merge_language_settings(
+    target: &mut ValknutConfig,
+    source: &ValknutConfig,
+    api_config: &api_config::AnalysisConfig,
+) {
+    for (language, source_config) in &source.languages {
+        let entry = target
+            .languages
+            .entry(language.clone())
+            .or_insert_with(|| source_config.clone());
+
+        if api_config.languages.enabled.contains(language) {
+            entry.enabled = true;
+        } else {
+            entry.enabled = source_config.enabled;
+        }
+
+        if api_config.languages.max_file_size_mb.is_none() {
+            entry.max_file_size_mb = source_config.max_file_size_mb;
+        }
+
+        if !api_config
+            .languages
+            .complexity_thresholds
+            .contains_key(language)
+        {
+            entry.complexity_threshold = source_config.complexity_threshold;
+        }
+
+        entry.file_extensions = source_config.file_extensions.clone();
+        entry.tree_sitter_language = source_config.tree_sitter_language.clone();
+        entry.additional_settings = source_config.additional_settings.clone();
+    }
+}
+
+fn apply_advanced_sections_from_file(target: &mut ValknutConfig, source: &ValknutConfig) {
+    target.scoring = source.scoring.clone();
+    target.graph = source.graph.clone();
+    target.lsh = source.lsh.clone();
+    target.dedupe = source.dedupe.clone();
+    target.denoise = source.denoise.clone();
+    target.io = source.io.clone();
+    target.performance = source.performance.clone();
+    target.structure = source.structure.clone();
+    target.live_reach = source.live_reach.clone();
+    target.analysis.enable_names_analysis = source.analysis.enable_names_analysis;
+}
+
 /// Enhanced configuration loading with layered approach
 pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
-    // Layer 1: Start with defaults
-    let mut config = ValknutConfig::default();
+    let mut api_config = api_config::AnalysisConfig::default();
+    let mut file_config: Option<ValknutConfig> = None;
 
-    // Layer 2: Apply configuration file if provided
     if let Some(config_path) = &args.config {
-        let file_config = ValknutConfig::from_yaml_file(config_path).map_err(|e| {
+        let loaded_config = ValknutConfig::from_yaml_file(config_path).map_err(|e| {
             anyhow::anyhow!(
                 "Failed to load configuration from {}: {}",
                 config_path.display(),
@@ -37,15 +83,26 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
             )
         })?;
 
-        // Merge file config (overrides defaults)
-        config.merge_with(file_config);
+        let api_from_file = api_config::AnalysisConfig::from_valknut_config(loaded_config.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to normalize configuration: {}", e))?;
+
+        api_config.merge_with(api_from_file);
+        file_config = Some(loaded_config);
     }
 
-    // Layer 3: Apply CLI overrides (highest priority)
+    let cli_api_overrides = api_config::AnalysisConfig::from_cli_args(args);
+    api_config.merge_with(cli_api_overrides);
+
+    let mut config = api_config.clone().to_valknut_config();
+
+    if let Some(file_cfg) = file_config {
+        apply_advanced_sections_from_file(&mut config, &file_cfg);
+        merge_language_settings(&mut config, &file_cfg, &api_config);
+    }
+
     let cli_overrides = ValknutConfig::from_cli_args(args);
     config.merge_with(cli_overrides);
 
-    // Validate final configuration
     config
         .validate()
         .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
@@ -55,55 +112,109 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
 
 impl ConfigMerge<ValknutConfig> for ValknutConfig {
     fn merge_with(&mut self, other: ValknutConfig) {
-        // Merge analysis config
-        self.analysis.merge_with(other.analysis);
-
-        // Merge coverage config
         self.coverage.merge_with(other.coverage);
-
-        // Merge denoise config
         self.denoise.merge_with(other.denoise);
 
-        // Merge I/O config - for paths and format, take the other if it's set
+        if other.io.cache_dir.is_some() {
+            self.io.cache_dir = other.io.cache_dir;
+        }
         if other.io.report_dir.is_some() {
             self.io.report_dir = other.io.report_dir;
         }
-        // ReportFormat doesn't implement PartialEq, so we check by converting to string or using pattern matching
-        match other.io.report_format {
-            ReportFormat::Html => {} // No change needed
-            _ => self.io.report_format = other.io.report_format,
+        if other.io.cache_ttl_seconds != self.io.cache_ttl_seconds {
+            self.io.cache_ttl_seconds = other.io.cache_ttl_seconds;
+        }
+        if other.io.enable_caching != self.io.enable_caching {
+            self.io.enable_caching = other.io.enable_caching;
         }
     }
 }
 
-impl ConfigMerge<AnalysisConfig> for AnalysisConfig {
-    fn merge_with(&mut self, other: AnalysisConfig) {
-        // For boolean flags, take the other value if it differs from default
-        if !other.enable_scoring {
-            self.enable_scoring = false;
+impl ConfigMerge<api_config::AnalysisConfig> for api_config::AnalysisConfig {
+    fn merge_with(&mut self, other: api_config::AnalysisConfig) {
+        let default_modules = api_config::AnalysisModules::default();
+
+        if other.modules.complexity != default_modules.complexity {
+            self.modules.complexity = other.modules.complexity;
         }
-        if !other.enable_graph_analysis {
-            self.enable_graph_analysis = false;
+        if other.modules.dependencies != default_modules.dependencies {
+            self.modules.dependencies = other.modules.dependencies;
         }
-        if !other.enable_lsh_analysis {
-            self.enable_lsh_analysis = false;
+        if other.modules.duplicates != default_modules.duplicates {
+            self.modules.duplicates = other.modules.duplicates;
         }
-        if !other.enable_refactoring_analysis {
-            self.enable_refactoring_analysis = false;
+        if other.modules.refactoring != default_modules.refactoring {
+            self.modules.refactoring = other.modules.refactoring;
         }
-        if !other.enable_coverage_analysis {
-            self.enable_coverage_analysis = false;
+        if other.modules.structure != default_modules.structure {
+            self.modules.structure = other.modules.structure;
         }
-        if !other.enable_structure_analysis {
-            self.enable_structure_analysis = false;
-        }
-        if !other.enable_names_analysis {
-            self.enable_names_analysis = false;
+        if other.modules.coverage != default_modules.coverage {
+            self.modules.coverage = other.modules.coverage;
         }
 
-        // For positive enables (features disabled by default that CLI can enable)
-        if other.enable_lsh_analysis && !self.enable_lsh_analysis {
-            self.enable_lsh_analysis = true;
+        if !other.languages.enabled.is_empty() {
+            self.languages.enabled = other.languages.enabled;
+        }
+
+        let default_language = api_config::LanguageSettings::default();
+        if other.languages.max_file_size_mb != default_language.max_file_size_mb {
+            self.languages.max_file_size_mb = other.languages.max_file_size_mb;
+        }
+        if !other.languages.complexity_thresholds.is_empty()
+            && other.languages.complexity_thresholds != default_language.complexity_thresholds
+        {
+            for (language, threshold) in other.languages.complexity_thresholds {
+                self.languages
+                    .complexity_thresholds
+                    .insert(language, threshold);
+            }
+        }
+
+        let default_files = api_config::FileSettings::default();
+        if other.files.include_patterns != default_files.include_patterns {
+            self.files.include_patterns = other.files.include_patterns;
+        }
+        if other.files.exclude_patterns != default_files.exclude_patterns {
+            self.files.exclude_patterns = other.files.exclude_patterns;
+        }
+        if other.files.max_files.is_some() {
+            self.files.max_files = other.files.max_files;
+        }
+        if other.files.follow_symlinks {
+            self.files.follow_symlinks = true;
+        }
+
+        let default_quality = api_config::QualitySettings::default();
+        if (other.quality.confidence_threshold - default_quality.confidence_threshold).abs()
+            > f64::EPSILON
+        {
+            self.quality.confidence_threshold = other.quality.confidence_threshold;
+        }
+        if other.quality.max_analysis_time_per_file != default_quality.max_analysis_time_per_file {
+            self.quality.max_analysis_time_per_file = other.quality.max_analysis_time_per_file;
+        }
+        if other.quality.strict_mode {
+            self.quality.strict_mode = true;
+        }
+
+        let default_coverage = api_config::CoverageSettings::default();
+        if other.coverage.enabled != default_coverage.enabled {
+            self.coverage.enabled = other.coverage.enabled;
+        }
+        if other.coverage.file_path.is_some() {
+            self.coverage.file_path = other.coverage.file_path;
+        }
+        if other.coverage.auto_discover != default_coverage.auto_discover {
+            self.coverage.auto_discover = other.coverage.auto_discover;
+        }
+        if other.coverage.max_age_days != default_coverage.max_age_days {
+            self.coverage.max_age_days = other.coverage.max_age_days;
+        }
+        if other.coverage.search_paths != default_coverage.search_paths
+            && !other.coverage.search_paths.is_empty()
+        {
+            self.coverage.search_paths = other.coverage.search_paths;
         }
     }
 }
@@ -188,27 +299,42 @@ impl ConfigMerge<DenoiseConfig> for DenoiseConfig {
 
 impl FromCliArgs<AnalyzeArgs> for ValknutConfig {
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
-        ValknutConfig {
-            analysis: AnalysisConfig::from_cli_args(args),
-            coverage: CoverageConfig::from_cli_args(args),
-            denoise: DenoiseConfig::from_cli_args(args),
-            ..Default::default()
-        }
+        let mut config = ValknutConfig::default();
+        config.coverage = CoverageConfig::from_cli_args(args);
+        config.denoise = DenoiseConfig::from_cli_args(args);
+        config
     }
 }
 
-impl FromCliArgs<AnalyzeArgs> for AnalysisConfig {
+impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
-        AnalysisConfig {
-            enable_structure_analysis: !args.analysis_control.no_structure,
-            enable_refactoring_analysis: !args.analysis_control.no_refactoring,
-            enable_graph_analysis: !args.analysis_control.no_impact, // Impact includes graph
-            enable_lsh_analysis: !args.analysis_control.no_lsh,
-            enable_coverage_analysis: !args.coverage.no_coverage,
-            enable_scoring: !args.analysis_control.no_complexity, // Map complexity to scoring
-            enable_names_analysis: true,                          // Always enabled
-            ..Default::default()
+        let mut config = api_config::AnalysisConfig::default();
+
+        config.modules.structure = !args.analysis_control.no_structure;
+        config.modules.refactoring = !args.analysis_control.no_refactoring;
+        config.modules.dependencies = !args.analysis_control.no_impact;
+        config.modules.duplicates = !args.analysis_control.no_lsh;
+        config.modules.coverage = !args.coverage.no_coverage;
+        config.modules.complexity = !args.analysis_control.no_complexity;
+
+        config.languages.enabled.clear();
+        config.languages.complexity_thresholds.clear();
+        config.languages.max_file_size_mb = None;
+
+        if args.coverage.no_coverage {
+            config.coverage.enabled = false;
         }
+        if let Some(path) = &args.coverage.coverage_file {
+            config.coverage.file_path = Some(path.clone());
+        }
+        if args.coverage.no_coverage_auto_discover {
+            config.coverage.auto_discover = false;
+        }
+        if let Some(max_age) = args.coverage.coverage_max_age_days {
+            config.coverage.max_age_days = max_age;
+        }
+
+        config
     }
 }
 

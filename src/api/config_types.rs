@@ -364,7 +364,7 @@ impl AnalysisConfig {
     ///
     /// This method handles the complexity of mapping the clean public API
     /// to the detailed internal configuration structure.
-    pub(crate) fn to_valknut_config(self) -> ValknutConfig {
+    pub fn to_valknut_config(self) -> ValknutConfig {
         let mut config = ValknutConfig::default();
 
         // Map analysis modules to internal flags

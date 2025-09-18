@@ -161,43 +161,6 @@ valknut mcp-manifest [OPTIONS]
 |--------|------|-------------|
 | `-o, --output <FILE>` | PATH | Output file (default: stdout) |
 
-### Legacy Commands (Backward Compatibility)
-
-#### `structure` - Structure Analysis Only
-
-Analyze code structure and generate refactoring recommendations.
-
-```bash
-valknut structure [OPTIONS] <PATH>
-```
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `-e, --extensions <EXTS>` | LIST | File extensions (comma-separated) |
-| `--branch-only` | FLAG | Enable only branch reorganization |
-| `--file-split-only` | FLAG | Enable only file splitting analysis |
-| `-n, --top <COUNT>` | INT | Maximum recommendations to show |
-| `-f, --format <FORMAT>` | ENUM | Output format |
-
-#### `impact` - Impact Analysis Only
-
-Analyze dependency cycles and clone detection for impact assessment.
-
-```bash
-valknut impact [OPTIONS] <PATH>
-```
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `-e, --extensions <EXTS>` | LIST | File extensions (comma-separated) |
-| `--cycles` | FLAG | Enable cycle detection |
-| `--clones` | FLAG | Enable clone detection |
-| `--chokepoints` | FLAG | Enable chokepoint detection |
-| `--min-similarity <RATIO>` | FLOAT | Minimum similarity threshold (0.0-1.0) |
-| `--min-total-loc <COUNT>` | INT | Minimum total LOC for clone groups |
-| `-n, --top <COUNT>` | INT | Maximum recommendations to show |
-| `-f, --format <FORMAT>` | ENUM | Output format |
-
 ## Output Formats
 
 Valknut supports multiple output formats for different use cases:
@@ -213,6 +176,9 @@ Valknut supports multiple output formats for different use cases:
 | `csv` | `.csv` | Spreadsheet data | Excel analysis |
 | `ci-summary` | `.json` | CI/CD optimized | Automated systems |
 | `pretty` | - | Human-readable console | Terminal viewing |
+
+> **Note:** Advanced clone detection and boilerplate learning live under the
+> `valknut_rs::experimental` module behind the optional `experimental` Cargo feature.
 
 ### Format-Specific Options
 

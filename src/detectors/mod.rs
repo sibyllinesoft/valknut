@@ -11,10 +11,11 @@
 //! - **lsh**: Locality Sensitive Hashing for code similarity and clone detection
 //! - **coverage**: Code coverage analysis and gap identification
 //! - **refactoring**: Refactoring opportunity detection and ranking
-//! - **names_simple**: Code naming convention and consistency analysis
 //! - **graph**: Dependency analysis and architectural metrics (v1.1)
-//! - **clone_detection**: Advanced clone detection with denoising algorithms
-//! - **boilerplate_learning**: Machine learning-based boilerplate pattern recognition
+//!
+//! Experimental and work-in-progress detectors (clone detection, boilerplate
+//! learning) are tracked under `experimental` to avoid implying production
+//! readiness in the default analysis pipeline.
 //!
 //! ## Usage
 //!
@@ -35,8 +36,4 @@ pub mod lsh;
 pub mod structure;
 pub mod coverage;
 pub mod refactoring;
-// pub mod names; // Temporarily disabled for build - embedding-based version
-pub mod names_simple; // Simplified rule-based version
 pub mod embedding;
-pub mod clone_detection;
-pub mod boilerplate_learning;

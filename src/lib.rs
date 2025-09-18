@@ -42,8 +42,7 @@
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = AnalysisConfig::default()
 //!         .with_language("python")
-//!         .with_scoring_enabled()
-//!         .with_graph_analysis();
+//!         .enable_all_modules();
 //!
 //!     let mut engine = ValknutEngine::new(config).await?;
 //!     let results = engine.analyze_directory("./src").await?;
@@ -55,62 +54,19 @@
 
 #![warn(missing_docs)]
 #![warn(unsafe_code)]
-#![warn(clippy::correctness)]
+#![warn(clippy::all)]
+#![warn(clippy::pedantic)]
 #![warn(clippy::suspicious)]
-#![allow(clippy::all)]
-#![allow(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::similar_names)]
-#![allow(clippy::uninlined_format_args)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-#![allow(clippy::redundant_else)]
-#![allow(clippy::needless_raw_string_hashes)]
-#![allow(clippy::int_plus_one)]
-#![allow(clippy::mixed_attributes_style)]
-#![allow(unreachable_patterns)]
-#![allow(dead_code)]
-#![allow(unused_comparisons)]
-#![allow(unused_mut)]
-#![allow(unused_assignments)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::unused_async)]
-#![allow(clippy::doc_lazy_continuation)]
-#![allow(clippy::unreadable_literal)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::map_unwrap_or)]
-#![allow(clippy::items_after_statements)]
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::fn_params_excessive_bools)]
-#![allow(clippy::cognitive_complexity)]
 #![allow(clippy::too_many_arguments)]
-#![allow(clippy::indexing_slicing)]
-#![allow(clippy::panic)]
-#![allow(clippy::empty_line_after_doc_comments)]
-#![allow(clippy::float_cmp)]
-#![allow(clippy::suboptimal_flops)]
-#![allow(clippy::imprecise_flops)]
-#![allow(clippy::enum_glob_use)]
-#![allow(clippy::wildcard_imports)]
-#![allow(clippy::large_enum_variant)]
 #![allow(clippy::type_complexity)]
-#![allow(clippy::match_same_arms)]
-#![allow(clippy::single_match_else)]
-#![allow(clippy::redundant_closure_for_method_calls)]
-#![allow(clippy::manual_let_else)]
-#![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::trivially_copy_pass_by_ref)]
-#![allow(clippy::unnecessary_wraps)]
-#![allow(clippy::explicit_iter_loop)]
-#![allow(clippy::implicit_clone)]
-#![allow(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // Additional allows for tests and examples
 #![cfg_attr(test, allow(clippy::unwrap_used))]
@@ -129,8 +85,10 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 pub mod core {
     //! Core analysis algorithms and data structures.
 
+    pub mod ast_service;
     pub mod bayesian;
     pub mod config;
+    pub mod dependency;
     pub mod errors;
     pub mod featureset;
     pub mod file_utils;
@@ -142,15 +100,16 @@ pub mod core {
 pub mod detectors {
     //! Specialized code analysis detectors.
 
-    pub mod clone_detection;
     pub mod complexity;
     pub mod coverage;
     pub mod graph;
     pub mod lsh;
-    pub mod names_simple;
     pub mod refactoring;
     pub mod structure;
 }
+
+/// Experimental and work-in-progress functionality.
+pub mod experimental;
 
 // Language-specific AST adapters
 pub mod lang {
@@ -161,8 +120,12 @@ pub mod lang {
     pub mod go;
     pub mod javascript;
     pub mod python;
+    pub mod registry;
     pub mod rust_lang;
     pub mod typescript;
+
+    pub use common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+    pub use registry::{adapter_for_file, adapter_for_language, language_key_for_path};
 }
 
 // I/O, persistence, and reporting
@@ -178,18 +141,7 @@ pub mod io {
 pub mod oracle;
 
 // Live reachability analysis
-pub mod live {
-    //! Live reachability analysis for production call graphs.
-
-    pub mod cli;
-    pub mod collectors;
-    pub mod community;
-    pub mod graph;
-    pub mod reports;
-    pub mod scoring;
-    pub mod storage;
-    pub mod types;
-}
+pub mod live;
 
 // Public API and engine interface
 pub mod api {

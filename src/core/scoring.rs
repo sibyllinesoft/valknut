@@ -335,6 +335,10 @@ impl FeatureNormalizer {
     pub fn get_bayesian_normalizer(&self) -> Option<&BayesianNormalizer> {
         self.bayesian_normalizer.as_ref()
     }
+
+    pub fn get_bayesian_normalizer_mut(&mut self) -> Option<&mut BayesianNormalizer> {
+        self.bayesian_normalizer.as_mut()
+    }
 }
 
 /// Feature scoring engine that combines normalization with weighted scoring
@@ -359,6 +363,10 @@ impl FeatureScorer {
     /// Fit the scorer to training data
     pub fn fit(&mut self, feature_vectors: &[FeatureVector]) -> Result<()> {
         self.normalizer.fit(feature_vectors)
+    }
+
+    pub fn normalizer(&mut self) -> &mut FeatureNormalizer {
+        &mut self.normalizer
     }
 
     /// Score feature vectors, returning normalized and weighted scores

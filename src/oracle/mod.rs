@@ -785,6 +785,7 @@ fn is_test_file(path: &str) -> bool {
         || path.ends_with("_test.c")
         || path.ends_with("Test.java")
         || path.ends_with("Tests.java")
+        || (path.contains("Test") && path.ends_with(".java"))
     {
         return true;
     }
@@ -873,4 +874,392 @@ fn html_escape(content: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::results::*;
+    use crate::core::scoring::Priority;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_oracle_config_creation() {
+        let config = OracleConfig {
+            api_key: "test-key".to_string(),
+            max_tokens: 100_000,
+            api_endpoint: "https://api.example.com".to_string(),
+            model: "test-model".to_string(),
+        };
+
+        assert_eq!(config.api_key, "test-key");
+        assert_eq!(config.max_tokens, 100_000);
+        assert_eq!(config.api_endpoint, "https://api.example.com");
+        assert_eq!(config.model, "test-model");
+    }
+
+    #[test]
+    fn test_oracle_config_from_env_missing_key() {
+        // Remove any existing GEMINI_API_KEY
+        std::env::remove_var("GEMINI_API_KEY");
+
+        let result = OracleConfig::from_env();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("GEMINI_API_KEY"));
+    }
+
+    #[test]
+    fn test_oracle_config_from_env_with_key() {
+        std::env::set_var("GEMINI_API_KEY", "test-api-key");
+
+        let result = OracleConfig::from_env();
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert_eq!(config.api_key, "test-api-key");
+        assert_eq!(config.max_tokens, 400_000);
+        assert_eq!(config.model, "gemini-2.5-pro");
+        assert!(config
+            .api_endpoint
+            .contains("generativelanguage.googleapis.com"));
+
+        // Clean up
+        std::env::remove_var("GEMINI_API_KEY");
+    }
+
+    #[test]
+    fn test_oracle_config_with_max_tokens() {
+        let config = OracleConfig {
+            api_key: "test".to_string(),
+            max_tokens: 100,
+            api_endpoint: "test".to_string(),
+            model: "test".to_string(),
+        }
+        .with_max_tokens(50_000);
+
+        assert_eq!(config.max_tokens, 50_000);
+    }
+
+    #[test]
+    fn test_refactoring_oracle_creation() {
+        let config = OracleConfig {
+            api_key: "test-key".to_string(),
+            max_tokens: 100_000,
+            api_endpoint: "https://api.example.com".to_string(),
+            model: "test-model".to_string(),
+        };
+
+        let oracle = RefactoringOracle::new(config);
+        assert_eq!(oracle.config.api_key, "test-key");
+    }
+
+    #[test]
+    fn test_is_test_file_patterns() {
+        // Test directory patterns
+        assert!(is_test_file("src/test/mod.rs"));
+        assert!(is_test_file("tests/integration.rs"));
+        assert!(is_test_file("src/tests/unit.py"));
+
+        // Test file name patterns
+        assert!(is_test_file("src/module_test.rs"));
+        assert!(is_test_file("src/component.test.js"));
+        assert!(is_test_file("src/service.spec.ts"));
+        assert!(is_test_file("test_module.py"));
+        assert!(is_test_file("src/TestClass.java"));
+        assert!(is_test_file("conftest.py"));
+
+        // Non-test files
+        assert!(!is_test_file("src/main.rs"));
+        assert!(!is_test_file("src/lib.rs"));
+        assert!(!is_test_file("src/config.py"));
+        assert!(!is_test_file("src/api/mod.rs"));
+    }
+
+    #[test]
+    fn test_calculate_file_priority() {
+        // High priority files
+        assert!(calculate_file_priority("src/main.rs", "rs", 1000) > 3.0);
+        assert!(calculate_file_priority("src/lib.rs", "rs", 1000) > 3.0);
+        assert!(calculate_file_priority("src/core/mod.rs", "rs", 1000) > 3.0);
+
+        // Config and API files get boost
+        assert!(calculate_file_priority("src/config.rs", "rs", 1000) > 2.0);
+        assert!(calculate_file_priority("src/api/mod.rs", "rs", 1000) > 2.0);
+
+        // Language priorities
+        assert!(
+            calculate_file_priority("src/module.rs", "rs", 1000)
+                > calculate_file_priority("src/module.py", "py", 1000)
+        );
+        assert!(
+            calculate_file_priority("src/module.py", "py", 1000)
+                > calculate_file_priority("src/module.c", "c", 1000)
+        );
+
+        // Size penalties
+        assert!(
+            calculate_file_priority("src/large.rs", "rs", 100_000)
+                < calculate_file_priority("src/small.rs", "rs", 1000)
+        );
+
+        // Test file penalty
+        assert!(
+            calculate_file_priority("src/module.rs", "rs", 1000)
+                > calculate_file_priority("src/module_test.rs", "rs", 1000)
+        );
+    }
+
+    #[test]
+    fn test_html_escape() {
+        assert_eq!(html_escape(""), "");
+        assert_eq!(html_escape("hello world"), "hello world");
+        assert_eq!(html_escape("hello & world"), "hello &amp; world");
+        assert_eq!(html_escape("<tag>"), "&lt;tag&gt;");
+        assert_eq!(html_escape("\"quoted\""), "&quot;quoted&quot;");
+        assert_eq!(html_escape("'single'"), "&#x27;single&#x27;");
+        assert_eq!(
+            html_escape("<script>alert('hello');</script>"),
+            "&lt;script&gt;alert(&#x27;hello&#x27;);&lt;/script&gt;"
+        );
+    }
+
+    #[test]
+    fn test_file_candidate_creation() {
+        let candidate = FileCandidate {
+            path: "src/test.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            tokens: 100,
+            priority: 2.5,
+            file_type: "rs".to_string(),
+        };
+
+        assert_eq!(candidate.path, "src/test.rs");
+        assert_eq!(candidate.content, "fn main() {}");
+        assert_eq!(candidate.tokens, 100);
+        assert_eq!(candidate.priority, 2.5);
+        assert_eq!(candidate.file_type, "rs");
+    }
+
+    #[test]
+    fn test_codebase_assessment_structure() {
+        let assessment = CodebaseAssessment {
+            health_score: 75,
+            strengths: vec!["Good modularity".to_string()],
+            weaknesses: vec!["Large files".to_string()],
+            architecture_quality: "Well structured".to_string(),
+            organization_quality: "Clear hierarchy".to_string(),
+        };
+
+        assert_eq!(assessment.health_score, 75);
+        assert_eq!(assessment.strengths.len(), 1);
+        assert_eq!(assessment.weaknesses.len(), 1);
+    }
+
+    #[test]
+    fn test_refactoring_task_structure() {
+        let task = RefactoringTask {
+            id: "task-1".to_string(),
+            title: "Split large file".to_string(),
+            description: "Break down monolithic module".to_string(),
+            task_type: "split_file".to_string(),
+            files: vec!["src/large.rs".to_string()],
+            risk_level: "medium".to_string(),
+            benefits: vec!["Improved maintainability".to_string()],
+        };
+
+        assert_eq!(task.id, "task-1");
+        assert_eq!(task.task_type, "split_file");
+        assert_eq!(task.risk_level, "medium");
+        assert_eq!(task.files.len(), 1);
+        assert_eq!(task.benefits.len(), 1);
+    }
+
+    #[test]
+    fn test_refactoring_subsystem_structure() {
+        let subsystem = RefactoringSubsystem {
+            id: "config-module".to_string(),
+            name: "Configuration System".to_string(),
+            affected_files: vec!["src/config.rs".to_string()],
+            tasks: vec![],
+        };
+
+        assert_eq!(subsystem.id, "config-module");
+        assert_eq!(subsystem.name, "Configuration System");
+        assert_eq!(subsystem.affected_files.len(), 1);
+        assert!(subsystem.tasks.is_empty());
+    }
+
+    #[test]
+    fn test_refactoring_phase_structure() {
+        let phase = RefactoringPhase {
+            id: "phase-1".to_string(),
+            name: "Initial Cleanup".to_string(),
+            description: "Address immediate issues".to_string(),
+            priority: 1,
+            subsystems: vec![],
+        };
+
+        assert_eq!(phase.id, "phase-1");
+        assert_eq!(phase.priority, 1);
+        assert!(phase.subsystems.is_empty());
+    }
+
+    #[test]
+    fn test_identified_risk_structure() {
+        let risk = IdentifiedRisk {
+            category: "technical".to_string(),
+            description: "Configuration changes may break integrations".to_string(),
+            probability: "medium".to_string(),
+            impact: "high".to_string(),
+            mitigation: "Use compatibility layer".to_string(),
+        };
+
+        assert_eq!(risk.category, "technical");
+        assert_eq!(risk.probability, "medium");
+        assert_eq!(risk.impact, "high");
+    }
+
+    #[test]
+    fn test_risk_assessment_structure() {
+        let assessment = RiskAssessment {
+            overall_risk: "medium".to_string(),
+            risks: vec![],
+            mitigation_strategies: vec!["Incremental deployment".to_string()],
+        };
+
+        assert_eq!(assessment.overall_risk, "medium");
+        assert!(assessment.risks.is_empty());
+        assert_eq!(assessment.mitigation_strategies.len(), 1);
+    }
+
+    #[test]
+    fn test_refactoring_plan_structure() {
+        let plan = RefactoringPlan { phases: vec![] };
+
+        assert!(plan.phases.is_empty());
+    }
+
+    #[test]
+    fn test_oracle_response_structure() {
+        let response = RefactoringOracleResponse {
+            assessment: CodebaseAssessment {
+                health_score: 80,
+                strengths: vec!["Good tests".to_string()],
+                weaknesses: vec!["Complex config".to_string()],
+                architecture_quality: "Solid".to_string(),
+                organization_quality: "Clear".to_string(),
+            },
+            refactoring_plan: RefactoringPlan { phases: vec![] },
+            risk_assessment: RiskAssessment {
+                overall_risk: "low".to_string(),
+                risks: vec![],
+                mitigation_strategies: vec![],
+            },
+        };
+
+        assert_eq!(response.assessment.health_score, 80);
+        assert!(response.refactoring_plan.phases.is_empty());
+        assert_eq!(response.risk_assessment.overall_risk, "low");
+    }
+
+    #[test]
+    fn test_condense_analysis_results() {
+        use std::collections::HashMap;
+        use std::time::Duration;
+
+        let config = OracleConfig {
+            api_key: "test".to_string(),
+            max_tokens: 100_000,
+            api_endpoint: "test".to_string(),
+            model: "test".to_string(),
+        };
+        let oracle = RefactoringOracle::new(config);
+
+        let results = AnalysisResults {
+            summary: AnalysisSummary {
+                code_health_score: 75.5,
+                files_processed: 10,
+                entities_analyzed: 50,
+                refactoring_needed: 5,
+                high_priority: 2,
+                critical: 1,
+                avg_refactoring_score: 3.2,
+            },
+            refactoring_candidates: vec![],
+            refactoring_candidates_by_file: vec![],
+            statistics: AnalysisStatistics {
+                total_duration: Duration::from_secs(30),
+                avg_file_processing_time: Duration::from_millis(500),
+                avg_entity_processing_time: Duration::from_millis(100),
+                features_per_entity: HashMap::new(),
+                priority_distribution: HashMap::new(),
+                issue_distribution: HashMap::new(),
+                memory_stats: MemoryStats {
+                    peak_memory_bytes: 1000000,
+                    final_memory_bytes: 800000,
+                    efficiency_score: 0.8,
+                },
+            },
+            directory_health_tree: None,
+            clone_analysis: None,
+            coverage_packs: vec![],
+            unified_hierarchy: vec![],
+            warnings: vec![],
+            health_metrics: None,
+        };
+
+        let condensed = oracle.condense_analysis_results(&results);
+        assert!(condensed.contains("75.5"));
+        assert!(condensed.contains("files_analyzed"));
+        assert!(condensed.contains("health_score"));
+    }
+
+    #[test]
+    fn test_token_budget_constants() {
+        assert_eq!(VALKNUT_OUTPUT_TOKEN_BUDGET, 50_000);
+    }
+
+    #[test]
+    fn test_gemini_request_structure() {
+        let request = GeminiRequest {
+            contents: vec![GeminiContent {
+                parts: vec![GeminiPart {
+                    text: "test content".to_string(),
+                }],
+            }],
+            generation_config: GeminiGenerationConfig {
+                temperature: 0.2,
+                top_k: 40,
+                top_p: 0.95,
+                max_output_tokens: 8192,
+                response_mime_type: "application/json".to_string(),
+            },
+        };
+
+        assert_eq!(request.contents.len(), 1);
+        assert_eq!(request.generation_config.temperature, 0.2);
+        assert_eq!(
+            request.generation_config.response_mime_type,
+            "application/json"
+        );
+    }
+
+    #[test]
+    fn test_gemini_response_structure() {
+        let response = GeminiResponse {
+            candidates: vec![GeminiCandidate {
+                content: GeminiResponseContent {
+                    parts: vec![GeminiResponsePart {
+                        text: "response text".to_string(),
+                    }],
+                },
+            }],
+        };
+
+        assert_eq!(response.candidates.len(), 1);
+        assert_eq!(
+            response.candidates[0].content.parts[0].text,
+            "response text"
+        );
+    }
 }

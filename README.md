@@ -243,15 +243,12 @@ valknut analyze --max-files 50000 --parallel 8 ./src
 valknut list-languages
 ```
 
-### Legacy Command Support
+## Experimental Modules
 
-```bash
-# Structure-only analysis
-valknut structure ./src --format pretty
-
-# Dependency and clone analysis
-valknut impact ./src --cycles --clones
-```
+Advanced clone detection and boilerplate learning remain under active development. These
+work-in-progress capabilities are available under the `valknut_rs::experimental` module and
+behind the `experimental` Cargo feature (`cargo build --features experimental`). They are
+intentionally excluded from the default CLI pipeline until they reach production quality.
 
 ## Contributing & Development
 

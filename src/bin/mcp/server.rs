@@ -136,34 +136,7 @@ impl McpServer {
         let result = McpInitResult {
             protocol_version: "2024-11-05".to_string(),
             capabilities: McpCapabilities {
-                tools: vec![
-                    McpTool {
-                        name: "analyze_code".to_string(),
-                        description:
-                            "Analyze code for refactoring opportunities and quality metrics"
-                                .to_string(),
-                        input_schema: create_analyze_code_schema(),
-                    },
-                    McpTool {
-                        name: "get_refactoring_suggestions".to_string(),
-                        description: "Get specific refactoring suggestions for a code entity"
-                            .to_string(),
-                        input_schema: create_refactoring_suggestions_schema(),
-                    },
-                    McpTool {
-                        name: "validate_quality_gates".to_string(),
-                        description:
-                            "Validate code against quality gate thresholds for CI/CD integration"
-                                .to_string(),
-                        input_schema: create_validate_quality_gates_schema(),
-                    },
-                    McpTool {
-                        name: "analyze_file_quality".to_string(),
-                        description: "Analyze quality metrics and issues for a specific file"
-                            .to_string(),
-                        input_schema: create_analyze_file_quality_schema(),
-                    },
-                ],
+                tools: self.available_tools(),
             },
             server_info: self.server_info.clone(),
         };
@@ -173,7 +146,15 @@ impl McpServer {
 
     /// Handle tools list request
     fn handle_tools_list(&self, id: Option<serde_json::Value>) -> JsonRpcResponse {
-        let tools = vec![
+        let result = serde_json::json!({
+            "tools": self.available_tools()
+        });
+
+        JsonRpcResponse::success(id, result)
+    }
+
+    fn available_tools(&self) -> Vec<McpTool> {
+        vec![
             McpTool {
                 name: "analyze_code".to_string(),
                 description: "Analyze code for refactoring opportunities and quality metrics"
@@ -196,13 +177,7 @@ impl McpServer {
                 description: "Analyze quality metrics and issues for a specific file".to_string(),
                 input_schema: create_analyze_file_quality_schema(),
             },
-        ];
-
-        let result = serde_json::json!({
-            "tools": tools
-        });
-
-        JsonRpcResponse::success(id, result)
+        ]
     }
 
     /// Handle tool call request
