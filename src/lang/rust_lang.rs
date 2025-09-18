@@ -535,7 +535,8 @@ impl RustAdapter {
                             let mut inner_cursor = param_child.walk();
                             for inner_child in param_child.children(&mut inner_cursor) {
                                 if inner_child.kind() == "type_identifier" {
-                                    let param_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    let param_name =
+                                        inner_child.utf8_text(source_code.as_bytes())?;
                                     generic_params.push(param_name);
                                 }
                             }
