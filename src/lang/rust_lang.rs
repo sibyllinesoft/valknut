@@ -530,9 +530,15 @@ impl RustAdapter {
                 "type_parameters" => {
                     let mut param_cursor = child.walk();
                     for param_child in child.children(&mut param_cursor) {
-                        if param_child.kind() == "type_identifier" {
-                            let param_name = param_child.utf8_text(source_code.as_bytes())?;
-                            generic_params.push(param_name);
+                        if param_child.kind() == "type_parameter" {
+                            // Look for the name field within the type_parameter
+                            let mut inner_cursor = param_child.walk();
+                            for inner_child in param_child.children(&mut inner_cursor) {
+                                if inner_child.kind() == "type_identifier" {
+                                    let param_name = inner_child.utf8_text(source_code.as_bytes())?;
+                                    generic_params.push(param_name);
+                                }
+                            }
                         }
                     }
                 }
