@@ -6,6 +6,7 @@
 use crate::core::ast_service::{
     AstService, ComplexityMetrics as AstComplexityMetrics, DecisionKind,
 };
+use crate::core::ast_utils::{entity_byte_range, find_entity_node};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{
     CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
@@ -18,18 +19,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-
-const HALSTEAD_OPERATOR_SYMBOLS: &[&str] = &[
-    "+", "-", "*", "/", "%", "=", "==", "!=", "<", ">", "<=", ">=", "&&", "||", "!", "&", "|", "^",
-    "~", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "->", "::",
-    "=>", "??", "?.", "++", "--", ".", "..", "...", ":", "?",
-];
-
-const HALSTEAD_OPERATOR_KEYWORDS: &[&str] = &[
-    "if", "else", "for", "while", "match", "case", "switch", "when", "try", "catch", "except",
-    "finally", "return", "break", "continue", "yield", "await", "async", "throw", "raise", "in",
-    "and", "or", "not", "lambda", "fn", "function", "def", "let", "const", "var",
-];
 
 /// Configuration for complexity analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -366,10 +355,10 @@ impl AstComplexityAnalyzer {
                     parameter_count: metrics.parameter_count,
                     lines_of_code: metrics.lines_of_code,
                     statement_count: metrics.statement_count,
-                    halstead: HalsteadMetrics::default(),
+                    halstead: metrics.halstead.clone(),
                     technical_debt_score: metrics.technical_debt_score,
                     maintainability_index: metrics.maintainability_index,
-                    decision_points: Vec::new(), // TODO: populate from AST analysis
+                    decision_points: metrics.decision_points.clone(),
                 },
                 severity: self.determine_complexity_severity(&metrics),
                 issues: issues.into_iter().map(|issue| {
@@ -671,8 +660,8 @@ impl AstComplexityAnalyzer {
             return Ok(0.0);
         }
 
-        let Some(node) = self.find_ast_node_for_entity(context, entity) else {
-            return Ok(self.fallback_parameter_count(entity) as f64);
+        let Some(node) = find_entity_node(context, entity) else {
+            return Ok(0.0);
         };
 
         if let Some(params_node) = self.locate_parameters_node(&node) {
@@ -680,7 +669,7 @@ impl AstComplexityAnalyzer {
             return Ok(count as f64);
         }
 
-        Ok(self.fallback_parameter_count(entity) as f64)
+        Ok(0.0)
     }
 
     /// Count statements in an entity
@@ -689,7 +678,7 @@ impl AstComplexityAnalyzer {
         entity: &CodeEntity,
         context: &crate::core::ast_service::AstContext<'_>,
     ) -> Result<f64> {
-        let Some(node) = self.find_ast_node_for_entity(context, entity) else {
+        let Some(node) = find_entity_node(context, entity) else {
             return Ok(0.0);
         };
 
@@ -705,7 +694,7 @@ impl AstComplexityAnalyzer {
         entity: &CodeEntity,
         context: &crate::core::ast_service::AstContext<'_>,
     ) -> Result<HalsteadMetrics> {
-        let Some((start_byte, end_byte)) = self.entity_byte_range(entity) else {
+        let Some(root_node) = find_entity_node(context, entity) else {
             return Ok(HalsteadMetrics::default());
         };
 
@@ -714,36 +703,24 @@ impl AstComplexityAnalyzer {
         let mut operator_total = 0.0;
         let mut operand_total = 0.0;
 
-        let mut stack = vec![context.tree.root_node()];
+        let mut stack = vec![root_node];
         while let Some(node) = stack.pop() {
-            if node.end_byte() <= start_byte || node.start_byte() >= end_byte {
-                continue;
+            if node.is_named() {
+                let kind = node.kind();
+
+                if self.is_halstead_operator_node(kind) {
+                    operator_set.insert(kind.to_string());
+                    operator_total += 1.0;
+                } else if self.is_halstead_operand_node(kind) {
+                    let operand = self.operand_representation(&node, context.source);
+                    operand_set.insert(operand);
+                    operand_total += 1.0;
+                }
             }
 
-            if node.child_count() == 0 {
-                let text = &context.source[node.start_byte()..node.end_byte()];
-                let trimmed = text.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                match self.classify_token(&node, trimmed) {
-                    TokenKind::Operator => {
-                        operator_set.insert(trimmed.to_string());
-                        operator_total += 1.0;
-                    }
-                    TokenKind::Operand => {
-                        operand_set.insert(trimmed.to_string());
-                        operand_total += 1.0;
-                    }
-                }
-            } else {
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.end_byte() > start_byte && child.start_byte() < end_byte {
-                        stack.push(child);
-                    }
-                }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
             }
         }
 
@@ -768,57 +745,72 @@ impl AstComplexityAnalyzer {
         Ok(metrics)
     }
 
+    fn is_halstead_operator_node(&self, kind: &str) -> bool {
+        kind.contains("operator")
+            || kind.contains("assignment")
+            || kind.ends_with("_expression")
+            || kind.ends_with("_statement")
+            || kind.ends_with("_clause")
+            || matches!(
+                kind,
+                "if_statement"
+                    | "else_clause"
+                    | "elif_clause"
+                    | "for_statement"
+                    | "while_statement"
+                    | "loop_expression"
+                    | "match_expression"
+                    | "switch_statement"
+                    | "case_clause"
+                    | "default_clause"
+                    | "return_statement"
+                    | "break_statement"
+                    | "continue_statement"
+                    | "yield_statement"
+                    | "await_expression"
+                    | "call_expression"
+                    | "lambda_expression"
+            )
+    }
+
+    fn is_halstead_operand_node(&self, kind: &str) -> bool {
+        kind.contains("identifier")
+            || kind.ends_with("_name")
+            || kind.contains("literal")
+            || matches!(
+                kind,
+                "identifier"
+                    | "field_identifier"
+                    | "property_identifier"
+                    | "type_identifier"
+                    | "string"
+                    | "string_literal"
+                    | "number"
+                    | "integer"
+                    | "float"
+                    | "boolean"
+                    | "true"
+                    | "false"
+                    | "null"
+                    | "nil"
+                    | "char_literal"
+            )
+    }
+
+    fn operand_representation(&self, node: &tree_sitter::Node, source: &str) -> String {
+        if let Ok(text) = node.utf8_text(source.as_bytes()) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return format!("{}:{}", node.kind(), trimmed);
+            }
+        }
+        node.kind().to_string()
+    }
+
     fn calculate_halstead_length(&self, n1: f64, n2: f64) -> f64 {
         let part1 = if n1 > 0.0 { n1 * n1.log2() } else { 0.0 };
         let part2 = if n2 > 0.0 { n2 * n2.log2() } else { 0.0 };
         part1 + part2
-    }
-
-    fn entity_byte_range(&self, entity: &CodeEntity) -> Option<(usize, usize)> {
-        let start = entity.properties.get("start_byte")?.as_u64()? as usize;
-        let end = entity.properties.get("end_byte")?.as_u64()? as usize;
-        Some((start, end))
-    }
-
-    fn find_ast_node_for_entity<'a>(
-        &self,
-        context: &'a crate::core::ast_service::AstContext<'a>,
-        entity: &CodeEntity,
-    ) -> Option<tree_sitter::Node<'a>> {
-        let (start_byte, end_byte) = self.entity_byte_range(entity)?;
-        let target_kind = entity
-            .properties
-            .get("ast_kind")
-            .and_then(|value| value.as_str())
-            .map(|s| s.to_string());
-
-        let mut stack = vec![context.tree.root_node()];
-        let mut candidate = None;
-
-        while let Some(node) = stack.pop() {
-            if node.start_byte() > end_byte || node.end_byte() < start_byte {
-                continue;
-            }
-
-            if start_byte >= node.start_byte() && end_byte <= node.end_byte() {
-                if let Some(kind) = &target_kind {
-                    if node.kind() == kind {
-                        candidate = Some(node);
-                    }
-                } else if node.start_byte() == start_byte && node.end_byte() == end_byte {
-                    candidate = Some(node);
-                }
-
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.end_byte() >= start_byte && child.start_byte() <= end_byte {
-                        stack.push(child);
-                    }
-                }
-            }
-        }
-
-        candidate
     }
 
     fn locate_parameters_node<'a>(
@@ -901,30 +893,6 @@ impl AstComplexityAnalyzer {
         )
     }
 
-    fn fallback_parameter_count(&self, entity: &CodeEntity) -> usize {
-        let signature_line = entity
-            .source_code
-            .lines()
-            .find(|line| line.contains('(') && line.contains(')'));
-
-        if let Some(line) = signature_line {
-            if let Some(start) = line.find('(') {
-                let remainder = &line[start + 1..];
-                if let Some(end) = remainder.find(')') {
-                    let params = &remainder[..end];
-                    return params
-                        .split(',')
-                        .map(|segment| segment.trim())
-                        .filter(|segment| !segment.is_empty())
-                        .filter(|segment| *segment != "self" && *segment != "this")
-                        .count();
-                }
-            }
-        }
-
-        0
-    }
-
     fn count_statement_nodes(
         &self,
         node: &tree_sitter::Node,
@@ -972,54 +940,6 @@ impl AstComplexityAnalyzer {
                     | "lexical_declaration"
                     | "const_declaration"
             )
-    }
-
-    fn classify_token(&self, node: &tree_sitter::Node, token: &str) -> TokenKind {
-        if !node.is_named() {
-            return TokenKind::Operator;
-        }
-
-        let kind = node.kind();
-        if kind.contains("comment") {
-            return TokenKind::Operand;
-        }
-
-        if self.is_operator_symbol(token)
-            || self.is_operator_keyword(token)
-            || kind.ends_with("_operator")
-        {
-            return TokenKind::Operator;
-        }
-
-        if kind.contains("identifier")
-            || kind.contains("literal")
-            || kind.ends_with("_name")
-            || matches!(
-                kind,
-                "identifier" | "string" | "number" | "integer" | "float" | "escape_sequence"
-            )
-        {
-            return TokenKind::Operand;
-        }
-
-        if matches!(token, "true" | "false" | "null" | "None" | "True" | "False") {
-            return TokenKind::Operand;
-        }
-
-        if kind.contains("keyword") {
-            return TokenKind::Operator;
-        }
-
-        TokenKind::Operand
-    }
-
-    fn is_operator_symbol(&self, token: &str) -> bool {
-        HALSTEAD_OPERATOR_SYMBOLS.contains(&token)
-    }
-
-    fn is_operator_keyword(&self, token: &str) -> bool {
-        let lower = token.to_ascii_lowercase();
-        HALSTEAD_OPERATOR_KEYWORDS.iter().any(|kw| *kw == lower)
     }
 
     /// Calculate technical debt score
@@ -1364,12 +1284,6 @@ fn ranges_overlap(lhs: (usize, usize), rhs: (usize, usize)) -> bool {
 
 fn normalize_path(path: &str) -> String {
     Path::new(path).to_string_lossy().into_owned()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenKind {
-    Operator,
-    Operand,
 }
 
 #[cfg(test)]

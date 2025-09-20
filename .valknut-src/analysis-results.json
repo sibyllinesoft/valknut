@@ -1,0 +1,103 @@
+{
+  "summary": {
+    "files_processed": 76,
+    "entities_analyzed": 0,
+    "refactoring_needed": 389,
+    "high_priority": 0,
+    "critical": 0,
+    "avg_refactoring_score": 1.0,
+    "code_health_score": 1.0
+  },
+  "refactoring_candidates": [],
+  "refactoring_candidates_by_file": [],
+  "statistics": {
+    "total_duration": {
+      "secs": 4,
+      "nanos": 920000000
+    },
+    "avg_file_processing_time": {
+      "secs": 0,
+      "nanos": 64000000
+    },
+    "avg_entity_processing_time": {
+      "secs": 4,
+      "nanos": 920000000
+    },
+    "features_per_entity": {},
+    "priority_distribution": {},
+    "issue_distribution": {},
+    "memory_stats": {
+      "peak_memory_bytes": 0,
+      "final_memory_bytes": 0,
+      "efficiency_score": 0.85
+    }
+  },
+  "health_metrics": {
+    "overall_health_score": 82.5,
+    "maintainability_score": 100.0,
+    "technical_debt_ratio": 0.0,
+    "complexity_score": 0.0,
+    "structure_quality_score": 30.0,
+    "graph_risk_score": 0.0
+  },
+  "impact_analysis": {
+    "enabled": false,
+    "dependency_cycles": [],
+    "chokepoints": [],
+    "clone_groups": [],
+    "issues_count": 0,
+    "entity_metrics": []
+  },
+  "directory_health_tree": {
+    "root": {
+      "path": ".",
+      "health_score": 1.0,
+      "file_count": 0,
+      "entity_count": 0,
+      "refactoring_needed": 0,
+      "critical_issues": 0,
+      "high_priority_issues": 0,
+      "avg_refactoring_score": 0.0,
+      "weight": 1.0,
+      "children": [],
+      "parent": "",
+      "issue_categories": {}
+    },
+    "directories": {
+      ".": {
+        "path": ".",
+        "health_score": 1.0,
+        "file_count": 0,
+        "entity_count": 0,
+        "refactoring_needed": 0,
+        "critical_issues": 0,
+        "high_priority_issues": 0,
+        "avg_refactoring_score": 0.0,
+        "weight": 1.0,
+        "children": [],
+        "parent": "",
+        "issue_categories": {}
+      }
+    },
+    "tree_statistics": {
+      "total_directories": 1,
+      "max_depth": 1,
+      "avg_health_score": 1.0,
+      "health_score_std_dev": 0.0,
+      "hotspot_directories": [],
+      "health_by_depth": {
+        "1": {
+          "depth": 1,
+          "directory_count": 1,
+          "avg_health_score": 1.0,
+          "min_health_score": 1.0,
+          "max_health_score": 1.0
+        }
+      }
+    }
+  },
+  "clone_analysis": null,
+  "coverage_packs": [],
+  "unified_hierarchy": [],
+  "warnings": []
+}

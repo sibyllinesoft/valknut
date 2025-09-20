@@ -1,13 +1,15 @@
 //! File analysis, entity extraction, and file splitting logic
 
 use petgraph::graph::NodeIndex;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
-use crate::lang::python::PythonAdapter;
-// use crate::lang::rust_lang::RustAdapter; // Temporarily disabled for Phase 0
+use crate::lang::common::{EntityKind, ParsedEntity};
+use crate::lang::registry::adapter_for_file;
+use tracing::warn;
 
 use super::config::{
     CohesionEdge, CohesionGraph, EntityNode, FileSplitPack, ImportStatement, SplitEffort,
@@ -16,18 +18,53 @@ use super::config::{
 
 pub struct FileAnalyzer {
     config: StructureConfig,
+    project_import_cache: Arc<RwLock<HashMap<PathBuf, Arc<ProjectImportSnapshot>>>>,
+}
+
+#[derive(Default, Debug)]
+struct ProjectImportSnapshot {
+    imports_by_file: HashMap<PathBuf, Vec<PathBuf>>,
+    reverse_imports: HashMap<PathBuf, HashSet<PathBuf>>,
+}
+
+#[derive(Default, Debug, Clone)]
+struct FileDependencyMetrics {
+    exports: Vec<ExportedEntity>,
+    outgoing_dependencies: HashSet<PathBuf>,
+    incoming_importers: HashSet<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct ExportedEntity {
+    name: String,
+    kind: EntityKind,
 }
 
 impl FileAnalyzer {
     pub fn new(config: StructureConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            project_import_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
     /// Check if file extension indicates a code file
     pub fn is_code_file(&self, extension: &str) -> bool {
         matches!(
             extension,
-            "py" | "js" | "ts" | "jsx" | "tsx" | "rs" | "go" | "java" | "cpp" | "c" | "h" | "hpp"
+            "py" | "pyi"
+                | "js"
+                | "mjs"
+                | "ts"
+                | "jsx"
+                | "tsx"
+                | "rs"
+                | "go"
+                | "java"
+                | "cpp"
+                | "c"
+                | "h"
+                | "hpp"
         )
     }
 
@@ -38,6 +75,23 @@ impl FileAnalyzer {
 
     /// Analyze file for split potential
     pub fn analyze_file_for_split(&self, file_path: &Path) -> Result<Option<FileSplitPack>> {
+        self.analyze_file_for_split_internal(file_path, None)
+    }
+
+    /// Analyze file for split potential with explicit project root context
+    pub fn analyze_file_for_split_with_root(
+        &self,
+        file_path: &Path,
+        project_root: &Path,
+    ) -> Result<Option<FileSplitPack>> {
+        self.analyze_file_for_split_internal(file_path, Some(project_root))
+    }
+
+    fn analyze_file_for_split_internal(
+        &self,
+        file_path: &Path,
+        project_root: Option<&Path>,
+    ) -> Result<Option<FileSplitPack>> {
         let metadata = std::fs::metadata(file_path)?;
         let size_bytes = metadata.len() as usize;
         let loc = self.count_lines_of_code(file_path)?;
@@ -76,9 +130,14 @@ impl FileAnalyzer {
         // Generate split suggestions
         let suggested_splits = self.generate_split_suggestions(file_path, &communities)?;
 
-        // Calculate value and effort
-        let value = self.calculate_split_value(loc, file_path)?;
-        let effort = self.calculate_split_effort(file_path)?;
+        // Derive dependency metrics for value/effort estimation
+        let dependency_metrics =
+            self.collect_dependency_metrics(file_path, project_root, &cohesion_graph)?;
+
+        // Calculate value and effort using real dependency information
+        let value =
+            self.calculate_split_value(loc, file_path, &cohesion_graph, &dependency_metrics)?;
+        let effort = self.calculate_split_effort(&dependency_metrics)?;
 
         let pack = FileSplitPack {
             kind: "file_split".to_string(),
@@ -365,10 +424,31 @@ impl FileAnalyzer {
     }
 
     /// Calculate value score for file splitting
-    pub fn calculate_split_value(&self, loc: usize, _file_path: &Path) -> Result<SplitValue> {
+    pub fn calculate_split_value(
+        &self,
+        loc: usize,
+        _file_path: &Path,
+        cohesion_graph: &CohesionGraph,
+        metrics: &FileDependencyMetrics,
+    ) -> Result<SplitValue> {
         let size_factor = (loc as f64 / self.config.fsfile.huge_loc as f64).min(1.0);
-        let cycle_factor = 0.0; // Placeholder - would check for participation in cycles
-        let clone_factor = 0.0; // Placeholder - would check for clone mass
+
+        let cycle_factor = if metrics.outgoing_dependencies.is_empty() {
+            0.0
+        } else {
+            let mutual = metrics
+                .outgoing_dependencies
+                .intersection(&metrics.incoming_importers)
+                .count();
+            let denominator = metrics
+                .outgoing_dependencies
+                .union(&metrics.incoming_importers)
+                .count()
+                .max(1);
+            (mutual as f64 / denominator as f64).min(1.0)
+        };
+
+        let clone_factor = self.estimate_clone_factor(cohesion_graph);
 
         let score = 0.6 * size_factor + 0.3 * cycle_factor + 0.1 * clone_factor;
 
@@ -376,12 +456,390 @@ impl FileAnalyzer {
     }
 
     /// Calculate effort required for file splitting
-    pub fn calculate_split_effort(&self, _file_path: &Path) -> Result<SplitEffort> {
-        // Placeholder - would analyze actual exports and external references
+    pub fn calculate_split_effort(&self, metrics: &FileDependencyMetrics) -> Result<SplitEffort> {
         Ok(SplitEffort {
-            exports: 5,
-            external_importers: 8,
+            exports: metrics.exports.len(),
+            external_importers: metrics.incoming_importers.len(),
         })
+    }
+
+    fn estimate_clone_factor(&self, graph: &CohesionGraph) -> f64 {
+        let node_count = graph.node_count();
+        if node_count < 2 {
+            return 0.0;
+        }
+
+        let mut heavy_edges = 0usize;
+        for edge_idx in graph.edge_indices() {
+            if let Some(edge) = graph.edge_weight(edge_idx) {
+                if edge.similarity >= 0.75 && edge.shared_symbols >= 3 {
+                    heavy_edges += 1;
+                }
+            }
+        }
+
+        if heavy_edges == 0 {
+            return 0.0;
+        }
+
+        let max_edges = (node_count.saturating_sub(1) * node_count) / 2;
+        if max_edges == 0 {
+            return 0.0;
+        }
+
+        (heavy_edges as f64 / max_edges as f64).min(1.0)
+    }
+
+    fn collect_dependency_metrics(
+        &self,
+        file_path: &Path,
+        project_root: Option<&Path>,
+        _cohesion_graph: &CohesionGraph,
+    ) -> Result<FileDependencyMetrics> {
+        let mut metrics = FileDependencyMetrics::default();
+        let content = FileReader::read_to_string(file_path)?;
+
+        if let Ok(mut adapter) = adapter_for_file(file_path) {
+            if let Ok(parse_index) = adapter.parse_source(&content, &file_path.to_string_lossy()) {
+                metrics.exports = self.extract_exported_entities(file_path, &parse_index, &content);
+            }
+        }
+
+        if let Some(root) = project_root {
+            let snapshot = self.get_project_import_snapshot(root)?;
+            let canonical_file = self.canonicalize_path(file_path);
+
+            if let Some(targets) = snapshot.imports_by_file.get(&canonical_file) {
+                metrics
+                    .outgoing_dependencies
+                    .extend(targets.iter().cloned());
+            }
+
+            if let Some(importers) = snapshot.reverse_imports.get(&canonical_file) {
+                metrics.incoming_importers.extend(importers.iter().cloned());
+            }
+        }
+
+        Ok(metrics)
+    }
+
+    fn extract_exported_entities(
+        &self,
+        file_path: &Path,
+        parse_index: &crate::lang::common::ParseIndex,
+        content: &str,
+    ) -> Vec<ExportedEntity> {
+        let file_key = file_path.to_string_lossy();
+        parse_index
+            .get_entities_in_file(&file_key)
+            .into_iter()
+            .filter(|entity| entity.parent.is_none())
+            .filter(|entity| {
+                matches!(
+                    entity.kind,
+                    EntityKind::Function
+                        | EntityKind::Class
+                        | EntityKind::Struct
+                        | EntityKind::Enum
+                        | EntityKind::Interface
+                )
+            })
+            .filter(|entity| self.is_entity_exported(entity, file_path, content))
+            .map(|entity| ExportedEntity {
+                name: entity.name.clone(),
+                kind: entity.kind,
+            })
+            .collect()
+    }
+
+    fn is_entity_exported(&self, entity: &ParsedEntity, file_path: &Path, content: &str) -> bool {
+        let ext = file_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default();
+
+        match ext {
+            "rs" => entity
+                .metadata
+                .get("visibility")
+                .and_then(|value| value.as_str())
+                .map(|vis| vis.contains("pub"))
+                .unwrap_or(false),
+            "py" | "pyi" => {
+                if entity.name.starts_with('_') {
+                    return false;
+                }
+                entity.parent.is_none()
+            }
+            "go" => entity
+                .name
+                .chars()
+                .next()
+                .map(|ch| ch.is_ascii_uppercase())
+                .unwrap_or(false),
+            "ts" | "tsx" | "js" | "jsx" => {
+                self.line_has_export_keyword(content, entity.location.start_line)
+            }
+            "java" => self.line_has_keyword(content, entity.location.start_line, "public"),
+            _ => entity.parent.is_none(),
+        }
+    }
+
+    fn line_has_export_keyword(&self, content: &str, start_line: usize) -> bool {
+        self.line_has_keyword(content, start_line, "export")
+    }
+
+    fn line_has_keyword(&self, content: &str, start_line: usize, keyword: &str) -> bool {
+        if start_line == 0 {
+            return false;
+        }
+
+        let lines: Vec<&str> = content.lines().collect();
+        let line_idx = start_line.saturating_sub(1);
+
+        if let Some(line) = lines.get(line_idx) {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") {
+                // Skip comment-only lines
+                return false;
+            }
+            if trimmed.starts_with(keyword) || trimmed.contains(&format!("{keyword} ")) {
+                return true;
+            }
+        }
+
+        if line_idx > 0 {
+            if let Some(previous) = lines.get(line_idx - 1) {
+                if previous.trim_end().ends_with(keyword) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn get_project_import_snapshot(
+        &self,
+        project_root: &Path,
+    ) -> Result<Arc<ProjectImportSnapshot>> {
+        let canonical_root = self.canonicalize_path(project_root);
+
+        if let Some(snapshot) = self
+            .project_import_cache
+            .read()
+            .unwrap()
+            .get(&canonical_root)
+            .cloned()
+        {
+            return Ok(snapshot);
+        }
+
+        let snapshot = Arc::new(self.build_project_import_snapshot(&canonical_root)?);
+        self.project_import_cache
+            .write()
+            .unwrap()
+            .insert(canonical_root, snapshot.clone());
+
+        Ok(snapshot)
+    }
+
+    fn build_project_import_snapshot(&self, project_root: &Path) -> Result<ProjectImportSnapshot> {
+        let mut snapshot = ProjectImportSnapshot::default();
+        for file in self.collect_project_code_files(project_root)? {
+            let canonical_file = self.canonicalize_path(&file);
+            let imports = match self.extract_imports(&file) {
+                Ok(imports) => imports,
+                Err(err) => {
+                    warn!("Failed to extract imports for {}: {}", file.display(), err);
+                    continue;
+                }
+            };
+
+            for import in imports {
+                if let Some(resolved) =
+                    self.resolve_import_to_project_file(&import, &file, project_root)
+                {
+                    let canonical_target = self.canonicalize_path(&resolved);
+                    snapshot
+                        .imports_by_file
+                        .entry(canonical_file.clone())
+                        .or_default()
+                        .push(canonical_target.clone());
+                    snapshot
+                        .reverse_imports
+                        .entry(canonical_target)
+                        .or_default()
+                        .insert(canonical_file.clone());
+                }
+            }
+        }
+
+        Ok(snapshot)
+    }
+
+    fn collect_project_code_files(&self, root: &Path) -> Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+        self.collect_project_code_files_recursive(root, &mut files)?;
+        Ok(files)
+    }
+
+    fn collect_project_code_files_recursive(
+        &self,
+        path: &Path,
+        files: &mut Vec<PathBuf>,
+    ) -> Result<()> {
+        if self.should_skip_directory(path) {
+            return Ok(());
+        }
+
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let child_path = entry.path();
+
+            if child_path.is_dir() {
+                self.collect_project_code_files_recursive(&child_path, files)?;
+            } else if child_path.is_file() {
+                if let Some(ext) = child_path.extension().and_then(|e| e.to_str()) {
+                    if self.is_code_file(ext) {
+                        files.push(child_path);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn resolve_import_to_project_file(
+        &self,
+        import: &ImportStatement,
+        current_file: &Path,
+        project_root: &Path,
+    ) -> Option<PathBuf> {
+        let module = import.module.trim();
+        if module.is_empty() {
+            return None;
+        }
+
+        let current_dir = current_file.parent().unwrap_or(project_root);
+        let mut candidates: Vec<PathBuf> = Vec::new();
+
+        if module.starts_with("./") || module.starts_with("../") {
+            candidates.push(current_dir.join(module));
+        } else if module.starts_with('.') {
+            candidates.extend(self.resolve_python_relative_module(
+                current_dir,
+                project_root,
+                module,
+            ));
+        } else {
+            if module.contains('/') {
+                candidates.push(project_root.join(module));
+                candidates.push(current_dir.join(module));
+            }
+
+            if module.contains('.') {
+                let mut from_root = project_root.to_path_buf();
+                for part in module.split('.') {
+                    if part.is_empty() {
+                        continue;
+                    }
+                    from_root.push(part);
+                }
+                candidates.push(from_root);
+            }
+
+            candidates.push(current_dir.join(module));
+        }
+
+        for candidate in candidates {
+            if let Some(resolved) = self.resolve_candidate_path(&candidate) {
+                return Some(resolved);
+            }
+        }
+
+        None
+    }
+
+    fn resolve_python_relative_module(
+        &self,
+        current_dir: &Path,
+        project_root: &Path,
+        module: &str,
+    ) -> Vec<PathBuf> {
+        let mut base = current_dir.to_path_buf();
+        let mut parts = Vec::new();
+        for part in module.split('.') {
+            if part.is_empty() {
+                if let Some(parent) = base.parent() {
+                    base = parent.to_path_buf();
+                } else {
+                    base = project_root.to_path_buf();
+                }
+            } else {
+                parts.push(part);
+            }
+        }
+
+        if parts.is_empty() {
+            vec![base]
+        } else {
+            let mut path = base;
+            for part in parts {
+                path.push(part);
+            }
+            vec![path]
+        }
+    }
+
+    fn resolve_candidate_path(&self, candidate: &Path) -> Option<PathBuf> {
+        let mut targets = Vec::new();
+
+        if candidate.exists() {
+            if candidate.is_file() {
+                targets.push(candidate.to_path_buf());
+            } else if candidate.is_dir() {
+                targets.extend(self.directory_module_fallbacks(candidate));
+            }
+        }
+
+        if candidate.extension().is_none() {
+            for ext in Self::supported_extensions() {
+                let candidate_with_ext = candidate.with_extension(ext);
+                if candidate_with_ext.exists() {
+                    targets.push(candidate_with_ext);
+                }
+            }
+        }
+
+        targets.into_iter().find(|path| path.exists())
+    }
+
+    fn directory_module_fallbacks(&self, dir: &Path) -> Vec<PathBuf> {
+        [
+            "mod.rs",
+            "lib.rs",
+            "__init__.py",
+            "index.ts",
+            "index.tsx",
+            "index.js",
+            "index.jsx",
+        ]
+        .iter()
+        .map(|candidate| dir.join(candidate))
+        .collect()
+    }
+
+    fn supported_extensions() -> &'static [&'static str] {
+        &[
+            "py", "pyi", "js", "mjs", "jsx", "ts", "tsx", "rs", "go", "java", "cpp", "c", "h",
+            "hpp",
+        ]
+    }
+
+    fn canonicalize_path(&self, path: &Path) -> PathBuf {
+        std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
     }
 
     /// Extract entities using tree-sitter for accurate parsing
@@ -391,52 +849,52 @@ impl FileAnalyzer {
         content: &str,
     ) -> Result<Vec<EntityNode>> {
         let file_path_str = file_path.to_string_lossy().to_string();
-
-        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-            match ext {
-                "py" => self.extract_python_entities_treesitter(content, &file_path_str),
-                "js" | "jsx" | "ts" | "tsx" => {
-                    // Fallback to legacy extraction for JS/TS until tree-sitter linking is fixed
-                    self.extract_javascript_entities(content)
-                }
-                "rs" => self.extract_rust_entities_treesitter(content, &file_path_str),
-                "go" => {
-                    // Fallback to text-based approach for Go
-                    Ok(Vec::new()) // TODO: Implement Go extraction
-                }
-                _ => Ok(Vec::new()),
+        match adapter_for_file(file_path) {
+            Ok(mut adapter) => {
+                self.extract_entities_from_adapter(adapter.as_mut(), content, &file_path_str)
             }
-        } else {
-            Ok(Vec::new())
+            Err(_) => Ok(Vec::new()),
         }
     }
 
-    /// Extract Python entities using simple tree-sitter approach
-    fn extract_python_entities_treesitter(
+    fn extract_entities_from_adapter(
         &self,
+        adapter: &mut dyn crate::lang::common::LanguageAdapter,
         content: &str,
         file_path: &str,
     ) -> Result<Vec<EntityNode>> {
-        let mut adapter = PythonAdapter::new()?;
-        let code_entities = adapter.extract_code_entities(content, file_path)?;
-
+        let parse_index = adapter.parse_source(content, file_path)?;
+        let parsed_entities = parse_index.get_entities_in_file(file_path);
         let mut entities = Vec::new();
 
-        for entity in code_entities {
-            // Extract symbols from entity source code for cohesion analysis
-            let mut symbols = HashSet::new();
+        for parsed in parsed_entities {
+            if !self.is_supported_entity_kind(parsed.kind) {
+                continue;
+            }
 
-            for line in entity.source_code.lines() {
-                self.extract_symbols_from_line(line.trim(), &mut symbols);
+            let start_line = parsed.location.start_line;
+            let end_line = parsed.location.end_line;
+            let loc = if end_line >= start_line {
+                end_line - start_line + 1
+            } else {
+                1
+            };
+
+            let entity_source = self.get_entity_lines_from_source(content, start_line, end_line);
+
+            let mut symbols = HashSet::new();
+            if !entity_source.is_empty() {
+                if let Ok(identifiers) = adapter.extract_identifiers(&entity_source) {
+                    for identifier in identifiers {
+                        symbols.insert(identifier);
+                    }
+                }
             }
 
             entities.push(EntityNode {
-                name: entity.name.clone(),
-                entity_type: entity.entity_type.clone(),
-                loc: entity
-                    .line_range
-                    .map(|(start, end)| end - start + 1)
-                    .unwrap_or(1),
+                name: parsed.name.clone(),
+                entity_type: format!("{:?}", parsed.kind).to_lowercase(),
+                loc,
                 symbols,
             });
         }
@@ -444,20 +902,31 @@ impl FileAnalyzer {
         Ok(entities)
     }
 
-    fn extract_rust_entities_treesitter(
-        &self,
-        content: &str,
-        file_path: &str,
-    ) -> Result<Vec<EntityNode>> {
-        // Temporarily disabled for Phase 0 - RustAdapter not available
-        // if let Ok(mut adapter) = RustAdapter::new() {
-        //     let _code_entities = adapter.extract_code_entities(content, file_path)?;
-        //     // TODO: Convert CodeEntity to EntityNode properly - for now using fallback
-        // }
+    fn is_supported_entity_kind(&self, kind: EntityKind) -> bool {
+        matches!(
+            kind,
+            EntityKind::Function
+                | EntityKind::Method
+                | EntityKind::Class
+                | EntityKind::Struct
+                | EntityKind::Enum
+                | EntityKind::Interface
+        )
+    }
 
-        // Convert CodeEntity to EntityNode - need to check the correct structure for EntityNode
-        // For now, fallback to legacy extraction until EntityNode structure is clarified
-        self.extract_rust_entities(content)
+    fn calculate_jaccard_similarity(&self, a: &HashSet<String>, b: &HashSet<String>) -> f64 {
+        if a.is_empty() && b.is_empty() {
+            return 1.0;
+        }
+
+        let intersection = a.intersection(b).count() as f64;
+        let union = a.union(b).count() as f64;
+
+        if union == 0.0 {
+            0.0
+        } else {
+            intersection / union
+        }
     }
 
     /// Helper method to extract lines from source code for an entity
@@ -480,574 +949,22 @@ impl FileAnalyzer {
 
     // Legacy text-based extraction methods (deprecated - kept for reference)
 
-    /// Extract Python entities (functions, classes)
-    pub fn extract_python_entities(&self, content: &str) -> Result<Vec<EntityNode>> {
-        let mut entities = Vec::new();
-        let mut current_entity: Option<EntityNode> = None;
-        let mut current_symbols = HashSet::new();
-        let mut current_line_count = 0;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            // Check for class or function definition
-            if trimmed.starts_with("class ") {
-                // Save previous entity
-                if let Some(mut entity) = current_entity.take() {
-                    entity.symbols = current_symbols.clone();
-                    entity.loc = current_line_count;
-                    entities.push(entity);
-                }
-
-                // Start new class entity
-                if let Some(class_name) = trimmed.split_whitespace().nth(1) {
-                    let clean_name = class_name.trim_end_matches(':').to_string();
-                    current_entity = Some(EntityNode {
-                        name: clean_name,
-                        entity_type: "class".to_string(),
-                        loc: 0,
-                        symbols: HashSet::new(),
-                    });
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                }
-            } else if trimmed.starts_with("def ") {
-                // Save previous entity if it's not a method (methods stay with their class)
-                if let Some(entity) = &current_entity {
-                    if entity.entity_type == "function" {
-                        if let Some(mut entity) = current_entity.take() {
-                            entity.symbols = current_symbols.clone();
-                            entity.loc = current_line_count;
-                            entities.push(entity);
-                        }
-                        current_symbols = HashSet::new();
-                        current_line_count = 0;
-                    }
-                } else {
-                    // No current entity, so this is a top-level function
-                    if let Some(func_name) = trimmed.split_whitespace().nth(1) {
-                        let clean_name =
-                            func_name.split('(').next().unwrap_or(func_name).to_string();
-                        current_entity = Some(EntityNode {
-                            name: clean_name,
-                            entity_type: "function".to_string(),
-                            loc: 0,
-                            symbols: HashSet::new(),
-                        });
-                        current_symbols = HashSet::new();
-                        current_line_count = 0;
-                    }
-                }
-            }
-
-            // Extract symbols from current line
-            if current_entity.is_some() && !trimmed.is_empty() {
-                self.extract_symbols_from_line(trimmed, &mut current_symbols);
-                current_line_count += 1;
-            }
-        }
-
-        // Handle the last entity
-        if let Some(mut entity) = current_entity {
-            entity.symbols = current_symbols;
-            entity.loc = current_line_count;
-            entities.push(entity);
-        }
-
-        Ok(entities)
-    }
-
-    /// Extract JavaScript/TypeScript entities (functions, classes)
-    pub fn extract_javascript_entities(&self, content: &str) -> Result<Vec<EntityNode>> {
-        let mut entities = Vec::new();
-        let mut current_entity: Option<EntityNode> = None;
-        let mut current_symbols = HashSet::new();
-        let mut current_line_count = 0;
-        let mut brace_depth = 0;
-        let mut in_entity = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            // Count braces to track entity scope
-            let open_braces = trimmed.chars().filter(|&c| c == '{').count();
-            let close_braces = trimmed.chars().filter(|&c| c == '}').count();
-
-            // Check for class or function definition
-            if trimmed.starts_with("class ") || trimmed.contains("class ") {
-                // Extract class name
-                if let Some(class_start) = trimmed.find("class ") {
-                    let after_class = &trimmed[class_start + 6..];
-                    if let Some(class_name) = after_class.split_whitespace().next() {
-                        let clean_name = class_name.trim_matches(['{', '(', ' ']).to_string();
-
-                        // Save previous entity
-                        if let Some(mut entity) = current_entity.take() {
-                            entity.symbols = current_symbols.clone();
-                            entity.loc = current_line_count;
-                            entities.push(entity);
-                        }
-
-                        current_entity = Some(EntityNode {
-                            name: clean_name,
-                            entity_type: "class".to_string(),
-                            loc: 0,
-                            symbols: HashSet::new(),
-                        });
-                        current_symbols = HashSet::new();
-                        current_line_count = 0;
-                        brace_depth = 0;
-                        in_entity = true;
-                    }
-                }
-            } else if trimmed.starts_with("function ")
-                || trimmed.contains(" function")
-                || (trimmed.contains("const ") && trimmed.contains(" = "))
-                || (trimmed.contains("let ") && trimmed.contains(" = "))
-            {
-                // Extract function name
-                let mut func_name = String::new();
-
-                if trimmed.starts_with("function ") {
-                    if let Some(name) = trimmed.split_whitespace().nth(1) {
-                        func_name = name.split('(').next().unwrap_or(name).to_string();
-                    }
-                } else if trimmed.contains(" = ") {
-                    if let Some(equal_pos) = trimmed.find(" = ") {
-                        let before_equal = &trimmed[..equal_pos];
-                        if let Some(name) = before_equal.split_whitespace().last() {
-                            func_name = name.to_string();
-                        }
-                    }
-                }
-
-                if !func_name.is_empty() && current_entity.is_none() {
-                    // Top-level function
-                    current_entity = Some(EntityNode {
-                        name: func_name,
-                        entity_type: "function".to_string(),
-                        loc: 0,
-                        symbols: HashSet::new(),
-                    });
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    brace_depth = 0;
-                    in_entity = true;
-                }
-            }
-
-            if in_entity {
-                brace_depth = (brace_depth + open_braces).saturating_sub(close_braces);
-
-                // Extract symbols from current line
-                if !trimmed.is_empty() {
-                    self.extract_symbols_from_line(trimmed, &mut current_symbols);
-                    current_line_count += 1;
-                }
-
-                // End of entity when braces balance (for functions) or class ends
-                if brace_depth == 0 && open_braces > 0 {
-                    if let Some(mut entity) = current_entity.take() {
-                        entity.symbols = current_symbols.clone();
-                        entity.loc = current_line_count;
-                        entities.push(entity);
-                    }
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    in_entity = false;
-                }
-            }
-        }
-
-        // Handle the last entity
-        if let Some(mut entity) = current_entity {
-            entity.symbols = current_symbols;
-            entity.loc = current_line_count;
-            entities.push(entity);
-        }
-
-        Ok(entities)
-    }
-
-    /// Extract Rust entities (functions, structs, impls)
-    pub fn extract_rust_entities(&self, content: &str) -> Result<Vec<EntityNode>> {
-        let mut entities = Vec::new();
-        let mut current_entity: Option<EntityNode> = None;
-        let mut current_symbols = HashSet::new();
-        let mut current_line_count = 0;
-        let mut brace_depth = 0;
-        let mut in_entity = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            // Skip comments
-            if trimmed.starts_with("//") {
-                continue;
-            }
-
-            // Count braces to track scope
-            let open_braces = trimmed.chars().filter(|&c| c == '{').count();
-            let close_braces = trimmed.chars().filter(|&c| c == '}').count();
-
-            // Check for struct, enum, fn, or impl
-            if trimmed.starts_with("pub struct ") || trimmed.starts_with("struct ") {
-                if let Some(name) = trimmed
-                    .split_whitespace()
-                    .nth(if trimmed.starts_with("pub") { 2 } else { 1 })
-                {
-                    let clean_name = name.trim_matches(['{', '<', ' ']).to_string();
-
-                    // Save previous entity
-                    if let Some(mut entity) = current_entity.take() {
-                        entity.symbols = current_symbols.clone();
-                        entity.loc = current_line_count;
-                        entities.push(entity);
-                    }
-
-                    current_entity = Some(EntityNode {
-                        name: clean_name,
-                        entity_type: "struct".to_string(),
-                        loc: 0,
-                        symbols: HashSet::new(),
-                    });
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    brace_depth = 0;
-                    in_entity = true;
-                }
-            } else if trimmed.starts_with("pub fn ") || trimmed.starts_with("fn ") {
-                if let Some(name) = trimmed
-                    .split_whitespace()
-                    .nth(if trimmed.starts_with("pub") { 2 } else { 1 })
-                {
-                    let clean_name = name.split('(').next().unwrap_or(name).to_string();
-
-                    // Save previous entity
-                    if let Some(mut entity) = current_entity.take() {
-                        entity.symbols = current_symbols.clone();
-                        entity.loc = current_line_count;
-                        entities.push(entity);
-                    }
-
-                    current_entity = Some(EntityNode {
-                        name: clean_name,
-                        entity_type: "function".to_string(),
-                        loc: 0,
-                        symbols: HashSet::new(),
-                    });
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    brace_depth = 0;
-                    in_entity = true;
-                }
-            } else if trimmed.starts_with("impl ") {
-                if let Some(impl_part) = trimmed.strip_prefix("impl ") {
-                    let impl_name = impl_part
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or("Impl")
-                        .to_string();
-
-                    // Save previous entity
-                    if let Some(mut entity) = current_entity.take() {
-                        entity.symbols = current_symbols.clone();
-                        entity.loc = current_line_count;
-                        entities.push(entity);
-                    }
-
-                    current_entity = Some(EntityNode {
-                        name: format!("impl_{}", impl_name),
-                        entity_type: "impl".to_string(),
-                        loc: 0,
-                        symbols: HashSet::new(),
-                    });
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    brace_depth = 0;
-                    in_entity = true;
-                }
-            }
-
-            if in_entity {
-                brace_depth = (brace_depth + open_braces).saturating_sub(close_braces);
-
-                // Extract symbols from current line
-                if !trimmed.is_empty() {
-                    self.extract_symbols_from_line(trimmed, &mut current_symbols);
-                    current_line_count += 1;
-                }
-
-                // End of entity when braces balance
-                if brace_depth == 0 && (open_braces > 0 || close_braces > 0) {
-                    if let Some(mut entity) = current_entity.take() {
-                        entity.symbols = current_symbols.clone();
-                        entity.loc = current_line_count;
-                        entities.push(entity);
-                    }
-                    current_symbols = HashSet::new();
-                    current_line_count = 0;
-                    in_entity = false;
-                }
-            }
-        }
-
-        // Handle the last entity
-        if let Some(mut entity) = current_entity {
-            entity.symbols = current_symbols;
-            entity.loc = current_line_count;
-            entities.push(entity);
-        }
-
-        Ok(entities)
-    }
-
-    /// Extract symbols (identifiers) from a line of code
-    pub fn extract_symbols_from_line(&self, line: &str, symbols: &mut HashSet<String>) {
-        // Simple regex-like approach to extract identifiers
-        let words: Vec<&str> = line.split(|c: char| !c.is_alphanumeric() && c != '_')
-            .filter(|word| !word.is_empty() && word.len() > 1) // Reduced from 2 to 1
-            .filter(|word| !word.chars().all(|c| c.is_ascii_digit()))
-            .collect();
-
-        for word in words {
-            // Filter out common keywords but allow certain important ones like 'self'
-            if !Self::is_keyword(word) || word == "self" {
-                symbols.insert(word.to_string());
-            }
-        }
-    }
-
-    /// Check if a word is a programming language keyword
-    pub fn is_keyword(word: &str) -> bool {
-        matches!(
-            word,
-            "def"
-                | "class"
-                | "function"
-                | "var"
-                | "let"
-                | "const"
-                | "if"
-                | "else"
-                | "for"
-                | "while"
-                | "return"
-                | "import"
-                | "from"
-                | "fn"
-                | "struct"
-                | "enum"
-                | "impl"
-                | "pub"
-                | "use"
-                | "mod"
-                | "true"
-                | "false"
-                | "null"
-                | "undefined"
-                | "this"
-                | "self"
-                | "and"
-                | "or"
-                | "not"
-                | "in"
-                | "is"
-                | "as"
-                | "with"
-                | "try"
-                | "except"
-                | "finally"
-        )
-    }
-
-    /// Calculate Jaccard similarity between two sets of symbols
-    pub fn calculate_jaccard_similarity(
-        &self,
-        set_a: &HashSet<String>,
-        set_b: &HashSet<String>,
-    ) -> f64 {
-        if set_a.is_empty() && set_b.is_empty() {
-            return 1.0;
-        }
-
-        let intersection_size = set_a.intersection(set_b).count();
-        let union_size = set_a.union(set_b).count();
-
-        if union_size == 0 {
-            0.0
-        } else {
-            intersection_size as f64 / union_size as f64
-        }
-    }
-
-    /// Extract imports from source file
     pub fn extract_imports(&self, file_path: &Path) -> Result<Vec<ImportStatement>> {
         let content = FileReader::read_to_string(file_path)?;
-        let extension = file_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-
-        match extension {
-            "py" => self.extract_python_imports(&content),
-            "js" | "jsx" | "ts" | "tsx" => self.extract_javascript_imports(&content),
-            "rs" => self.extract_rust_imports(&content),
-            _ => Ok(Vec::new()),
+        match adapter_for_file(file_path) {
+            Ok(mut adapter) => adapter.extract_imports(&content),
+            Err(err) => {
+                warn!(
+                    "Failed to obtain language adapter for {}: {}",
+                    file_path.display(),
+                    err
+                );
+                Ok(Vec::new())
+            }
         }
     }
 
     /// Extract Python import statements
-    pub fn extract_python_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-
-            if let Some(import_part) = trimmed.strip_prefix("import ") {
-                // Handle: import module
-                let module = import_part
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                imports.push(ImportStatement {
-                    module,
-                    imports: None,
-                    import_type: "module".to_string(),
-                    line_number: line_number + 1,
-                });
-            } else if let Some(from_part) = trimmed.strip_prefix("from ") {
-                // Handle: from module import ...
-                if let Some(import_pos) = from_part.find(" import ") {
-                    let module = from_part[..import_pos].trim().to_string();
-                    let import_list = from_part[import_pos + 8..].trim();
-
-                    let specific_imports = if import_list == "*" {
-                        None // Star import
-                    } else {
-                        Some(
-                            import_list
-                                .split(',')
-                                .map(|s| s.trim().to_string())
-                                .collect(),
-                        )
-                    };
-
-                    imports.push(ImportStatement {
-                        module,
-                        imports: specific_imports,
-                        import_type: if import_list == "*" { "star" } else { "named" }.to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(imports)
-    }
-
-    /// Extract JavaScript/TypeScript import statements  
-    pub fn extract_javascript_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                continue;
-            }
-
-            if let Some(import_part) = trimmed.strip_prefix("import ") {
-                // Handle various import patterns
-                if let Some(from_pos) = import_part.find(" from ") {
-                    let import_spec = import_part[..from_pos].trim();
-                    let module_part = import_part[from_pos + 6..]
-                        .trim()
-                        .trim_matches(['"', '\'', ';']);
-
-                    let specific_imports = if import_spec.starts_with('*') {
-                        None // Star import
-                    } else if import_spec.starts_with('{') && import_spec.ends_with('}') {
-                        // Named imports: { a, b, c }
-                        let inner = &import_spec[1..import_spec.len() - 1];
-                        Some(inner.split(',').map(|s| s.trim().to_string()).collect())
-                    } else {
-                        // Default import
-                        Some(vec![import_spec.to_string()])
-                    };
-
-                    imports.push(ImportStatement {
-                        module: module_part.to_string(),
-                        imports: specific_imports,
-                        import_type: if import_spec.starts_with('*') {
-                            "star"
-                        } else {
-                            "named"
-                        }
-                        .to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(imports)
-    }
-
-    /// Extract Rust use statements
-    pub fn extract_rust_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                continue;
-            }
-
-            if let Some(use_part) = trimmed.strip_prefix("use ") {
-                let use_part = use_part.trim_end_matches(';');
-
-                if let Some(brace_pos) = use_part.find('{') {
-                    // Handle: use module::{item1, item2}
-                    let module = use_part[..brace_pos].trim().to_string();
-                    let items_part = &use_part[brace_pos + 1..];
-
-                    if let Some(close_brace) = items_part.find('}') {
-                        let items = &items_part[..close_brace];
-                        let specific_imports =
-                            Some(items.split(',').map(|s| s.trim().to_string()).collect());
-
-                        imports.push(ImportStatement {
-                            module,
-                            imports: specific_imports,
-                            import_type: "named".to_string(),
-                            line_number: line_number + 1,
-                        });
-                    }
-                } else {
-                    // Handle: use module::item
-                    imports.push(ImportStatement {
-                        module: use_part.to_string(),
-                        imports: None,
-                        import_type: "module".to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(imports)
-    }
-
     /// Resolve import statement to local file path
     pub fn resolve_import_to_local_file(
         &self,
@@ -1063,9 +980,7 @@ impl FileAnalyzer {
         }
 
         // Try common file extensions
-        let extensions = ["py", "js", "ts", "jsx", "tsx", "rs"];
-
-        for ext in &extensions {
+        for ext in Self::supported_extensions() {
             let potential_path = dir_path.join(format!("{}.{}", module_name, ext));
             if potential_path.exists() {
                 return Some(potential_path);
@@ -1137,6 +1052,7 @@ mod tests {
     use crate::detectors::structure::config::{
         FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig, StructureToggles,
     };
+    use crate::lang::registry::adapter_for_language;
     use std::fs;
     use tempfile::TempDir;
 
@@ -1233,146 +1149,6 @@ def hello():
         assert!(analyzer.should_skip_directory(Path::new("dist")));
         assert!(!analyzer.should_skip_directory(Path::new("src")));
         assert!(!analyzer.should_skip_directory(Path::new("lib")));
-    }
-
-    #[test]
-    fn test_extract_python_entities() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
-        let content = r#"
-import os
-import sys
-
-class MyClass:
-    def __init__(self):
-        self.value = 0
-        
-    def get_value(self):
-        return self.value
-
-def standalone_function():
-    return "hello"
-"#;
-
-        let entities = analyzer.extract_python_entities(content).unwrap();
-
-        assert!(entities.len() >= 1); // At least one entity extracted
-                                      // Check if specific entities exist, but don't require all of them since parsing may vary
-        let has_class = entities
-            .iter()
-            .any(|e| e.name == "MyClass" && e.entity_type == "class");
-        let has_function = entities
-            .iter()
-            .any(|e| e.name == "standalone_function" && e.entity_type == "function");
-        assert!(
-            has_class || has_function,
-            "Should find at least one expected entity"
-        );
-    }
-
-    #[test]
-    fn test_extract_javascript_entities() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
-        let content = r#"
-class MyClass {
-    constructor() {
-        this.value = 0;
-    }
-    
-    getValue() {
-        return this.value;
-    }
-}
-
-function standaloneFunction() {
-    return "hello";
-}
-
-const arrowFunction = () => {
-    return "world";
-};
-"#;
-
-        let entities = analyzer.extract_javascript_entities(content).unwrap();
-
-        assert!(entities.len() >= 1); // At least one entity extracted
-                                      // Check if specific entities exist, but don't require all of them since parsing may vary
-        let has_class = entities
-            .iter()
-            .any(|e| e.name == "MyClass" && e.entity_type == "class");
-        let has_function = entities
-            .iter()
-            .any(|e| e.name == "standaloneFunction" && e.entity_type == "function");
-        assert!(
-            has_class || has_function,
-            "Should find at least one expected entity"
-        );
-    }
-
-    #[test]
-    fn test_extract_rust_entities() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
-        let content = r#"
-pub struct MyStruct {
-    value: i32,
-}
-
-impl MyStruct {
-    pub fn new() -> Self {
-        Self { value: 0 }
-    }
-    
-    pub fn get_value(&self) -> i32 {
-        self.value
-    }
-}
-
-pub fn standalone_function() -> String {
-    "hello".to_string()
-}
-"#;
-
-        let entities = analyzer.extract_rust_entities(content).unwrap();
-
-        assert!(entities.len() >= 2); // At least MyStruct, impl_MyStruct, standalone_function
-        assert!(entities
-            .iter()
-            .any(|e| e.name == "MyStruct" && e.entity_type == "struct"));
-        assert!(entities
-            .iter()
-            .any(|e| e.name == "standalone_function" && e.entity_type == "function"));
-    }
-
-    #[test]
-    fn test_extract_symbols_from_line() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
-        let mut symbols = HashSet::new();
-        analyzer.extract_symbols_from_line("self.value = other.calculate()", &mut symbols);
-
-        assert!(symbols.contains("self"));
-        assert!(symbols.contains("value"));
-        assert!(symbols.contains("other"));
-        assert!(symbols.contains("calculate"));
-    }
-
-    #[test]
-    fn test_is_keyword() {
-        assert!(FileAnalyzer::is_keyword("def"));
-        assert!(FileAnalyzer::is_keyword("class"));
-        assert!(FileAnalyzer::is_keyword("function"));
-        assert!(FileAnalyzer::is_keyword("if"));
-        assert!(FileAnalyzer::is_keyword("for"));
-        assert!(FileAnalyzer::is_keyword("fn"));
-        assert!(FileAnalyzer::is_keyword("struct"));
-        assert!(!FileAnalyzer::is_keyword("variable_name"));
-        assert!(!FileAnalyzer::is_keyword("my_function"));
     }
 
     #[test]
@@ -1522,7 +1298,11 @@ pub fn standalone_function() -> String {
         let config = create_test_config();
         let analyzer = FileAnalyzer::new(config);
 
-        let value = analyzer.calculate_split_value(100, &file_path).unwrap();
+        let graph = petgraph::Graph::new_undirected();
+        let metrics = FileDependencyMetrics::default();
+        let value = analyzer
+            .calculate_split_value(100, &file_path, &graph, &metrics)
+            .unwrap();
 
         assert!(value.score >= 0.0);
         assert!(value.score <= 1.0);
@@ -1535,24 +1315,31 @@ pub fn standalone_function() -> String {
         let config = create_test_config();
         let analyzer = FileAnalyzer::new(config);
 
-        let effort = analyzer.calculate_split_effort(&file_path).unwrap();
+        let mut metrics = FileDependencyMetrics::default();
+        metrics.exports.push(ExportedEntity {
+            name: "foo".to_string(),
+            kind: EntityKind::Function,
+        });
+        metrics
+            .incoming_importers
+            .insert(temp_dir.path().join("other.py"));
 
-        assert!(effort.exports > 0);
-        assert!(effort.external_importers > 0);
+        let effort = analyzer.calculate_split_effort(&metrics).unwrap();
+
+        assert_eq!(effort.exports, 1);
+        assert_eq!(effort.external_importers, 1);
     }
 
     #[test]
     fn test_extract_python_imports() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
         let content = r#"import os
 import sys
 from pathlib import Path
 from collections import OrderedDict, defaultdict
 "#;
 
-        let imports = analyzer.extract_python_imports(content).unwrap();
+        let mut adapter = adapter_for_language("py").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 4);
         assert_eq!(imports[0].module, "os");
@@ -1563,15 +1350,13 @@ from collections import OrderedDict, defaultdict
 
     #[test]
     fn test_extract_javascript_imports() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
         let content = r#"import React from 'react';
 import { useState, useEffect } from 'react';
 import * as utils from './utils';
 "#;
 
-        let imports = analyzer.extract_javascript_imports(content).unwrap();
+        let mut adapter = adapter_for_language("js").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].module, "react");
@@ -1581,15 +1366,13 @@ import * as utils from './utils';
 
     #[test]
     fn test_extract_rust_imports() {
-        let config = create_test_config();
-        let analyzer = FileAnalyzer::new(config);
-
         let content = r#"use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use serde::{Serialize, Deserialize};
 "#;
 
-        let imports = analyzer.extract_rust_imports(content).unwrap();
+        let mut adapter = adapter_for_language("rs").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].module, "std::collections::HashMap");

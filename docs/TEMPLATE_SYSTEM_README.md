@@ -62,9 +62,9 @@ valknut/
 ├── vscode-extension/          # VS Code extension
 ├── docs/
 │   └── template-system.md     # Documentation
-└── examples/
-    ├── report-config.yml      # Configuration example
-    └── sample-report.json     # Sample data for testing
+├── examples/
+│   └── sample-report.json     # Sample data for testing
+└── valknut.yml.example        # Canonical configuration example
 ```
 
 ## 🚀 Usage

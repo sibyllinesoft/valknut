@@ -9,6 +9,7 @@ use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
+use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
 mod tests {
@@ -866,5 +867,56 @@ impl LanguageAdapter for PythonAdapter {
 
     fn language_name(&self) -> &str {
         "python"
+    }
+
+    fn extract_imports(&mut self, source: &str) -> Result<Vec<ImportStatement>> {
+        let mut imports = Vec::new();
+
+        for (line_number, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+
+            if let Some(import_part) = trimmed.strip_prefix("import ") {
+                let module = import_part
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                imports.push(ImportStatement {
+                    module,
+                    imports: None,
+                    import_type: "module".to_string(),
+                    line_number: line_number + 1,
+                });
+            } else if let Some(from_part) = trimmed.strip_prefix("from ") {
+                if let Some(import_pos) = from_part.find(" import ") {
+                    let module = from_part[..import_pos].trim().to_string();
+                    let import_list = from_part[import_pos + 8..].trim();
+
+                    let specific_imports = if import_list == "*" {
+                        None
+                    } else {
+                        Some(
+                            import_list
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .collect(),
+                        )
+                    };
+
+                    imports.push(ImportStatement {
+                        module,
+                        imports: specific_imports,
+                        import_type: if import_list == "*" { "star" } else { "named" }.to_string(),
+                        line_number: line_number + 1,
+                    });
+                }
+            }
+        }
+
+        Ok(imports)
     }
 }

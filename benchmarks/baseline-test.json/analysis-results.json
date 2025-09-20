@@ -986,9 +986,9 @@
       "suggestion_count": 3
     },
     {
-      "entity_id": "src/core/pipeline/pipeline_config.rs:function:from",
-      "name": "src/core/pipeline/pipeline_config.rs:function:from",
-      "file_path": "src/core/pipeline/pipeline_config.rs",
+      "entity_id": "src/core/pipeline/pipeline_executor.rs:function:from",
+      "name": "src/core/pipeline/pipeline_executor.rs:function:from",
+      "file_path": "src/core/pipeline/pipeline_executor.rs",
       "line_range": null,
       "priority": "Low",
       "score": 12.0,
@@ -7463,17 +7463,17 @@
       ]
     },
     {
-      "file_path": "src/core/pipeline/pipeline_config.rs",
-      "file_name": "pipeline_config.rs",
+      "file_path": "src/core/pipeline/pipeline_executor.rs",
+      "file_name": "pipeline_executor.rs",
       "entity_count": 1,
       "highest_priority": "Low",
       "avg_score": 12.0,
       "total_issues": 2,
       "entities": [
         {
-          "entity_id": "src/core/pipeline/pipeline_config.rs:function:from",
-          "name": "src/core/pipeline/pipeline_config.rs:function:from",
-          "file_path": "src/core/pipeline/pipeline_config.rs",
+          "entity_id": "src/core/pipeline/pipeline_executor.rs:function:from",
+          "name": "src/core/pipeline/pipeline_executor.rs:function:from",
+          "file_path": "src/core/pipeline/pipeline_executor.rs",
           "line_range": null,
           "priority": "Low",
           "score": 12.0,
@@ -9558,7 +9558,7 @@
                   "type": "suggestion"
                 }
               ],
-              "entity_id": "src/core/pipeline/pipeline_config.rs:function:from",
+              "entity_id": "src/core/pipeline/pipeline_executor.rs:function:from",
               "issue_count": 2,
               "name": "from",
               "score": 12.0,
@@ -9566,7 +9566,7 @@
               "type": "entity"
             }
           ],
-          "name": "pipeline_config.rs",
+          "name": "pipeline_executor.rs",
           "type": "file"
         },
         {

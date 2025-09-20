@@ -3,12 +3,14 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::core::ast_service::AstService;
+use crate::core::ast_utils::{find_entity_node, node_text};
 use crate::core::errors::Result;
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
 use crate::core::file_utils::FileReader;
@@ -30,6 +32,11 @@ const LARGE_CLASS_LINE_THRESHOLD: usize = 200;
 const LARGE_CLASS_MEMBER_THRESHOLD: usize = 12;
 /// Logical operator count that suggests a complex conditional
 const COMPLEX_CONDITIONAL_THRESHOLD: usize = 4;
+
+const PROP_DUPLICATE_FINGERPRINT: &str = "duplicate_fingerprint";
+const PROP_FINGERPRINT_TOKENS: &str = "duplicate_token_count";
+const PROP_MEMBER_COUNT: &str = "member_count";
+const PROP_COMPLEXITY_METRICS: &str = "complexity_metrics";
 
 /// Configuration for refactoring analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,46 +94,6 @@ pub struct RefactoringAnalysisResult {
     pub recommendations: Vec<RefactoringRecommendation>,
     /// Overall refactoring score (0-100, higher means more refactoring needed)
     pub refactoring_score: f64,
-}
-
-/// Summary representation of an entity extracted from the AST/parse index
-#[derive(Debug, Clone)]
-struct EntitySummary {
-    id: String,
-    name: String,
-    kind: EntityKind,
-    start_line: usize,
-    end_line: usize,
-    snippet: String,
-    duplicate_fingerprint: Option<u64>,
-    fingerprint_complexity: Option<usize>,
-    member_count: usize,
-    complexity: Option<AnalyzerComplexityMetrics>,
-}
-
-impl EntitySummary {
-    fn line_count(&self) -> usize {
-        if self.end_line >= self.start_line {
-            self.end_line - self.start_line + 1
-        } else {
-            1
-        }
-    }
-
-    fn location(&self) -> (usize, usize) {
-        (self.start_line, self.end_line.max(self.start_line))
-    }
-
-    fn is_function_like(&self) -> bool {
-        matches!(self.kind, EntityKind::Function | EntityKind::Method)
-    }
-
-    fn is_type_like(&self) -> bool {
-        matches!(
-            self.kind,
-            EntityKind::Class | EntityKind::Struct | EntityKind::Interface | EntityKind::Enum
-        )
-    }
 }
 
 /// Main refactoring analyzer
@@ -231,8 +198,12 @@ impl RefactoringAnalyzer {
         };
 
         let parse_index = adapter.parse_source(&content, &file_path_str)?;
+        let cached_tree = self.ast_service.get_ast(&file_path_str, &content).await?;
+        let ast_context = self
+            .ast_service
+            .create_context(&cached_tree, &file_path_str);
         let entity_summaries =
-            self.collect_entity_summaries(&parse_index, &content, &complexity_by_id);
+            self.collect_entity_summaries(&parse_index, &content, &complexity_by_id, &ast_context)?;
 
         if entity_summaries.is_empty() {
             return Ok(RefactoringAnalysisResult {
@@ -244,13 +215,13 @@ impl RefactoringAnalyzer {
 
         let functions: Vec<_> = entity_summaries
             .iter()
-            .filter(|e| e.is_function_like())
+            .filter(|e| Self::is_function_entity(e))
             .cloned()
             .collect();
 
         let type_like_entities: Vec<_> = entity_summaries
             .iter()
-            .filter(|e| e.is_type_like())
+            .filter(|e| Self::is_type_entity(e))
             .cloned()
             .collect();
 
@@ -278,42 +249,60 @@ impl RefactoringAnalyzer {
         index: &ParseIndex,
         content: &str,
         complexity: &HashMap<String, ComplexityAnalysisResult>,
-    ) -> Vec<EntitySummary> {
+        ast_context: &crate::core::ast_service::AstContext<'_>,
+    ) -> Result<Vec<CodeEntity>> {
         let lines: Vec<&str> = content.lines().collect();
         let child_function_counts = self.count_child_functions(index);
+        let mut summaries = Vec::new();
 
-        index
-            .entities
-            .values()
-            .filter_map(|entity| {
-                let start_line = entity.location.start_line;
-                let end_line = entity.location.end_line;
+        for entity in index.entities.values() {
+            let start_line = entity.location.start_line;
+            let end_line = entity.location.end_line;
 
-                if start_line == 0 || end_line == 0 || start_line > lines.len() + 1 {
-                    return None;
+            if start_line == 0 || end_line == 0 || start_line > lines.len() + 1 {
+                continue;
+            }
+
+            let end_line = end_line.min(lines.len());
+            let snippet = extract_lines(&lines, start_line, end_line);
+
+            let mut code_entity = CodeEntity::new(
+                entity.id.clone(),
+                format!("{:?}", entity.kind),
+                entity.name.clone(),
+                entity.location.file_path.clone(),
+            )
+            .with_line_range(start_line, end_line)
+            .with_source_code(snippet.clone());
+
+            if let Some(range) = entity.metadata.get("byte_range") {
+                code_entity.add_property("byte_range", range.clone());
+            }
+            if let Some(kind) = entity.metadata.get("node_kind") {
+                code_entity.add_property("node_kind", kind.clone());
+            }
+
+            let (fingerprint, complexity_score) =
+                self.compute_duplicate_fingerprint_for_entity(&code_entity, ast_context)?;
+            if let Some(hash) = fingerprint {
+                code_entity.add_property(PROP_DUPLICATE_FINGERPRINT, json!(hash));
+            }
+            if let Some(tokens) = complexity_score {
+                code_entity.add_property(PROP_FINGERPRINT_TOKENS, json!(tokens));
+            }
+            if let Some(metrics) = self.lookup_complexity_metrics(entity, start_line, complexity) {
+                if let Ok(value) = serde_json::to_value(&metrics) {
+                    code_entity.add_property(PROP_COMPLEXITY_METRICS, value);
                 }
+            }
+            if let Some(count) = child_function_counts.get(&entity.id) {
+                code_entity.add_property(PROP_MEMBER_COUNT, json!(count));
+            }
 
-                let end_line = end_line.min(lines.len());
-                let snippet = extract_lines(&lines, start_line, end_line);
-                let (fingerprint, complexity_score) =
-                    compute_duplicate_fingerprint(entity.kind, &snippet);
-                let complexity_metrics =
-                    self.lookup_complexity_metrics(entity, start_line, complexity);
+            summaries.push(code_entity);
+        }
 
-                Some(EntitySummary {
-                    id: entity.id.clone(),
-                    name: entity.name.clone(),
-                    kind: entity.kind,
-                    start_line,
-                    end_line,
-                    snippet,
-                    duplicate_fingerprint: fingerprint,
-                    fingerprint_complexity: complexity_score,
-                    member_count: *child_function_counts.get(&entity.id).unwrap_or(&0),
-                    complexity: complexity_metrics,
-                })
-            })
-            .collect()
+        Ok(summaries)
     }
 
     /// Count child functions for each entity to help with class size detection
@@ -333,6 +322,147 @@ impl RefactoringAnalyzer {
         counts
     }
 
+    fn is_function_entity(entity: &CodeEntity) -> bool {
+        let kind = entity.entity_type.as_str();
+        kind.eq_ignore_ascii_case("function") || kind.eq_ignore_ascii_case("method")
+    }
+
+    fn is_type_entity(entity: &CodeEntity) -> bool {
+        let kind = entity.entity_type.as_str();
+        kind.eq_ignore_ascii_case("class")
+            || kind.eq_ignore_ascii_case("struct")
+            || kind.eq_ignore_ascii_case("interface")
+            || kind.eq_ignore_ascii_case("enum")
+    }
+
+    fn entity_complexity(entity: &CodeEntity) -> Option<AnalyzerComplexityMetrics> {
+        entity
+            .properties
+            .get(PROP_COMPLEXITY_METRICS)
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+    }
+
+    fn duplicate_signature(entity: &CodeEntity) -> Option<(u64, usize)> {
+        let hash = entity
+            .properties
+            .get(PROP_DUPLICATE_FINGERPRINT)?
+            .as_u64()? as u64;
+        let tokens = entity
+            .properties
+            .get(PROP_FINGERPRINT_TOKENS)
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0) as usize;
+        Some((hash, tokens))
+    }
+
+    fn member_count_from_entity(entity: &CodeEntity) -> usize {
+        entity
+            .properties
+            .get(PROP_MEMBER_COUNT)
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .unwrap_or(0)
+    }
+
+    fn entity_location(entity: &CodeEntity) -> (usize, usize) {
+        entity
+            .line_range
+            .map(|(start, end)| (start, end.max(start)))
+            .unwrap_or((1, entity.line_count()))
+    }
+
+    fn compute_duplicate_fingerprint_for_entity(
+        &self,
+        entity: &CodeEntity,
+        context: &crate::core::ast_service::AstContext<'_>,
+    ) -> Result<(Option<u64>, Option<usize>)> {
+        let Some(node) = find_entity_node(context, entity) else {
+            return Ok((None, None));
+        };
+
+        let mut tokens = Vec::new();
+        self.collect_fingerprint_tokens(node, context.source, &mut tokens);
+
+        if tokens.is_empty() {
+            return Ok((None, None));
+        }
+
+        let token_count = tokens.len();
+        if token_count < DUPLICATE_MIN_TOKEN_COUNT {
+            return Ok((None, Some(token_count)));
+        }
+
+        let normalized = tokens.join(" ");
+        let hash = blake3::hash(normalized.as_bytes());
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&hash.as_bytes()[..8]);
+
+        Ok((Some(u64::from_le_bytes(bytes)), Some(token_count)))
+    }
+
+    fn collect_fingerprint_tokens(
+        &self,
+        node: tree_sitter::Node<'_>,
+        source: &str,
+        tokens: &mut Vec<String>,
+    ) {
+        if !node.is_named() {
+            return;
+        }
+
+        let kind = node.kind();
+        match kind {
+            "comment" | "block_comment" | "line_comment" => return,
+            "identifier"
+            | "field_identifier"
+            | "property_identifier"
+            | "shorthand_property_identifier_pattern"
+            | "member_expression"
+            | "scoped_identifier" => tokens.push("IDENT".to_string()),
+            "type_identifier" | "primitive_type" => tokens.push("TYPE".to_string()),
+            "string" | "string_literal" | "raw_string_literal" => tokens.push("STRING".to_string()),
+            "number" | "integer" | "float" | "decimal_literal" | "float_literal" => {
+                tokens.push("NUMBER".to_string())
+            }
+            "true" | "false" => tokens.push("BOOL".to_string()),
+            "null" | "nil" => tokens.push("NULL".to_string()),
+            _ => tokens.push(kind.to_string()),
+        }
+
+        if matches!(
+            kind,
+            "binary_expression" | "assignment_expression" | "logical_expression"
+        ) {
+            if let Some(operator) = node.child_by_field_name("operator") {
+                if let Some(text) = node_text(operator, source) {
+                    tokens.push(format!("OP:{}", text.trim()));
+                }
+            }
+        }
+
+        if matches!(kind, "call_expression" | "call") {
+            let arg_count = node
+                .child_by_field_name("arguments")
+                .map(|args| args.named_child_count())
+                .unwrap_or_else(|| {
+                    let mut cnt = 0;
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        if child.kind().ends_with("argument") {
+                            cnt += 1;
+                        }
+                    }
+                    cnt
+                });
+            tokens.push(format!("CALL_ARGS:{}", arg_count));
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.collect_fingerprint_tokens(child, source, tokens);
+        }
+    }
+
     fn lookup_complexity_metrics(
         &self,
         entity: &ParsedEntity,
@@ -349,12 +479,12 @@ impl RefactoringAnalyzer {
             .map(|result| result.metrics.clone())
     }
 
-    fn detect_long_methods(&self, functions: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
+    fn detect_long_methods(&self, functions: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
         let mut recommendations = Vec::new();
 
         for function in functions {
-            let loc = function
-                .complexity
+            let complexity = Self::entity_complexity(function);
+            let loc = complexity
                 .as_ref()
                 .map(|metrics| metrics.lines_of_code.max(function.line_count() as f64))
                 .unwrap_or(function.line_count() as f64);
@@ -363,8 +493,7 @@ impl RefactoringAnalyzer {
                 continue;
             }
 
-            let cyclomatic = function
-                .complexity
+            let cyclomatic = complexity
                 .as_ref()
                 .map(|metrics| metrics.cyclomatic_complexity)
                 .unwrap_or(0.0);
@@ -388,7 +517,7 @@ impl RefactoringAnalyzer {
                 estimated_impact: impact,
                 estimated_effort: effort,
                 priority_score: priority,
-                location: function.location(),
+                location: Self::entity_location(function),
             });
         }
 
@@ -397,26 +526,24 @@ impl RefactoringAnalyzer {
 
     fn detect_complex_conditionals(
         &self,
-        functions: &[EntitySummary],
+        functions: &[CodeEntity],
     ) -> Vec<RefactoringRecommendation> {
         let mut recommendations = Vec::new();
 
         for function in functions {
-            let fallback_complexity = count_logical_operators(&function.snippet);
-            let (logical_complexity, cognitive_complexity) = if let Some(metrics) = &function.complexity {
-                let logical = if metrics.decision_points.is_empty() {
-                    fallback_complexity
-                } else {
-                    metrics.decision_points.len()
-                };
-                let cognitive = if metrics.cognitive_complexity > 0.0 {
-                    metrics.cognitive_complexity
-                } else {
-                    fallback_complexity as f64
-                };
-                (logical, cognitive)
-            } else {
-                (fallback_complexity, fallback_complexity as f64)
+            let operator_complexity = estimate_logical_operator_complexity(&function.source_code);
+            let complexity = Self::entity_complexity(function);
+            let (logical_complexity, cognitive_complexity) = match &complexity {
+                Some(metrics) => {
+                    let combined = metrics.decision_points.len().max(operator_complexity);
+                    let cognitive = if metrics.cognitive_complexity > 0.0 {
+                        metrics.cognitive_complexity
+                    } else {
+                        combined as f64
+                    };
+                    (combined, cognitive)
+                }
+                None => (operator_complexity, operator_complexity as f64),
             };
 
             if logical_complexity < COMPLEX_CONDITIONAL_THRESHOLD {
@@ -436,31 +563,25 @@ impl RefactoringAnalyzer {
                 estimated_impact: impact,
                 estimated_effort: effort,
                 priority_score: priority,
-                location: function.location(),
+                location: Self::entity_location(function),
             });
         }
 
         recommendations
     }
 
-    fn detect_duplicate_code(&self, functions: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
-        let mut buckets: HashMap<u64, Vec<&EntitySummary>> = HashMap::new();
+    fn detect_duplicate_code(&self, functions: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
+        let mut buckets: HashMap<u64, Vec<&CodeEntity>> = HashMap::new();
 
         for function in functions {
             if function.line_count() < DUPLICATE_MIN_LINE_COUNT {
                 continue;
             }
 
-            match (
-                function.duplicate_fingerprint,
-                function.fingerprint_complexity,
-            ) {
-                (Some(fingerprint), Some(complexity))
-                    if complexity >= DUPLICATE_MIN_TOKEN_COUNT =>
-                {
+            if let Some((fingerprint, complexity)) = Self::duplicate_signature(function) {
+                if complexity >= DUPLICATE_MIN_TOKEN_COUNT {
                     buckets.entry(fingerprint).or_default().push(function);
                 }
-                _ => {}
             }
         }
 
@@ -488,7 +609,7 @@ impl RefactoringAnalyzer {
                     estimated_impact: impact,
                     estimated_effort: effort,
                     priority_score: priority,
-                    location: function.location(),
+                    location: Self::entity_location(function),
                 });
             }
         }
@@ -496,12 +617,12 @@ impl RefactoringAnalyzer {
         recommendations
     }
 
-    fn detect_large_types(&self, types: &[EntitySummary]) -> Vec<RefactoringRecommendation> {
+    fn detect_large_types(&self, types: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
         let mut recommendations = Vec::new();
 
         for entity in types {
             let line_count = entity.line_count();
-            let member_count = entity.member_count;
+            let member_count = Self::member_count_from_entity(entity);
 
             if line_count < LARGE_CLASS_LINE_THRESHOLD
                 && member_count < LARGE_CLASS_MEMBER_THRESHOLD
@@ -524,7 +645,7 @@ impl RefactoringAnalyzer {
                 estimated_impact: impact,
                 estimated_effort: effort,
                 priority_score: priority,
-                location: entity.location(),
+                location: Self::entity_location(entity),
             });
         }
 
@@ -799,70 +920,25 @@ fn extract_lines(lines: &[&str], start_line: usize, end_line: usize) -> String {
 
     lines[start_idx..=end_idx].join("\n")
 }
-
-fn strip_first_line(snippet: &str) -> String {
-    snippet.lines().skip(1).collect::<Vec<&str>>().join("\n")
-}
-
-fn compute_duplicate_fingerprint(kind: EntityKind, snippet: &str) -> (Option<u64>, Option<usize>) {
-    let body = if matches!(kind, EntityKind::Function | EntityKind::Method) {
-        strip_first_line(snippet)
-    } else {
-        snippet.to_string()
-    };
-
-    let tokens: Vec<String> = body
-        .lines()
-        .map(|line| {
-            line.split('#')
-                .next()
-                .unwrap_or("")
-                .split("//")
-                .next()
-                .unwrap_or("")
-                .split_whitespace()
-                .map(|token| {
-                    token
-                        .trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
-                        .to_lowercase()
-                })
-                .filter(|token| !token.is_empty())
-                .collect::<Vec<String>>()
-        })
-        .flatten()
-        .collect();
-
-    if tokens.is_empty() {
-        return (None, None);
-    }
-
-    let token_count = tokens.len();
-    if token_count < DUPLICATE_MIN_TOKEN_COUNT {
-        return (None, Some(token_count));
-    }
-
-    let normalized = tokens.join(" ");
-    let hash = blake3::hash(normalized.as_bytes());
-    let mut bytes = [0u8; 8];
-    bytes.copy_from_slice(&hash.as_bytes()[..8]);
-
-    (Some(u64::from_le_bytes(bytes)), Some(token_count))
-}
-
-fn count_logical_operators(snippet: &str) -> usize {
+fn estimate_logical_operator_complexity(snippet: &str) -> usize {
     let mut count = 0;
 
-    let lowered = snippet.to_lowercase();
-    count += lowered.matches("&&").count();
-    count += lowered.matches("||").count();
-    count += lowered.matches(" and ").count();
-    count += lowered.matches(" or ").count();
-    count += lowered.matches(" elif ").count();
-    count += lowered.matches(" else if ").count();
-    count += lowered.matches(" when ").count();
-    count += lowered.matches(" match ").count();
+    for line in snippet.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+
+        count += trimmed.matches("&&").count();
+        count += trimmed.matches("||").count();
+    }
 
     count
+        + snippet
+            .split(|c: char| !c.is_alphabetic())
+            .filter(|token| matches!(token.to_ascii_lowercase().as_str(), "and" | "or"))
+            .count()
 }
 
 #[cfg(test)]
@@ -985,15 +1061,26 @@ def helper_copy():
         let analyzer = analyzer();
         let source = fs::read_to_string(&file_path).unwrap();
         let mut adapter = crate::lang::python::PythonAdapter::new().unwrap();
-        let parse_index = adapter
-            .parse_source(&source, file_path.to_string_lossy().as_ref())
+        let file_path_str = file_path.to_string_lossy().to_string();
+        let parse_index = adapter.parse_source(&source, &file_path_str).unwrap();
+        let ast_service = Arc::new(AstService::new());
+        let cached_tree = ast_service.get_ast(&file_path_str, &source).await.unwrap();
+        let ast_context = ast_service.create_context(&cached_tree, &file_path_str);
+        let complexity_map = HashMap::<String, ComplexityAnalysisResult>::new();
+        let summaries = analyzer
+            .collect_entity_summaries(&parse_index, &source, &complexity_map, &ast_context)
             .unwrap();
-        let summaries = analyzer.collect_entity_summaries(&parse_index, &source, &HashMap::new());
-        assert!(summaries.iter().filter(|s| s.is_function_like()).count() >= 2);
+        assert!(
+            summaries
+                .iter()
+                .filter(|s| RefactoringAnalyzer::is_function_entity(s))
+                .count()
+                >= 2
+        );
         let duplicate_ready = summaries
             .iter()
-            .filter(|s| s.is_function_like())
-            .filter(|s| s.duplicate_fingerprint.is_some())
+            .filter(|s| RefactoringAnalyzer::is_function_entity(s))
+            .filter(|s| RefactoringAnalyzer::duplicate_signature(s).is_some())
             .count();
         assert!(
             duplicate_ready >= 2,

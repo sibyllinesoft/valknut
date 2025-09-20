@@ -1,16 +1,14 @@
 {
-  "version": "0.1.0",
-  "description": "Valknut CI/CD Configuration - Optimized for automated quality gates",
-  
   "analysis": {
     "enable_scoring": true,
     "enable_graph_analysis": false,
-    "enable_lsh_analysis": false,
+    "enable_lsh_analysis": true,
     "enable_refactoring_analysis": true,
+    "enable_coverage_analysis": true,
     "enable_structure_analysis": true,
     "enable_names_analysis": false,
-    "enable_coverage_analysis": false,
-    "max_files": 1000,
+    "confidence_threshold": 0.75,
+    "max_files": 2000,
     "exclude_patterns": [
       "*/node_modules/*",
       "*/venv/*",
@@ -18,93 +16,210 @@
       "*/__pycache__/*",
       "*.min.js",
       "*/dist/*",
-      "*/build/*",
-      "*/test/*",
-      "*/tests/*"
-    ]
+      "*/build/*"
+    ],
+    "include_patterns": ["**/*"]
   },
-  
+  "denoise": {
+    "enabled": true,
+    "auto": true,
+    "min_function_tokens": 40,
+    "min_match_tokens": 24,
+    "require_blocks": 2,
+    "similarity": 0.82,
+    "weights": {
+      "ast": 0.35,
+      "pdg": 0.45,
+      "emb": 0.20
+    },
+    "io_mismatch_penalty": 0.25,
+    "threshold_s": 0.82,
+    "stop_motifs": {
+      "enabled": true,
+      "percentile": 0.5,
+      "refresh_days": 7
+    },
+    "auto_calibration": {
+      "enabled": true,
+      "quality_target": 0.8,
+      "sample_size": 200,
+      "max_iterations": 50
+    },
+    "ranking": {
+      "by": "saved_tokens",
+      "min_saved_tokens": 120,
+      "min_rarity_gain": 1.2
+    },
+    "dry_run": false
+  },
   "scoring": {
-    "normalization_scheme": "Standard",
-    "use_bayesian_fallbacks": false,
+    "normalization_scheme": "z_score",
+    "use_bayesian_fallbacks": true,
     "confidence_reporting": false,
     "weights": {
       "complexity": 1.0,
-      "structure": 0.8,
-      "refactoring": 0.9
+      "graph": 0.8,
+      "structure": 0.9,
+      "style": 0.5,
+      "coverage": 0.7
+    },
+    "statistical_params": {
+      "confidence_level": 0.95,
+      "min_sample_size": 10,
+      "outlier_threshold": 3.0
     }
   },
-  
-  "structure": {
-    "structure": {
-      "enable_branch_packs": true,
-      "enable_file_split_packs": true,
-      "top_packs": 5
+  "graph": {
+    "enable_betweenness": false,
+    "enable_closeness": false,
+    "enable_cycle_detection": true,
+    "max_exact_size": 5000,
+    "use_approximation": true,
+    "approximation_sample_rate": 0.1
+  },
+  "lsh": {
+    "num_hashes": 128,
+    "num_bands": 16,
+    "shingle_size": 3,
+    "similarity_threshold": 0.72,
+    "max_candidates": 80,
+    "use_semantic_similarity": false
+  },
+  "dedupe": {
+    "include": ["src/**"],
+    "exclude": ["tests/**", "examples/**", "**/generated/**"],
+    "min_function_tokens": 40,
+    "min_ast_nodes": 35,
+    "min_match_tokens": 24,
+    "min_match_coverage": 0.4,
+    "shingle_k": 9,
+    "require_distinct_blocks": 2,
+    "weights": {
+      "ast": 0.35,
+      "pdg": 0.45,
+      "emb": 0.20
     },
-    "fsdir": {
-      "max_files_per_dir": 30,
-      "max_subdirs_per_dir": 15,
-      "max_dir_loc": 3000
-    },
-    "fsfile": {
-      "huge_loc": 1000,
-      "huge_bytes": 150000
+    "io_mismatch_penalty": 0.25,
+    "threshold_s": 0.82,
+    "stop_phrases": [
+      "^\\s*@staticmethod\\b",
+      "\\bgroup\\.finish\\s*\\(\\)"
+    ],
+    "rank_by": "saved_tokens",
+    "min_saved_tokens": 120,
+    "keep_top_per_file": 2,
+    "adaptive": {
+      "auto_denoise": true,
+      "adaptive_learning": true,
+      "rarity_weighting": true,
+      "structural_validation": true,
+      "stop_motif_percentile": 0.75,
+      "hub_suppression_threshold": 0.6,
+      "quality_gate_percentage": 0.85,
+      "tfidf_kgram_size": 8,
+      "wl_iterations": 3,
+      "min_rarity_gain": 1.2,
+      "external_call_jaccard_threshold": 0.2,
+      "cache_refresh_days": 7,
+      "auto_refresh_cache": true
     }
   },
-  
   "languages": {
     "python": {
       "enabled": true,
-      "file_extensions": [".py"],
-      "max_file_size_mb": 5,
-      "complexity_threshold": 12.0
+      "file_extensions": [".py", ".pyi"],
+      "tree_sitter_language": "python",
+      "max_file_size_mb": 8.0,
+      "complexity_threshold": 12.0,
+      "additional_settings": {}
     },
     "javascript": {
       "enabled": true,
       "file_extensions": [".js", ".jsx"],
-      "max_file_size_mb": 3,
-      "complexity_threshold": 10.0
+      "tree_sitter_language": "javascript",
+      "max_file_size_mb": 4.0,
+      "complexity_threshold": 10.0,
+      "additional_settings": {}
     },
     "typescript": {
       "enabled": true,
       "file_extensions": [".ts", ".tsx"],
-      "max_file_size_mb": 3,
-      "complexity_threshold": 10.0
+      "tree_sitter_language": "typescript",
+      "max_file_size_mb": 4.0,
+      "complexity_threshold": 10.0,
+      "additional_settings": {}
     },
     "rust": {
       "enabled": true,
       "file_extensions": [".rs"],
-      "max_file_size_mb": 8,
-      "complexity_threshold": 15.0
+      "tree_sitter_language": "rust",
+      "max_file_size_mb": 10.0,
+      "complexity_threshold": 15.0,
+      "additional_settings": {}
     },
     "go": {
       "enabled": true,
       "file_extensions": [".go"],
-      "max_file_size_mb": 5,
-      "complexity_threshold": 12.0
+      "tree_sitter_language": "go",
+      "max_file_size_mb": 6.0,
+      "complexity_threshold": 12.0,
+      "additional_settings": {}
     }
   },
-  
   "io": {
+    "cache_dir": null,
     "enable_caching": false,
-    "output_dir": "out",
-    "default_format": "json"
+    "cache_ttl_seconds": 1800,
+    "report_dir": "reports/ci",
+    "report_format": "json"
   },
-  
   "performance": {
+    "max_threads": 4,
+    "memory_limit_mb": 4096,
     "file_timeout_seconds": 20,
-    "total_timeout_seconds": 300,
-    "batch_size": 50
+    "total_timeout_seconds": 600,
+    "enable_simd": false,
+    "batch_size": 80
   },
-  
-  "quality_gates": {
-    "enabled": true,
-    "max_complexity": 70.0,
-    "min_health": 65.0,
-    "max_debt": 25.0,
-    "min_maintainability": 25.0,
-    "max_issues": 30,
-    "max_critical": 0,
-    "max_high_priority": 3
+  "structure": {
+    "enable_branch_packs": true,
+    "enable_file_split_packs": true,
+    "top_packs": 10,
+    "fsdir": {
+      "max_files_per_dir": 30,
+      "max_subdirs_per_dir": 12,
+      "max_dir_loc": 2500,
+      "min_branch_recommendation_gain": 0.2,
+      "min_files_for_split": 6,
+      "target_loc_per_subdir": 900
+    },
+    "fsfile": {
+      "huge_loc": 900,
+      "huge_bytes": 140000,
+      "min_split_loc": 250,
+      "min_entities_per_split": 3
+    },
+    "partitioning": {
+      "balance_tolerance": 0.25,
+      "max_clusters": 4,
+      "min_clusters": 2,
+      "naming_fallbacks": ["core", "api", "io", "util"]
+    }
+  },
+  "coverage": {
+    "auto_discover": true,
+    "search_paths": [
+      "./coverage/",
+      "./reports/",
+      "./",
+      "./target/tarpaulin/"
+    ],
+    "file_patterns": [
+      "coverage.xml",
+      "lcov.info",
+      "**/coverage.xml"
+    ],
+    "max_age_days": 3,
+    "coverage_file": null
   }
 }

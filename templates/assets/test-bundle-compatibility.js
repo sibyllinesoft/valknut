@@ -26,16 +26,16 @@ const testAnalysisData = {
       children: [
         {
           id: 'file-1',
-          name: 'test.rs',
+          name: 'pipeline_executor.rs',
           type: 'file',
-          filePath: 'src/test.rs',
+          filePath: 'src/core/pipeline/pipeline_executor.rs',
           highestPriority: 'critical',
           avgScore: 12.4,
           severityCounts: { critical: 1, high: 1, medium: 0, low: 0 },
           children: [
             {
               id: 'entity-1',
-              name: 'validate_config',
+              name: 'evaluate_quality_gates',
               type: 'entity',
               priority: 'critical',
               score: 15.7,
@@ -69,14 +69,14 @@ const testAnalysisData = {
 const testLegacyData = {
   refactoringCandidatesByFile: [
     {
-      filePath: 'src/test.rs',
+      filePath: 'src/core/pipeline/pipeline_executor.rs',
       highestPriority: 'critical',
       entityCount: 1,
       avgScore: 15.7,
       totalIssues: 2,
       entities: [
         {
-          name: './src/test.rs:function:validate_config',
+          name: './src/core/pipeline/pipeline_executor.rs:function:evaluate_quality_gates',
           priority: 'critical',
           score: 15.7,
           lineRange: [42, 89],

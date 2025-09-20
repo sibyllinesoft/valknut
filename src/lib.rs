@@ -24,11 +24,11 @@
 //! ┌─────────────────────────────────────────────────────────────┐
 //! │                        API Layer                            │
 //! ├─────────────────────────────────────────────────────────────┤
-//! │  Core Engine  │  Detectors  │  Language  │  I/O & Storage  │
+//! │  Core Engine  │  Detectors  │  Language  │  I/O & Reports  │
 //! │              │             │  Adapters  │                 │
 //! │ • Scoring    │ • Graph     │ • Python   │ • Cache         │
-//! │ • Bayesian   │ • LSH/Hash  │ • JS/TS    │ • Persistence   │
-//! │ • Pipeline   │ • Structure │ • Rust     │ • Reports       │
+//! │ • Bayesian   │ • LSH/Hash  │ • JS/TS    │ • Reports       │
+//! │ • Pipeline   │ • Structure │ • Rust     │                 │
 //! │ • Config     │ • Coverage  │ • Go       │                 │
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
@@ -86,6 +86,7 @@ pub mod core {
     //! Core analysis algorithms and data structures.
 
     pub mod ast_service;
+    pub mod ast_utils;
     pub mod bayesian;
     pub mod config;
     pub mod dependency;
@@ -108,9 +109,6 @@ pub mod detectors {
     pub mod structure;
 }
 
-/// Experimental and work-in-progress functionality.
-pub mod experimental;
-
 // Language-specific AST adapters
 pub mod lang {
     //! Language-specific parsing and AST processing.
@@ -128,20 +126,16 @@ pub mod lang {
     pub use registry::{adapter_for_file, adapter_for_language, language_key_for_path};
 }
 
-// I/O, persistence, and reporting
+// I/O, caching, and reporting
 pub mod io {
-    //! I/O operations, caching, and result persistence.
+    //! I/O operations, caching, and report generation.
 
     pub mod cache;
-    pub mod persistence;
     pub mod reports;
 }
 
 // AI refactoring oracle
 pub mod oracle;
-
-// Live reachability analysis
-pub mod live;
 
 // Public API and engine interface
 pub mod api {
@@ -155,18 +149,11 @@ pub mod api {
 // Re-export primary types for convenience
 pub use api::config_types::AnalysisConfig;
 pub use api::engine::ValknutEngine;
-pub use api::results::AnalysisResults;
+pub use crate::core::pipeline::AnalysisResults;
 pub use core::errors::{Result, ValknutError, ValknutResultExt};
 
 #[cfg(test)]
 mod test_coverage_integration;
-
-// Feature-gated exports
-#[cfg(feature = "database")]
-pub mod database {
-    //! Database integration for large-scale analysis.
-    pub use crate::io::persistence::DatabaseBackend;
-}
 
 /// Library version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -183,10 +170,5 @@ pub mod features {
     /// Check if parallel processing is enabled
     pub const fn has_parallel() -> bool {
         cfg!(feature = "parallel")
-    }
-
-    /// Check if database integration is available
-    pub const fn has_database() -> bool {
-        cfg!(feature = "database")
     }
 }

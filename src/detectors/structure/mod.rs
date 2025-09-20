@@ -215,7 +215,7 @@ impl StructureExtractor {
             .iter()
             .filter_map(|file_path| {
                 self.file_analyzer
-                    .analyze_file_for_split(file_path)
+                    .analyze_file_for_split_with_root(file_path, root_path)
                     .ok()
                     .flatten()
             })

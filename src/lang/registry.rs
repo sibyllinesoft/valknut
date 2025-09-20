@@ -4,7 +4,11 @@ use std::path::Path;
 
 use crate::core::errors::{Result, ValknutError};
 use crate::lang::common::LanguageAdapter;
+use crate::lang::go::GoAdapter;
+use crate::lang::javascript::JavaScriptAdapter;
 use crate::lang::python::PythonAdapter;
+use crate::lang::rust_lang::RustAdapter;
+use crate::lang::typescript::TypeScriptAdapter;
 
 /// Identify the canonical language key for a file path.
 pub fn language_key_for_path(path: &Path) -> Option<String> {
@@ -38,7 +42,11 @@ pub fn adapter_for_file(path: &Path) -> Result<Box<dyn LanguageAdapter>> {
 /// Create a language adapter for a specific language key (usually an extension).
 pub fn adapter_for_language(language: &str) -> Result<Box<dyn LanguageAdapter>> {
     match language {
-        "py" => Ok(Box::new(PythonAdapter::new()?)),
+        "py" | "python" => Ok(Box::new(PythonAdapter::new()?)),
+        "js" | "jsx" | "javascript" => Ok(Box::new(JavaScriptAdapter::new()?)),
+        "ts" | "tsx" | "typescript" => Ok(Box::new(TypeScriptAdapter::new()?)),
+        "rs" | "rust" => Ok(Box::new(RustAdapter::new()?)),
+        "go" | "golang" => Ok(Box::new(GoAdapter::new()?)),
         other => Err(ValknutError::unsupported(format!(
             "Language adapter for '{}' is not yet implemented",
             other
@@ -69,15 +77,27 @@ mod tests {
 
     #[test]
     fn test_adapter_creation_supported_languages() {
-        let python = adapter_for_language("py");
-        assert!(python.is_ok());
+        for lang in ["py", "js", "ts", "rs", "go"] {
+            let adapter = adapter_for_language(lang);
+            assert!(adapter.is_ok(), "adapter for {} should be available", lang);
+        }
+    }
+
+    #[test]
+    fn test_adapter_creation_language_aliases() {
+        for alias in ["python", "javascript", "typescript", "rust", "golang"] {
+            let adapter = adapter_for_language(alias);
+            assert!(
+                adapter.is_ok(),
+                "adapter for alias {} should be available",
+                alias
+            );
+        }
     }
 
     #[test]
     fn test_adapter_creation_unknown_language() {
-        for lang in ["js", "ts", "rs", "go", "unknown"] {
-            let adapter = adapter_for_language(lang);
-            assert!(adapter.is_err());
-        }
+        let adapter = adapter_for_language("unknown");
+        assert!(adapter.is_err());
     }
 }

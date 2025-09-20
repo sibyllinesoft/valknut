@@ -2,6 +2,26 @@
 
 This directory contains datasets for testing and benchmarking valknut's Bayesian normalization system for code quality assessment.
 
+## Directory Layout
+
+```
+datasets/
+├── python/
+│   ├── benchmarks/           # Synthetic workloads for complexity and normalization tests
+│   │   ├── complexity_benchmark.py
+│   │   └── irrefutable_complexity_test.py
+│   ├── code_smells/
+│   │   └── case-studies/     # Before/after smell examples from real projects
+│   ├── data/                 # Tabular smell datasets (CSV)
+│   │   ├── Python_LargeClassSmell_Dataset.csv
+│   │   └── Python_LongMethodSmell_Dataset.csv
+│   └── samples/              # Hand-written fixtures for quick experiments
+│       ├── sample_bad_code.py
+│       └── test_scenarios.py
+├── quick_start_guide.md
+└── README.md
+```
+
 ## Available Datasets
 
 ### 1. Zenodo Python Code Smell Datasets (Sandouka & Aljamaan, 2023)
@@ -9,7 +29,7 @@ This directory contains datasets for testing and benchmarking valknut's Bayesian
 **Source**: https://doi.org/10.5281/zenodo.7512516
 **Publication**: Sandouka R, Aljamaan H. 2023. Python code smells detection using conventional machine learning models. PeerJ Computer Science 9:e1370
 
-#### Files:
+#### Files (see `python/data/`):
 - `Python_LargeClassSmell_Dataset.csv` (99.3 KB) - 1,000 samples of Large Class smell
 - `Python_LongMethodSmell_Dataset.csv` (85.9 KB) - 1,000 samples of Long Method smell
 
@@ -28,13 +48,13 @@ This directory contains datasets for testing and benchmarking valknut's Bayesian
 **Source**: https://github.com/ZikaZaki/code-smells-python
 **License**: Open source
 
-#### Structure:
+#### Structure (`python/code_smells/case-studies/`):
 ```
-code-smells-python/
-├── command-line-shell/
+case-studies/
 ├── employee-management-system/
 ├── point-of-sale/
-└── vehicle-registry-system/
+├── vehicle-registry-system/
+└── command-line-shell/
 ```
 
 #### Code Smell Types Covered:
@@ -65,10 +85,10 @@ code-smells-python/
 Use the Zenodo CSV datasets to validate that valknut's code analysis produces similar metrics to the ground truth data.
 
 ### Scenario 2: Code Smell Detection
-Test valknut on the `before.py` files to see if it correctly identifies code quality issues.
+Run valknut on the `python/code_smells/case-studies/*/before.py` files to verify it flags the expected issues.
 
 ### Scenario 3: Improvement Detection  
-Compare valknut scores between `before.py` and `after.py` files to validate that the Bayesian system detects improvements.
+Compare valknut scores between `before.py` and `after.py` in the case studies to validate that the Bayesian system detects improvements.
 
 ### Scenario 4: Ranking Validation
 Use multiple files with known quality levels to test if valknut's Bayesian ranking correlates with expected quality rankings.
@@ -77,7 +97,7 @@ Use multiple files with known quality levels to test if valknut's Bayesian ranki
 
 ### Setting up for testing:
 1. Ensure valknut is installed and configured
-2. Run analysis on individual files: `valknut analyze path/to/file.py`
+2. Run analysis on individual files: `valknut analyze datasets/python/samples/sample_bad_code.py`
 3. Compare results with ground truth data
 4. Generate reports on correlation between valknut scores and known quality metrics
 

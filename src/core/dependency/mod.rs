@@ -7,30 +7,125 @@ use petgraph::Direction;
 use tracing::{debug, warn};
 
 use crate::core::errors::Result;
-use crate::lang::{adapter_for_file, EntityKind};
+use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
 
 #[derive(Debug, Clone)]
 pub struct FunctionNode {
     pub unique_id: String,
     pub name: String,
+    pub qualified_name: String,
+    pub namespace: Vec<String>,
     pub file_path: PathBuf,
     pub start_line: Option<usize>,
     pub end_line: Option<usize>,
     pub calls: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct CallIdentifier {
+    segments: Vec<String>,
+}
+
+impl CallIdentifier {
+    fn parse(raw: &str) -> Option<Self> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let mut segments = Vec::new();
+        let mut buffer = String::new();
+        let mut chars = trimmed.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch.is_alphanumeric() || ch == '_' {
+                buffer.push(ch);
+            } else if ch == '.' || ch == ':' {
+                if !buffer.is_empty() {
+                    segments.push(buffer.to_lowercase());
+                    buffer.clear();
+                }
+                while matches!(chars.peek(), Some(':')) {
+                    chars.next();
+                }
+            } else if ch == '(' {
+                if !buffer.is_empty() {
+                    segments.push(buffer.to_lowercase());
+                    buffer.clear();
+                }
+                break;
+            } else if ch.is_whitespace() {
+                if !buffer.is_empty() {
+                    segments.push(buffer.to_lowercase());
+                    buffer.clear();
+                }
+            } else {
+                if !buffer.is_empty() {
+                    segments.push(buffer.to_lowercase());
+                    buffer.clear();
+                }
+            }
+        }
+
+        if !buffer.is_empty() {
+            segments.push(buffer.to_lowercase());
+        }
+
+        while matches!(segments.first(), Some(segment) if matches!(segment.as_str(), "self" | "this" | "cls" | "super"))
+        {
+            segments.remove(0);
+        }
+
+        if segments.is_empty() {
+            return None;
+        }
+
+        Some(Self { segments })
+    }
+
+    fn base(&self) -> &str {
+        self.segments.last().map(|s| s.as_str()).unwrap_or("")
+    }
+
+    fn namespace(&self) -> &[String] {
+        if self.segments.len() <= 1 {
+            &self.segments[..0]
+        } else {
+            &self.segments[..self.segments.len() - 1]
+        }
+    }
+
+    fn candidate_keys(&self) -> Vec<String> {
+        let mut keys = Vec::new();
+        for start in 0..self.segments.len() {
+            let candidate = self.segments[start..].join("::");
+            if !keys.contains(&candidate) {
+                keys.push(candidate);
+            }
+        }
+        keys
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntityKey {
     file_path: PathBuf,
     name: String,
+    qualified_name: String,
     start_line: Option<usize>,
 }
 
 impl EntityKey {
-    pub fn new(path: PathBuf, name: String, start_line: Option<usize>) -> Self {
+    pub fn new(
+        path: PathBuf,
+        name: String,
+        qualified_name: String,
+        start_line: Option<usize>,
+    ) -> Self {
         Self {
             file_path: path,
             name,
+            qualified_name,
             start_line,
         }
     }
@@ -39,6 +134,7 @@ impl EntityKey {
         Self {
             file_path: node.file_path.clone(),
             name: node.name.clone(),
+            qualified_name: node.qualified_name.clone(),
             start_line: node.start_line,
         }
     }
@@ -49,6 +145,10 @@ impl EntityKey {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn qualified_name(&self) -> &str {
+        &self.qualified_name
     }
 
     pub fn start_line(&self) -> Option<usize> {
@@ -124,7 +224,12 @@ impl ProjectDependencyAnalysis {
         }
 
         self.metrics.iter().find_map(|(candidate, metrics)| {
-            if candidate.file_path == key.file_path && candidate.name == key.name {
+            if candidate.file_path == key.file_path
+                && (candidate
+                    .qualified_name
+                    .eq_ignore_ascii_case(key.qualified_name())
+                    || candidate.name.eq_ignore_ascii_case(key.name()))
+            {
                 Some(metrics)
             } else {
                 None
@@ -138,6 +243,10 @@ impl ProjectDependencyAnalysis {
 
     pub fn chokepoints(&self) -> &[Chokepoint] {
         &self.chokepoints
+    }
+
+    pub fn metrics_iter(&self) -> impl Iterator<Item = (&EntityKey, &DependencyMetrics)> {
+        self.metrics.iter()
     }
 }
 
@@ -190,6 +299,13 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
         let start_line = Some(entity.location.start_line);
         let end_line = Some(entity.location.end_line);
 
+        let namespace = build_namespace(entity, &parse_index);
+        let qualified_name = if namespace.is_empty() {
+            entity.name.clone()
+        } else {
+            format!("{}::{}", namespace.join("::"), entity.name)
+        };
+
         let calls = entity
             .metadata
             .get("function_calls")
@@ -212,6 +328,8 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
         functions.push(FunctionNode {
             unique_id,
             name: entity.name.clone(),
+            qualified_name,
+            namespace,
             file_path,
             start_line,
             end_line,
@@ -220,6 +338,30 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
     }
 
     Ok(functions)
+}
+
+fn build_namespace(entity: &ParsedEntity, index: &ParseIndex) -> Vec<String> {
+    let mut namespace = Vec::new();
+    let mut current = entity.parent.clone();
+
+    while let Some(parent_id) = current {
+        if let Some(parent) = index.entities.get(&parent_id) {
+            match parent.kind {
+                EntityKind::Class
+                | EntityKind::Interface
+                | EntityKind::Struct
+                | EntityKind::Enum
+                | EntityKind::Module => namespace.push(parent.name.clone()),
+                _ => {}
+            }
+            current = parent.parent.clone();
+        } else {
+            break;
+        }
+    }
+
+    namespace.reverse();
+    namespace
 }
 
 type DependencyGraph = Graph<EntityKey, (), petgraph::Directed>;
@@ -244,15 +386,29 @@ fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, In
         let mut seen_targets = HashSet::new();
 
         for raw_call in &node.calls {
-            if let Some(call_name) = normalize_call_name(raw_call) {
-                let call_key = call_name.to_lowercase();
-                if let Some(candidates) = name_lookup.get(&call_key) {
-                    let target = select_target(candidates.as_slice(), key);
-                    if let Some(target_key) = target {
-                        if let Some(&target_index) = index_map.get(target_key) {
-                            if seen_targets.insert(target_index) {
-                                graph.add_edge(from_index, target_index, ());
-                            }
+            if let Some(call_id) = CallIdentifier::parse(raw_call) {
+                let candidate_keys = call_id.candidate_keys();
+                let mut matched_target: Option<&EntityKey> = None;
+
+                for candidate_name in &candidate_keys {
+                    if let Some(candidates) = name_lookup.get(candidate_name) {
+                        if let Some(target_key) = select_target(
+                            candidates.as_slice(),
+                            node,
+                            nodes,
+                            &call_id,
+                            &candidate_keys,
+                        ) {
+                            matched_target = Some(target_key);
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(target_key) = matched_target {
+                    if let Some(&target_index) = index_map.get(target_key) {
+                        if seen_targets.insert(target_index) {
+                            graph.add_edge(from_index, target_index, ());
                         }
                     }
                 }
@@ -268,27 +424,144 @@ fn build_name_lookup<'a>(
 ) -> HashMap<String, Vec<&'a EntityKey>> {
     let mut map: HashMap<String, Vec<&EntityKey>> = HashMap::new();
 
-    for key in nodes.keys() {
-        map.entry(key.name.to_lowercase()).or_default().push(key);
+    for (key, node) in nodes {
+        map.entry(node.name.to_lowercase()).or_default().push(key);
+
+        let qualified_lower = node.qualified_name.to_lowercase();
+        map.entry(qualified_lower.clone()).or_default().push(key);
+
+        let mut segments: Vec<String> = node
+            .qualified_name
+            .split("::")
+            .map(|segment| segment.to_lowercase())
+            .collect();
+        while segments.len() > 1 {
+            segments.remove(0);
+            map.entry(segments.join("::")).or_default().push(key);
+        }
+    }
+
+    for values in map.values_mut() {
+        values.sort_by(|a, b| {
+            let path_cmp = a.file_path().cmp(b.file_path());
+            if path_cmp != std::cmp::Ordering::Equal {
+                path_cmp
+            } else {
+                a.start_line().cmp(&b.start_line())
+            }
+        });
+        values.dedup();
     }
 
     map
 }
 
-fn select_target<'a>(candidates: &'a [&'a EntityKey], source: &EntityKey) -> Option<&'a EntityKey> {
-    for &candidate in candidates {
-        if candidate.file_path == source.file_path && candidate != source {
-            return Some(candidate);
+fn select_target<'a>(
+    candidates: &'a [&'a EntityKey],
+    source: &FunctionNode,
+    nodes: &HashMap<EntityKey, FunctionNode>,
+    call: &CallIdentifier,
+    candidate_keys: &[String],
+) -> Option<&'a EntityKey> {
+    let mut best: Option<&EntityKey> = None;
+    let mut best_score = i32::MIN;
+
+    for &candidate_key in candidates {
+        let Some(candidate_node) = nodes.get(candidate_key) else {
+            continue;
+        };
+
+        let is_self_call = candidate_node.unique_id == source.unique_id;
+
+        if is_self_call
+            && !call
+                .base()
+                .eq_ignore_ascii_case(candidate_node.name.as_str())
+        {
+            continue;
+        }
+
+        let mut score = 0;
+
+        if is_self_call {
+            score += 120;
+        }
+        let candidate_qualified_lower = candidate_node.qualified_name.to_lowercase();
+
+        if !candidate_keys.is_empty() && candidate_qualified_lower == candidate_keys[0] {
+            score += 100;
+        } else if candidate_keys
+            .iter()
+            .any(|candidate| candidate == &candidate_qualified_lower)
+        {
+            score += 75;
+        } else if candidate_node.name.eq_ignore_ascii_case(call.base()) {
+            score += 40;
+        }
+
+        if namespace_matches(call.namespace(), &candidate_node.namespace) {
+            score += 50;
+        }
+
+        if candidate_node.file_path == source.file_path {
+            score += 20;
+        }
+
+        if namespace_equals(&source.namespace, &candidate_node.namespace) {
+            score += 15;
+        } else if namespace_shares_tail(&source.namespace, &candidate_node.namespace) {
+            score += 8;
+        }
+
+        if let (Some(src_line), Some(dst_line)) = (source.start_line, candidate_node.start_line) {
+            let distance = if src_line >= dst_line {
+                src_line - dst_line
+            } else {
+                dst_line - src_line
+            };
+            let capped = distance.min(400);
+            score += 15 - (capped as i32 / 25);
+        }
+
+        if score > best_score {
+            best_score = score;
+            best = Some(candidate_key);
         }
     }
 
-    for &candidate in candidates {
-        if candidate != source {
-            return Some(candidate);
+    best
+}
+
+fn namespace_matches(call_ns: &[String], candidate_ns: &[String]) -> bool {
+    if call_ns.is_empty() || call_ns.len() > candidate_ns.len() {
+        return false;
+    }
+
+    let offset = candidate_ns.len() - call_ns.len();
+    for (idx, segment) in call_ns.iter().enumerate() {
+        if !candidate_ns[offset + idx].eq_ignore_ascii_case(segment) {
+            return false;
         }
     }
 
-    candidates.first().copied()
+    true
+}
+
+fn namespace_equals(a: &[String], b: &[String]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    a.iter()
+        .zip(b.iter())
+        .all(|(lhs, rhs)| lhs.eq_ignore_ascii_case(rhs))
+}
+
+fn namespace_shares_tail(a: &[String], b: &[String]) -> bool {
+    match (a.last(), b.last()) {
+        (Some(lhs), Some(rhs)) => lhs.eq_ignore_ascii_case(rhs),
+        _ => false,
+    }
 }
 
 fn compute_metrics(
@@ -431,37 +704,6 @@ fn compute_chokepoints(
         })
         .take(limit)
         .collect()
-}
-
-fn normalize_call_name(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let mut candidate = trimmed;
-    for prefix in ["self.", "cls.", "this."] {
-        if candidate.starts_with(prefix) {
-            candidate = &candidate[prefix.len()..];
-            break;
-        }
-    }
-
-    let parts: Vec<&str> = candidate
-        .split(|c: char| c == '.' || c == ':' || c == ' ')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-
-    let Some(last) = parts.last() else {
-        return None;
-    };
-
-    let clean = last.trim_matches(|c: char| c == '(' || c == ')' || c == '[' || c == ']');
-    if clean.is_empty() {
-        None
-    } else {
-        Some(clean.to_string())
-    }
 }
 
 pub fn canonicalize_path(path: &Path) -> PathBuf {

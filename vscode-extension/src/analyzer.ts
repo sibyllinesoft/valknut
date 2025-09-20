@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 export interface AnalyzeOptions {
     onProgress?: (message: string) => void;
@@ -84,6 +85,55 @@ export class ValknutAnalyzer {
                 process.kill();
             });
         });
+    }
+
+    async exportHtmlReport(destination: string, reportPath?: string): Promise<void> {
+        const config = vscode.workspace.getConfiguration('valknut');
+        const executablePath = config.get<string>('executablePath', 'valknut');
+
+        const workspaceRoot =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+            (reportPath ? path.dirname(reportPath) : undefined);
+
+        if (!workspaceRoot) {
+            throw new Error('Unable to resolve a workspace folder for export.');
+        }
+
+        const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'valknut-export-'));
+        const args = [
+            'analyze',
+            workspaceRoot,
+            '--out',
+            tempDir,
+            '--format',
+            'html',
+            '--quiet',
+        ];
+
+        try {
+            await this.runValknutProcess(executablePath, args, workspaceRoot);
+
+            const htmlFile = await this.findNewestHtml(tempDir);
+            if (!htmlFile) {
+                throw new Error('Valknut did not produce an HTML report.');
+            }
+
+            const destinationDir = path.dirname(destination);
+            await fs.promises.mkdir(destinationDir, { recursive: true });
+            await fs.promises.copyFile(htmlFile, destination);
+
+            const entries = await fs.promises.readdir(tempDir);
+            for (const entry of entries) {
+                const sourcePath = path.join(tempDir, entry);
+                if (path.resolve(sourcePath) === path.resolve(htmlFile)) {
+                    continue;
+                }
+                const targetPath = path.join(destinationDir, entry);
+                await this.copyRecursive(sourcePath, targetPath);
+            }
+        } finally {
+            await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+        }
     }
 
     async analyzeFile(filePath: string, options: AnalyzeOptions = {}): Promise<string | null> {
@@ -204,5 +254,75 @@ export class ValknutAnalyzer {
                 resolve(null);
             });
         });
+    }
+
+    private runValknutProcess(executablePath: string, args: string[], cwd: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const child = cp.spawn(executablePath, args, {
+                cwd,
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+
+            let stderr = '';
+            child.stderr?.on('data', (data: Buffer) => {
+                stderr += data.toString();
+            });
+
+            child.on('error', (error) => {
+                reject(
+                    error.message.includes('ENOENT')
+                        ? new Error(`Valknut executable not found at '${executablePath}'.`) : error,
+                );
+            });
+
+            child.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`Valknut export failed with code ${code}: ${stderr.trim()}`));
+                }
+            });
+        });
+    }
+
+    private async findNewestHtml(tempDir: string): Promise<string | null> {
+        const entries = await fs.promises.readdir(tempDir);
+        const htmlFiles: { path: string; mtime: number }[] = [];
+
+        for (const entry of entries) {
+            if (!entry.endsWith('.html')) {
+                continue;
+            }
+
+            const fullPath = path.join(tempDir, entry);
+            const stats = await fs.promises.stat(fullPath);
+            htmlFiles.push({ path: fullPath, mtime: stats.mtimeMs });
+        }
+
+        if (htmlFiles.length === 0) {
+            return null;
+        }
+
+        htmlFiles.sort((a, b) => b.mtime - a.mtime);
+        return htmlFiles[0].path;
+    }
+
+    private async copyRecursive(source: string, destination: string): Promise<void> {
+        const stats = await fs.promises.stat(source);
+
+        if (stats.isDirectory()) {
+            await fs.promises.mkdir(destination, { recursive: true });
+            const children = await fs.promises.readdir(source);
+            for (const child of children) {
+                await this.copyRecursive(
+                    path.join(source, child),
+                    path.join(destination, child),
+                );
+            }
+            return;
+        }
+
+        await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+        await fs.promises.copyFile(source, destination);
     }
 }

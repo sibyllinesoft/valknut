@@ -2,8 +2,8 @@
 
 use chrono;
 use serde_json;
-use std::path::Path;
-use tracing::{error, info};
+use std::path::{Path, PathBuf};
+use tracing::{error, info, warn};
 
 // Type aliases to reduce complexity
 type DynError = Box<dyn std::error::Error>;
@@ -13,11 +13,11 @@ use valknut_rs::api::{
     config_types::AnalysisConfig, engine::ValknutEngine, results::AnalysisResults,
 };
 use valknut_rs::core::config::ReportFormat;
+use valknut_rs::core::errors::ValknutError;
 use valknut_rs::core::scoring::Priority;
 use valknut_rs::io::reports::ReportGenerator;
 
 use crate::mcp::protocol::{error_codes, ContentItem, ToolResult};
-// use crate::cli::config::StructureConfig;
 
 /// Parameters for analyze_code tool
 #[derive(serde::Deserialize)]
@@ -94,19 +94,7 @@ pub async fn execute_analyze_code(params: AnalyzeCodeParams) -> Result<ToolResul
         ]);
 
     // Initialize the analysis engine
-    let mut engine = match ValknutEngine::new(analysis_config).await {
-        Ok(engine) => engine,
-        Err(e) => {
-            error!("Failed to initialize analysis engine: {}", e);
-            return Err((
-                error_codes::ANALYSIS_ERROR,
-                format!("Failed to initialize analysis engine: {}", e),
-            ));
-        }
-    };
-
-    // Run analysis
-    let results = match engine.analyze_directory(&path).await {
+    let results = match analyze_with_cache(&analysis_config, path).await {
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
@@ -158,24 +146,10 @@ pub async fn execute_refactoring_suggestions(
         .with_confidence_threshold(0.5) // Lower threshold for suggestions
         .with_max_files(100); // Focus on relevant files only
 
-    // Initialize the analysis engine
-    let mut engine = match ValknutEngine::new(analysis_config).await {
-        Ok(engine) => engine,
-        Err(e) => {
-            error!("Failed to initialize analysis engine: {}", e);
-            return Err((
-                error_codes::ANALYSIS_ERROR,
-                format!("Failed to initialize analysis engine: {}", e),
-            ));
-        }
-    };
-
-    // Run analysis on the specific file or directory containing the entity
     let path = Path::new(&file_path);
-    let results = match engine
-        .analyze_directory(path.parent().unwrap_or(path))
-        .await
-    {
+    let analysis_target = path.parent().unwrap_or(path);
+
+    let results = match analyze_with_cache(&analysis_config, analysis_target).await {
         Ok(results) => results,
         Err(e) => {
             error!("Analysis failed: {}", e);
@@ -207,6 +181,14 @@ pub async fn execute_refactoring_suggestions(
             text: formatted_suggestions,
         }],
     })
+}
+
+async fn analyze_with_cache(
+    config: &AnalysisConfig,
+    path: &Path,
+) -> Result<AnalysisResults, ValknutError> {
+    let mut engine = ValknutEngine::new(config.clone()).await?;
+    engine.analyze_directory(path).await
 }
 
 /// Format analysis results according to requested format

@@ -3,7 +3,7 @@
 //! This module provides intelligent refactoring suggestions by using scribe-analyzer to bundle
 //! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
 
-use crate::api::results::AnalysisResults;
+use crate::core::pipeline::AnalysisResults;
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -879,7 +879,7 @@ fn html_escape(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::results::*;
+    use crate::core::pipeline::*;
     use crate::core::scoring::Priority;
     use std::path::PathBuf;
 
@@ -1184,6 +1184,13 @@ mod tests {
                 high_priority: 2,
                 critical: 1,
                 avg_refactoring_score: 3.2,
+                total_files: 10,
+                total_entities: 50,
+                total_lines_of_code: 1_500,
+                languages: vec!["Rust".to_string()],
+                total_issues: 3,
+                high_priority_issues: 2,
+                critical_issues: 1,
             },
             refactoring_candidates: vec![],
             refactoring_candidates_by_file: vec![],

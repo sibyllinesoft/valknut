@@ -32,9 +32,9 @@ const mockUnifiedHierarchyData = {
           "children": [
             {
               "type": "file",
-              "name": "pipeline_config.rs",
-              "id": "file-pipeline-config",
-              "path": "src/core/pipeline_config.rs",
+              "name": "pipeline_executor.rs",
+              "id": "file-pipeline_executor",
+              "path": "src/core/pipeline/pipeline_executor.rs",
               "priority": "Critical",
               "avg_score": 12.4,
               "avgScore": 12.4,
@@ -43,9 +43,9 @@ const mockUnifiedHierarchyData = {
               "children": [
                 {
                   "type": "entity", 
-                  "name": "validate_configuration",
-                  "id": "entity-validate-config",
-                  "entity_id": "src/core/pipeline_config.rs:function:validate_configuration",
+                  "name": "evaluate_quality_gates",
+                  "id": "entity-evaluate-gates",
+                  "entity_id": "src/core/pipeline/pipeline_executor.rs:function:evaluate_quality_gates",
                   "priority": "Critical",
                   "score": 15.7,
                   "issue_count": 3,

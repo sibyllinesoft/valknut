@@ -29,8 +29,9 @@ src/tree-component/          # Organized React components
 
 tests/                       # Comprehensive test suite
 ├── unit/                    # Unit tests for utilities and components
-├── integration/             # Integration tests with real valknut data
-└── setup.js                 # Test environment configuration
+├── integration/             # Bundle compatibility checks
+├── setup.js                 # Test environment configuration
+└── playwright.e2e.test.ts   # Browser smoke tests using Playwright API
 
 dist/                        # Built bundles (created by build)
 ├── react-tree-bundle.min.js      # Production bundle
@@ -75,25 +76,27 @@ bun test tests/unit/treeUtils.test.js
 
 **Unit Tests** (`tests/unit/`):
 - `treeUtils.test.js` - ID assignment logic, validation, severity calculation
-- `CodeAnalysisTree.test.jsx` - React component behavior and rendering
+- `CodeAnalysisTree.spec.jsx` - React component behavior and rendering
 
 **Integration Tests** (`tests/integration/`):
-- `valknutIntegration.test.js` - Real valknut data structures and workflows
-- Performance tests with large datasets
-- Edge case handling for malformed data
+- `code-analysis-tree.bundle.test.js` - Validates the bundled tree component in a simulated browser
+
+**End-to-End (Playwright)** (`tests/playwright.e2e.test.ts`):
+- Launches Chromium headless against the sample HTML report and verifies metrics/tree visibility
 
 ### React Component Testing
 ```javascript
 // Testing with real valknut data structures
 import { CodeAnalysisTree } from '../../src/tree-component/CodeAnalysisTree.jsx';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 
-test('renders valknut unified hierarchy', () => {
+test('renders valknut unified hierarchy', async () => {
   const data = { unifiedHierarchy: sampleTreeData };
   render(<CodeAnalysisTree data={data} />);
-  
-  expect(screen.getByTestId('mock-tree')).toBeInTheDocument();
-  expect(screen.getByTestId('tree-node-folder-src')).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(screen.getByRole('treeitem', { name: /src/i })).toBeInTheDocument();
+  });
 });
 ```
 

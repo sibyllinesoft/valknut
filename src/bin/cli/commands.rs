@@ -3,7 +3,11 @@
 //! This module contains the main command execution logic, analysis operations,
 //! and progress tracking functionality.
 
-use crate::cli::args::*;
+use crate::cli::args::{
+    AdvancedCloneArgs, AIFeaturesArgs, AnalyzeArgs, AnalysisControlArgs, CloneDetectionArgs,
+    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, QualityGateArgs,
+    SurveyVerbosity, ValidateConfigArgs,
+};
 use crate::cli::config_layer::build_layered_valknut_config;
 use anyhow;
 use chrono;
@@ -29,8 +33,6 @@ use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, QualityGa
 use valknut_rs::core::scoring::Priority;
 use valknut_rs::detectors::structure::StructureConfig;
 use valknut_rs::io::reports::ReportGenerator;
-use valknut_rs::live::cli::{LiveReachArgs, LiveReachCli};
-use valknut_rs::live::LiveReachConfig;
 use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -2199,20 +2201,6 @@ async fn run_oracle_analysis(
 #[allow(dead_code)]
 async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
     generate_reports_with_oracle(result, &None, args).await
-}
-
-/// Live reachability analysis command
-pub async fn live_reach_command(args: LiveReachArgs) -> anyhow::Result<()> {
-    // Load configuration (for now use default)
-    let config = LiveReachConfig::default();
-
-    // Create CLI executor and run command
-    let cli = LiveReachCli::new(config);
-    cli.execute(args)
-        .await
-        .map_err(|e| anyhow::anyhow!("Live reachability analysis failed: {}", e))?;
-
-    Ok(())
 }
 
 #[cfg(test)]

@@ -34,7 +34,7 @@ function createDistDirectory() {
 
 function buildBundle(mode = 'production') {
   const isProduction = mode === 'production';
-  const outputFile = isProduction ? 'react-tree-bundle.min.js' : 'react-tree-bundle.debug.js';
+  const outputFile = isProduction ? 'react-tree-bundle.js' : 'react-tree-bundle.debug.js';
   
   log(`🔨 Building ${mode} bundle...`, colors.yellow);
   
@@ -45,9 +45,6 @@ function buildBundle(mode = 'production') {
       '--outfile', `dist/${outputFile}`,
       '--format', 'iife',
       '--global-name', 'ReactTreeBundle',
-      '--external', 'react',
-      '--external', 'react-dom', 
-      '--external', 'react-arborist',
       ...(isProduction ? ['--minify'] : ['--sourcemap'])
     ],
     stdout: 'pipe',
@@ -77,7 +74,7 @@ function buildBundle(mode = 'production') {
 
 function addGlobalWrappers(mode = 'production') {
   const isProduction = mode === 'production';
-  const outputFile = isProduction ? 'react-tree-bundle.min.js' : 'react-tree-bundle.debug.js';
+  const outputFile = isProduction ? 'react-tree-bundle.js' : 'react-tree-bundle.debug.js';
   const filePath = `dist/${outputFile}`;
   
   try {
@@ -182,7 +179,7 @@ function copyCompatibilityFiles() {
     <script crossorigin src="../react-arborist.min.js"></script>
     
     <!-- Include our bundle -->
-    <script src="./react-tree-bundle.min.js"></script>
+    <script src="./react-tree-bundle.js"></script>
     
     <script>
         // Test data
@@ -233,7 +230,7 @@ function copyCompatibilityFiles() {
 
 function validateBundle(mode = 'production') {
   const isProduction = mode === 'production';
-  const outputFile = isProduction ? 'react-tree-bundle.min.js' : 'react-tree-bundle.debug.js';
+  const outputFile = isProduction ? 'react-tree-bundle.js' : 'react-tree-bundle.debug.js';
   const filePath = `dist/${outputFile}`;
   
   try {
@@ -287,7 +284,7 @@ async function main() {
       copyCompatibilityFiles();
       log('🎉 Build completed successfully!', colors.green);
       log('📁 Output files:', colors.cyan);
-      log('  - dist/react-tree-bundle.min.js (production)', colors.cyan);
+      log('  - dist/react-tree-bundle.js (production)', colors.cyan);
       log('  - dist/react-tree-bundle.debug.js (development)', colors.cyan);
       log('  - dist/test.html (for testing)', colors.cyan);
     } else {

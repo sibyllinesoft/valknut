@@ -18,11 +18,12 @@ use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use crate::detectors::structure::{StructureConfig, StructureExtractor};
 use std::sync::Arc;
 
-use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
+use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
 use super::pipeline_results::{
-    AnalysisSummary, ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics,
-    MemoryStats, PipelineResults, PipelineStatistics, PipelineStatus, ScoringResults,
+    ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics, MemoryStats, PipelineResults,
+    PipelineStatistics, PipelineStatus, ScoringResults,
 };
+use crate::core::pipeline::AnalysisSummary;
 use super::pipeline_stages::AnalysisStages;
 
 /// Progress callback function type
@@ -71,7 +72,7 @@ impl AnalysisPipeline {
         let ast_service = Arc::new(AstService::new());
 
         let stages = if valknut_config.denoise.enabled && analysis_config.enable_lsh_analysis {
-            use crate::core::config::DedupeConfig;
+            use crate::detectors::lsh::config::DedupeConfig;
             use crate::detectors::lsh::LshExtractor;
 
             // Create LSH extractor with denoising configuration
@@ -509,7 +510,37 @@ impl AnalysisPipeline {
             }
         }
 
+        let files_processed = total_files;
+        let entities_analyzed = total_entities;
+        let refactoring_needed = refactoring.opportunities_count;
+        let high_priority = high_priority_issues;
+        let critical = critical_issues;
+        let avg_refactoring_score = if refactoring_needed > 0 {
+            refactoring
+                .detailed_results
+                .iter()
+                .map(|result| result.refactoring_score)
+                .sum::<f64>()
+                / refactoring_needed as f64
+        } else {
+            0.0
+        };
+
+        let code_health_score = if total_entities > 0 {
+            let penalty = (total_issues as f64 / total_entities as f64).min(1.0);
+            (1.0 - penalty).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+
         AnalysisSummary {
+            files_processed,
+            entities_analyzed,
+            refactoring_needed,
+            high_priority,
+            critical,
+            avg_refactoring_score,
+            code_health_score,
             total_files,
             total_entities,
             total_lines_of_code,
@@ -636,17 +667,33 @@ impl AnalysisPipeline {
             })
             .count();
 
+        let critical_issues = scoring_files
+            .iter()
+            .filter(|result| result.priority == crate::core::scoring::Priority::Critical)
+            .count();
+
+        let code_health_score = if total_entities > 0 {
+            let penalty = (priority_counts as f64 / total_entities as f64).min(1.0);
+            (1.0 - penalty).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+
         let summary = AnalysisSummary {
+            files_processed: total_entities,
+            entities_analyzed: total_entities,
+            refactoring_needed: priority_counts,
+            high_priority: high_priority,
+            critical: critical_issues,
+            avg_refactoring_score: 0.0,
+            code_health_score,
             total_files: total_entities,
             total_entities,
             total_lines_of_code: 0,
             languages: Vec::new(),
             total_issues: priority_counts,
             high_priority_issues: high_priority,
-            critical_issues: scoring_files
-                .iter()
-                .filter(|result| result.priority == crate::core::scoring::Priority::Critical)
-                .count(),
+            critical_issues,
         };
 
         let placeholder = ComprehensiveAnalysisResult {
@@ -710,6 +757,8 @@ impl AnalysisPipeline {
                 memory_stats: MemoryStats {
                     current_memory_bytes: 0,
                     peak_memory_bytes: 0,
+                    final_memory_bytes: 0,
+                    efficiency_score: 1.0,
                 },
                 files_processed: total_entities,
                 total_duration_ms: 0,
@@ -747,6 +796,8 @@ impl AnalysisPipeline {
                 memory_stats: MemoryStats {
                     current_memory_bytes: 0,
                     peak_memory_bytes: 0,
+                    final_memory_bytes: 0,
+                    efficiency_score: 1.0,
                 },
                 files_processed: results.summary.total_files,
                 total_duration_ms: (results.processing_time * 1000.0) as u64,
@@ -798,11 +849,239 @@ impl AnalysisPipeline {
         config: &QualityGateConfig,
         results: &ComprehensiveAnalysisResult,
     ) -> QualityGateResult {
-        // Placeholder implementation
+        if !config.enabled {
+            return QualityGateResult {
+                passed: true,
+                violations: Vec::new(),
+                overall_score: results.health_metrics.overall_health_score,
+            };
+        }
+
+        let mut violations = Vec::new();
+        let mut penalty = 0.0;
+
+        // Helper closure to map ratio to severity labels
+        let severity_from_ratio = |ratio: f64| -> String {
+            if ratio >= 0.5 {
+                "critical".to_string()
+            } else if ratio >= 0.25 {
+                "high".to_string()
+            } else if ratio >= 0.1 {
+                "medium".to_string()
+            } else {
+                "low".to_string()
+            }
+        };
+
+        let pick_top_files = |paths: Vec<String>| {
+            paths
+                .into_iter()
+                .map(PathBuf::from)
+                .take(5)
+                .collect::<Vec<PathBuf>>()
+        };
+
+        // Complexity score gate (lower is better)
+        if results.health_metrics.complexity_score > config.max_complexity_score {
+            let delta = results.health_metrics.complexity_score - config.max_complexity_score;
+            let ratio = delta / config.max_complexity_score.max(1.0);
+            penalty += (ratio * 15.0).min(25.0);
+
+            let mut offenders: Vec<_> = results.complexity.detailed_results.iter().collect();
+            offenders.sort_by(|a, b| {
+                b.metrics
+                    .cyclomatic()
+                    .partial_cmp(&a.metrics.cyclomatic())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let affected_files = pick_top_files(
+                offenders
+                    .into_iter()
+                    .map(|entry| entry.file_path.clone())
+                    .collect(),
+            );
+
+            violations.push(QualityGateViolation {
+                rule_name: "complexity_score".to_string(),
+                description: format!(
+                    "Average complexity {:.1} exceeds allowed {:.1}",
+                    results.health_metrics.complexity_score,
+                    config.max_complexity_score
+                ),
+                current_value: results.health_metrics.complexity_score,
+                threshold: config.max_complexity_score,
+                severity: severity_from_ratio(ratio),
+                affected_files,
+                recommended_actions: vec![
+                    "Refactor the highest-complexity functions to smaller, cohesive units".to_string(),
+                    "Introduce helper methods to reduce cyclomatic paths".to_string(),
+                ],
+            });
+        }
+
+        // Technical debt ratio gate (lower is better)
+        if results.health_metrics.technical_debt_ratio > config.max_technical_debt_ratio {
+            let delta =
+                results.health_metrics.technical_debt_ratio - config.max_technical_debt_ratio;
+            let ratio = delta / config.max_technical_debt_ratio.max(1.0);
+            penalty += (ratio * 10.0).min(20.0);
+
+            let mut high_debt: Vec<_> = results.complexity.detailed_results.iter().collect();
+            high_debt.sort_by(|a, b| {
+                b.metrics
+                    .technical_debt_score
+                    .partial_cmp(&a.metrics.technical_debt_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let affected_files = pick_top_files(
+                high_debt
+                    .into_iter()
+                    .map(|entry| entry.file_path.clone())
+                    .collect(),
+            );
+
+            violations.push(QualityGateViolation {
+                rule_name: "technical_debt_ratio".to_string(),
+                description: format!(
+                    "Technical debt ratio {:.1}% exceeds allowed {:.1}%",
+                    results.health_metrics.technical_debt_ratio,
+                    config.max_technical_debt_ratio
+                ),
+                current_value: results.health_metrics.technical_debt_ratio,
+                threshold: config.max_technical_debt_ratio,
+                severity: severity_from_ratio(ratio),
+                affected_files,
+                recommended_actions: vec![
+                    "Schedule debt-repayment tasks for the modules with the highest debt score".to_string(),
+                    "Add regression tests before refactoring debt-heavy code".to_string(),
+                ],
+            });
+        }
+
+        // Maintainability gate (higher is better)
+        if results.health_metrics.maintainability_score < config.min_maintainability_score {
+            let delta = config.min_maintainability_score - results.health_metrics.maintainability_score;
+            let ratio = delta / config.min_maintainability_score.max(1.0);
+            penalty += (ratio * 12.0).min(20.0);
+
+            let mut low_maint: Vec<_> = results.complexity.detailed_results.iter().collect();
+            low_maint.sort_by(|a, b| {
+                a.metrics
+                    .maintainability_index
+                    .partial_cmp(&b.metrics.maintainability_index)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let affected_files = pick_top_files(
+                low_maint
+                    .into_iter()
+                    .map(|entry| entry.file_path.clone())
+                    .collect(),
+            );
+
+            violations.push(QualityGateViolation {
+                rule_name: "maintainability_score".to_string(),
+                description: format!(
+                    "Maintainability score {:.1} fell below required {:.1}",
+                    results.health_metrics.maintainability_score,
+                    config.min_maintainability_score
+                ),
+                current_value: results.health_metrics.maintainability_score,
+                threshold: config.min_maintainability_score,
+                severity: severity_from_ratio(ratio),
+                affected_files,
+                recommended_actions: vec![
+                    "Document complex modules and add unit tests to stabilise behaviour".to_string(),
+                    "Break large files into well-scoped components".to_string(),
+                ],
+            });
+        }
+
+        let critical_issues = results.summary.critical_issues.max(results.summary.critical);
+        if critical_issues as usize > config.max_critical_issues {
+            let delta = critical_issues as f64 - config.max_critical_issues as f64;
+            let ratio = delta / config.max_critical_issues.max(1) as f64;
+            penalty += (ratio * 8.0).min(15.0);
+
+            let mut critical_files: Vec<_> = results.refactoring.detailed_results.iter().collect();
+            critical_files.sort_by(|a, b| {
+                b.refactoring_score
+                    .partial_cmp(&a.refactoring_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let affected_files = pick_top_files(
+                critical_files
+                    .into_iter()
+                    .map(|entry| entry.file_path.clone())
+                    .collect(),
+            );
+
+            violations.push(QualityGateViolation {
+                rule_name: "critical_issues".to_string(),
+                description: format!(
+                    "{} critical issues exceed allowed {}",
+                    critical_issues, config.max_critical_issues
+                ),
+                current_value: critical_issues as f64,
+                threshold: config.max_critical_issues as f64,
+                severity: severity_from_ratio(ratio),
+                affected_files,
+                recommended_actions: vec![
+                    "Prioritise fixes for critical refactoring recommendations".to_string(),
+                    "Pull the highest scoring files into an immediate remediation sprint".to_string(),
+                ],
+            });
+        }
+
+        let high_priority_issues = results.summary.high_priority_issues.max(results.summary.high_priority);
+        if high_priority_issues as usize > config.max_high_priority_issues {
+            let delta = high_priority_issues as f64 - config.max_high_priority_issues as f64;
+            let ratio = delta / config.max_high_priority_issues.max(1) as f64;
+            penalty += (ratio * 5.0).min(12.0);
+
+            let mut high_priority_files: Vec<_> = results.refactoring.detailed_results.iter().collect();
+            high_priority_files.sort_by(|a, b| {
+                b.refactoring_score
+                    .partial_cmp(&a.refactoring_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let affected_files = pick_top_files(
+                high_priority_files
+                    .into_iter()
+                    .map(|entry| entry.file_path.clone())
+                    .collect(),
+            );
+
+            violations.push(QualityGateViolation {
+                rule_name: "high_priority_issues".to_string(),
+                description: format!(
+                    "{} high-priority issues exceed allowed {}",
+                    high_priority_issues, config.max_high_priority_issues
+                ),
+                current_value: high_priority_issues as f64,
+                threshold: config.max_high_priority_issues as f64,
+                severity: severity_from_ratio(ratio),
+                affected_files,
+                recommended_actions: vec![
+                    "Schedule remediation tasks for the highest scoring files".to_string(),
+                    "Pair with senior maintainers to reduce backlog of high-priority fixes".to_string(),
+                ],
+            });
+        }
+
+        let mut overall_score = results.health_metrics.overall_health_score - penalty;
+        if overall_score < 0.0 {
+            overall_score = 0.0;
+        }
+
         QualityGateResult {
-            passed: true,
-            violations: Vec::new(),
-            overall_score: results.health_metrics.overall_health_score,
+            passed: violations.is_empty(),
+            violations,
+            overall_score,
         }
     }
 
@@ -815,68 +1094,58 @@ impl AnalysisPipeline {
 
         let mut scoring_results = Vec::new();
 
+        // Helper closure to clamp values into scoring range
+        let clamp_score = |value: f64| value.clamp(0.0, 100.0);
+
         // Convert complexity analysis results to scoring results
         for complexity_result in &results.complexity.detailed_results {
             let entity_id = format!(
                 "{}:{}:{}",
                 complexity_result.file_path,
-                "function", // Use generic type since entity_type field doesn't exist
+                complexity_result.entity_type,
                 complexity_result.entity_name
             );
 
-            // Map complexity metrics to scoring categories
+            let metrics = &complexity_result.metrics;
+
+            // Normalise metrics against reasonable thresholds
+            let cyclomatic_score = clamp_score((metrics.cyclomatic() / 10.0) * 40.0);
+            let cognitive_score = clamp_score((metrics.cognitive() / 15.0) * 30.0);
+            let nesting_score = clamp_score(metrics.max_nesting_depth * 6.0);
+            let debt_score = clamp_score(metrics.technical_debt_score);
+            let maintainability_penalty = clamp_score(100.0 - metrics.maintainability_index);
+
             let mut category_scores = HashMap::new();
-            category_scores.insert(
-                "complexity".to_string(),
-                (complexity_result.metrics.cyclomatic() + complexity_result.metrics.cognitive())
-                    / 2.0,
-            );
+            category_scores.insert("complexity".to_string(), cyclomatic_score);
+            category_scores.insert("cognitive".to_string(), cognitive_score);
+            category_scores.insert("structure".to_string(), nesting_score);
+            category_scores.insert("debt".to_string(), debt_score);
+            category_scores.insert("maintainability".to_string(), maintainability_penalty);
 
-            if complexity_result.metrics.max_nesting_depth > 0.0 {
-                category_scores.insert(
-                    "structure".to_string(),
-                    complexity_result.metrics.max_nesting_depth,
-                );
-            }
-
-            // Map individual features to contributions
             let mut feature_contributions = HashMap::new();
-            feature_contributions.insert(
-                "cyclomatic_complexity".to_string(),
-                complexity_result.metrics.cyclomatic(),
-            );
-            feature_contributions.insert(
-                "cognitive_complexity".to_string(),
-                complexity_result.metrics.cognitive(),
-            );
-            feature_contributions.insert(
-                "nesting_depth".to_string(),
-                complexity_result.metrics.max_nesting_depth,
-            );
-            feature_contributions.insert(
-                "lines_of_code".to_string(),
-                complexity_result.metrics.lines_of_code,
-            );
+            feature_contributions.insert("cyclomatic_complexity".to_string(), metrics.cyclomatic());
+            feature_contributions.insert("cognitive_complexity".to_string(), metrics.cognitive());
+            feature_contributions.insert("max_nesting_depth".to_string(), metrics.max_nesting_depth);
+            feature_contributions.insert("lines_of_code".to_string(), metrics.lines_of_code);
             feature_contributions.insert(
                 "technical_debt_score".to_string(),
-                complexity_result.metrics.technical_debt_score,
+                metrics.technical_debt_score,
             );
             feature_contributions.insert(
                 "maintainability_index".to_string(),
-                complexity_result.metrics.maintainability_index,
+                metrics.maintainability_index,
             );
 
-            // Calculate overall score based on complexity
-            let complexity_avg = (complexity_result.metrics.cyclomatic()
-                + complexity_result.metrics.cognitive())
-                / 2.0;
-            let overall_score =
-                complexity_avg + (complexity_result.metrics.max_nesting_depth * 0.5);
+            let weighted_overall = clamp_score(
+                cyclomatic_score * 0.30
+                    + cognitive_score * 0.25
+                    + nesting_score * 0.15
+                    + debt_score * 0.20
+                    + maintainability_penalty * 0.10,
+            );
 
-            // Determine priority based on overall score and issues
-            let priority = if !complexity_result.issues.is_empty() {
+            let mut priority = {
                 use crate::detectors::complexity::ComplexitySeverity;
-                // Use the severity of the complexity result itself since we can't easily find max
                 match complexity_result.severity {
                     ComplexitySeverity::Critical => Priority::Critical,
                     ComplexitySeverity::VeryHigh => Priority::High,
@@ -885,22 +1154,27 @@ impl AnalysisPipeline {
                     ComplexitySeverity::Moderate => Priority::Medium,
                     ComplexitySeverity::Low => Priority::Low,
                 }
-            } else if overall_score >= 20.0 {
-                Priority::Critical
-            } else if overall_score >= 15.0 {
-                Priority::High
-            } else if overall_score >= 10.0 {
-                Priority::Medium
-            } else if overall_score >= 5.0 {
-                Priority::Low
-            } else {
-                Priority::None
             };
 
-            // Calculate confidence based on data quality
-            let confidence = if complexity_result.metrics.lines_of_code > 10.0 {
-                0.9
-            } else if complexity_result.metrics.lines_of_code > 5.0 {
+            if complexity_result.issues.is_empty() {
+                priority = if weighted_overall >= 70.0 {
+                    Priority::Critical
+                } else if weighted_overall >= 55.0 {
+                    Priority::High
+                } else if weighted_overall >= 35.0 {
+                    Priority::Medium
+                } else if weighted_overall >= 20.0 {
+                    Priority::Low
+                } else {
+                    Priority::None
+                };
+            }
+
+            let confidence = if metrics.lines_of_code >= 30.0 {
+                0.95
+            } else if metrics.lines_of_code >= 15.0 {
+                0.85
+            } else if metrics.lines_of_code >= 5.0 {
                 0.7
             } else {
                 0.5
@@ -909,7 +1183,7 @@ impl AnalysisPipeline {
             let feature_count = feature_contributions.len();
             scoring_results.push(ScoringResult {
                 entity_id,
-                overall_score,
+                overall_score: weighted_overall,
                 priority,
                 category_scores,
                 feature_contributions,
@@ -940,16 +1214,15 @@ impl AnalysisPipeline {
             );
 
             // Calculate overall score based on refactoring needs
-            let overall_score = refactoring_score;
+            let overall_score = clamp_score(refactoring_score);
 
-            // Determine priority based on refactoring score
-            let priority = if refactoring_score >= 80.0 {
+            let priority = if overall_score >= 75.0 {
                 Priority::Critical
-            } else if refactoring_score >= 60.0 {
+            } else if overall_score >= 55.0 {
                 Priority::High
-            } else if refactoring_score >= 40.0 {
+            } else if overall_score >= 35.0 {
                 Priority::Medium
-            } else if refactoring_score >= 20.0 {
+            } else if overall_score >= 20.0 {
                 Priority::Low
             } else {
                 Priority::None

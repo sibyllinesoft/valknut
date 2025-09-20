@@ -28,16 +28,16 @@ const malformedUnifiedHierarchyData = {
           "children": [
             {
               "type": "file",
-              "name": "pipeline_config.rs",
-              "path": "src/core/pipeline_config.rs",
+              "name": "pipeline_executor.rs",
+              "path": "src/core/pipeline/pipeline_executor.rs",
               "priority": "Critical",
               "avg_score": 12.4,
               "avgScore": 12.4,
               "children": [
                 {
                   "type": "entity",
-                  "name": "validate_configuration",
-                  "entity_id": "src/core/pipeline_config.rs:function:validate_configuration",
+                  "name": "evaluate_quality_gates",
+                  "entity_id": "src/core/pipeline/pipeline_executor.rs:function:evaluate_quality_gates",
                   "priority": "Critical",
                   "score": 15.7,
                   "children": [
@@ -267,11 +267,11 @@ describe('Malformed Data Fix', () => {
     
     const file = coreFolder.children[0];
     expect(file.type).toBe('file');
-    expect(file.name).toBe('pipeline_config.rs');
+    expect(file.name).toBe('pipeline_executor.rs');
     
     const entity = file.children[0];
     expect(entity.type).toBe('entity');
-    expect(entity.name).toBe('validate_configuration');
+    expect(entity.name).toBe('evaluate_quality_gates');
     
     // Should have issues and suggestions
     expect(entity.children.length).toBeGreaterThan(0);

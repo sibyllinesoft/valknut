@@ -13,9 +13,9 @@
 //! - **refactoring**: Refactoring opportunity detection and ranking
 //! - **graph**: Dependency analysis and architectural metrics (v1.1)
 //!
-//! Experimental and work-in-progress detectors (clone detection, boilerplate
-//! learning) are tracked under `experimental` to avoid implying production
-//! readiness in the default analysis pipeline.
+//! Experimental concepts that are not yet production-ready should live on
+//! feature branches rather than in this crate to keep the public surface
+//! honest about supported capabilities.
 //!
 //! ## Usage
 //!

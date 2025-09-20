@@ -33,17 +33,20 @@ pub use pipeline_config::{
 };
 pub use pipeline_executor::{AnalysisPipeline, ExtractorRegistry, ProgressCallback};
 pub use pipeline_results::{
-    AnalysisSummary, ComplexityAnalysisResults, ComprehensiveAnalysisResult,
-    CoverageAnalysisResults, FileScore, HealthMetrics, ImpactAnalysisResults, MemoryStats,
-    PipelineResults, PipelineStatistics, PipelineStatus, RefactoringAnalysisResults, ResultSummary,
-    ScoringResults, StructureAnalysisResults,
+    ComplexityAnalysisResults, ComprehensiveAnalysisResult, CoverageAnalysisResults, FileScore,
+    HealthMetrics, ImpactAnalysisResults, PipelineResults, PipelineStatistics, PipelineStatus,
+    RefactoringAnalysisResults, ResultSummary, ScoringResults, StructureAnalysisResults,
 };
+pub use result_conversions::*;
+pub use result_types::*;
 pub use pipeline_stages::AnalysisStages;
 
 mod pipeline_config;
 mod pipeline_executor;
 mod pipeline_results;
 mod pipeline_stages;
+mod result_conversions;
+mod result_types;
 
 /// Additional tests for pipeline modules to improve coverage
 
@@ -95,7 +98,14 @@ mod tests {
             timestamp: chrono::Utc::now(),
             processing_time: 1.0,
             config: pipeline_config::AnalysisConfig::default(),
-            summary: pipeline_results::AnalysisSummary {
+            summary: AnalysisSummary {
+                files_processed: 1,
+                entities_analyzed: 1,
+                refactoring_needed: 0,
+                high_priority: 0,
+                critical: 0,
+                avg_refactoring_score: 0.0,
+                code_health_score: 1.0,
                 total_files: 1,
                 total_entities: 1,
                 total_lines_of_code: 100,

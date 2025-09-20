@@ -4,9 +4,10 @@ use serde_json::{self, Value};
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
-use super::common::{EntityKind, ParseIndex, ParsedEntity, SourceLocation};
+use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
+use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
 mod tests {
@@ -186,6 +187,31 @@ impl RustAdapter {
         })?;
 
         Ok(Self { parser, language })
+    }
+
+    fn parse_tree(&mut self, source_code: &str) -> Result<Tree> {
+        self.parser
+            .parse(source_code, None)
+            .ok_or_else(|| ValknutError::parse("rust", "Failed to parse Rust source"))
+    }
+
+    fn walk_tree<F>(node: Node, callback: &mut F)
+    where
+        F: FnMut(Node),
+    {
+        callback(node);
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            Self::walk_tree(child, callback);
+        }
+    }
+
+    fn node_text(node: &Node, source_code: &str) -> Result<String> {
+        Ok(node
+            .utf8_text(source_code.as_bytes())?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "))
     }
 
     /// Parse Rust source code and extract entities
@@ -728,6 +754,140 @@ impl RustAdapter {
             current = parent.parent();
         }
         false
+    }
+}
+
+impl LanguageAdapter for RustAdapter {
+    fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex> {
+        RustAdapter::parse_source(self, source, file_path)
+    }
+
+    fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parse_tree(source)?;
+        let mut calls = Vec::new();
+
+        Self::walk_tree(tree.root_node(), &mut |node| {
+            let target = match node.kind() {
+                "call_expression" => node.child_by_field_name("function"),
+                "macro_invocation" => node.child_by_field_name("macro"),
+                _ => None,
+            };
+
+            if let Some(candidate) = target.or_else(|| node.child(0)) {
+                if let Ok(text) = Self::node_text(&candidate, source) {
+                    let cleaned = text.trim();
+                    if !cleaned.is_empty() {
+                        calls.push(cleaned.to_string());
+                    }
+                }
+            }
+        });
+
+        calls.sort();
+        calls.dedup();
+        Ok(calls)
+    }
+
+    fn contains_boilerplate_patterns(
+        &mut self,
+        source: &str,
+        patterns: &[String],
+    ) -> Result<Vec<String>> {
+        let mut found: Vec<String> = patterns
+            .iter()
+            .filter(|pattern| !pattern.is_empty() && source.contains(pattern.as_str()))
+            .cloned()
+            .collect();
+
+        found.sort();
+        found.dedup();
+        Ok(found)
+    }
+
+    fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parse_tree(source)?;
+        let mut identifiers = Vec::new();
+
+        Self::walk_tree(tree.root_node(), &mut |node| match node.kind() {
+            "identifier" | "field_identifier" | "type_identifier" | "scoped_identifier"
+            | "lifetime" => {
+                if let Ok(text) = Self::node_text(&node, source) {
+                    let cleaned = text.trim();
+                    if !cleaned.is_empty() {
+                        identifiers.push(cleaned.trim_matches('"').to_string());
+                    }
+                }
+            }
+            _ => {}
+        });
+
+        identifiers.sort();
+        identifiers.dedup();
+        Ok(identifiers)
+    }
+
+    fn count_ast_nodes(&mut self, source: &str) -> Result<usize> {
+        let tree = self.parse_tree(source)?;
+        let mut count = 0usize;
+        Self::walk_tree(tree.root_node(), &mut |_| count += 1);
+        Ok(count)
+    }
+
+    fn count_distinct_blocks(&mut self, source: &str) -> Result<usize> {
+        let index = RustAdapter::parse_source(self, source, "<memory>")?;
+        Ok(index.count_distinct_blocks())
+    }
+
+    fn normalize_source(&mut self, source: &str) -> Result<String> {
+        let tree = self.parse_tree(source)?;
+        Ok(tree.root_node().to_sexp())
+    }
+
+    fn language_name(&self) -> &str {
+        "rust"
+    }
+
+    fn extract_imports(&mut self, source: &str) -> Result<Vec<ImportStatement>> {
+        let mut imports = Vec::new();
+
+        for (line_number, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+
+            if let Some(use_part) = trimmed.strip_prefix("use ") {
+                let use_part = use_part.trim_end_matches(';');
+
+                if let Some(brace_pos) = use_part.find('{') {
+                    let module = use_part[..brace_pos].trim().to_string();
+                    let items_part = &use_part[brace_pos + 1..];
+
+                    if let Some(close_brace) = items_part.find('}') {
+                        let items = &items_part[..close_brace];
+                        let specific_imports =
+                            Some(items.split(',').map(|s| s.trim().to_string()).collect());
+
+                        imports.push(ImportStatement {
+                            module,
+                            imports: specific_imports,
+                            import_type: "named".to_string(),
+                            line_number: line_number + 1,
+                        });
+                    }
+                } else {
+                    imports.push(ImportStatement {
+                        module: use_part.to_string(),
+                        imports: None,
+                        import_type: "module".to_string(),
+                        line_number: line_number + 1,
+                    });
+                }
+            }
+        }
+
+        Ok(imports)
     }
 }
 

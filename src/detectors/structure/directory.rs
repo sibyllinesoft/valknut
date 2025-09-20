@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use crate::core::errors::{Result, ValknutError};
 use crate::core::file_utils::FileReader;
+use crate::lang::registry::adapter_for_file;
+use tracing::warn;
 
 use super::config::{
     BranchReorgPack, DependencyEdge, DependencyGraph, DirectoryMetrics, DirectoryPartition,
@@ -361,6 +363,7 @@ impl DirectoryAnalyzer {
             let best_partition = self.find_optimal_bipartition(nodes, graph)?;
             Ok(vec![best_partition.0, best_partition.1])
         } else {
+            // TODO: replace this random fallback with multi-way partitioning (e.g. multi-level KL)
             // Fall back to simple random partitioning for larger k
             self.random_partition(nodes, k)
         }
@@ -958,168 +961,17 @@ impl DirectoryAnalyzer {
     /// Extract imports from source file
     fn extract_imports(&self, file_path: &Path) -> Result<Vec<ImportStatement>> {
         let content = FileReader::read_to_string(file_path)?;
-        let extension = file_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-
-        match extension {
-            "py" => self.extract_python_imports(&content),
-            "js" | "jsx" | "ts" | "tsx" => self.extract_javascript_imports(&content),
-            "rs" => self.extract_rust_imports(&content),
-            _ => Ok(Vec::new()),
-        }
-    }
-
-    /// Extract Python import statements
-    fn extract_python_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-
-            if let Some(import_part) = trimmed.strip_prefix("import ") {
-                // Handle: import module
-                let module = import_part
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                imports.push(ImportStatement {
-                    module,
-                    imports: None,
-                    import_type: "module".to_string(),
-                    line_number: line_number + 1,
-                });
-            } else if let Some(from_part) = trimmed.strip_prefix("from ") {
-                // Handle: from module import ...
-                if let Some(import_pos) = from_part.find(" import ") {
-                    let module = from_part[..import_pos].trim().to_string();
-                    let import_list = from_part[import_pos + 8..].trim();
-
-                    let specific_imports = if import_list == "*" {
-                        None // Star import
-                    } else {
-                        Some(
-                            import_list
-                                .split(',')
-                                .map(|s| s.trim().to_string())
-                                .collect(),
-                        )
-                    };
-
-                    imports.push(ImportStatement {
-                        module,
-                        imports: specific_imports,
-                        import_type: if import_list == "*" { "star" } else { "named" }.to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
+        match adapter_for_file(file_path) {
+            Ok(mut adapter) => adapter.extract_imports(&content),
+            Err(err) => {
+                warn!(
+                    "Directory analyzer could not create adapter for {}: {}",
+                    file_path.display(),
+                    err
+                );
+                Ok(Vec::new())
             }
         }
-
-        Ok(imports)
-    }
-
-    /// Extract JavaScript/TypeScript import statements  
-    fn extract_javascript_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                continue;
-            }
-
-            if let Some(import_part) = trimmed.strip_prefix("import ") {
-                // Handle various import patterns
-                if let Some(from_pos) = import_part.find(" from ") {
-                    let import_spec = import_part[..from_pos].trim();
-                    let module_part = import_part[from_pos + 6..]
-                        .trim()
-                        .trim_matches(['"', '\'', ';']);
-
-                    let specific_imports = if import_spec.starts_with('*') {
-                        None // Star import
-                    } else if import_spec.starts_with('{') && import_spec.ends_with('}') {
-                        // Named imports: { a, b, c }
-                        let inner = &import_spec[1..import_spec.len() - 1];
-                        Some(inner.split(',').map(|s| s.trim().to_string()).collect())
-                    } else {
-                        // Default import
-                        Some(vec![import_spec.to_string()])
-                    };
-
-                    imports.push(ImportStatement {
-                        module: module_part.to_string(),
-                        imports: specific_imports,
-                        import_type: if import_spec.starts_with('*') {
-                            "star"
-                        } else {
-                            "named"
-                        }
-                        .to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(imports)
-    }
-
-    /// Extract Rust use statements
-    fn extract_rust_imports(&self, content: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty lines
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                continue;
-            }
-
-            if let Some(use_part) = trimmed.strip_prefix("use ") {
-                let use_part = use_part.trim_end_matches(';');
-
-                if let Some(brace_pos) = use_part.find('{') {
-                    // Handle: use module::{item1, item2}
-                    let module = use_part[..brace_pos].trim().to_string();
-                    let items_part = &use_part[brace_pos + 1..];
-
-                    if let Some(close_brace) = items_part.find('}') {
-                        let items = &items_part[..close_brace];
-                        let specific_imports =
-                            Some(items.split(',').map(|s| s.trim().to_string()).collect());
-
-                        imports.push(ImportStatement {
-                            module,
-                            imports: specific_imports,
-                            import_type: "named".to_string(),
-                            line_number: line_number + 1,
-                        });
-                    }
-                } else {
-                    // Handle: use module::item
-                    imports.push(ImportStatement {
-                        module: use_part.to_string(),
-                        imports: None,
-                        import_type: "module".to_string(),
-                        line_number: line_number + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(imports)
     }
 
     /// Resolve import statement to local file path
@@ -1205,6 +1057,7 @@ mod tests {
     use crate::detectors::structure::config::{
         FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig, StructureToggles,
     };
+    use crate::lang::registry::adapter_for_language;
     use std::fs;
     use tempfile::TempDir;
 
@@ -1470,16 +1323,14 @@ def hello():
 
     #[test]
     fn test_extract_python_imports_basic() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let content = r#"import os
 import sys
 from pathlib import Path
 from collections import OrderedDict, defaultdict
 "#;
 
-        let imports = analyzer.extract_python_imports(content).unwrap();
+        let mut adapter = adapter_for_language("py").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 4);
 
@@ -1497,11 +1348,9 @@ from collections import OrderedDict, defaultdict
 
     #[test]
     fn test_extract_python_imports_star_import() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let content = "from module import *";
-        let imports = analyzer.extract_python_imports(content).unwrap();
+        let mut adapter = adapter_for_language("py").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].import_type, "star");
@@ -1510,15 +1359,13 @@ from collections import OrderedDict, defaultdict
 
     #[test]
     fn test_extract_javascript_imports_basic() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let content = r#"import React from 'react';
 import { useState, useEffect } from 'react';
 import * as utils from './utils';
 "#;
 
-        let imports = analyzer.extract_javascript_imports(content).unwrap();
+        let mut adapter = adapter_for_language("js").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].module, "react");
@@ -1528,15 +1375,13 @@ import * as utils from './utils';
 
     #[test]
     fn test_extract_rust_imports_basic() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let content = r#"use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use serde::{Serialize, Deserialize};
 "#;
 
-        let imports = analyzer.extract_rust_imports(content).unwrap();
+        let mut adapter = adapter_for_language("rs").unwrap();
+        let imports = adapter.extract_imports(content).unwrap();
 
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].module, "std::collections::HashMap");

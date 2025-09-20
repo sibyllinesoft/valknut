@@ -1,12 +1,11 @@
-//! I/O, Persistence, and Reporting Infrastructure
+//! I/O, Caching, and Reporting Infrastructure
 //!
 //! This module provides comprehensive I/O capabilities for valknut, including
-//! result caching, data persistence, and multi-format report generation.
+//! result caching and multi-format report generation.
 //!
 //! ## Key Components
 //!
 //! - **cache**: High-performance result caching to avoid redundant analysis
-//! - **persistence**: Optional database storage for analysis history and trends
 //! - **reports**: Multi-format report generation (HTML, JSON, Markdown, CSV)
 //!
 //! ## Report Formats
@@ -33,5 +32,4 @@
 //! ```
 
 pub mod cache;
-pub mod persistence;
 pub mod reports;

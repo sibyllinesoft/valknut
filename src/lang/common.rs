@@ -1,6 +1,7 @@
 //! Common AST and parsing abstractions.
 
 use crate::core::errors::Result;
+use crate::detectors::structure::config::ImportStatement;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -246,6 +247,11 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Get language name
     fn language_name(&self) -> &str;
+
+    /// Extract import statements from source code
+    fn extract_imports(&mut self, _source: &str) -> Result<Vec<ImportStatement>> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]

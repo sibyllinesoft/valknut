@@ -25,7 +25,7 @@ src/
 │   ├── config.rs     # ValknutConfig - internal config
 │   ├── pipeline/     # Multi-stage analysis pipeline
 │   │   ├── pipeline_executor.rs  # AnalysisPipeline - orchestrates stages
-│   │   ├── pipeline_config.rs    # Pipeline-specific config
+│   │   ├── quality.rs            # Pipeline quality gate types
 │   │   ├── pipeline_results.rs   # Internal result structures  
 │   │   └── pipeline_stages.rs    # AnalysisStages enum
 │   ├── scoring.rs    # FeatureNormalizer - statistical normalization
@@ -372,16 +372,6 @@ valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 ```bash  
 # Generate SonarQube-compatible reports
 valknut analyze --format sonarqube --out reports/ ./src
-```
-
-**Database Integration** (Optional):
-```rust
-#[cfg(feature = "database")]
-use crate::io::persistence::DatabaseBackend;
-
-// Store analysis results for trend analysis
-let db = DatabaseBackend::new(connection_string).await?;
-db.store_analysis_results(&results).await?;
 ```
 
 ---

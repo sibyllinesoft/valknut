@@ -569,57 +569,67 @@
             <div class="file-section" id="file-1">
                 <div class="file-header"><i data-lucide="file-code" class="icon"></i>core/pipeline/mod.rs</div>
                 <div class="file-content">
-                    <pre>pub use pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
+                    <pre>pub use crate::core::config::AnalysisConfig;
+pub use pipeline_executor::{AnalysisPipeline, ExtractorRegistry, ProgressCallback};
 pub use pipeline_results::{
-    ComprehensiveAnalysisResult, AnalysisSummary, StructureAnalysisResults,
-    ComplexityAnalysisResults, RefactoringAnalysisResults, ImpactAnalysisResults,
-    CoverageAnalysisResults, HealthMetrics, PipelineResults, PipelineStatistics, 
-    MemoryStats, ResultSummary, ScoringResults, FileScore, PipelineStatus
+    AnalysisSummary, CloneFragmentRecord, ClonePairRecord, ComplexityAnalysisResults,
+    ComprehensiveAnalysisResult, CoverageAnalysisResults, FileScore, HealthMetrics,
+    ImpactAnalysisResults, LshAnalysisResults, LshPerformanceMetrics, MemoryStats, PipelineResults,
+    PipelineStatistics, PipelineStatus, RefactoringAnalysisResults, ResultSummary, ScoringResults,
+    StructureAnalysisResults, TfIdfStats,
 };
-pub use pipeline_executor::{AnalysisPipeline, ProgressCallback, ExtractorRegistry};
 pub use pipeline_stages::AnalysisStages;
+pub use quality::{QualityGateConfig, QualityGateResult, QualityGateViolation};
 
-mod pipeline_config;
-mod pipeline_results; 
 mod pipeline_executor;
+mod pipeline_results;
 mod pipeline_stages;
+mod quality;
 
 /// Additional tests for pipeline modules to improve coverage
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    use std::fs;
-    
+
     #[tokio::test]
     async fn test_pipeline_fit_legacy_api() {
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let mut pipeline &#x3D; pipeline;
-        let result &#x3D; pipeline.fit(&amp;amp;[]).await;
-        assert!(result.is_ok());
+        use crate::core::errors::ValknutError;
+
+        let mut pipeline = AnalysisPipeline::default();
+        let result = pipeline.fit(&amp;[]).await;
+        match result {
+            Err(ValknutError::Validation { .. }) =&gt; {}
+            other =&gt; panic!(&quot;expected Validation error, got {:?}&quot;, other),
+        }
     }
 
     #[tokio::test]
     async fn test_pipeline_extractor_registry() {
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let registry &#x3D; pipeline.extractor_registry();
-        let extractors: Vec&amp;lt;_&amp;gt; &#x3D; registry.get_all_extractors().collect();
-        assert_eq!(extractors.len(), 0);
+        let pipeline = AnalysisPipeline::default();
+        let registry = pipeline.extractor_registry();
+        let extractor_count = registry.get_all_extractors().len();
+        assert!(
+            extractor_count &gt;= 3,
+            &quot;expected default extractors to be registered, got {}&quot;,
+            extractor_count
+        );
     }
 
     #[tokio::test]
     async fn test_pipeline_analyze_vectors_legacy() {
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let result &#x3D; pipeline.analyze_vectors(vec![]).await;
+        let pipeline = AnalysisPipeline::default();
+        let result = pipeline.analyze_vectors(vec![]).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_pipeline_status() {
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let status &#x3D; pipeline.get_status();
+        let pipeline = AnalysisPipeline::default();
+        let status = pipeline.get_status();
         assert!(status.ready);
         assert!(status.is_ready);
         assert!(status.config_valid);
@@ -627,18 +637,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_quality_gates_evaluation() {
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let config &#x3D; QualityGateConfig::default();
-        let results &#x3D; pipeline_results::ComprehensiveAnalysisResult {
-            analysis_id: &amp;quot;test&amp;quot;.to_string(),
+        let pipeline = AnalysisPipeline::default();
+        let config = QualityGateConfig::default();
+        let results = pipeline_results::ComprehensiveAnalysisResult {
+            analysis_id: &quot;test&quot;.to_string(),
             timestamp: chrono::Utc::now(),
             processing_time: 1.0,
-            config: pipeline_config::AnalysisConfig::default(),
+            config: AnalysisConfig::default(),
             summary: pipeline_results::AnalysisSummary {
                 total_files: 1,
                 total_entities: 1,
                 total_lines_of_code: 100,
-                languages: vec![&amp;quot;Rust&amp;quot;.to_string()],
+                languages: vec![&quot;Rust&quot;.to_string()],
                 total_issues: 0,
                 high_priority_issues: 0,
                 critical_issues: 0,
@@ -669,6 +679,7 @@ mod tests {
                 chokepoints: vec![],
                 clone_groups: vec![],
                 issues_count: 0,
+                entity_metrics: vec![],
             },
             lsh: pipeline_results::LshAnalysisResults {
                 enabled: false,
@@ -678,6 +689,13 @@ mod tests {
                 duplicate_count: 0,
                 denoising_enabled: false,
                 tfidf_stats: None,
+                auto_calibration_applied: None,
+                candidates_before_denoising: None,
+                candidates_after_denoising: None,
+                calibrated_threshold: None,
+                quality_score: None,
+                phase_filtering_stats: None,
+                performance_metrics: None,
             },
             coverage: pipeline_results::CoverageAnalysisResults {
                 enabled: false,
@@ -685,7 +703,7 @@ mod tests {
                 coverage_gaps: vec![],
                 gaps_count: 0,
                 overall_coverage_percentage: None,
-                analysis_method: &amp;quot;none&amp;quot;.to_string(),
+                analysis_method: &quot;none&quot;.to_string(),
             },
             health_metrics: pipeline_results::HealthMetrics {
                 overall_health_score: 88.0,
@@ -693,64 +711,47 @@ mod tests {
                 technical_debt_ratio: 10.0,
                 complexity_score: 15.0,
                 structure_quality_score: 90.0,
+                graph_risk_score: 5.0,
             },
         };
 
-        let gate_result &#x3D; pipeline.evaluate_quality_gates(&amp;amp;config, &amp;amp;results);
+        let gate_result = pipeline.evaluate_quality_gates(&amp;config, &amp;results);
         assert!(gate_result.passed);
     }
 
     #[tokio::test]
     async fn test_analyze_directory_integration() {
-        let temp_dir &#x3D; TempDir::new().unwrap();
-        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
-        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
-        
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let result &#x3D; pipeline.analyze_directory(temp_dir.path()).await;
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join(&quot;test.rs&quot;);
+        fs::write(&amp;file_path, &quot;fn main() { println!(\&quot;Hello\&quot;); }&quot;).unwrap();
+
+        let mut pipeline = AnalysisPipeline::default();
+        let result = pipeline.analyze_directory(temp_dir.path()).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_analyze_paths_with_progress() {
-        let temp_dir &#x3D; TempDir::new().unwrap();
-        let file_path &#x3D; temp_dir.path().join(&amp;quot;test.rs&amp;quot;);
-        fs::write(&amp;amp;file_path, &amp;quot;fn main() { println!(\&amp;quot;Hello\&amp;quot;); }&amp;quot;).unwrap();
-        
-        let pipeline &#x3D; AnalysisPipeline::default();
-        let paths &#x3D; vec![temp_dir.path().to_path_buf()];
-        
-        let progress_called &#x3D; std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let progress_called_clone &#x3D; progress_called.clone();
-        let progress_callback &#x3D; Some(Box::new(move |_msg: &amp;amp;str, _progress: f64| {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join(&quot;test.rs&quot;);
+        fs::write(&amp;file_path, &quot;fn main() { println!(\&quot;Hello\&quot;); }&quot;).unwrap();
+
+        let mut pipeline = AnalysisPipeline::default();
+        let paths = vec![temp_dir.path().to_path_buf()];
+
+        let progress_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let progress_called_clone = progress_called.clone();
+        let progress_callback = Some(Box::new(move |_msg: &amp;str, _progress: f64| {
             progress_called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
         }) as ProgressCallback);
-        
-        let result &#x3D; pipeline.analyze_paths(&amp;amp;paths, progress_callback).await;
+
+        let result = pipeline.analyze_paths(&amp;paths, progress_callback).await;
         assert!(result.is_ok());
         assert!(progress_called.load(std::sync::atomic::Ordering::SeqCst));
-    }
-}</pre>
+    }</pre>
                 </div>
             </div>
             <div class="file-section" id="file-2">
-                <div class="file-header"><i data-lucide="file-code" class="icon"></i>io/persistence.rs</div>
-                <div class="file-content">
-                    <pre>//! Persistence layer - placeholder.
-
-#[cfg(feature &#x3D; &amp;quot;database&amp;quot;)]
-#[derive(Debug, Default)]
-pub struct DatabaseBackend;
-
-#[cfg(feature &#x3D; &amp;quot;database&amp;quot;)]
-impl DatabaseBackend {
-    pub fn new() -&amp;gt; Self {
-        Self::default()
-    }
-}</pre>
-                </div>
-            </div>
-            <div class="file-section" id="file-3">
                 <div class="file-header"><i data-lucide="file-code" class="icon"></i>bin/mcp/mod.rs</div>
                 <div class="file-content">
                     <pre>//! MCP (Model Context Protocol) JSON-RPC server implementation for valknut.
@@ -767,7 +768,7 @@ pub use tools::*;
 pub use server::*;</pre>
                 </div>
             </div>
-            <div class="file-section" id="file-4">
+            <div class="file-section" id="file-3">
                 <div class="file-header"><i data-lucide="file-code" class="icon"></i>lang/mod.rs</div>
                 <div class="file-content">
                     <pre>//! Language-specific parsing and AST processing modules.

@@ -6,6 +6,8 @@
   "main": "src/tree-component/index.js",
   "scripts": {
     "test": "bun test",
+    "test:e2e": "bun test tests/playwright.e2e.test.ts",
+    "test:all": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "build": "bun run build:bundle",

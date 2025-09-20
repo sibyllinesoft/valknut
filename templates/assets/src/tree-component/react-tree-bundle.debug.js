@@ -31430,29 +31430,60 @@ Use the data prop if you want to provide your own handlers.`);
   var import_react32 = __toESM(require_react());
   var TreeNode = ({ node, style, innerRef, tree }) => {
     const data = node.data;
+    const iconRefs = import_react32.useRef([]);
+    iconRefs.current = [];
+    const registerIcon = (element, fallback) => {
+      if (element) {
+        iconRefs.current.push({ element, fallback });
+      }
+    };
     const isFolder = data.type === "folder";
     const isFile = data.type === "file";
     const isEntity = data.type === "entity";
     const isInfoRow = data.type === "info-row";
     const isIssueRow = data.type === "issue-row";
     const isSuggestionRow = data.type === "suggestion-row";
+    import_react32.useEffect(() => {
+      const pendingIcons = [...iconRefs.current];
+      const applyFallbacks = () => {
+        pendingIcons.forEach(({ element, fallback }) => {
+          if (!element) {
+            return;
+          }
+          const hasSvg = element.querySelector("svg");
+          if (!hasSvg) {
+            element.textContent = fallback;
+          }
+        });
+      };
+      if (typeof window !== "undefined" && window.lucide) {
+        window.lucide.createIcons();
+        window.requestAnimationFrame(applyFallbacks);
+      } else {
+        applyFallbacks();
+      }
+    }, [node.id, node.isOpen, data.type, data.name, data.priority]);
     if (isInfoRow || isIssueRow || isSuggestionRow) {
       const manualIndent2 = node.level * 24 + 16;
       let iconName2 = "info";
       let iconColor = "var(--text-secondary)";
       let backgroundColor = "transparent";
+      let iconFallbackSymbol2 = "ℹ️";
       if (isIssueRow) {
         iconName2 = "alert-triangle";
         iconColor = "var(--danger, #dc3545)";
         backgroundColor = "rgba(220, 53, 69, 0.05)";
+        iconFallbackSymbol2 = "⚠️";
       } else if (isSuggestionRow) {
         iconName2 = "lightbulb";
         iconColor = "var(--info, #007acc)";
         backgroundColor = "rgba(0, 123, 255, 0.05)";
+        iconFallbackSymbol2 = "\uD83D\uDCA1";
       } else if (isInfoRow) {
         iconName2 = "info";
         iconColor = "var(--success, #28a745)";
         backgroundColor = "rgba(40, 167, 69, 0.05)";
+        iconFallbackSymbol2 = "ℹ️";
       }
       let displayText = data.name;
       let scoreElement = null;
@@ -31491,6 +31522,7 @@ Use the data prop if you want to provide your own handlers.`);
         import_react32.default.createElement("i", {
           "data-lucide": iconName2,
           key: "icon",
+          ref: (el) => registerIcon(el, iconFallbackSymbol2),
           style: {
             width: "14px",
             height: "14px",
@@ -31589,21 +31621,7 @@ Use the data prop if you want to provide your own handlers.`);
           e.stopPropagation();
           tree.toggle(node.id);
         },
-        ref: (el) => {
-          if (el) {
-            if (!el.querySelector("svg")) {
-              el.textContent = fallbackSymbol;
-            }
-            if (typeof window !== "undefined" && window.lucide) {
-              setTimeout(() => {
-                window.lucide.createIcons();
-                if (!el.querySelector("svg")) {
-                  el.textContent = fallbackSymbol;
-                }
-              }, 50);
-            }
-          }
-        }
+        ref: (el) => registerIcon(el, fallbackSymbol)
       }));
     } else {
       children.push(import_react32.default.createElement("div", {
@@ -31612,13 +31630,18 @@ Use the data prop if you want to provide your own handlers.`);
       }));
     }
     let iconName = "function-square";
-    if (isFolder)
+    let iconFallbackSymbol = "\uD83D\uDD27";
+    if (isFolder) {
       iconName = "folder";
-    else if (isFile)
+      iconFallbackSymbol = "\uD83D\uDCC1";
+    } else if (isFile) {
       iconName = "file-code";
+      iconFallbackSymbol = "\uD83D\uDCC4";
+    }
     children.push(import_react32.default.createElement("i", {
       "data-lucide": iconName,
       key: "icon",
+      ref: (el) => registerIcon(el, iconFallbackSymbol),
       style: { width: "16px", height: "16px", marginRight: "0.5rem" }
     }));
     children.push(import_react32.default.createElement("span", {
@@ -31927,6 +31950,37 @@ Use the data prop if you want to provide your own handlers.`);
   // src/tree-component/CodeAnalysisTree.jsx
   var CodeAnalysisTree = ({ data }) => {
     const [treeData, setTreeData] = import_react33.useState([]);
+    const [filterText, setFilterText] = import_react33.useState("");
+    const filterTree = import_react33.useCallback((nodes, query) => {
+      if (!query) {
+        return nodes;
+      }
+      const needle = query.toLowerCase();
+      const filterNode = (node) => {
+        if (!node) {
+          return null;
+        }
+        const children = Array.isArray(node.children) ? node.children : [];
+        const name = String(node.name || "").toLowerCase();
+        const matches = name.includes(needle);
+        if (matches) {
+          return {
+            ...node,
+            children: children.map((child) => filterNode(child) || child)
+          };
+        }
+        const filteredChildren = children.map(filterNode).filter(Boolean);
+        if (filteredChildren.length > 0) {
+          return {
+            ...node,
+            children: filteredChildren
+          };
+        }
+        return null;
+      };
+      return nodes.map(filterNode).filter(Boolean);
+    }, []);
+    const filteredData = import_react33.useMemo(() => filterTree(treeData, filterText.trim()), [treeData, filterText, filterTree]);
     const buildTreeData = import_react33.useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
       const folderMap = new Map;
       const result = [];
@@ -32196,6 +32250,9 @@ Use the data prop if you want to provide your own handlers.`);
         setTreeData([]);
       }
     }, [data, buildTreeData]);
+    const handleFilterChange = import_react33.useCallback((event) => {
+      setFilterText(event.target.value);
+    }, []);
     if (treeData.length === 0) {
       return import_react33.default.createElement("div", {
         style: {
@@ -32205,8 +32262,40 @@ Use the data prop if you want to provide your own handlers.`);
         }
       }, import_react33.default.createElement("h3", { key: "title" }, "No Refactoring Candidates Found"), import_react33.default.createElement("p", { key: "desc" }, "Your code is in excellent shape!"));
     }
-    return import_react33.default.createElement(Tree, {
-      data: treeData,
+    const hasMatchingResults = filteredData.length > 0;
+    return import_react33.default.createElement("div", {
+      className: "valknut-analysis-tree",
+      style: { display: "flex", flexDirection: "column", gap: "0.75rem" }
+    }, import_react33.default.createElement("div", {
+      key: "controls",
+      className: "valknut-analysis-tree__controls",
+      style: {
+        display: "flex",
+        gap: "0.5rem",
+        alignItems: "center"
+      }
+    }, import_react33.default.createElement("input", {
+      key: "search",
+      type: "search",
+      value: filterText,
+      onChange: handleFilterChange,
+      placeholder: "Filter by file, folder, or entity name…",
+      style: {
+        flex: 1,
+        padding: "0.5rem 0.75rem",
+        borderRadius: "6px",
+        border: "1px solid var(--border, #e0e0e0)",
+        fontSize: "0.95rem"
+      }
+    }), filterText ? import_react33.default.createElement("span", {
+      key: "results",
+      style: {
+        color: "var(--text-secondary)",
+        fontSize: "0.85rem"
+      }
+    }, `${hasMatchingResults ? filteredData.length : 0} matches`) : null), hasMatchingResults ? import_react33.default.createElement(Tree, {
+      key: "tree",
+      data: filteredData,
       openByDefault: (node) => {
         return node.data.type === "folder" || node.data.type === "file";
       },
@@ -32218,7 +32307,14 @@ Use the data prop if you want to provide your own handlers.`);
       disableEdit: true,
       disableDrop: true,
       children: TreeNode
-    });
+    }) : import_react33.default.createElement("div", {
+      key: "no-results",
+      style: {
+        textAlign: "center",
+        padding: "2rem",
+        color: "var(--muted)"
+      }
+    }, import_react33.default.createElement("h3", { key: "title" }, "No matches for that filter"), import_react33.default.createElement("p", { key: "desc" }, "Try a different keyword or clear the filter input")));
   };
 
   // src/tree-component/index.js
@@ -32237,5 +32333,5 @@ Use the data prop if you want to provide your own handlers.`);
   }
 })();
 
-//# debugId=C2CF9AD9734F438A64756E2164756E21
+//# debugId=66A1D193428A035C64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.debug.js.map

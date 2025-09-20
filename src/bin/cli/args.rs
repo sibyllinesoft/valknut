@@ -88,9 +88,6 @@ pub enum Commands {
     #[command(name = "list-languages")]
     ListLanguages,
 
-    /// Live reachability analysis for production call graphs
-    #[command(name = "live-reach")]
-    LiveReach(valknut_rs::live::cli::LiveReachArgs),
 }
 
 /// Quality gate configuration for CI/CD integration

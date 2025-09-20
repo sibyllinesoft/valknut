@@ -28,24 +28,41 @@ valknut init-config --force
 The configuration is organized into logical sections:
 
 ### Analysis Settings
-Controls which analysis modules are enabled:
+Controls which analysis modules are enabled and the associated discovery rules:
 
 ```json
 {
   "analysis": {
-    "enable_scoring": true,
-    "enable_graph_analysis": true,
-    "enable_lsh_analysis": true,
-    "enable_refactoring_analysis": true,
-    "enable_structure_analysis": true,
-    "enable_names_analysis": false,
-    "enable_coverage_analysis": false,
-    "max_files": 0,
-    "exclude_patterns": [
-      "*/node_modules/*",
-      "*/venv/*", 
-      "*/target/*"
-    ]
+    "modules": {
+      "complexity": true,
+      "dependencies": true,
+      "duplicates": true,
+      "refactoring": true,
+      "structure": true,
+      "coverage": false
+    },
+    "files": {
+      "include_patterns": ["**/*"],
+      "exclude_patterns": [
+        "*/node_modules/*",
+        "*/venv/*",
+        "*/target/*"
+      ],
+      "max_files": null,
+      "follow_symlinks": false
+    },
+    "quality": {
+      "confidence_threshold": 0.7,
+      "max_analysis_time_per_file": 30,
+      "strict_mode": false
+    },
+    "coverage": {
+      "enabled": false,
+      "auto_discover": true,
+      "file_path": null,
+      "max_age_days": 7,
+      "search_paths": ["./coverage/", "./reports/"]
+    }
   }
 }
 ```
@@ -93,21 +110,6 @@ Control directory organization and file analysis:
 }
 ```
 
-### Code Quality Analysis (Optional)
-Pattern-based code quality analysis:
-
-```json
-{
-  "names": {
-    "enabled": false,
-    "pattern_analysis": true,
-    "min_confidence": 0.65,
-    "min_impact": 3,
-    "protect_public_api": true
-  }
-}
-```
-
 ### Language Support
 Per-language settings and thresholds:
 
@@ -132,41 +134,22 @@ Per-language settings and thresholds:
 
 ## Configuration Presets
 
-The configuration includes built-in presets for common use cases:
+The CLI now exposes four built-in presets designed to cover the most common workflows. They can be combined with explicit flags or configuration overrides:
 
-### Strict Quality Gates
-```json
-{
-  "_presets": {
-    "strict_quality_gates": {
-      "quality_gates": {
-        "enabled": true,
-        "max_complexity": 50.0,
-        "min_health": 70.0,
-        "max_debt": 25.0,
-        "max_critical": 0,
-        "max_high_priority": 3
-      }
-    }
-  }
-}
+| Preset     | Focus                                                             |
+| ---------- | ----------------------------------------------------------------- |
+| `fast`     | Lightweight structure + complexity pass (coverage and clones off) |
+| `default`  | Balanced daily-driver configuration                               |
+| `deep`     | Full analysis with LSH, denoising, and stricter heuristics         |
+| `ci`       | Deterministic output tuned for CI/CD pipelines                    |
+
+Example usage:
+
+```bash
+valknut analyze --preset deep ./src
 ```
 
-### Statistical Analysis
-```json
-{
-  "_presets": {
-    "statistical_analysis": {
-      "names": {
-        "enabled": true
-      },
-      "analysis": {
-        "enable_names_analysis": true
-      }
-    }
-  }
-}
-```
+When a preset is selected the CLI applies the corresponding module toggles before merging config files. You can still adjust individual sections in YAML; explicit settings always win over the preset defaults.
 
 ## Common Configuration Patterns
 
@@ -176,10 +159,14 @@ Minimal configuration for fast CI/CD analysis:
 ```json
 {
   "analysis": {
-    "enable_graph_analysis": false,
-    "enable_lsh_analysis": false,
-    "enable_names_analysis": false,
-    "max_files": 1000
+    "modules": {
+      "dependencies": false,
+      "duplicates": false,
+      "coverage": true
+    },
+    "files": {
+      "max_files": 1000
+    }
   },
   "quality_gates": {
     "enabled": true,
@@ -199,10 +186,14 @@ Full analysis for local development:
 ```json
 {
   "analysis": {
-    "enable_scoring": true,
-    "enable_graph_analysis": true,
-    "enable_refactoring_analysis": true,
-    "enable_structure_analysis": true
+    "modules": {
+      "complexity": true,
+      "dependencies": true,
+      "duplicates": true,
+      "refactoring": true,
+      "structure": true,
+      "coverage": true
+    }
   },
   "quality_gates": {
     "enabled": false
@@ -241,8 +232,8 @@ Focused on code quality and maintainability:
 
 If you have existing configuration files:
 
-1. **From `valknut-config.yml`**: Use `valknut init-config` to generate the new format, then manually copy your custom settings
-2. **From multiple configs**: All settings are now unified in `.valknut.yml`
+1. **From legacy `valknut-config-*.yml`**: Use `valknut init-config` to generate the new format, then manually copy your custom settings
+2. **From multiple configs**: All settings are now unified in `valknut.yml`
 
 ### Migration Examples
 
@@ -309,7 +300,7 @@ valknut analyze --config .valknut-prod.json ./src
 1. **Start with defaults**: Use `valknut init-config` to generate a baseline
 2. **Gradual customization**: Adjust thresholds based on your codebase characteristics
 3. **Environment-specific**: Use different configs for dev, CI, and production
-4. **Version control**: Commit your `.valknut.json` to share team standards
+4. **Version control**: Commit your `valknut.yml` to share team standards
 5. **Documentation**: Add comments to your configuration (use `"_comment"` fields)
 6. **Validation**: Always validate configuration changes before committing
 
@@ -334,8 +325,9 @@ valknut print-default-config > current-config.json
 
 ## Examples
 
-See the `ci-examples/` directory for complete configuration examples:
+See the repository root and `ci-examples/` directory for complete configuration examples:
+- `valknut.yml.example` - Annotated reference configuration in YAML
 - `.valknut-ci.json` - Optimized for CI/CD pipelines
-- GitHub Actions, GitLab CI, Azure DevOps examples with corresponding configs
+- GitHub Actions, GitLab CI, Azure DevOps templates with corresponding configs
 
 For more details on specific analysis modules, see their respective documentation files.

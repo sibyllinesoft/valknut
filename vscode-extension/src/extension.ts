@@ -114,12 +114,22 @@ export function activate(context: vscode.ExtensionContext) {
                 defaultUri: vscode.Uri.file('valknut-report.html')
             });
 
-            if (result) {
-                await ReportPanel.currentPanel.exportReport(result.fsPath);
-                vscode.window.showInformationMessage('Report exported successfully');
+            if (!result) {
+                return;
             }
+
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Exporting Valknut report',
+            }, async (progress) => {
+                progress.report({ message: 'Generating HTML report...' });
+                await analyzer.exportHtmlReport(result.fsPath, ReportPanel.currentPanel?.reportPath);
+            });
+
+            vscode.window.showInformationMessage('Report exported successfully');
         } catch (error) {
-            vscode.window.showErrorMessage(`Export failed: ${error}`);
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Export failed: ${message}`);
         }
     });
 

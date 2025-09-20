@@ -3,6 +3,12 @@
 //! This module provides efficient duplicate code detection using MinHash signatures
 //! and LSH banding techniques for sub-linear similarity search.
 
+pub mod config;
+pub use config::{
+    AdaptiveDenoiseConfig, AutoCalibrationConfig, DedupeConfig, DedupeWeights, DenoiseConfig,
+    DenoiseWeights, LshConfig, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
+};
+
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -11,12 +17,16 @@ use ahash::AHasher;
 use async_trait::async_trait;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::fs;
 use tracing::{debug, info, warn};
 
 #[cfg(feature = "simd")]
 use wide::u64x4;
 
-use crate::core::config::{DedupeConfig, LshConfig};
+use crate::core::ast_service::AstService;
+use crate::core::ast_utils::{
+    count_control_blocks, count_named_nodes, find_entity_node, node_text,
+};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
 use crate::lang::common::LanguageAdapter;
@@ -24,6 +34,7 @@ use crate::lang::{
     go::GoAdapter, javascript::JavaScriptAdapter, python::PythonAdapter, rust_lang::RustAdapter,
     typescript::TypeScriptAdapter,
 };
+use tree_sitter::Node;
 
 mod lsh_cache;
 pub use lsh_cache::{CacheStatistics, LshCache};
@@ -121,6 +132,8 @@ impl LshPerformanceMetrics {
 /// LSH-based similarity feature extractor with O(n) candidate search
 #[derive(Debug)]
 pub struct LshExtractor {
+    /// Shared AST service for structural analysis
+    ast_service: Arc<AstService>,
     /// Feature definitions
     features: Vec<FeatureDefinition>,
 
@@ -159,10 +172,18 @@ pub struct LshExtractor {
     similarity_context_cache: std::sync::RwLock<Option<(String, Arc<LshSimilarityContext>)>>,
 }
 
+#[derive(Debug, Clone)]
+struct EntityAstStats {
+    node_count: usize,
+    block_count: usize,
+    has_stop_motif: bool,
+}
+
 impl LshExtractor {
     /// Create a new LSH extractor
     pub fn new() -> Self {
         let mut extractor = Self {
+            ast_service: Arc::new(AstService::new()),
             features: Vec::new(),
             num_hashes: 128,
             shingle_size: 3,
@@ -184,6 +205,7 @@ impl LshExtractor {
     /// Create with custom parameters
     pub fn with_params(num_hashes: usize, shingle_size: usize) -> Self {
         let mut extractor = Self {
+            ast_service: Arc::new(AstService::new()),
             features: Vec::new(),
             num_hashes,
             shingle_size,
@@ -205,6 +227,7 @@ impl LshExtractor {
     /// Create with enhanced dedupe configuration
     pub fn with_dedupe_config(dedupe_config: DedupeConfig) -> Self {
         let mut extractor = Self {
+            ast_service: Arc::new(AstService::new()),
             features: Vec::new(),
             num_hashes: 128,
             shingle_size: dedupe_config.shingle_k,
@@ -221,6 +244,75 @@ impl LshExtractor {
 
         extractor.initialize_features();
         extractor
+    }
+
+    /// Replace the internal AST service with a shared instance so multiple
+    /// detectors operate on the same parse cache.
+    pub fn with_shared_ast_service(mut self, ast_service: Arc<AstService>) -> Self {
+        self.ast_service = ast_service;
+        self
+    }
+
+    /// Expose the configured similarity threshold
+    pub fn similarity_threshold(&self) -> f64 {
+        self.lsh_config.similarity_threshold
+    }
+
+    /// Maximum number of candidates to consider per entity
+    pub fn max_candidates(&self) -> Option<usize> {
+        if self.lsh_config.max_candidates == 0 {
+            None
+        } else {
+            Some(self.lsh_config.max_candidates)
+        }
+    }
+
+    /// Obtain the cached similarity context when available
+    pub fn similarity_context(
+        &self,
+        context: &ExtractionContext,
+    ) -> Option<Arc<LshSimilarityContext>> {
+        self.get_similarity_context(context)
+    }
+
+    /// Check whether an entity passes the fragment thresholds configured for dedupe analysis
+    pub async fn entity_passes_thresholds(&self, entity: &CodeEntity) -> Result<bool> {
+        if let Some(ref config) = self.dedupe_config {
+            return self.meets_fragment_thresholds(entity, config).await;
+        }
+        Ok(true)
+    }
+
+    /// Compute weighted shingle signatures and statistics when denoising is enabled
+    pub fn weighted_signatures_with_stats(
+        &self,
+        entities: &[&CodeEntity],
+    ) -> std::result::Result<
+        (
+            HashMap<String, WeightedMinHashSignature>,
+            WeightedShingleStats,
+        ),
+        String,
+    > {
+        let analyzer_template = self
+            .weighted_analyzer
+            .as_ref()
+            .ok_or_else(|| "Weighted analyzer not enabled".to_string())?;
+
+        let mut analyzer_copy = WeightedShingleAnalyzer::new(analyzer_template.k);
+        let signatures = analyzer_copy.compute_weighted_signatures(entities)?;
+        let stats = analyzer_copy.statistics();
+
+        Ok((signatures, stats))
+    }
+
+    /// Compute TF-IDF statistics for the provided entities when denoising is enabled
+    pub fn weighted_statistics(
+        &self,
+        entities: &[&CodeEntity],
+    ) -> std::result::Result<WeightedShingleStats, String> {
+        let (_, stats) = self.weighted_signatures_with_stats(entities)?;
+        Ok(stats)
     }
 
     /// Enable weighted shingle analysis for clone denoising
@@ -511,8 +603,7 @@ impl FeatureExtractor for LshExtractor {
 
         // Apply enhanced fragment analysis if dedupe config is available
         if let Some(ref config) = self.dedupe_config {
-            if !self.meets_fragment_thresholds(entity, config) {
-                // Return zero features for fragments that don't meet thresholds
+            if !self.meets_fragment_thresholds(entity, config).await? {
                 features.insert("clone_mass".to_string(), 0.0);
                 features.insert("max_similarity".to_string(), 0.0);
                 features.insert("avg_similarity".to_string(), 0.0);
@@ -778,76 +869,142 @@ impl LshExtractor {
         normalized
     }
 
-    /// Check if source contains boilerplate patterns using basic text matching
-    fn contains_boilerplate_patterns(
+    async fn compute_entity_ast_stats(
         &self,
-        source_code: &str,
-        _file_path: &str,
-        stop_phrases: &[String],
-    ) -> bool {
-        // Use basic text matching for boilerplate detection
-        let source_lower = source_code.to_lowercase();
+        entity: &CodeEntity,
+    ) -> Result<Option<EntityAstStats>> {
+        let mut cache_key = entity.file_path.clone();
+        let source = match fs::read_to_string(&entity.file_path).await {
+            Ok(content) => content,
+            Err(err) => {
+                debug!(
+                    "Falling back to entity source for AST metrics ({}): {}",
+                    entity.file_path, err
+                );
+                if entity.source_code.is_empty() {
+                    return Ok(None);
+                }
+                cache_key = format!("{}::fragment:{}", entity.file_path, entity.id);
+                entity.source_code.clone()
+            }
+        };
 
-        for phrase in stop_phrases {
-            if source_lower.contains(&phrase.to_lowercase()) {
+        let cached_tree = self.ast_service.get_ast(&cache_key, &source).await?;
+        let context = self
+            .ast_service
+            .create_context(&cached_tree, &entity.file_path);
+
+        let Some(entity_node) = find_entity_node(&context, entity) else {
+            return Ok(None);
+        };
+
+        let node_count = count_named_nodes(&entity_node);
+        let block_count = count_control_blocks(&entity_node);
+        let has_stop_motif = self.detect_ast_stop_motifs(&context, entity_node);
+
+        Ok(Some(EntityAstStats {
+            node_count,
+            block_count,
+            has_stop_motif,
+        }))
+    }
+
+    fn detect_ast_stop_motifs(
+        &self,
+        context: &crate::core::ast_service::AstContext<'_>,
+        root: Node<'_>,
+    ) -> bool {
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            if self.node_matches_stop_motif(context, node) {
                 return true;
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
             }
         }
 
         false
     }
 
-    /// Check if source contains AST-based stop-motif patterns using basic pattern matching
-    fn contains_ast_stop_motif_patterns(&self, source_code: &str, file_path: &str) -> bool {
-        // Common AST-based boilerplate patterns per language
-        let common_patterns = vec![
-            // Python patterns
-            "import os".to_string(),
-            "import sys".to_string(),
-            "__main__".to_string(),
-            "from typing import".to_string(),
-            "__init__".to_string(),
-            // JavaScript/TypeScript patterns
-            "console.log".to_string(),
-            "require".to_string(),
-            "module.exports".to_string(),
-            // Rust patterns
-            "println!".to_string(),
-            "eprintln!".to_string(),
-            "unwrap".to_string(),
-            "expect".to_string(),
-            // Go patterns
-            "fmt.Println".to_string(),
-            "make".to_string(),
-            "append".to_string(),
-        ];
+    fn node_matches_stop_motif(
+        &self,
+        context: &crate::core::ast_service::AstContext<'_>,
+        node: Node<'_>,
+    ) -> bool {
+        let language = context.language;
 
-        self.contains_boilerplate_patterns(source_code, file_path, &common_patterns)
+        let text = node_text(node, context.source)
+            .unwrap_or_default()
+            .to_lowercase();
+
+        match language {
+            "py" | "pyw" => match node.kind() {
+                "import_statement" | "import_from_statement" => {
+                    text.contains("import os")
+                        || text.contains("import sys")
+                        || text.contains("from typing")
+                }
+                "if_statement" => text.contains("__name__") && text.contains("__main__"),
+                "function_definition" => text.contains("__init__"),
+                _ => false,
+            },
+            "js" | "jsx" => match node.kind() {
+                "call_expression" => text.contains("console.log") || text.contains("require("),
+                "assignment_expression" => text.contains("module.exports"),
+                _ => false,
+            },
+            "ts" | "tsx" => match node.kind() {
+                "call_expression" => text.contains("console.log"),
+                "import_statement" => text.contains("from \"@angular/core\""),
+                _ => false,
+            },
+            "rs" => match node.kind() {
+                "macro_invocation" | "macro_invocation_body" => {
+                    text.contains("println!") || text.contains("dbg!") || text.contains("todo!")
+                }
+                _ => false,
+            },
+            "go" => match node.kind() {
+                "call_expression" => text.contains("fmt.println"),
+                _ => false,
+            },
+            _ => false,
+        }
     }
 
-    /// Check if entity meets fragment analysis thresholds
-    fn meets_fragment_thresholds(&self, entity: &CodeEntity, config: &DedupeConfig) -> bool {
+    /// Check if entity meets fragment analysis thresholds using structural data
+    async fn meets_fragment_thresholds(
+        &self,
+        entity: &CodeEntity,
+        config: &DedupeConfig,
+    ) -> Result<bool> {
         let source_code = &entity.source_code;
 
-        // Count tokens (simplified approach)
         let token_count = self.count_tokens(source_code);
         if token_count < config.min_function_tokens {
-            return false;
+            return Ok(false);
         }
 
-        // Estimate AST nodes using tree-sitter parsing (preferred) or fallback to text analysis
-        let ast_node_count = self.estimate_ast_nodes_treesitter(source_code, &entity.file_path);
-        if ast_node_count < config.min_ast_nodes {
-            return false;
+        let Some(stats) = self.compute_entity_ast_stats(entity).await? else {
+            return Ok(false);
+        };
+
+        if stats.node_count < config.min_ast_nodes {
+            return Ok(false);
         }
 
-        // Check for distinct blocks requirement using tree-sitter parsing
-        let distinct_blocks = self.count_distinct_blocks_treesitter(source_code, &entity.file_path);
-        if distinct_blocks < config.require_distinct_blocks {
-            return false;
+        if stats.block_count < config.require_distinct_blocks {
+            return Ok(false);
         }
 
-        true
+        if stats.has_stop_motif {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Count tokens in source code (simplified approach)
@@ -856,60 +1013,6 @@ impl LshExtractor {
             .split_whitespace()
             .filter(|token| !token.is_empty())
             .count()
-    }
-
-    /// Estimate AST nodes using basic heuristics
-    fn estimate_ast_nodes_treesitter(&self, source_code: &str, _file_path: &str) -> usize {
-        // Use basic heuristics for AST node estimation
-        let lines = source_code.lines().count();
-        let tokens = self.count_tokens(source_code);
-
-        // Rough estimate: each line has ~3 AST nodes, plus additional for complex constructs
-        let base_nodes = lines * 3;
-        let token_complexity = tokens / 5; // Additional nodes for complex expressions
-
-        base_nodes + token_complexity
-    }
-
-    /// Legacy method - removed text fallback, tree-sitter only
-    fn estimate_ast_nodes(&self, source_code: &str) -> usize {
-        // This method should not be used - use estimate_ast_nodes_treesitter instead
-        0
-    }
-
-    /// Count distinct code blocks using basic pattern matching
-    fn count_distinct_blocks_treesitter(&self, source_code: &str, _file_path: &str) -> usize {
-        // Use basic pattern matching to count code blocks
-        let mut block_count = 0;
-
-        for line in source_code.lines() {
-            let line = line.trim();
-
-            // Count function definitions, class definitions, control structures
-            if line.starts_with("def ") ||       // Python functions
-               line.starts_with("class ") ||     // Python/JavaScript classes
-               line.starts_with("function ") ||  // JavaScript functions
-               line.starts_with("fn ") ||        // Rust functions
-               line.starts_with("func ") ||      // Go functions
-               line.contains(" fn ") ||          // Rust impl functions
-               line.contains(" function") ||     // Method definitions
-               line.starts_with("if ") ||        // Conditionals
-               line.starts_with("for ") ||       // Loops
-               line.starts_with("while ") ||     // While loops
-               line.starts_with("match ") ||     // Match statements
-               line.starts_with("switch ")
-            {
-                // Switch statements
-                block_count += 1;
-            }
-        }
-
-        block_count.max(1) // Always return at least 1
-    }
-
-    /// Removed text-based method - use count_distinct_blocks_treesitter instead
-    fn count_distinct_blocks(&self, _source_code: &str) -> usize {
-        0 // Error condition - tree-sitter parsing required
     }
 
     /// Detect programming language from file path
@@ -1394,6 +1497,19 @@ impl LshIndex {
 /// Weighted shingle analyzer for clone denoising
 ///
 /// This analyzer implements Phase 1 of the clone denoising system by using
+/// Summary statistics generated while building TF-IDF weighted shingles.
+#[derive(Debug, Clone)]
+pub struct WeightedShingleStats {
+    /// Total number of code fragments analysed
+    pub total_documents: usize,
+    /// Total number of k-gram occurrences observed across the corpus
+    pub total_grams: usize,
+    /// Number of unique k-grams observed
+    pub unique_grams: usize,
+    /// Contribution percentage of the top 1% most frequent k-grams
+    pub top1pct_contribution: f64,
+}
+
 /// TF-IDF weighted shingling to reduce the contribution of common boilerplate patterns.
 #[derive(Debug)]
 pub struct WeightedShingleAnalyzer {
@@ -1457,30 +1573,13 @@ impl WeightedShingleAnalyzer {
         }
 
         // Log some statistics for analysis
-        let total_kgrams = self.document_frequencies.len();
-        let top1pct_threshold = (total_kgrams as f64 * 0.01).ceil() as usize;
+        let stats = self.statistics();
         let mut kgram_freqs: Vec<_> = self.document_frequencies.iter().collect();
         kgram_freqs.sort_by(|a, b| b.1.cmp(a.1)); // Sort by frequency descending
 
-        let top1pct_contribution = if !kgram_freqs.is_empty() && top1pct_threshold > 0 {
-            let top1pct_count: usize = kgram_freqs
-                .iter()
-                .take(top1pct_threshold.min(kgram_freqs.len()))
-                .map(|(_, freq)| **freq)
-                .sum();
-            let total_count: usize = kgram_freqs.iter().map(|(_, freq)| **freq).sum();
-            if total_count > 0 {
-                (top1pct_count as f64 / total_count as f64) * 100.0
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        };
-
         info!(
             "grams_total: {}, grams_top1pct_pctcontrib: {:.1}%",
-            total_kgrams, top1pct_contribution
+            stats.unique_grams, stats.top1pct_contribution
         );
 
         debug!("Top 5 most frequent k-grams:");
@@ -1638,6 +1737,38 @@ impl WeightedShingleAnalyzer {
             .count();
 
         matching as f64 / sig1.signature.len() as f64
+    }
+
+    /// Summarise TF-IDF statistics gathered during IDF table construction
+    pub fn statistics(&self) -> WeightedShingleStats {
+        let unique_grams = self.document_frequencies.len();
+        let total_grams: usize = self.document_frequencies.values().copied().sum();
+
+        let top1pct_threshold = (unique_grams as f64 * 0.01).ceil() as usize;
+        let mut kgram_freqs: Vec<_> = self.document_frequencies.iter().collect();
+        kgram_freqs.sort_by(|a, b| b.1.cmp(a.1));
+
+        let top1pct_contribution = if !kgram_freqs.is_empty() && top1pct_threshold > 0 {
+            let top1pct_count: usize = kgram_freqs
+                .iter()
+                .take(top1pct_threshold.min(kgram_freqs.len()))
+                .map(|(_, freq)| **freq)
+                .sum();
+            if total_grams > 0 {
+                (top1pct_count as f64 / total_grams as f64) * 100.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+        WeightedShingleStats {
+            total_documents: self.total_documents,
+            total_grams,
+            unique_grams,
+            top1pct_contribution,
+        }
     }
 }
 

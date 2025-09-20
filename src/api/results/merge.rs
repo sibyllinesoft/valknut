@@ -103,15 +103,6 @@ impl AnalysisResults {
     }
 }
 
-impl MemoryStats {
-    pub fn merge(&mut self, other: MemoryStats) {
-        self.peak_memory_bytes = self.peak_memory_bytes.max(other.peak_memory_bytes);
-        self.final_memory_bytes = self.final_memory_bytes.max(other.final_memory_bytes);
-        self.efficiency_score =
-            weighted_average(self.efficiency_score, 1, other.efficiency_score, 1);
-    }
-}
-
 impl CloneAnalysisResults {
     pub fn merge(&mut self, other: CloneAnalysisResults) {
         self.denoising_enabled |= other.denoising_enabled;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tree } from 'react-arborist';
 import { TreeNode } from './TreeNode.jsx';
 import { getSeverityLevel } from './treeUtils.js';
@@ -9,7 +9,50 @@ import { getSeverityLevel } from './treeUtils.js';
  */
 export const CodeAnalysisTree = ({ data }) => {
     const [treeData, setTreeData] = useState([]);
-    
+    const [filterText, setFilterText] = useState('');
+
+    const filterTree = useCallback((nodes, query) => {
+        if (!query) {
+            return nodes;
+        }
+
+        const needle = query.toLowerCase();
+
+        const filterNode = (node) => {
+            if (!node) {
+                return null;
+            }
+
+            const children = Array.isArray(node.children) ? node.children : [];
+            const name = String(node.name || '').toLowerCase();
+            const matches = name.includes(needle);
+
+            if (matches) {
+                return {
+                    ...node,
+                    children: children.map((child) => filterNode(child) || child),
+                };
+            }
+
+            const filteredChildren = children.map(filterNode).filter(Boolean);
+            if (filteredChildren.length > 0) {
+                return {
+                    ...node,
+                    children: filteredChildren,
+                };
+            }
+
+            return null;
+        };
+
+        return nodes.map(filterNode).filter(Boolean);
+    }, []);
+
+    const filteredData = useMemo(
+        () => filterTree(treeData, filterText.trim()),
+        [treeData, filterText, filterTree]
+    );
+
     // Build tree structure from file paths and directory health
     const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
         
@@ -103,7 +146,7 @@ export const CodeAnalysisTree = ({ data }) => {
             fileChildren.push(...fileGroup.entities.map((entity, entityIndex) => {
                 // Clean up entity name - remove filename and :function: prefix
                 let cleanName = String(entity.name || 'Unknown Entity');
-                // Remove filename prefix (e.g., "./src/core/pipeline/pipeline_config.rs:function:")
+                // Remove filename prefix (e.g., "./src/core/pipeline/pipeline_executor.rs:function:")
                 const functionMatch = cleanName.match(/:function:(.+)$/);
                 if (functionMatch) {
                     cleanName = functionMatch[1];
@@ -373,6 +416,10 @@ export const CodeAnalysisTree = ({ data }) => {
             setTreeData([]);
         }
     }, [data, buildTreeData]);
+
+    const handleFilterChange = useCallback((event) => {
+        setFilterText(event.target.value);
+    }, []);
     
     if (treeData.length === 0) {
         return React.createElement('div', {
@@ -386,20 +433,73 @@ export const CodeAnalysisTree = ({ data }) => {
             React.createElement('p', { key: 'desc' }, 'Your code is in excellent shape!')
         );
     }
-    
-    return React.createElement(Tree, {
-        data: treeData,
-        openByDefault: (node) => {
-            // Open folders and files by default, but keep entities (functions) closed
-            return node.data.type === 'folder' || node.data.type === 'file';
+
+    const hasMatchingResults = filteredData.length > 0;
+
+    return React.createElement('div', {
+        className: 'valknut-analysis-tree',
+        style: { display: 'flex', flexDirection: 'column', gap: '0.75rem' }
+    },
+        React.createElement('div', {
+            key: 'controls',
+            className: 'valknut-analysis-tree__controls',
+            style: {
+                display: 'flex',
+                gap: '0.5rem',
+                alignItems: 'center'
+            }
         },
-        width: '100%',
-        height: 600,
-        indent: 24, // Indentation per level
-        rowHeight: 40, // Fixed height - now works since each info/issue/suggestion gets its own row
-        overscanCount: 10, // Render extra rows for better scrolling
-        disableEdit: true, // Disable inline editing
-        disableDrop: true, // Disable drag and drop
-        children: TreeNode
-    });
+            React.createElement('input', {
+                key: 'search',
+                type: 'search',
+                value: filterText,
+                onChange: handleFilterChange,
+                placeholder: 'Filter by file, folder, or entity name…',
+                style: {
+                    flex: 1,
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border, #e0e0e0)',
+                    fontSize: '0.95rem'
+                }
+            }),
+            filterText
+                ? React.createElement('span', {
+                      key: 'results',
+                      style: {
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.85rem'
+                      }
+                  }, `${hasMatchingResults ? filteredData.length : 0} matches`)
+                : null
+        ),
+        hasMatchingResults
+            ? React.createElement(Tree, {
+                  key: 'tree',
+                  data: filteredData,
+                  openByDefault: (node) => {
+                      // Open folders and files by default, but keep entities (functions) closed
+                      return node.data.type === 'folder' || node.data.type === 'file';
+                  },
+                  width: '100%',
+                  height: 600,
+                  indent: 24,
+                  rowHeight: 40,
+                  overscanCount: 10,
+                  disableEdit: true,
+                  disableDrop: true,
+                  children: TreeNode
+              })
+            : React.createElement('div', {
+                  key: 'no-results',
+                  style: {
+                      textAlign: 'center',
+                      padding: '2rem',
+                      color: 'var(--muted)'
+                  }
+              },
+                  React.createElement('h3', { key: 'title' }, 'No matches for that filter'),
+                  React.createElement('p', { key: 'desc' }, 'Try a different keyword or clear the filter input')
+              )
+    );
 };

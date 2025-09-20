@@ -1,8 +1,8 @@
 // Mock data fixtures for valknut analysis results
 // These represent the typical structure of data passed to the React tree component
 
-const sampleEntityWithIssues = {
-  name: "./src/core/pipeline/pipeline_config.rs:function:validate_configuration",
+export const sampleEntityWithIssues = {
+  name: "./src/core/pipeline/pipeline_executor.rs:function:evaluate_quality_gates",
   priority: "high",
   score: 15.7,
   lineRange: [42, 89],
@@ -36,8 +36,8 @@ const sampleEntityWithIssues = {
   ]
 };
 
-const sampleRefactoringFileGroup = {
-  filePath: "src/core/pipeline/pipeline_config.rs",
+export const sampleRefactoringFileGroup = {
+  filePath: "src/core/pipeline/pipeline_executor.rs",
   highestPriority: "critical",
   entityCount: 3,
   avgScore: 12.4,
@@ -45,7 +45,7 @@ const sampleRefactoringFileGroup = {
   entities: [
     sampleEntityWithIssues,
     {
-      name: "./src/core/pipeline/pipeline_config.rs:function:load_config",
+      name: "./src/core/pipeline/pipeline_executor.rs:function:discover_files",
       priority: "medium", 
       score: 8.2,
       lineRange: [15, 30],
@@ -60,7 +60,7 @@ const sampleRefactoringFileGroup = {
       suggestions: []
     },
     {
-      name: "./src/core/pipeline/pipeline_config.rs:function:simple_helper",
+      name: "./src/core/pipeline/pipeline_executor.rs:function:should_include_directory",
       priority: "low",
       score: 3.1,
       lineRange: [5, 12],
@@ -70,7 +70,7 @@ const sampleRefactoringFileGroup = {
   ]
 };
 
-const sampleDirectoryHealth = {
+export const sampleDirectoryHealth = {
   directories: {
     "src": {
       health_score: 0.65,
@@ -102,9 +102,9 @@ const sampleDirectoryHealth = {
   }
 };
 
-const sampleCoveragePacks = [
+export const sampleCoveragePacks = [
   {
-    path: "src/core/pipeline/pipeline_config.rs",
+    path: "src/core/pipeline/pipeline_executor.rs",
     file_info: {
       coverage_before: 0.72,
       coverage_after_if_filled: 0.85,
@@ -122,7 +122,7 @@ const sampleCoveragePacks = [
 ];
 
 // Complete analysis data structure as passed to the component
-const sampleAnalysisData = {
+export const sampleAnalysisData = {
   refactoringCandidatesByFile: [
     sampleRefactoringFileGroup,
     {
@@ -170,7 +170,7 @@ const sampleAnalysisData = {
 };
 
 // New unified hierarchy format (for testing the newer data format)
-const sampleUnifiedHierarchy = [
+export const sampleUnifiedHierarchy = [
   {
     id: "folder-src",
     name: "src",
@@ -190,17 +190,17 @@ const sampleUnifiedHierarchy = [
         severityCounts: { critical: 2, high: 8, medium: 5, low: 2 },
         children: [
           {
-            id: "file-pipeline_config",
-            name: "pipeline_config.rs",
+            id: "file-pipeline_executor",
+            name: "pipeline_executor.rs",
             type: "file",
-            filePath: "src/core/pipeline_config.rs",
+            filePath: "src/core/pipeline/pipeline_executor.rs",
             highestPriority: "critical",
             avgScore: 12.4,
             severityCounts: { critical: 1, high: 2, medium: 1, low: 0 },
             children: [
               {
-                id: "entity-validate_config",
-                name: "validate_configuration",
+                id: "entity-evaluate_quality_gates",
+                name: "evaluate_quality_gates",
                 type: "entity",
                 priority: "critical",
                 score: 15.7,
@@ -208,7 +208,7 @@ const sampleUnifiedHierarchy = [
                 severityCounts: { critical: 1, high: 1, medium: 1, low: 0 },
                 children: [
                   {
-                    id: "issue:entity-validate_config:0",
+                    id: "issue:entity-evaluate_quality_gates:0",
                     name: "complexity: Function has very high cyclomatic complexity (score: 15.7)",
                     type: "issue-row",
                     entityScore: 15.7,
@@ -216,7 +216,7 @@ const sampleUnifiedHierarchy = [
                     children: []
                   },
                   {
-                    id: "suggestion:entity-validate_config:0", 
+                    id: "suggestion:entity-evaluate_quality_gates:0", 
                     name: "extract_method: Consider extracting validation logic into smaller methods",
                     type: "suggestion-row",
                     children: []
@@ -232,7 +232,7 @@ const sampleUnifiedHierarchy = [
 ];
 
 // Test data with no issues (for testing empty states)
-const sampleCleanAnalysisData = {
+export const sampleCleanAnalysisData = {
   refactoringCandidatesByFile: [],
   directoryHealthTree: {
     directories: {
@@ -251,7 +251,7 @@ const sampleCleanAnalysisData = {
 };
 
 // Invalid/malformed data for testing error handling
-const sampleInvalidData = {
+export const sampleInvalidData = {
   refactoringCandidatesByFile: [
     {
       // Missing filePath
@@ -269,15 +269,4 @@ const sampleInvalidData = {
       ]
     }
   ]
-};
-
-module.exports = {
-  sampleEntityWithIssues,
-  sampleRefactoringFileGroup, 
-  sampleDirectoryHealth,
-  sampleCoveragePacks,
-  sampleAnalysisData,
-  sampleUnifiedHierarchy,
-  sampleCleanAnalysisData,
-  sampleInvalidData
 };

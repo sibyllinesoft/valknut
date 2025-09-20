@@ -15,7 +15,7 @@ console.log('─'.repeat(30));
 const fs = require('fs');
 const path = require('path');
 
-const bundlePath = './react-tree-bundle.min.js';
+const bundlePath = './dist/react-tree-bundle.js';
 if (fs.existsSync(bundlePath)) {
   const bundle = fs.readFileSync(bundlePath, 'utf8');
   console.log(`✅ Bundle exists (${Math.round(bundle.length/1024)}KB)`);
@@ -62,7 +62,7 @@ testPages.forEach((pagePath, i) => {
 console.log('\n📋 Test 3: Source Code Analysis');
 console.log('─'.repeat(30));
 
-const srcPath = './src/tree.js';
+const srcPath = './src/tree-component/CodeAnalysisTree.jsx';
 if (fs.existsSync(srcPath)) {
   const source = fs.readFileSync(srcPath, 'utf8');
   console.log('✅ Source code found');

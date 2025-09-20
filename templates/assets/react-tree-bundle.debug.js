@@ -40613,7 +40613,7 @@ const CodeAnalysisTree = ({ data }) => {
             fileChildren.push(...fileGroup.entities.map((entity, entityIndex) => {
                 // Clean up entity name - remove filename and :function: prefix
                 let cleanName = String(entity.name || 'Unknown Entity');
-                // Remove filename prefix (e.g., "./src/core/pipeline/pipeline_config.rs:function:")
+                // Remove filename prefix (e.g., "./src/core/pipeline/pipeline_executor.rs:function:")
                 const functionMatch = cleanName.match(/:function:(.+)$/);
                 if (functionMatch) {
                     cleanName = functionMatch[1];

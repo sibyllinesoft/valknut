@@ -87,53 +87,58 @@ Comprehensive structural analysis for Python, TypeScript, JavaScript, Rust, Go, 
 ### Quick Setup
 
 ```bash
-# Generate default configuration
-valknut init-config --output .valknut.yml
+# Generate a starter configuration
+valknut init-config --output valknut.yml
 
-# Validate configuration
-valknut validate-config --config .valknut.yml
+# Validate configuration changes
+valknut validate-config --config valknut.yml
 
-# View all available options
+# Inspect all available options
 valknut print-default-config
 ```
 
-### Quality Gates for CI/CD
+The repository ships with `valknut.yml.example`, a fully annotated sample that covers every
+supported section. Copy it to `valknut.yml` and trim it down to match your project.
 
-Configure automatic build failures when quality thresholds are exceeded:
-
-```yaml
-quality_gates:
-  enabled: true
-  max_complexity: 75        # Fail if complexity score exceeds 75
-  min_health: 60           # Fail if health score drops below 60
-  max_debt: 30             # Fail if technical debt exceeds 30%
-  max_issues: 50           # Fail if more than 50 total issues
-  max_critical: 0          # Fail on any critical issues
-```
-
-### Language-Specific Configuration
-
-```yaml
-languages:
-  python:
-    enabled: true
-    complexity_threshold: 10.0
-    file_extensions: [".py", ".pyi"]
-  typescript:
-    enabled: true
-    complexity_threshold: 10.0
-    file_extensions: [".ts", ".tsx"]
-```
-
-### Advanced Options
+### Key Sections
 
 ```yaml
 analysis:
+  enable_scoring: true
+  enable_structure_analysis: true
+  enable_coverage_analysis: true
+  confidence_threshold: 0.7
+  exclude_patterns:
+    - "*/node_modules/*"
+    - "*/venv/*"
+  include_patterns:
+    - "**/*"
+
+denoise:
   enabled: true
-  complexity_threshold: 10.0
-  min_confidence: 0.65     # Analysis confidence threshold
-  include_test_files: true # Include test files in analysis
+  min_function_tokens: 40
+  min_match_tokens: 24
+  require_blocks: 2
+  similarity: 0.82
+  ranking:
+    by: "saved_tokens"
+    min_saved_tokens: 100
+
+coverage:
+  auto_discover: true
+  search_paths:
+    - "./coverage/"
+    - "./target/coverage/"
+  coverage_file: null
+
+performance:
+  max_threads: null
+  file_timeout_seconds: 30
+  batch_size: 100
 ```
+
+Sample `.env.example` values are included for the Docker Compose services. Copy it to `.env`
+to control the mounted report and configuration directories when running the containers.
 
 ## CI/CD Integration
 
@@ -208,6 +213,28 @@ valknut analyze --format json ./src | jq '.health_score'
 
 ## Advanced Usage
 
+### Preset Profiles
+
+Valknut now ships with tuned presets that make it easy to get started without memorising dozens of flags:
+
+```bash
+# Lightning-fast sweep focusing on structure + complexity
+valknut analyze --preset fast ./src
+
+# Balanced defaults (equivalent to manual flags you know today)
+valknut analyze --preset default ./src
+
+# Deep dive with clone detection, denoising, and strict validation
+valknut analyze --preset deep ./src
+
+# CI-friendly profile optimised for predictable output
+valknut analyze --preset ci ./src
+```
+
+Presets can still be combined with individual flags – explicit CLI options always win. They are applied before merging config files so you can treat them as opinionated starting points for teams.
+
+> **Tip:** advanced clone-detection tunables (e.g. `--ast-weight`, `--min-saved-tokens`) now require the `--advanced` switch. This keeps the day-to-day CLI compact while still exposing expert controls when you need them.
+
 ### Output Formats
 
 ```bash
@@ -243,12 +270,11 @@ valknut analyze --max-files 50000 --parallel 8 ./src
 valknut list-languages
 ```
 
-## Experimental Modules
+## Future Work
 
 Advanced clone detection and boilerplate learning remain under active development. These
-work-in-progress capabilities are available under the `valknut_rs::experimental` module and
-behind the `experimental` Cargo feature (`cargo build --features experimental`). They are
-intentionally excluded from the default CLI pipeline until they reach production quality.
+work-in-progress capabilities are kept on dedicated branches until they reach production
+quality to ensure the published crate only advertises supported functionality.
 
 ## Contributing & Development
 

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::api::config_types::AnalysisConfig as ApiAnalysisConfig;
-use crate::api::results::AnalysisResults;
+use crate::core::pipeline::AnalysisResults;
 use crate::core::config::ValknutConfig;
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::FeatureVector;

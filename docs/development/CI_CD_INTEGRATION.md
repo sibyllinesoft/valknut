@@ -170,7 +170,6 @@ jobs:
           enable_structure_analysis: true
           enable_complexity_analysis: true
           enable_refactoring_analysis: true
-          enable_names_analysis: true
           max_files: 1000
         
         quality_gates:
@@ -1137,7 +1136,6 @@ configs/
 ```yaml
 # Team A: Frontend team
 analysis:
-  enable_names_analysis: true
   focus_areas: ["ui", "components"]
 quality_gates:
   max_complexity: 70

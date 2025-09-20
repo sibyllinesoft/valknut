@@ -3,6 +3,21 @@
  * Configures React testing environment and mocks
  */
 
+import { Window } from 'happy-dom';
+
+// Provide a full DOM implementation for React testing utilities
+const happyDom = new Window({ url: 'http://localhost/' });
+
+globalThis.window = happyDom.window;
+globalThis.document = happyDom.document;
+globalThis.navigator = happyDom.navigator;
+globalThis.location = happyDom.location;
+globalThis.HTMLElement = happyDom.HTMLElement;
+globalThis.Node = happyDom.Node;
+globalThis.CustomEvent = happyDom.CustomEvent;
+globalThis.Event = happyDom.Event;
+globalThis.MutationObserver = happyDom.MutationObserver;
+
 // Set up testing environment
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -47,33 +62,43 @@ if (typeof performance === 'undefined') {
   };
 }
 
-// Mock window object for browser-specific tests
-if (typeof window === 'undefined') {
-  globalThis.window = {
+// Mock Lucide icons for tests
+window.lucide = {
+  createIcons: () => {},
+  createElement: (name) => {
+    const element = document.createElement('div');
+    element.setAttribute('data-lucide', name);
+    element.textContent = name; // fallback text
+    return element;
+  }
+};
+
+// Additional browser APIs used by react-dom/testing-library
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = () => ({
+    matches: false,
+    addListener: () => {},
+    removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
-    dispatchEvent: () => {},
-    location: { href: 'http://localhost:3000' },
-    navigator: { userAgent: 'test' },
-    document: {
-      createElement: () => ({}),
-      addEventListener: () => {},
-      removeEventListener: () => {}
-    }
-  };
+    dispatchEvent: () => false
+  });
 }
 
-// Mock Lucide icons if needed
-if (typeof window !== 'undefined') {
-  window.lucide = {
-    createIcons: () => {},
-    createElement: (name) => {
-      const element = document.createElement('div');
-      element.setAttribute('data-lucide', name);
-      element.textContent = name; // fallback text
-      return element;
-    }
-  };
+if (typeof window.requestAnimationFrame !== 'function') {
+  window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+}
+
+if (typeof window.cancelAnimationFrame !== 'function') {
+  window.cancelAnimationFrame = (id) => clearTimeout(id);
+}
+
+if (typeof window.scrollTo !== 'function') {
+  window.scrollTo = () => {};
+}
+
+if (typeof globalThis.Image === 'undefined') {
+  globalThis.Image = class ImageMock {};
 }
 
 // Extend Jest matchers with testing-library

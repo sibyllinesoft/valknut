@@ -148,89 +148,8 @@ export class ReportPanel {
         }
     }
 
-    public async exportReport(outputPath: string) {
-        try {
-            const config = vscode.workspace.getConfiguration('valknut');
-            const theme = config.get('theme', 'default');
-            
-            // Generate HTML report
-            const html = this.generateHtmlReport(theme);
-            fs.writeFileSync(outputPath, html, 'utf8');
-            
-        } catch (error) {
-            throw new Error(`Export failed: ${error}`);
-        }
-    }
-
-    private generateHtmlReport(theme: string): string {
-        // This would use the Handlebars template system from the Rust code
-        // For now, we'll generate a basic HTML report
-        const themeUri = vscode.Uri.joinPath(this._extensionUri, '..', 'themes', `${theme}.css`);
-        const themePath = themeUri.fsPath;
-        
-        let themeCSS = '';
-        try {
-            if (fs.existsSync(themePath)) {
-                themeCSS = fs.readFileSync(themePath, 'utf8');
-            }
-        } catch (error) {
-            console.warn('Failed to load theme CSS:', error);
-        }
-
-        return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Valknut Analysis Report</title>
-    <style>${themeCSS}</style>
-</head>
-<body>
-    <div class="container">
-        <header class="header">
-            <h1>Valknut Analysis Report</h1>
-            <div class="meta">
-                Generated on ${new Date().toISOString()} | Version 0.1.0
-            </div>
-        </header>
-        
-        <section class="summary">
-            <div class="summary-card">
-                <div class="value">${this._reportData?.files?.length || 0}</div>
-                <div class="label">Files Analyzed</div>
-            </div>
-        </section>
-        
-        <section class="results-section">
-            <h2>Analysis Results</h2>
-            <div class="file-list">
-                ${this.generateFileList()}
-            </div>
-        </section>
-        
-        <details class="raw-data">
-            <summary>Raw Data</summary>
-            <pre><code>${JSON.stringify(this._reportData, null, 2)}</code></pre>
-        </details>
-    </div>
-</body>
-</html>`;
-    }
-
-    private generateFileList(): string {
-        if (!this._reportData?.files) {
-            return '<p>No files found in report</p>';
-        }
-
-        return this._reportData.files.map((file: any) => `
-            <div class="file-item">
-                <div class="file-path">${file.path || 'Unknown'}</div>
-                <div class="file-details">
-                    Size: ${file.size || 0} bytes
-                </div>
-            </div>
-        `).join('');
+    public get reportPath(): string {
+        return this._reportPath;
     }
 
     private _update() {
@@ -464,7 +383,7 @@ export class ReportPanel {
             <section class="results-section">
                 <h2>All Issues (${allIssues.length})</h2>
                 <div class="issues-list">
-                    ${allIssues.map(issue => `
+                    ${allIssues.map((issue: any) => `
                         <div class="issue-item-full" data-file-path="${issue.file}" data-line="${issue.line || 1}">
                             <div class="issue-header">
                                 <span class="issue-type ${issue.severity || 'info'}">${issue.type || 'Issue'}</span>

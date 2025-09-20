@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::pipeline_config::AnalysisConfig;
+use super::result_types::AnalysisSummary;
 use crate::core::featureset::FeatureVector;
 use crate::core::scoring::ScoringResult;
 use crate::detectors::complexity::ComplexityAnalysisResult;
@@ -38,25 +39,6 @@ pub struct ComprehensiveAnalysisResult {
     pub coverage: CoverageAnalysisResults,
     /// Overall health metrics
     pub health_metrics: HealthMetrics,
-}
-
-/// Summary statistics for the analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnalysisSummary {
-    /// Total files analyzed
-    pub total_files: usize,
-    /// Total entities analyzed (functions, classes, etc.)
-    pub total_entities: usize,
-    /// Total lines of code
-    pub total_lines_of_code: usize,
-    /// Languages detected
-    pub languages: Vec<String>,
-    /// Total issues found
-    pub total_issues: usize,
-    /// High-priority issues
-    pub high_priority_issues: usize,
-    /// Critical issues
-    pub critical_issues: usize,
 }
 
 /// Structure analysis results
@@ -248,10 +230,14 @@ pub struct PipelineStatistics {
 /// Memory usage statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryStats {
-    /// Current memory usage in bytes
+    /// Current memory usage in bytes at sampling time
     pub current_memory_bytes: usize,
-    /// Peak memory usage in bytes
+    /// Peak memory usage in bytes during execution
     pub peak_memory_bytes: usize,
+    /// Final memory usage in bytes once execution completed
+    pub final_memory_bytes: usize,
+    /// Heuristic efficiency score (0.0 - 1.0)
+    pub efficiency_score: f64,
 }
 
 /// Summary of analysis results

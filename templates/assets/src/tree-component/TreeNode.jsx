@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 /**
  * Individual tree node component for React Arborist
@@ -6,12 +6,44 @@ import React from 'react';
  */
 export const TreeNode = ({ node, style, innerRef, tree }) => {
     const data = node.data;
+    const iconRefs = useRef([]);
+    iconRefs.current = [];
+
+    const registerIcon = (element, fallback) => {
+        if (element) {
+            iconRefs.current.push({ element, fallback });
+        }
+    };
+
     const isFolder = data.type === 'folder';
     const isFile = data.type === 'file';
     const isEntity = data.type === 'entity';
     const isInfoRow = data.type === 'info-row';
     const isIssueRow = data.type === 'issue-row';
     const isSuggestionRow = data.type === 'suggestion-row';
+
+    useEffect(() => {
+        const pendingIcons = [...iconRefs.current];
+
+        const applyFallbacks = () => {
+            pendingIcons.forEach(({ element, fallback }) => {
+                if (!element) {
+                    return;
+                }
+                const hasSvg = element.querySelector('svg');
+                if (!hasSvg) {
+                    element.textContent = fallback;
+                }
+            });
+        };
+
+        if (typeof window !== 'undefined' && window.lucide) {
+            window.lucide.createIcons();
+            window.requestAnimationFrame(applyFallbacks);
+        } else {
+            applyFallbacks();
+        }
+    }, [node.id, node.isOpen, data.type, data.name, data.priority]);
     
     // Handle info/issue/suggestion rows
     if (isInfoRow || isIssueRow || isSuggestionRow) {
@@ -19,19 +51,23 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         let iconName = 'info';
         let iconColor = 'var(--text-secondary)';
         let backgroundColor = 'transparent';
-        
+        let iconFallbackSymbol = 'ℹ️';
+
         if (isIssueRow) {
             iconName = 'alert-triangle';
             iconColor = 'var(--danger, #dc3545)';
             backgroundColor = 'rgba(220, 53, 69, 0.05)';
+            iconFallbackSymbol = '⚠️';
         } else if (isSuggestionRow) {
             iconName = 'lightbulb';
             iconColor = 'var(--info, #007acc)';
             backgroundColor = 'rgba(0, 123, 255, 0.05)';
+            iconFallbackSymbol = '💡';
         } else if (isInfoRow) {
             iconName = 'info';
             iconColor = 'var(--success, #28a745)';
             backgroundColor = 'rgba(40, 167, 69, 0.05)';
+            iconFallbackSymbol = 'ℹ️';
         }
         
         // Parse text and score for complexity/structure issues
@@ -88,6 +124,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             React.createElement('i', {
                 'data-lucide': iconName,
                 key: 'icon',
+                ref: (el) => registerIcon(el, iconFallbackSymbol),
                 style: { 
                     width: '14px', 
                     height: '14px', 
@@ -202,26 +239,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 e.stopPropagation();
                 tree.toggle(node.id);
             },
-            // Force Lucide refresh and add fallback
-            ref: (el) => {
-                if (el) {
-                    // Add fallback text in case Lucide doesn't render
-                    if (!el.querySelector('svg')) {
-                        el.textContent = fallbackSymbol;
-                    }
-                    
-                    // Try to initialize Lucide
-                    if (typeof window !== 'undefined' && window.lucide) {
-                        setTimeout(() => {
-                            window.lucide.createIcons();
-                            // Check if Lucide worked, if not use fallback
-                            if (!el.querySelector('svg')) {
-                                el.textContent = fallbackSymbol;
-                            }
-                        }, 50);
-                    }
-                }
-            }
+            ref: (el) => registerIcon(el, fallbackSymbol)
         }));
     } else {
         // Add spacing for nodes without children to align with expandable nodes
@@ -233,12 +251,19 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Icon
     let iconName = 'function-square'; // default for entities
-    if (isFolder) iconName = 'folder';
-    else if (isFile) iconName = 'file-code';
-    
+    let iconFallbackSymbol = '🔧';
+    if (isFolder) {
+        iconName = 'folder';
+        iconFallbackSymbol = '📁';
+    } else if (isFile) {
+        iconName = 'file-code';
+        iconFallbackSymbol = '📄';
+    }
+
     children.push(React.createElement('i', {
         'data-lucide': iconName,
         key: 'icon',
+        ref: (el) => registerIcon(el, iconFallbackSymbol),
         style: { width: '16px', height: '16px', marginRight: '0.5rem' }
     }));
     

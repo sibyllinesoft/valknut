@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
-use super::common::{EntityKind, ParseIndex, ParsedEntity, SourceLocation};
+use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
@@ -26,6 +26,31 @@ impl GoAdapter {
         })?;
 
         Ok(Self { parser, language })
+    }
+
+    fn parse_tree(&mut self, source_code: &str) -> Result<Tree> {
+        self.parser
+            .parse(source_code, None)
+            .ok_or_else(|| ValknutError::parse("go", "Failed to parse Go source"))
+    }
+
+    fn walk_tree<F>(node: Node, callback: &mut F)
+    where
+        F: FnMut(Node),
+    {
+        callback(node);
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            Self::walk_tree(child, callback);
+        }
+    }
+
+    fn node_text(node: &Node, source_code: &str) -> Result<String> {
+        Ok(node
+            .utf8_text(source_code.as_bytes())?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "))
     }
 
     /// Parse Go source code and extract entities
@@ -634,6 +659,96 @@ impl GoAdapter {
         }
 
         Ok(code_entity)
+    }
+}
+
+impl LanguageAdapter for GoAdapter {
+    fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex> {
+        GoAdapter::parse_source(self, source, file_path)
+    }
+
+    fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parse_tree(source)?;
+        let mut calls = Vec::new();
+
+        Self::walk_tree(tree.root_node(), &mut |node| {
+            if node.kind() == "call_expression" {
+                let callee = node
+                    .child_by_field_name("function")
+                    .or_else(|| node.child(0));
+
+                if let Some(target) = callee {
+                    if let Ok(text) = Self::node_text(&target, source) {
+                        let cleaned = text.trim();
+                        if !cleaned.is_empty() {
+                            calls.push(cleaned.to_string());
+                        }
+                    }
+                }
+            }
+        });
+
+        calls.sort();
+        calls.dedup();
+        Ok(calls)
+    }
+
+    fn contains_boilerplate_patterns(
+        &mut self,
+        source: &str,
+        patterns: &[String],
+    ) -> Result<Vec<String>> {
+        let mut found: Vec<String> = patterns
+            .iter()
+            .filter(|pattern| !pattern.is_empty() && source.contains(pattern.as_str()))
+            .cloned()
+            .collect();
+
+        found.sort();
+        found.dedup();
+        Ok(found)
+    }
+
+    fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>> {
+        let tree = self.parse_tree(source)?;
+        let mut identifiers = Vec::new();
+
+        Self::walk_tree(tree.root_node(), &mut |node| match node.kind() {
+            "identifier" | "field_identifier" | "type_identifier" | "package_identifier" => {
+                if let Ok(text) = Self::node_text(&node, source) {
+                    let cleaned = text.trim();
+                    if !cleaned.is_empty() {
+                        identifiers.push(cleaned.to_string());
+                    }
+                }
+            }
+            _ => {}
+        });
+
+        identifiers.sort();
+        identifiers.dedup();
+        Ok(identifiers)
+    }
+
+    fn count_ast_nodes(&mut self, source: &str) -> Result<usize> {
+        let tree = self.parse_tree(source)?;
+        let mut count = 0usize;
+        Self::walk_tree(tree.root_node(), &mut |_| count += 1);
+        Ok(count)
+    }
+
+    fn count_distinct_blocks(&mut self, source: &str) -> Result<usize> {
+        let index = GoAdapter::parse_source(self, source, "<memory>")?;
+        Ok(index.count_distinct_blocks())
+    }
+
+    fn normalize_source(&mut self, source: &str) -> Result<String> {
+        let tree = self.parse_tree(source)?;
+        Ok(tree.root_node().to_sexp())
+    }
+
+    fn language_name(&self) -> &str {
+        "go"
     }
 }
 

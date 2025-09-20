@@ -77,19 +77,6 @@ pub enum ValknutError {
         parameters: Option<String>,
     },
 
-    /// Database and persistence errors
-    #[cfg(feature = "database")]
-    #[error("Database error: {message}")]
-    Database {
-        /// Error description
-        message: String,
-        /// Database operation that failed
-        operation: Option<String>,
-        /// Underlying database error
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
     /// Analysis pipeline errors
     #[error("Pipeline error at stage '{stage}': {message}")]
     Pipeline {
@@ -364,17 +351,6 @@ impl From<ParseFloatError> for ValknutError {
 impl From<Utf8Error> for ValknutError {
     fn from(err: Utf8Error) -> Self {
         Self::parse("unknown", format!("UTF-8 encoding error: {err}"))
-    }
-}
-
-#[cfg(feature = "database")]
-impl From<sqlx::Error> for ValknutError {
-    fn from(err: sqlx::Error) -> Self {
-        Self::Database {
-            message: format!("Database operation failed: {err}"),
-            operation: None,
-            source: Some(Box::new(err)),
-        }
     }
 }
 

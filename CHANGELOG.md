@@ -5,6 +5,22 @@ All notable changes to valknut-rs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-03-15
+
+### Added
+- CLI `--preset` profiles (`fast`, `default`, `deep`, `ci`) with optional `--advanced` controls for expert tuning.
+- Release automation script that tags the repo and publishes GitHub releases via the `gh` CLI.
+- Coverage extractor test suite exercising LCOV ingestion and gap scoring across languages.
+
+### Changed
+- Unified configuration loading to normalize through the public `AnalysisConfig` types and remove legacy `names`/`live_reach` remnants.
+- HTML report tree now initializes icons via React effects and ships with client-side filtering for large analyses.
+- Documentation reorganized into `docs/README.md` with historical reports archived under `docs/archive/`.
+
+### Fixed
+- Prevents dead coverage spans shorter than the configured threshold from skewing gap scoring.
+- Ensures preset application toggles coverage/LSH modules consistently across API and internal config layers.
+
 ## [1.2.1] - 2024-12-11
 
 ### 🚀 Enhanced MCP Server for Claude Code Integration

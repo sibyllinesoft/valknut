@@ -115,7 +115,7 @@ Since this is the first stable release (1.0.0), no upgrade path is needed. Futur
 #### Configuration Migration
 First-time users should generate a new configuration file:
 ```bash
-valknut init-config --output valknut-config.yml
+valknut init-config --output valknut.yml
 ```
 
 ## ⚠️ Breaking Changes & Migration
@@ -208,7 +208,7 @@ valknut analyze --quality-gate --max-complexity 75 --min-health 60 ./src
 
 ### Configuration File
 ```yaml
-# valknut-config.yml
+# valknut.yml
 analysis:
   max_complexity: 75
   min_health_score: 60

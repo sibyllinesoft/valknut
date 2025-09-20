@@ -13,7 +13,7 @@ This guide helps you quickly get started with testing valknut's Bayesian normali
 ### 1. Test on Sample Bad Code
 ```bash
 # Run valknut on our intentionally bad code sample
-valknut analyze datasets/sample_bad_code.py
+valknut analyze datasets/python/samples/sample_bad_code.py
 
 # Expected: Should detect multiple code smells and provide low quality scores
 ```
@@ -21,10 +21,10 @@ valknut analyze datasets/sample_bad_code.py
 ### 2. Test Before/After Improvement Detection
 ```bash
 # Analyze a "before" file (should show poor quality)
-valknut analyze datasets/code-smells-python/employee-management-system/before.py
+valknut analyze datasets/python/code_smells/case-studies/employee-management-system/before.py
 
 # Analyze the corresponding "after" file (should show improved quality)
-valknut analyze datasets/code-smells-python/employee-management-system/after.py
+valknut analyze datasets/python/code_smells/case-studies/employee-management-system/after.py
 
 # Compare the scores - "after" should have better ratings
 ```
@@ -32,8 +32,7 @@ valknut analyze datasets/code-smells-python/employee-management-system/after.py
 ### 3. Run Comprehensive Benchmark
 ```bash
 # Execute the full benchmark suite
-cd datasets
-python test_scenarios.py
+python datasets/python/samples/test_scenarios.py
 
 # This will generate benchmark_report.json with detailed results
 ```

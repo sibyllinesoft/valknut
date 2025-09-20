@@ -15,7 +15,6 @@ fn main() {
     println!("Phase 4 Components Successfully Integrated:");
     println!("  ✓ PayoffRankingSystem with complete ranking formula");
     println!("  ✓ Hard filtering floors (SavedTokens ≥ 100, RarityGain ≥ 1.2)");
-    println!("  ✓ Live reach data integration");
     println!("  ✓ Quality metrics calculation (fragmentarity, structure_ratio, uniqueness)");
     println!("  ✓ Auto-calibration quality assessment");
     println!("  ✓ IDF statistics for rarity calculations");
@@ -25,7 +24,6 @@ fn main() {
     println!("  • Automatic threshold calibration achieving ≥80% quality targets");
     println!("  • Intelligent clone prioritization based on actual refactoring value");
     println!("  • Hard floors that effectively eliminate noise");
-    println!("  • Integration with live reachability data when available");
     println!("  • Persistent caching of calibration results");
     println!("  • Production-ready system that works hands-off on any codebase");
 

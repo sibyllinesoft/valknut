@@ -51,9 +51,6 @@ async fn main() -> anyhow::Result<()> {
         Commands::ListLanguages => {
             cli::list_languages().await?;
         }
-        Commands::LiveReach(args) => {
-            cli::live_reach_command(args).await?;
-        }
     }
 
     Ok(())
