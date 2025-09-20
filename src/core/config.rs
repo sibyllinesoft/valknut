@@ -66,6 +66,15 @@ pub struct ValknutConfig {
 
 impl Default for ValknutConfig {
     fn default() -> Self {
+        Self::new_with_defaults()
+    }
+}
+
+impl ValknutConfig {
+    /// Construct a configuration using the canonical default values used across
+    /// the CLI and public API layers. Keeping this in one place prevents the
+    /// various configuration surfaces from drifting apart.
+    pub(crate) fn new_with_defaults() -> Self {
         Self {
             analysis: AnalysisConfig::default(),
             scoring: ScoringConfig::default(),
@@ -83,9 +92,7 @@ impl Default for ValknutConfig {
             _names_placeholder: None,
         }
     }
-}
 
-impl ValknutConfig {
     /// Load configuration from a YAML file
     pub fn from_yaml_file(path: impl Into<PathBuf>) -> Result<Self> {
         let path = path.into();
@@ -246,13 +253,15 @@ pub struct AnalysisConfig {
 
 impl Default for AnalysisConfig {
     fn default() -> Self {
+        let module_defaults = crate::api::config_types::AnalysisModules::default();
+
         Self {
-            enable_scoring: true,
-            enable_graph_analysis: false, // Deferred to v1.1 - placeholder implementation
-            enable_lsh_analysis: true,
-            enable_refactoring_analysis: true,
-            enable_coverage_analysis: true, // Now enabled by default
-            enable_structure_analysis: true,
+            enable_scoring: module_defaults.complexity,
+            enable_graph_analysis: module_defaults.dependencies,
+            enable_lsh_analysis: module_defaults.duplicates,
+            enable_refactoring_analysis: module_defaults.refactoring,
+            enable_coverage_analysis: module_defaults.coverage,
+            enable_structure_analysis: module_defaults.structure,
             enable_names_analysis: true,
             confidence_threshold: 0.7,
             max_files: 0,

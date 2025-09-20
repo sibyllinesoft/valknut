@@ -18,13 +18,15 @@ use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use crate::detectors::structure::{StructureConfig, StructureExtractor};
 use std::sync::Arc;
 
-use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation};
-use super::pipeline_results::{
-    ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics, MemoryStats, PipelineResults,
-    PipelineStatistics, PipelineStatus, ScoringResults,
+use super::pipeline_config::{
+    AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
-use crate::core::pipeline::AnalysisSummary;
+use super::pipeline_results::{
+    ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics, MemoryStats,
+    PipelineResults, PipelineStatistics, PipelineStatus, ScoringResults,
+};
 use super::pipeline_stages::AnalysisStages;
+use crate::core::pipeline::AnalysisSummary;
 
 /// Progress callback function type
 pub type ProgressCallback = Box<dyn Fn(&str, f64) + Send + Sync>;
@@ -683,7 +685,7 @@ impl AnalysisPipeline {
             files_processed: total_entities,
             entities_analyzed: total_entities,
             refactoring_needed: priority_counts,
-            high_priority: high_priority,
+            high_priority,
             critical: critical_issues,
             avg_refactoring_score: 0.0,
             code_health_score,
@@ -906,15 +908,15 @@ impl AnalysisPipeline {
                 rule_name: "complexity_score".to_string(),
                 description: format!(
                     "Average complexity {:.1} exceeds allowed {:.1}",
-                    results.health_metrics.complexity_score,
-                    config.max_complexity_score
+                    results.health_metrics.complexity_score, config.max_complexity_score
                 ),
                 current_value: results.health_metrics.complexity_score,
                 threshold: config.max_complexity_score,
                 severity: severity_from_ratio(ratio),
                 affected_files,
                 recommended_actions: vec![
-                    "Refactor the highest-complexity functions to smaller, cohesive units".to_string(),
+                    "Refactor the highest-complexity functions to smaller, cohesive units"
+                        .to_string(),
                     "Introduce helper methods to reduce cyclomatic paths".to_string(),
                 ],
             });
@@ -946,15 +948,15 @@ impl AnalysisPipeline {
                 rule_name: "technical_debt_ratio".to_string(),
                 description: format!(
                     "Technical debt ratio {:.1}% exceeds allowed {:.1}%",
-                    results.health_metrics.technical_debt_ratio,
-                    config.max_technical_debt_ratio
+                    results.health_metrics.technical_debt_ratio, config.max_technical_debt_ratio
                 ),
                 current_value: results.health_metrics.technical_debt_ratio,
                 threshold: config.max_technical_debt_ratio,
                 severity: severity_from_ratio(ratio),
                 affected_files,
                 recommended_actions: vec![
-                    "Schedule debt-repayment tasks for the modules with the highest debt score".to_string(),
+                    "Schedule debt-repayment tasks for the modules with the highest debt score"
+                        .to_string(),
                     "Add regression tests before refactoring debt-heavy code".to_string(),
                 ],
             });
@@ -962,7 +964,8 @@ impl AnalysisPipeline {
 
         // Maintainability gate (higher is better)
         if results.health_metrics.maintainability_score < config.min_maintainability_score {
-            let delta = config.min_maintainability_score - results.health_metrics.maintainability_score;
+            let delta =
+                config.min_maintainability_score - results.health_metrics.maintainability_score;
             let ratio = delta / config.min_maintainability_score.max(1.0);
             penalty += (ratio * 12.0).min(20.0);
 
@@ -985,21 +988,24 @@ impl AnalysisPipeline {
                 rule_name: "maintainability_score".to_string(),
                 description: format!(
                     "Maintainability score {:.1} fell below required {:.1}",
-                    results.health_metrics.maintainability_score,
-                    config.min_maintainability_score
+                    results.health_metrics.maintainability_score, config.min_maintainability_score
                 ),
                 current_value: results.health_metrics.maintainability_score,
                 threshold: config.min_maintainability_score,
                 severity: severity_from_ratio(ratio),
                 affected_files,
                 recommended_actions: vec![
-                    "Document complex modules and add unit tests to stabilise behaviour".to_string(),
+                    "Document complex modules and add unit tests to stabilise behaviour"
+                        .to_string(),
                     "Break large files into well-scoped components".to_string(),
                 ],
             });
         }
 
-        let critical_issues = results.summary.critical_issues.max(results.summary.critical);
+        let critical_issues = results
+            .summary
+            .critical_issues
+            .max(results.summary.critical);
         if critical_issues as usize > config.max_critical_issues {
             let delta = critical_issues as f64 - config.max_critical_issues as f64;
             let ratio = delta / config.max_critical_issues.max(1) as f64;
@@ -1031,18 +1037,23 @@ impl AnalysisPipeline {
                 affected_files,
                 recommended_actions: vec![
                     "Prioritise fixes for critical refactoring recommendations".to_string(),
-                    "Pull the highest scoring files into an immediate remediation sprint".to_string(),
+                    "Pull the highest scoring files into an immediate remediation sprint"
+                        .to_string(),
                 ],
             });
         }
 
-        let high_priority_issues = results.summary.high_priority_issues.max(results.summary.high_priority);
+        let high_priority_issues = results
+            .summary
+            .high_priority_issues
+            .max(results.summary.high_priority);
         if high_priority_issues as usize > config.max_high_priority_issues {
             let delta = high_priority_issues as f64 - config.max_high_priority_issues as f64;
             let ratio = delta / config.max_high_priority_issues.max(1) as f64;
             penalty += (ratio * 5.0).min(12.0);
 
-            let mut high_priority_files: Vec<_> = results.refactoring.detailed_results.iter().collect();
+            let mut high_priority_files: Vec<_> =
+                results.refactoring.detailed_results.iter().collect();
             high_priority_files.sort_by(|a, b| {
                 b.refactoring_score
                     .partial_cmp(&a.refactoring_score)
@@ -1068,7 +1079,8 @@ impl AnalysisPipeline {
                 affected_files,
                 recommended_actions: vec![
                     "Schedule remediation tasks for the highest scoring files".to_string(),
-                    "Pair with senior maintainers to reduce backlog of high-priority fixes".to_string(),
+                    "Pair with senior maintainers to reduce backlog of high-priority fixes"
+                        .to_string(),
                 ],
             });
         }
@@ -1125,7 +1137,8 @@ impl AnalysisPipeline {
             let mut feature_contributions = HashMap::new();
             feature_contributions.insert("cyclomatic_complexity".to_string(), metrics.cyclomatic());
             feature_contributions.insert("cognitive_complexity".to_string(), metrics.cognitive());
-            feature_contributions.insert("max_nesting_depth".to_string(), metrics.max_nesting_depth);
+            feature_contributions
+                .insert("max_nesting_depth".to_string(), metrics.max_nesting_depth);
             feature_contributions.insert("lines_of_code".to_string(), metrics.lines_of_code);
             feature_contributions.insert(
                 "technical_debt_score".to_string(),

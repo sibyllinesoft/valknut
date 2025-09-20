@@ -4,7 +4,7 @@
 //! and progress tracking functionality.
 
 use crate::cli::args::{
-    AdvancedCloneArgs, AIFeaturesArgs, AnalyzeArgs, AnalysisControlArgs, CloneDetectionArgs,
+    AIFeaturesArgs, AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs,
     CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, QualityGateArgs,
     SurveyVerbosity, ValidateConfigArgs,
 };

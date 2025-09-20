@@ -9,7 +9,6 @@ use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 use crate::lang::common::{EntityKind, ParsedEntity};
 use crate::lang::registry::adapter_for_file;
-use tracing::warn;
 
 use super::config::{
     CohesionEdge, CohesionGraph, EntityNode, FileSplitPack, ImportStatement, SplitEffort,
@@ -648,13 +647,7 @@ impl FileAnalyzer {
         let mut snapshot = ProjectImportSnapshot::default();
         for file in self.collect_project_code_files(project_root)? {
             let canonical_file = self.canonicalize_path(&file);
-            let imports = match self.extract_imports(&file) {
-                Ok(imports) => imports,
-                Err(err) => {
-                    warn!("Failed to extract imports for {}: {}", file.display(), err);
-                    continue;
-                }
-            };
+            let imports = self.extract_imports(&file)?;
 
             for import in imports {
                 if let Some(resolved) =
@@ -951,17 +944,8 @@ impl FileAnalyzer {
 
     pub fn extract_imports(&self, file_path: &Path) -> Result<Vec<ImportStatement>> {
         let content = FileReader::read_to_string(file_path)?;
-        match adapter_for_file(file_path) {
-            Ok(mut adapter) => adapter.extract_imports(&content),
-            Err(err) => {
-                warn!(
-                    "Failed to obtain language adapter for {}: {}",
-                    file_path.display(),
-                    err
-                );
-                Ok(Vec::new())
-            }
-        }
+        let mut adapter = adapter_for_file(file_path)?;
+        adapter.extract_imports(&content)
     }
 
     /// Extract Python import statements

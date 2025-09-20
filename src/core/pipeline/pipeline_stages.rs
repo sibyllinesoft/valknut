@@ -220,19 +220,17 @@ impl AnalysisStages {
             });
         }
 
-        let analysis = match ProjectDependencyAnalysis::analyze(files) {
-            Ok(analysis) => analysis,
-            Err(err) => {
-                warn!("Impact analysis failed: {}", err);
-                return Ok(ImpactAnalysisResults {
-                    enabled: false,
-                    dependency_cycles: Vec::new(),
-                    chokepoints: Vec::new(),
-                    clone_groups: Vec::new(),
-                    issues_count: 0,
-                });
-            }
-        };
+        let analysis = ProjectDependencyAnalysis::analyze(files)?;
+
+        if analysis.is_empty() {
+            return Ok(ImpactAnalysisResults {
+                enabled: false,
+                dependency_cycles: Vec::new(),
+                chokepoints: Vec::new(),
+                clone_groups: Vec::new(),
+                issues_count: 0,
+            });
+        }
 
         let dependency_cycles = analysis
             .cycles()

@@ -3,8 +3,8 @@
 //! This module provides intelligent refactoring suggestions by using scribe-analyzer to bundle
 //! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
 
-use crate::core::pipeline::AnalysisResults;
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
+use crate::core::pipeline::AnalysisResults;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use walkdir::WalkDir;

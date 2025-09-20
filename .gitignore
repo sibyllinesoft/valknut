@@ -159,6 +159,9 @@ __pycache__/
 # Serena MCP
 .serena/
 
+# Development inventory helpers
+DIRECTORY_MAP.txt
+
 # Editor files
 *.swp
 *.swo

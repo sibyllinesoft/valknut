@@ -147,9 +147,9 @@ pub mod api {
 }
 
 // Re-export primary types for convenience
+pub use crate::core::pipeline::AnalysisResults;
 pub use api::config_types::AnalysisConfig;
 pub use api::engine::ValknutEngine;
-pub use crate::core::pipeline::AnalysisResults;
 pub use core::errors::{Result, ValknutError, ValknutResultExt};
 
 #[cfg(test)]

@@ -37,9 +37,9 @@ pub use pipeline_results::{
     HealthMetrics, ImpactAnalysisResults, PipelineResults, PipelineStatistics, PipelineStatus,
     RefactoringAnalysisResults, ResultSummary, ScoringResults, StructureAnalysisResults,
 };
+pub use pipeline_stages::AnalysisStages;
 pub use result_conversions::*;
 pub use result_types::*;
-pub use pipeline_stages::AnalysisStages;
 
 mod pipeline_config;
 mod pipeline_executor;

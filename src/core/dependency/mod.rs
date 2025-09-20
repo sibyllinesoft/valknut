@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use petgraph::algo::kosaraju_scc;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Direction;
-use tracing::{debug, warn};
 
 use crate::core::errors::Result;
+use crate::core::file_utils::FileReader;
 use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
 
 #[derive(Debug, Clone)]
@@ -218,6 +218,10 @@ impl ProjectDependencyAnalysis {
         })
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
     pub fn metrics_for(&self, key: &EntityKey) -> Option<&DependencyMetrics> {
         if let Some(metrics) = self.metrics.get(key) {
             return Some(metrics);
@@ -251,42 +255,11 @@ impl ProjectDependencyAnalysis {
 }
 
 fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
-    let mut adapter = match adapter_for_file(path) {
-        Ok(adapter) => adapter,
-        Err(err) => {
-            debug!(
-                "Skipping dependency analysis for {}: {}",
-                path.display(),
-                err
-            );
-            return Ok(Vec::new());
-        }
-    };
-
-    let source = match std::fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(err) => {
-            warn!(
-                "Failed to read file {} for dependency analysis: {}",
-                path.display(),
-                err
-            );
-            return Ok(Vec::new());
-        }
-    };
+    let mut adapter = adapter_for_file(path)?;
+    let source = FileReader::read_to_string(path)?;
 
     let path_str = path.to_string_lossy().to_string();
-    let parse_index = match adapter.parse_source(&source, &path_str) {
-        Ok(index) => index,
-        Err(err) => {
-            warn!(
-                "Failed to parse {} for dependency analysis: {}",
-                path.display(),
-                err
-            );
-            return Ok(Vec::new());
-        }
-    };
+    let parse_index = adapter.parse_source(&source, &path_str)?;
 
     let mut functions = Vec::new();
 

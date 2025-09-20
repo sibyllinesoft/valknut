@@ -87,7 +87,6 @@ pub enum Commands {
     /// List supported programming languages and their status
     #[command(name = "list-languages")]
     ListLanguages,
-
 }
 
 /// Quality gate configuration for CI/CD integration

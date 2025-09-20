@@ -6,10 +6,10 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::api::config_types::AnalysisConfig as ApiAnalysisConfig;
-use crate::core::pipeline::AnalysisResults;
 use crate::core::config::ValknutConfig;
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::FeatureVector;
+use crate::core::pipeline::AnalysisResults;
 use crate::core::pipeline::{AnalysisConfig as PipelineAnalysisConfig, AnalysisPipeline};
 
 /// Main valknut analysis engine

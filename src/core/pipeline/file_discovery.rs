@@ -196,7 +196,7 @@ fn allowed_extensions_from(
             .map(|ext| ext.to_ascii_lowercase())
             .collect()
     } else {
-        ["py", "js", "ts", "tsx", "jsx", "rs", "go", "java"]
+        ["py", "js", "ts", "tsx", "jsx", "rs", "go"]
             .iter()
             .map(|ext| ext.to_string())
             .collect()
