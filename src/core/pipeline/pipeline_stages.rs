@@ -3,6 +3,7 @@
 // use chrono::{DateTime, Utc}; // Unused imports
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
+use futures::future;
 
 use super::pipeline_results::{
     ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
@@ -129,12 +130,33 @@ impl AnalysisStages {
     ) -> Result<ComplexityAnalysisResults> {
         debug!("Running complexity analysis on {} files", files.len());
 
-        let file_refs: Vec<&Path> = files.iter().map(|p| p.as_path()).collect();
-        // Use AST-based complexity analyzer instead of text-based one
-        let detailed_results = self
-            .ast_complexity_analyzer
-            .analyze_files(&file_refs)
-            .await?;
+        // Parallelize file analysis using tokio::spawn
+        // Since AstComplexityAnalyzer contains Arc<AstService>, we need to access the shared service
+        let analysis_futures = files.iter().map(|file_path| {
+            let ast_service = self.ast_service.clone();
+            let config = crate::detectors::complexity::ComplexityConfig::default();
+            let path = file_path.clone();
+            
+            tokio::spawn(async move {
+                // Create a local analyzer for this file
+                let analyzer = crate::detectors::complexity::AstComplexityAnalyzer::new(config, ast_service);
+                let file_refs = vec![path.as_path()];
+                analyzer.analyze_files(&file_refs).await
+            })
+        });
+
+        // Wait for all concurrent analyses to complete
+        let results_of_results = futures::future::join_all(analysis_futures).await;
+
+        // Collect and flatten the results
+        let mut detailed_results = Vec::new();
+        for result in results_of_results {
+            match result {
+                Ok(Ok(file_results)) => detailed_results.extend(file_results),
+                Ok(Err(e)) => warn!("Complexity analysis task failed: {}", e),
+                Err(e) => warn!("Tokio spawn failed for complexity analysis: {}", e),
+            }
+        }
 
         // Calculate averages
         let count = detailed_results.len() as f64;
@@ -190,7 +212,31 @@ impl AnalysisStages {
     ) -> Result<RefactoringAnalysisResults> {
         debug!("Running refactoring analysis on {} files", files.len());
 
-        let detailed_results = self.refactoring_analyzer.analyze_files(files).await?;
+        // Parallelize file analysis using tokio::spawn
+        let analysis_futures = files.iter().map(|file_path| {
+            let ast_service = self.ast_service.clone();
+            let config = crate::detectors::refactoring::RefactoringConfig::default();
+            let path = file_path.clone();
+            
+            tokio::spawn(async move {
+                // Create a local analyzer for this file
+                let analyzer = crate::detectors::refactoring::RefactoringAnalyzer::new(config, ast_service);
+                analyzer.analyze_files(&[path]).await
+            })
+        });
+
+        // Wait for all concurrent analyses to complete
+        let results_of_results = futures::future::join_all(analysis_futures).await;
+
+        // Collect and flatten the results
+        let mut detailed_results = Vec::new();
+        for result in results_of_results {
+            match result {
+                Ok(Ok(file_results)) => detailed_results.extend(file_results),
+                Ok(Err(e)) => warn!("Refactoring analysis task failed: {}", e),
+                Err(e) => warn!("Tokio spawn failed for refactoring analysis: {}", e),
+            }
+        }
         let opportunities_count = detailed_results
             .iter()
             .map(|r| r.recommendations.len())
@@ -321,11 +367,16 @@ impl AnalysisStages {
                 ..context
             };
 
-            // Run LSH analysis on each entity
+            // Run LSH analysis on each entity in parallel
+            // Note: LSH analysis will remain sequential for now due to shared state concerns
+            // but could be optimized further with proper Arc wrapping of the extractor
             let mut all_similarities = Vec::new();
             let mut max_similarity: f64 = 0.0;
             let mut total_similarity = 0.0;
             let mut duplicate_count = 0;
+            
+            // For now, we'll keep LSH sequential but optimize other stages
+            // TODO: Parallelize LSH with proper shared state management
             for entity in &entities {
                 if let Ok(features) = lsh_extractor.extract(entity, &context).await {
                     if let Some(similarity) = features.get("max_similarity") {

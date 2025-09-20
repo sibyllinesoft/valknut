@@ -2,12 +2,26 @@
 
 use chrono;
 use serde_json;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 // Type aliases to reduce complexity
 type DynError = Box<dyn std::error::Error>;
 type ParseResult = Result<(String, Option<String>), (i32, String)>;
+
+/// Session-level analysis cache for avoiding redundant work
+#[derive(Debug, Clone)]
+pub struct AnalysisCache {
+    pub path: PathBuf,
+    pub results: Arc<AnalysisResults>,
+    pub timestamp: std::time::Instant,
+}
+
+/// Type alias for the analysis cache
+pub type AnalysisCacheRef = Arc<Mutex<HashMap<PathBuf, AnalysisCache>>>;
 
 use valknut_rs::api::{
     config_types::AnalysisConfig, engine::ValknutEngine, results::AnalysisResults,
@@ -187,8 +201,65 @@ async fn analyze_with_cache(
     config: &AnalysisConfig,
     path: &Path,
 ) -> Result<AnalysisResults, ValknutError> {
+    // For now, create a new engine each time since we don't have cache access here
+    // The actual caching will be handled at the server level
     let mut engine = ValknutEngine::new(config.clone()).await?;
     engine.analyze_directory(path).await
+}
+
+/// Analyze with session-level cache support
+pub async fn analyze_with_session_cache(
+    config: &AnalysisConfig,
+    path: &Path,
+    cache: &AnalysisCacheRef,
+) -> Result<Arc<AnalysisResults>, ValknutError> {
+    let canonical_path = path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf());
+    
+    // Check cache first
+    {
+        let cache_guard = cache.lock().await;
+        if let Some(cached) = cache_guard.get(&canonical_path) {
+            // Check if cache is still valid (5 minutes)
+            if cached.timestamp.elapsed().as_secs() < 300 {
+                info!("Using cached analysis results for: {}", path.display());
+                return Ok(cached.results.clone());
+            } else {
+                info!("Cache expired for: {}", path.display());
+            }
+        }
+    }
+    
+    // Cache miss - run analysis
+    info!("Running fresh analysis for: {}", path.display());
+    let mut engine = ValknutEngine::new(config.clone()).await?;
+    let results = engine.analyze_directory(path).await?;
+    let results_arc = Arc::new(results);
+    
+    // Cache the results
+    {
+        let mut cache_guard = cache.lock().await;
+        
+        // Limit cache size to prevent memory growth
+        if cache_guard.len() >= 10 {
+            // Remove oldest entry
+            if let Some(oldest_key) = cache_guard.iter()
+                .min_by_key(|(_, entry)| entry.timestamp)
+                .map(|(key, _)| key.clone()) {
+                cache_guard.remove(&oldest_key);
+                info!("Evicted oldest cache entry: {}", oldest_key.display());
+            }
+        }
+        
+        cache_guard.insert(canonical_path.clone(), AnalysisCache {
+            path: canonical_path,
+            results: results_arc.clone(),
+            timestamp: std::time::Instant::now(),
+        });
+        info!("Cached analysis results for: {}", path.display());
+    }
+    
+    Ok(results_arc)
 }
 
 /// Format analysis results according to requested format

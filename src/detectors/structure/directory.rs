@@ -137,43 +137,33 @@ impl DirectoryAnalyzer {
             .count())
     }
 
-    /// Calculate Gini coefficient for LOC distribution with SIMD optimization
+    /// Calculate Gini coefficient for LOC distribution with O(n log n) optimization
     pub fn calculate_gini_coefficient(&self, values: &[usize]) -> f64 {
         if values.len() <= 1 {
             return 0.0;
         }
 
         let n = values.len() as f64;
-        let sum: usize = values.iter().sum();
+        let sum: f64 = values.iter().map(|&v| v as f64).sum();
 
-        if sum == 0 {
+        if sum == 0.0 {
             return 0.0;
         }
 
-        // For small arrays, use the standard algorithm
-        if values.len() < 32 {
-            let mut sum_diff = 0.0;
-            for i in 0..values.len() {
-                for j in 0..values.len() {
-                    sum_diff += (values[i] as i64 - values[j] as i64).abs() as f64;
-                }
-            }
-            return sum_diff / (2.0 * n * sum as f64);
+        // O(n log n) algorithm using the standard Gini formula
+        // Sort the values first (O(n log n))
+        let mut sorted_values = values.to_vec();
+        sorted_values.sort_unstable();
+
+        // Calculate using the efficient formula: Gini = (2 * sum(i * y_i) / (n * sum(y_i))) - (n + 1) / n
+        // where i is the rank (1-indexed) and y_i is the sorted value
+        let mut weighted_sum = 0.0;
+        for (i, &val) in sorted_values.iter().enumerate() {
+            weighted_sum += (i as f64 + 1.0) * val as f64;
         }
 
-        // For larger arrays, use optimized parallel computation
-        let sum_diff: f64 = values
-            .par_iter()
-            .enumerate()
-            .map(|(_, &val_i)| {
-                values
-                    .iter()
-                    .map(|&val_j| (val_i as i64 - val_j as i64).abs() as f64)
-                    .sum::<f64>()
-            })
-            .sum();
-
-        sum_diff / (2.0 * n * sum as f64)
+        let gini = (2.0 * weighted_sum) / (n * sum) - (n + 1.0) / n;
+        gini.max(0.0) // Ensure non-negative result
     }
 
     /// Calculate entropy for LOC distribution with parallel optimization

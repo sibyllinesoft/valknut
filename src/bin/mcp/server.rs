@@ -1,25 +1,40 @@
 //! MCP JSON-RPC 2.0 server implementation for stdio communication.
 
 use serde_json;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 use crate::mcp::protocol::{
     create_analyze_code_schema, create_analyze_file_quality_schema,
     create_refactoring_suggestions_schema, create_validate_quality_gates_schema, error_codes,
     JsonRpcRequest, JsonRpcResponse, McpCapabilities, McpInitResult, McpServerInfo, McpTool,
-    ToolCallParams,
+    ToolCallParams, ToolResult, ContentItem,
 };
 use crate::mcp::tools::{
     execute_analyze_code, execute_analyze_file_quality, execute_refactoring_suggestions,
     execute_validate_quality_gates, AnalyzeCodeParams, AnalyzeFileQualityParams,
     RefactoringSuggestionsParams, ValidateQualityGatesParams,
 };
+use valknut_rs::api::results::AnalysisResults;
+
+/// Session-level analysis cache for avoiding redundant work
+#[derive(Debug, Clone)]
+struct AnalysisCache {
+    path: PathBuf,
+    results: Arc<AnalysisResults>,
+    timestamp: std::time::Instant,
+}
 
 /// MCP server that handles JSON-RPC 2.0 communication over stdin/stdout
 pub struct McpServer {
     /// Server name and version information
     server_info: McpServerInfo,
+    /// Session-level cache to avoid re-running analysis for recently analyzed paths
+    analysis_cache: Arc<Mutex<HashMap<PathBuf, AnalysisCache>>>,
 }
 
 impl McpServer {
@@ -30,6 +45,168 @@ impl McpServer {
                 name: "valknut".to_string(),
                 version: version.to_string(),
             },
+            analysis_cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Get cached analysis results if available and still valid (within 5 minutes)
+    async fn get_cached_analysis(&self, path: &PathBuf) -> Option<Arc<AnalysisResults>> {
+        let cache = self.analysis_cache.lock().await;
+        if let Some(cached) = cache.get(path) {
+            // Check if cache is still valid (5 minutes)
+            if cached.timestamp.elapsed().as_secs() < 300 {
+                info!("Using cached analysis results for: {}", path.display());
+                return Some(cached.results.clone());
+            } else {
+                info!("Cache expired for: {}", path.display());
+            }
+        }
+        None
+    }
+
+    /// Cache analysis results for a path
+    async fn cache_analysis(&self, path: PathBuf, results: AnalysisResults) {
+        let mut cache = self.analysis_cache.lock().await;
+        
+        // Limit cache size to prevent memory growth
+        if cache.len() >= 10 {
+            // Remove oldest entry
+            if let Some(oldest_key) = cache.iter()
+                .min_by_key(|(_, entry)| entry.timestamp)
+                .map(|(key, _)| key.clone()) {
+                cache.remove(&oldest_key);
+                info!("Evicted oldest cache entry: {}", oldest_key.display());
+            }
+        }
+        
+        cache.insert(path.clone(), AnalysisCache {
+            path: path.clone(),
+            results: Arc::new(results),
+            timestamp: std::time::Instant::now(),
+        });
+        info!("Cached analysis results for: {}", path.display());
+    }
+
+    /// Execute analyze_code with session-level caching
+    async fn execute_analyze_code_cached(&self, params: AnalyzeCodeParams) -> Result<ToolResult, (i32, String)> {
+        info!("Executing analyze_code tool with caching for path: {}", params.path);
+
+        // Validate path exists
+        let path = std::path::Path::new(&params.path);
+        if !path.exists() {
+            return Err((
+                error_codes::INVALID_PARAMS,
+                format!("Path does not exist: {}", params.path),
+            ));
+        }
+
+        let canonical_path = path.canonicalize()
+            .unwrap_or_else(|_| path.to_path_buf());
+
+        // Check cache first
+        if let Some(cached_results) = self.get_cached_analysis(&canonical_path).await {
+            // Format cached results according to requested format
+            let formatted_output = match self.format_analysis_results(&cached_results, &params.format) {
+                Ok(output) => output,
+                Err(e) => {
+                    error!("Failed to format cached results: {}", e);
+                    return Err((
+                        error_codes::INTERNAL_ERROR,
+                        format!("Failed to format cached results: {}", e),
+                    ));
+                }
+            };
+
+            return Ok(ToolResult {
+                content: vec![ContentItem {
+                    content_type: "text".to_string(),
+                    text: formatted_output,
+                }],
+            });
+        }
+
+        // Cache miss - run fresh analysis
+        let analysis_config = valknut_rs::api::config_types::AnalysisConfig::default()
+            .with_confidence_threshold(0.75)
+            .with_max_files(5000)
+            .with_languages(vec![
+                "python".to_string(),
+                "typescript".to_string(),
+                "javascript".to_string(),
+                "rust".to_string(),
+            ]);
+
+        let mut engine = match valknut_rs::api::engine::ValknutEngine::new(analysis_config).await {
+            Ok(engine) => engine,
+            Err(e) => {
+                error!("Failed to create analysis engine: {}", e);
+                return Err((
+                    error_codes::ANALYSIS_ERROR,
+                    format!("Failed to create analysis engine: {}", e),
+                ));
+            }
+        };
+
+        let results = match engine.analyze_directory(path).await {
+            Ok(results) => results,
+            Err(e) => {
+                error!("Analysis failed: {}", e);
+                return Err((
+                    error_codes::ANALYSIS_ERROR,
+                    format!("Analysis failed: {}", e),
+                ));
+            }
+        };
+
+        // Cache the results and format the output
+        let formatted_output = match self.format_analysis_results(&results, &params.format) {
+            Ok(output) => output,
+            Err(e) => {
+                error!("Failed to format results: {}", e);
+                return Err((
+                    error_codes::INTERNAL_ERROR,
+                    format!("Failed to format results: {}", e),
+                ));
+            }
+        };
+
+        // Cache the results after successful formatting
+        self.cache_analysis(canonical_path, results).await;
+
+        Ok(ToolResult {
+            content: vec![ContentItem {
+                content_type: "text".to_string(),
+                text: formatted_output,
+            }],
+        })
+    }
+
+    /// Format analysis results according to requested format
+    fn format_analysis_results(&self, results: &AnalysisResults, format: &str) -> Result<String, Box<dyn std::error::Error>> {
+        match format {
+            "json" => {
+                // Direct JSON serialization for JSON format
+                serde_json::to_string_pretty(results).map_err(|e| e.into())
+            }
+            "html" => {
+                // Use the report generator for HTML output
+                let generator = valknut_rs::io::reports::ReportGenerator::new();
+                let report_format = valknut_rs::core::config::ReportFormat::Html;
+                // Create a temporary directory path for the report generation
+                let temp_path = std::env::temp_dir().join("valknut_mcp_report");
+                match generator.generate_report(results, &temp_path, report_format) {
+                    Ok(_) => {
+                        // Read the generated file and return its contents
+                        let report_file = temp_path.with_extension("html");
+                        std::fs::read_to_string(report_file).map_err(|e| e.into())
+                    }
+                    Err(e) => Err(e.into()),
+                }
+            }
+            _ => {
+                // Default to JSON for unsupported formats
+                serde_json::to_string_pretty(results).map_err(|e| e.into())
+            }
         }
     }
 
@@ -223,7 +400,7 @@ impl McpServer {
                     }
                 };
 
-                match execute_analyze_code(params).await {
+                match self.execute_analyze_code_cached(params).await {
                     Ok(result) => result,
                     Err((code, message)) => {
                         return JsonRpcResponse::error(id, code, message);

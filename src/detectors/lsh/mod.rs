@@ -1225,8 +1225,9 @@ impl LshExtractor {
                     break;
                 }
 
+                // Use cached signature generation instead of internal method to avoid redundant work
                 let other_signature =
-                    self.generate_minhash_signature_internal(&other_entity.source_code);
+                    self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
                 let similarity = self.jaccard_similarity(signature, &other_signature);
 
                 if similarity >= self.lsh_config.similarity_threshold {

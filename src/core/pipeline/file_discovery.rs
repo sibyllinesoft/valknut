@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use git2::Repository;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::core::config::ValknutConfig;
 use crate::core::errors::{Result, ValknutError};
@@ -44,6 +44,9 @@ pub fn discover_files(
     let mut collected = Vec::new();
 
     if let Some(tracked) = tracked_files {
+        info!("Found git repository at '{}'. Using git index for file discovery.", 
+              repo_root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown".to_string()));
+        info!("Discovered {} tracked files from git index", tracked.len());
         for file in tracked {
             if !is_within_requested_roots(&canonical_roots, &file) {
                 continue;
@@ -64,6 +67,9 @@ pub fn discover_files(
             }
         }
     } else {
+        warn!("No git repository found for paths: {:?}. Falling back to filesystem walk. This may be slower.", 
+              canonical_roots.iter().map(|p| p.display().to_string()).collect::<Vec<_>>());
+        info!("Using filesystem traversal with ignore rules for file discovery");
         // Fall back to filesystem walk with ignore rules when git metadata isn't available.
         for root in &canonical_roots {
             if root.is_file() {
@@ -121,6 +127,10 @@ pub fn discover_files(
     }
 
     collected.sort();
+    info!("File discovery completed: {} files selected for analysis", collected.len());
+    if collected.len() > 100 {
+        info!("Large file set detected ({} files). Consider using more specific include/exclude patterns for better performance", collected.len());
+    }
     Ok(collected)
 }
 
@@ -237,12 +247,14 @@ fn find_repository(roots: &[PathBuf]) -> Result<(Option<Vec<PathBuf>>, Option<Pa
     for root in roots {
         if let Ok(repo) = Repository::discover(root) {
             if let Some(workdir) = repo.workdir() {
+                info!("Located git repository: {}", workdir.display());
                 let tracked = collect_tracked_files(&repo, workdir)?;
                 return Ok((Some(tracked), Some(workdir.to_path_buf())));
             }
         }
     }
 
+    info!("No git repository found in any of the provided paths");
     Ok((None, None))
 }
 

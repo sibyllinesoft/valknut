@@ -1561,11 +1561,11 @@ def func2():
         let rs_imports = analyzer.extract_imports(&rs_file).unwrap();
         assert_eq!(rs_imports.len(), 1);
 
-        // Test unsupported file
+        // Test unsupported file - should return error for unsupported language
         let txt_file = temp_dir.path().join("test.txt");
         fs::write(&txt_file, "some text").unwrap();
-        let txt_imports = analyzer.extract_imports(&txt_file).unwrap();
-        assert_eq!(txt_imports.len(), 0);
+        let txt_result = analyzer.extract_imports(&txt_file);
+        assert!(txt_result.is_err()); // Should error for unsupported file type
     }
 
     #[test]
