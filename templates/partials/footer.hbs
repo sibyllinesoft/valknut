@@ -8,37 +8,66 @@
 </div>
 
 <script>
-    // Filter dropdown functionality
+    // Filter dropdown functionality (optional - only works if filter elements exist)
     function toggleFilterMenu() {
         const menu = document.getElementById('filter-menu');
         const button = document.getElementById('filter-button');
+        
+        // Only proceed if filter elements exist
+        if (!menu || !button) {
+            console.warn('Filter menu elements not found - filter functionality unavailable');
+            return;
+        }
+        
         const chevron = button.querySelector('[data-lucide="chevron-down"]');
         
         if (menu.style.display === 'none') {
             menu.style.display = 'block';
-            chevron.style.transform = 'rotate(180deg)';
+            if (chevron) {
+                chevron.style.transform = 'rotate(180deg)';
+            }
         } else {
             menu.style.display = 'none';
-            chevron.style.transform = 'rotate(0deg)';
+            if (chevron) {
+                chevron.style.transform = 'rotate(0deg)';
+            }
         }
     }
     
-    // Close filter menu when clicking outside
+    // Close filter menu when clicking outside (only if filter elements exist)
     document.addEventListener('click', function(event) {
         const dropdown = document.querySelector('.filter-dropdown');
         const menu = document.getElementById('filter-menu');
         
-        if (!dropdown.contains(event.target)) {
+        // Only proceed if filter elements actually exist
+        if (dropdown && menu && !dropdown.contains(event.target)) {
             menu.style.display = 'none';
             const chevron = document.querySelector('#filter-button [data-lucide="chevron-down"]');
-            chevron.style.transform = 'rotate(0deg)';
+            if (chevron) {
+                chevron.style.transform = 'rotate(0deg)';
+            }
         }
     });
     
-    // Apply filters based on checkboxes
+    // Apply filters based on checkboxes (optional - only works if filter elements exist)
     function applyFilters() {
         // FIXME: Temporarily disable all filtering - show everything
         return true;
+        
+        // Check if filter elements exist before proceeding
+        const filterElements = [
+            'filter-high-complexity',
+            'filter-extract-method', 
+            'filter-simplify-conditionals',
+            'filter-improve-structure',
+            'filter-general-refactoring'
+        ];
+        
+        const hasAllFilters = filterElements.every(id => document.getElementById(id) !== null);
+        if (!hasAllFilters) {
+            console.warn('Filter checkboxes not found - filter functionality unavailable');
+            return true; // Show everything if filters don't exist
+        }
         
         const highComplexityOnly = document.getElementById('filter-high-complexity').checked;
         const extractMethod = document.getElementById('filter-extract-method').checked;

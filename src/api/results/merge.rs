@@ -94,12 +94,20 @@ impl AnalysisResults {
         }
 
         self.coverage_packs.extend(other.coverage_packs.into_iter());
-        self.unified_hierarchy
-            .extend(other.unified_hierarchy.into_iter());
+        // NOTE: Do NOT extend unified_hierarchy here - it flattens the tree structure
+        // We rebuild it properly after all merging is complete
         self.warnings.extend(other.warnings.into_iter());
 
         self.refactoring_candidates_by_file =
             AnalysisResults::group_candidates_by_file(&self.refactoring_candidates);
+            
+        // Rebuild unified hierarchy after merge to restore proper hierarchical structure
+        if let Some(ref directory_health_tree) = self.directory_health_tree {
+            self.unified_hierarchy = Self::build_unified_hierarchy_with_fallback(
+                &self.refactoring_candidates,
+                directory_health_tree,
+            );
+        }
     }
 }
 

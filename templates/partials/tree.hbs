@@ -12,7 +12,7 @@
 
     <script id="tree-data" type="application/json">
         {
-            "unifiedHierarchy": {{#if unified_hierarchy}}{{{unified_hierarchy}}}{{else}}[]{{/if}},
+            "unifiedHierarchy": {{#if unified_hierarchy}}{{{json unified_hierarchy}}}{{else}}[]{{/if}},
             "refactoringCandidatesByFile": {{#if refactoring_candidates_by_file}}{{{json refactoring_candidates_by_file}}}{{else}}[]{{/if}},
             "directoryHealthTree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
             "coveragePacks": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}}
@@ -25,7 +25,8 @@
             const dataElement = document.getElementById('tree-data');
 
             if (!container || !dataElement) {
-                console.warn('Valknut: tree container or data payload missing');
+                console.error('Valknut: tree container or data payload missing');
+                container.innerHTML = '<div class="valknut-tree-empty"><h3>Tree initialization failed: missing container or data</h3></div>';
                 return;
             }
 
@@ -41,45 +42,9 @@
 
             const payload = parsePayload();
             if (!payload) {
-                renderFallback('invalid-payload');
+                console.error('Valknut: invalid payload data');
+                container.innerHTML = '<div class="valknut-tree-empty"><h3>Tree initialization failed: invalid data</h3></div>';
                 return;
-            }
-
-            const getFallbackNodes = () => {
-                if (Array.isArray(payload.unifiedHierarchy)) {
-                    return payload.unifiedHierarchy;
-                }
-                if (Array.isArray(payload.refactoringCandidatesByFile)) {
-                    return payload.refactoringCandidatesByFile;
-                }
-                return [];
-            };
-
-            function renderFallback(reason) {
-                console.warn('Valknut: using static tree fallback', reason);
-
-                const attachFallback = () => {
-                    if (typeof window.initializeTree === 'function') {
-                        container.innerHTML = '';
-                        window.initializeTree('react-tree-root', getFallbackNodes());
-                        return;
-                    }
-                    container.innerHTML = '<div class="valknut-tree-empty"><h3>Unable to load tree view</h3></div>';
-                };
-
-                if (typeof window.initializeTree === 'function') {
-                    attachFallback();
-                    return;
-                }
-
-                const script = document.createElement('script');
-                script.src = './tree-fallback.js';
-                script.async = true;
-                script.onload = attachFallback;
-                script.onerror = () => {
-                    container.innerHTML = '<div class="valknut-tree-empty"><h3>Unable to load tree view</h3></div>';
-                };
-                document.body.appendChild(script);
             }
 
             function mountReactTree() {
@@ -92,11 +57,12 @@
                         throw new Error('React tree bundle not available');
                     }
 
+                    console.log('Mounting React Arborist tree with data:', payload);
                     const root = ReactDOM.createRoot(container);
                     root.render(React.createElement(TreeComponent, { data: payload }));
                 } catch (error) {
                     console.error('Valknut: failed to mount React tree', error);
-                    renderFallback(error.message || 'render-error');
+                    container.innerHTML = '<div class="valknut-tree-empty"><h3>React tree failed to load</h3><p>' + error.message + '</p></div>';
                 }
             }
 
@@ -110,7 +76,10 @@
                 script.src = './react-tree-bundle.js';
                 script.async = true;
                 script.onload = mountReactTree;
-                script.onerror = () => renderFallback('bundle-load-failed');
+                script.onerror = (error) => {
+                    console.error('Failed to load React tree bundle', error);
+                    container.innerHTML = '<div class="valknut-tree-empty"><h3>Failed to load React tree bundle</h3><p>Please check if react-tree-bundle.js is available</p></div>';
+                };
                 document.body.appendChild(script);
             }
 

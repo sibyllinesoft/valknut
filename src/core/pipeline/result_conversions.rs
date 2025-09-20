@@ -136,6 +136,7 @@ impl AnalysisResults {
 
         // Convert scoring results to refactoring candidates
         // Processing scoring results
+        
         let refactoring_candidates: Vec<RefactoringCandidate> = pipeline_results
             .scoring_results
             .files
@@ -235,10 +236,14 @@ impl AnalysisResults {
         // Extract coverage packs from pipeline results
         let coverage_packs = Self::convert_coverage_to_packs(&pipeline_results.results.coverage);
 
-        // Build unified hierarchy from refactoring candidates
-        let unified_hierarchy = Self::build_unified_hierarchy(&refactoring_candidates);
+        // Build unified hierarchy from refactoring candidates and directory health tree
+        let unified_hierarchy = Self::build_unified_hierarchy_with_fallback(
+            &refactoring_candidates,
+            &directory_health_tree,
+        );
 
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
+
 
         Self {
             summary,
@@ -255,8 +260,26 @@ impl AnalysisResults {
         }
     }
 
+    /// Build unified hierarchy from refactoring candidates with directory health tree fallback
+    pub fn build_unified_hierarchy_with_fallback(
+        candidates: &[RefactoringCandidate],
+        directory_health_tree: &DirectoryHealthTree,
+    ) -> Vec<serde_json::Value> {
+        // Always use the directory health tree if available, as it has proper hierarchical structure
+        if !directory_health_tree.directories.is_empty() {
+            return Self::build_unified_hierarchy_from_directory_tree(directory_health_tree);
+        }
+        
+        // Fallback to candidates-based hierarchy only if no directory health tree
+        if !candidates.is_empty() {
+            return Self::build_unified_hierarchy_from_candidates(candidates);
+        }
+        // Return empty hierarchy if no data available
+        vec![]
+    }
+
     /// Build unified hierarchy from flat refactoring candidates list
-    fn build_unified_hierarchy(candidates: &[RefactoringCandidate]) -> Vec<serde_json::Value> {
+    fn build_unified_hierarchy_from_candidates(candidates: &[RefactoringCandidate]) -> Vec<serde_json::Value> {
         use std::collections::BTreeMap;
         use std::path::Path;
 
@@ -304,8 +327,9 @@ impl AnalysisResults {
                     let mut entity_children = Vec::new();
 
                     // Add issues as children
-                    for issue in &candidate.issues {
+                    for (issue_idx, issue) in candidate.issues.iter().enumerate() {
                         let issue_node = serde_json::json!({
+                            "id": format!("issue_{}_{}", candidate.entity_id, issue_idx),
                             "type": "issue",
                             "name": format!("{}: {}", issue.category, issue.description),
                             "priority": format!("{:?}", candidate.priority),
@@ -315,8 +339,9 @@ impl AnalysisResults {
                     }
 
                     // Add suggestions as children
-                    for suggestion in &candidate.suggestions {
+                    for (suggestion_idx, suggestion) in candidate.suggestions.iter().enumerate() {
                         let suggestion_node = serde_json::json!({
+                            "id": format!("suggestion_{}_{}", candidate.entity_id, suggestion_idx),
                             "type": "suggestion",
                             "name": format!("{}: {}", suggestion.refactoring_type, suggestion.description),
                             "priority": format!("{:?}", candidate.priority),
@@ -326,6 +351,7 @@ impl AnalysisResults {
                     }
 
                     let entity_node = serde_json::json!({
+                        "id": candidate.entity_id,
                         "type": "entity",
                         "entity_id": candidate.entity_id,
                         "name": Self::extract_entity_name(&candidate.name),
@@ -339,6 +365,7 @@ impl AnalysisResults {
                 }
 
                 let file_node = serde_json::json!({
+                    "id": format!("file_{}/{}", dir_path, file_name),
                     "type": "file",
                     "name": file_name,
                     "children": file_children
@@ -365,6 +392,7 @@ impl AnalysisResults {
             };
 
             let dir_node = serde_json::json!({
+                "id": format!("folder_{}", dir_path),
                 "type": "folder", // Use "folder" instead of "directory" for React Arborist compatibility
                 "name": dir_path,
                 "health_score": health_score,
@@ -398,6 +426,104 @@ impl AnalysisResults {
         (health_score - score_penalty).max(0.0f64).min(1.0f64)
     }
 
+    /// Build unified hierarchy from directory health tree
+    pub fn build_unified_hierarchy_from_directory_tree(
+        directory_health_tree: &DirectoryHealthTree,
+    ) -> Vec<serde_json::Value> {
+        use std::collections::HashMap;
+        use std::path::Path;
+
+        // Build a map of path -> directory info for easy lookup
+        let mut dir_map: HashMap<String, &DirectoryHealthScore> = HashMap::new();
+        for (path_buf, dir_info) in &directory_health_tree.directories {
+            let path_str = path_buf.to_string_lossy().to_string();
+            // Filter out trivial directories
+            if !Self::is_trivial_directory(&path_str) {
+                dir_map.insert(path_str, dir_info);
+            }
+        }
+
+        // Build the hierarchical structure recursively
+        fn build_node_with_children(
+            path: &str,
+            dir_info: &DirectoryHealthScore,
+            dir_map: &HashMap<String, &DirectoryHealthScore>,
+        ) -> serde_json::Value {
+            let mut children = Vec::new();
+
+            // Use the existing children array from the directory info
+            for child_path in &dir_info.children {
+                let child_path_str = child_path.to_string_lossy();
+                if let Some(child_info) = dir_map.get(child_path_str.as_ref()) {
+                    // Recursively build child node
+                    let child_node = build_node_with_children(&child_path_str, child_info, dir_map);
+                    children.push(child_node);
+                }
+            }
+
+            // Sort children by name for consistent display
+            children.sort_by(|a, b| {
+                let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                name_a.cmp(name_b)
+            });
+
+            // Get just the directory name (not the full path) for display
+            let display_name = Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string());
+
+            serde_json::json!({
+                "id": format!("directory_{}", path.replace("/", "_").replace(".", "root")),
+                "type": "folder",
+                "name": display_name,
+                "path": path,
+                "health_score": dir_info.health_score,
+                "file_count": dir_info.file_count,
+                "entity_count": dir_info.entity_count,
+                "refactoring_needed": dir_info.refactoring_needed,
+                "children": children
+            })
+        }
+
+        // Find top-level directories (those with empty parent or parent not in our filtered set)
+        let mut top_level_dirs = Vec::new();
+        for (path, dir_info) in &dir_map {
+            // A directory is top-level if its parent is None or not in our filtered set
+            let is_top_level = match &dir_info.parent {
+                None => true, // No parent, this is a top-level directory
+                Some(parent_path) => {
+                    let parent_str = parent_path.to_string_lossy();
+                    Self::is_trivial_directory(&parent_str) || 
+                    !dir_map.contains_key(parent_str.as_ref())
+                }
+            };
+
+            if is_top_level {
+                let node = build_node_with_children(path, dir_info, &dir_map);
+                top_level_dirs.push(node);
+            }
+        }
+
+        // Sort top-level directories by name
+        top_level_dirs.sort_by(|a, b| {
+            let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            name_a.cmp(name_b)
+        });
+
+        top_level_dirs
+    }
+
+    /// Check if a directory path is trivial and should be filtered out
+    fn is_trivial_directory(path: &str) -> bool {
+        match path {
+            "." | "" | "./" => true,
+            _ => false,
+        }
+    }
+
     /// Build directory health tree from pipeline results
     fn build_directory_health_tree(
         pipeline_results: &PipelineResults,
@@ -412,7 +538,7 @@ impl AnalysisResults {
         // Group ALL entities by directory (not just refactoring candidates)
         let mut directory_entity_counts: BTreeMap<PathBuf, usize> = BTreeMap::new();
 
-        // Count total entities per directory from scoring results
+        // First, try to count entities from scoring results
         for scoring_result in &pipeline_results.scoring_results.files {
             // Each scoring result represents one entity, extract file path from entity_id
             let entity_id_parts: Vec<&str> = scoring_result.entity_id.split(':').collect();
@@ -441,6 +567,49 @@ impl AnalysisResults {
                             .filter(|p| !p.as_os_str().is_empty())
                             .map(|p| p.to_path_buf());
                     }
+                }
+            }
+        }
+
+        // FALLBACK: If no scoring results, use refactoring analysis results to build the tree
+        if directory_entity_counts.is_empty() && !pipeline_results.results.refactoring.detailed_results.is_empty() {
+            for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
+                // Extract file path from refactoring result
+                let file_path = Path::new(&refactoring_result.file_path);
+                if let Some(dir_path) = file_path.parent() {
+                    let dir_path = dir_path.to_path_buf();
+                    // Count the number of recommendations as entities for this file
+                    let entity_count = refactoring_result.recommendations.len().max(1); // At least 1 entity per file
+                    *directory_entity_counts.entry(dir_path.clone()).or_insert(0) += entity_count;
+
+                    // Add all parent directories
+                    let mut current = Some(dir_path);
+                    while let Some(dir) = current {
+                        if !dir.as_os_str().is_empty() {
+                            all_directories.insert(dir.clone());
+                        }
+                        current = dir
+                            .parent()
+                            .filter(|p| !p.as_os_str().is_empty())
+                            .map(|p| p.to_path_buf());
+                    }
+                }
+            }
+        }
+
+        // Also track files by directory for fallback file counting
+        let mut directory_files: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
+        
+        // FALLBACK: Use refactoring analysis results to track files if no candidates exist
+        if refactoring_candidates.is_empty() && !pipeline_results.results.refactoring.detailed_results.is_empty() {
+            for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
+                let file_path = Path::new(&refactoring_result.file_path);
+                if let Some(dir_path) = file_path.parent() {
+                    let dir_path = dir_path.to_path_buf();
+                    directory_files
+                        .entry(dir_path)
+                        .or_default()
+                        .insert(refactoring_result.file_path.clone());
                 }
             }
         }
@@ -506,11 +675,17 @@ impl AnalysisResults {
             let candidates_in_dir = directory_data.get(dir_path).cloned().unwrap_or_default();
 
             // Count files directly in this directory (not subdirectories)
-            let files_in_dir: BTreeSet<&str> = candidates_in_dir
-                .iter()
-                .map(|c| c.file_path.as_str())
-                .collect();
-            let file_count = files_in_dir.len();
+            let file_count = if !candidates_in_dir.is_empty() {
+                // Use candidates from scoring results
+                let files_in_dir: BTreeSet<&str> = candidates_in_dir
+                    .iter()
+                    .map(|c| c.file_path.as_str())
+                    .collect();
+                files_in_dir.len()
+            } else {
+                // FALLBACK: Use files from refactoring analysis
+                directory_files.get(dir_path).map(|files| files.len()).unwrap_or(0)
+            };
 
             // Calculate directory statistics
             let total_entity_count = directory_entity_counts.get(dir_path).copied().unwrap_or(0);
@@ -1400,5 +1575,96 @@ mod tests {
         assert_eq!(summary.total_issues, 3);
         assert_eq!(summary.high_priority_issues, 2);
         assert_eq!(summary.critical_issues, 1);
+    }
+
+    #[test]
+    fn test_unified_hierarchy_has_id_fields() {
+        // Create a test refactoring candidate
+        let candidate = RefactoringCandidate {
+            entity_id: "test_file.rs:function:test_function".to_string(),
+            name: "test_function".to_string(),
+            file_path: "src/test_file.rs".to_string(),
+            line_range: Some((10, 20)),
+            priority: Priority::High,
+            score: 2.0,
+            confidence: 0.8,
+            issues: vec![RefactoringIssue {
+                category: "complexity".to_string(),
+                description: "High complexity detected".to_string(),
+                severity: 1.5,
+                contributing_features: vec![],
+            }],
+            suggestions: vec![RefactoringSuggestion {
+                refactoring_type: "extract_method".to_string(),
+                description: "Extract helper method".to_string(),
+                priority: 0.7,
+                effort: 0.5,
+                impact: 0.8,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        };
+
+        let candidates = vec![candidate];
+        let hierarchy = AnalysisResults::build_unified_hierarchy_from_candidates(&candidates);
+
+        // Verify the hierarchy is not empty
+        assert!(!hierarchy.is_empty());
+
+        // Get the first directory node
+        let dir_node = &hierarchy[0];
+        
+        // Verify directory node has an id
+        assert!(dir_node.get("id").is_some());
+        assert_eq!(dir_node.get("type").and_then(|v| v.as_str()), Some("folder"));
+        
+        // Get file children
+        let children = dir_node.get("children").and_then(|v| v.as_array()).unwrap();
+        assert!(!children.is_empty());
+        
+        // Verify file node has an id
+        let file_node = &children[0];
+        assert!(file_node.get("id").is_some());
+        assert_eq!(file_node.get("type").and_then(|v| v.as_str()), Some("file"));
+        
+        // Get entity children
+        let file_children = file_node.get("children").and_then(|v| v.as_array()).unwrap();
+        assert!(!file_children.is_empty());
+        
+        // Verify entity node has an id
+        let entity_node = &file_children[0];
+        assert!(entity_node.get("id").is_some());
+        assert_eq!(entity_node.get("type").and_then(|v| v.as_str()), Some("entity"));
+        
+        // Get issue/suggestion children
+        let entity_children = entity_node.get("children").and_then(|v| v.as_array()).unwrap();
+        assert!(!entity_children.is_empty());
+        
+        // Verify issue/suggestion nodes have ids
+        for child in entity_children {
+            assert!(child.get("id").is_some());
+            let node_type = child.get("type").and_then(|v| v.as_str());
+            assert!(node_type == Some("issue") || node_type == Some("suggestion"));
+        }
+    }
+
+    #[test]
+    fn test_unified_hierarchy_empty_candidates() {
+        // Test with empty candidates list
+        let candidates = vec![];
+        let hierarchy = AnalysisResults::build_unified_hierarchy_from_candidates(&candidates);
+
+        // Should return a fallback root directory
+        assert!(!hierarchy.is_empty());
+        assert_eq!(hierarchy.len(), 1);
+
+        let root_node = &hierarchy[0];
+        assert!(root_node.get("id").is_some());
+        assert_eq!(root_node.get("id").and_then(|v| v.as_str()), Some("root_directory"));
+        assert_eq!(root_node.get("type").and_then(|v| v.as_str()), Some("folder"));
+        assert_eq!(root_node.get("name").and_then(|v| v.as_str()), Some("."));
+        
+        let children = root_node.get("children").and_then(|v| v.as_array()).unwrap();
+        assert!(children.is_empty());
     }
 }
