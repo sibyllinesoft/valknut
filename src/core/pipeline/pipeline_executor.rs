@@ -490,7 +490,7 @@ impl AnalysisPipeline {
     /// Read multiple files in batches for optimal I/O performance
     async fn read_files_batched(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
         let start_time = std::time::Instant::now();
-        const BATCH_SIZE: usize = 50; // Process files in batches
+        const BATCH_SIZE: usize = 200; // Optimized batch size to reduce context switching
         
         let mut file_contents = Vec::with_capacity(files.len());
         

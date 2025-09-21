@@ -80,8 +80,14 @@ impl ArenaFileAnalyzer {
     ) -> Result<ArenaAnalysisResult> {
         let start_time = std::time::Instant::now();
         
-        // Create arena for this file's analysis - all temporary objects go here
-        let arena = Bump::new();
+        // Pre-size arena based on file size heuristics for optimal memory layout
+        // Heuristic: 2.5x file size covers AST nodes, entities, and analysis metadata
+        let file_size = source_code.len();
+        let estimated_arena_size = (file_size * 25) / 10; // 2.5x multiplier
+        let arena_capacity = estimated_arena_size.max(8192); // Minimum 8KB
+        
+        // Create pre-sized arena to minimize reallocations during analysis
+        let arena = Bump::with_capacity(arena_capacity);
         let initial_capacity = arena.allocated_bytes();
         
         debug!(
@@ -166,13 +172,8 @@ impl ArenaFileAnalyzer {
         // Use the interned entity extraction for optimal performance
         let file_path_str = file_path.to_string_lossy();
         
-        // Extract entities using regular extraction then convert to interned
-        // Note: This could be optimized further by using language-specific interned extractors
-        let regular_entities = adapter.extract_code_entities(source_code, &file_path_str)?;
-        let interned_entities: Vec<crate::core::interned_entities::InternedCodeEntity> = regular_entities
-            .into_iter()
-            .map(|entity| crate::core::interned_entities::InternedCodeEntity::from_code_entity(&entity))
-            .collect();
+        // Use optimized interned extraction to eliminate all string allocations during parsing
+        let interned_entities = adapter.extract_code_entities_interned(source_code, &file_path_str)?;
 
         let entity_extraction_time = entity_extraction_start.elapsed();
         

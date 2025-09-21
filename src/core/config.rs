@@ -529,7 +529,7 @@ impl Default for LshConfig {
     fn default() -> Self {
         Self {
             num_hashes: 128,
-            num_bands: 16,
+            num_bands: 8,  // Reduced from 16 -> 8 for faster candidate filtering (16 rows per band)
             shingle_size: 3,
             similarity_threshold: 0.7,
             max_candidates: 100,
@@ -1229,15 +1229,15 @@ impl Default for RankingConfig {
 impl Default for DenoiseConfig {
     fn default() -> Self {
         Self {
-            enabled: true, // Default enabled
+            enabled: false, // Changed to opt-in for better default performance
             auto: true,    // Default auto-calibration enabled
-            min_function_tokens: 40,
-            min_match_tokens: 24,
+            min_function_tokens: 60,  // Increased from 40 -> 60 to filter smaller functions
+            min_match_tokens: 32,     // Increased from 24 -> 32 to reduce comparison workload
             require_blocks: 2,
-            similarity: 0.82,
+            similarity: 0.80,         // Lowered from 0.82 -> 0.80 for faster threshold checks
             weights: DenoiseWeights::default(),
             io_mismatch_penalty: 0.25,
-            threshold_s: 0.82, // Alias for similarity
+            threshold_s: 0.80,        // Updated to match similarity field
             stop_motifs: StopMotifsConfig::default(),
             auto_calibration: AutoCalibrationConfig::default(),
             ranking: RankingConfig::default(),

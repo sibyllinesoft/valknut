@@ -30,6 +30,14 @@ impl StringInterner {
         self.inner.get_or_intern(string.as_ref())
     }
 
+    /// Batch intern multiple strings for optimal performance during parsing
+    /// Returns a vector of interned keys in the same order as input
+    pub fn batch_intern<S: AsRef<str>>(&self, strings: &[S]) -> Vec<InternedString> {
+        // For ThreadedRodeo, batch operations are already optimized internally
+        // But we can still provide a convenience method for cleaner code
+        strings.iter().map(|s| self.inner.get_or_intern(s.as_ref())).collect()
+    }
+
     /// Get the key for an already-interned string, returns None if not found
     pub fn get<S: AsRef<str>>(&self, string: S) -> Option<InternedString> {
         self.inner.get(string.as_ref())
@@ -79,9 +87,44 @@ impl std::fmt::Debug for StringInterner {
     }
 }
 
+/// Pre-populate common AST node types and keywords to eliminate string comparisons
+fn create_prepopulated_interner() -> StringInterner {
+    let interner = StringInterner::with_capacity(100_000);
+    
+    // Pre-intern common AST node types to eliminate string matching during parsing
+    let common_node_types = [
+        // Common across languages
+        "identifier", "function_definition", "class_definition", "method_definition",
+        "call_expression", "assignment", "import_statement", "import_from_statement",
+        "if_statement", "for_statement", "while_statement", "try_statement",
+        "expression_statement", "return_statement", "comment", "string", "number",
+        
+        // Python specific  
+        "module", "decorated_definition", "async_function_definition", "lambda",
+        "list_comprehension", "dictionary_comprehension", "set_comprehension",
+        
+        // JavaScript/TypeScript specific
+        "program", "function_declaration", "arrow_function", "method_definition", 
+        "class_declaration", "interface_declaration", "type_alias_declaration",
+        
+        // Rust specific
+        "source_file", "function_item", "struct_item", "impl_item", "trait_item",
+        "mod_item", "use_declaration", "macro_invocation",
+        
+        // Go specific
+        "source_file", "function_declaration", "method_declaration", "type_declaration",
+        "interface_type", "struct_type", "package_clause", "import_declaration",
+    ];
+    
+    // Batch intern all common types
+    interner.batch_intern(&common_node_types);
+    
+    interner
+}
+
 /// Global string interner instance for the entire valknut analysis
 static GLOBAL_INTERNER: once_cell::sync::Lazy<StringInterner> = 
-    once_cell::sync::Lazy::new(|| StringInterner::with_capacity(100_000));
+    once_cell::sync::Lazy::new(create_prepopulated_interner);
 
 /// Get a reference to the global string interner
 pub fn global_interner() -> &'static StringInterner {

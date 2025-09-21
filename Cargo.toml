@@ -40,6 +40,7 @@ indexmap = "2.0"
 hashbrown = "0.14"
 smallvec = { version = "1.11", features = ["serde"] }
 ahash = "0.8"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 bitvec = "1.0"
 
 # Graph algorithms

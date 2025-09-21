@@ -255,6 +255,16 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Extract code entities (functions, classes, etc.) from source code
     fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>>;
+
+    /// Extract code entities using interned strings for optimal performance
+    /// Default implementation converts from regular extraction - language adapters should override
+    fn extract_code_entities_interned(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
+        let regular_entities = self.extract_code_entities(source, file_path)?;
+        Ok(regular_entities
+            .into_iter()
+            .map(|entity| crate::core::interned_entities::InternedCodeEntity::from_code_entity(&entity))
+            .collect())
+    }
 }
 
 #[cfg(test)]

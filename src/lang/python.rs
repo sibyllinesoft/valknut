@@ -1132,4 +1132,9 @@ impl LanguageAdapter for PythonAdapter {
     fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
         PythonAdapter::extract_code_entities(self, source, file_path)
     }
+
+    /// Optimized interned extraction - bypasses string allocations entirely
+    fn extract_code_entities_interned(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
+        PythonAdapter::extract_code_entities_interned(self, source, file_path)
+    }
 }

@@ -14,6 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use ahash::AHasher;
+use xxhash_rust::xxh3::Xxh3;
 use async_trait::async_trait;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -798,9 +799,8 @@ impl LshExtractor {
     /// Fast hash implementation optimized for SIMD batch processing
     #[cfg(feature = "simd")]
     fn hash_with_seed_fast(&self, data: &str, seed: u64) -> u64 {
-        // Use a fast hash algorithm optimized for batch processing
-        let mut hasher = AHasher::default();
-        seed.hash(&mut hasher);
+        // Use xxHash3 for superior performance in bulk hashing scenarios
+        let mut hasher = Xxh3::with_seed(seed);
         data.hash(&mut hasher);
         hasher.finish()
     }
@@ -1188,8 +1188,7 @@ impl LshExtractor {
 
     /// Hash a string with a seed
     fn hash_with_seed(&self, data: &str, seed: u64) -> u64 {
-        let mut hasher = AHasher::default();
-        seed.hash(&mut hasher);
+        let mut hasher = Xxh3::with_seed(seed);
         data.hash(&mut hasher);
         hasher.finish()
     }
@@ -1722,14 +1721,51 @@ impl WeightedShingleAnalyzer {
             return Err("No entities provided for IDF table construction".to_string());
         }
 
-        // Count document frequencies for each k-gram
-        for entity in entities {
-            let kgrams = self.generate_kgrams(&entity.source_code);
-            let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
+        // Count document frequencies for each k-gram using parallel map-reduce
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            use std::collections::HashMap;
+            
+            // Parallel map: process entities in chunks to generate local frequency maps
+            let local_frequency_maps: Vec<HashMap<String, usize>> = entities
+                .par_chunks(50) // Process in chunks of 50 entities for good load balancing
+                .map(|chunk| {
+                    let mut local_frequencies = HashMap::new();
+                    
+                    for entity in chunk {
+                        let kgrams = self.generate_kgrams(&entity.source_code);
+                        let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
 
-            // Increment document frequency for each unique k-gram in this function
-            for kgram in unique_kgrams {
-                *self.document_frequencies.entry(kgram).or_insert(0) += 1;
+                        // Increment local document frequency for each unique k-gram
+                        for kgram in unique_kgrams {
+                            *local_frequencies.entry(kgram).or_insert(0) += 1;
+                        }
+                    }
+                    
+                    local_frequencies
+                })
+                .collect();
+
+            // Reduce: merge all local frequency maps into the global one
+            for local_map in local_frequency_maps {
+                for (kgram, local_count) in local_map {
+                    *self.document_frequencies.entry(kgram).or_insert(0) += local_count;
+                }
+            }
+        }
+        
+        // Fallback to sequential processing if parallel feature is disabled
+        #[cfg(not(feature = "parallel"))]
+        {
+            for entity in entities {
+                let kgrams = self.generate_kgrams(&entity.source_code);
+                let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
+
+                // Increment document frequency for each unique k-gram in this function
+                for kgram in unique_kgrams {
+                    *self.document_frequencies.entry(kgram).or_insert(0) += 1;
+                }
             }
         }
 
@@ -1878,8 +1914,7 @@ impl WeightedShingleAnalyzer {
 
     /// Hash a string with a seed (same as LshExtractor)
     fn hash_with_seed(&self, data: &str, seed: u64) -> u64 {
-        let mut hasher = AHasher::default();
-        seed.hash(&mut hasher);
+        let mut hasher = Xxh3::with_seed(seed);
         data.hash(&mut hasher);
         hasher.finish()
     }
@@ -1898,6 +1933,12 @@ impl WeightedShingleAnalyzer {
             return 0.0;
         }
 
+        // Use SIMD acceleration for large signatures (4+ elements)
+        #[cfg(feature = "simd")]
+        if sig1.signature.len() >= 4 {
+            return self.weighted_jaccard_similarity_simd(&sig1.signature, &sig2.signature);
+        }
+
         let matching = sig1.signature
             .iter()
             .zip(sig2.signature.iter())
@@ -1905,6 +1946,62 @@ impl WeightedShingleAnalyzer {
             .count();
 
         matching as f64 / sig1.signature.len() as f64
+    }
+
+    /// SIMD-accelerated weighted Jaccard similarity calculation for f64 signatures
+    #[cfg(feature = "simd")]
+    fn weighted_jaccard_similarity_simd(&self, sig1: &[f64], sig2: &[f64]) -> f64 {
+        use wide::{f64x4, CmpLt};
+        
+        let len = sig1.len();
+        let chunks = len / 4;
+        let remainder = len % 4;
+        let mut matching_count = 0usize;
+        
+        // Create epsilon vector for floating-point comparison
+        let epsilon = f64x4::splat(1e-6);
+
+        // Process in chunks of 4 using SIMD
+        for chunk_idx in 0..chunks {
+            let base_idx = chunk_idx * 4;
+            
+            let vec1 = f64x4::from([
+                sig1[base_idx],
+                sig1[base_idx + 1],
+                sig1[base_idx + 2],
+                sig1[base_idx + 3],
+            ]);
+            
+            let vec2 = f64x4::from([
+                sig2[base_idx],
+                sig2[base_idx + 1],
+                sig2[base_idx + 2],
+                sig2[base_idx + 3],
+            ]);
+
+            // Calculate absolute difference: |a - b|
+            let diff = (vec1 - vec2).abs();
+            
+            // Compare with epsilon: |a - b| < 1e-6
+            let lt_epsilon = diff.cmp_lt(epsilon);
+            
+            // Count matching elements (each lane is either 0 or all 1s)
+            let matches = lt_epsilon.to_array();
+            for &match_val in &matches {
+                if match_val != 0.0 {  // Non-zero means match (all bits set)
+                    matching_count += 1;
+                }
+            }
+        }
+
+        // Handle remainder elements
+        for i in (chunks * 4)..(chunks * 4 + remainder) {
+            if (sig1[i] - sig2[i]).abs() < 1e-6 {
+                matching_count += 1;
+            }
+        }
+
+        matching_count as f64 / len as f64
     }
 
     /// Summarise TF-IDF statistics gathered during IDF table construction

@@ -1456,11 +1456,11 @@ pub async fn run_analysis_with_progress(
     };
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = !args.clone_detection.no_denoise;
+    let denoise_enabled = args.clone_detection.denoise;
     let auto_enabled = !args.advanced_clone.no_auto;
 
     if denoise_enabled {
-        info!("Clone denoising enabled (default behavior)");
+        info!("Clone denoising enabled (advanced analysis mode)");
     } else {
         info!("Clone denoising disabled via --no-denoise flag");
     }
@@ -1658,11 +1658,11 @@ pub async fn run_analysis_without_progress(
     };
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = !args.clone_detection.no_denoise;
+    let denoise_enabled = args.clone_detection.denoise;
     let auto_enabled = !args.advanced_clone.no_auto;
 
     if denoise_enabled {
-        info!("Clone denoising enabled (default behavior)");
+        info!("Clone denoising enabled (advanced analysis mode)");
     } else {
         info!("Clone denoising disabled via --no-denoise flag");
     }
@@ -2271,7 +2271,7 @@ mod tests {
             clone_detection: CloneDetectionArgs {
                 semantic_clones: false,
                 strict_dedupe: false,
-                no_denoise: false,
+                denoise: false,
                 min_function_tokens: None,
                 min_match_tokens: None,
                 require_blocks: None,

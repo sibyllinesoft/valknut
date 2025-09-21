@@ -352,7 +352,7 @@ impl FromCliArgs<AnalyzeArgs> for CoverageConfig {
 impl FromCliArgs<AnalyzeArgs> for DenoiseConfig {
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
         DenoiseConfig {
-            enabled: !args.clone_detection.no_denoise,
+            enabled: args.clone_detection.denoise,
             auto: !args.advanced_clone.no_auto,
             dry_run: args.clone_detection.denoise_dry_run,
             min_function_tokens: args.clone_detection.min_function_tokens.unwrap_or(40),

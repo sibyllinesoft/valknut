@@ -140,9 +140,9 @@ pub struct CloneDetectionArgs {
     #[arg(long)]
     pub strict_dedupe: bool,
 
-    /// Disable clone denoising system (enabled by default for intelligent clone detection)
+    /// Enable the advanced (but slower) clone denoising system for higher accuracy  
     #[arg(long)]
-    pub no_denoise: bool,
+    pub denoise: bool,
 
     /// Minimum function tokens for clone detection (default: 40)
     #[arg(long)]

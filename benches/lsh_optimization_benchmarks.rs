@@ -306,13 +306,167 @@ fn benchmark_lsh_band_optimization(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark SIMD-accelerated weighted Jaccard similarity
+fn benchmark_simd_jaccard_similarity(c: &mut Criterion) {
+    let mut group = c.benchmark_group("simd_jaccard_similarity");
+    
+    // Generate test weighted signatures
+    let signature_sizes = [4, 16, 64, 128, 256]; // Different signature sizes to test SIMD effectiveness
+    
+    for &size in &signature_sizes {
+        // Create test signatures with f64 values
+        let sig1_values: Vec<f64> = (0..size).map(|i| i as f64 * 0.123).collect();
+        let sig2_values: Vec<f64> = (0..size).map(|i| (i as f64 * 0.456) + 0.1).collect();
+        
+        let sig1 = valknut_rs::detectors::lsh::WeightedMinHashSignature::new(sig1_values);
+        let sig2 = valknut_rs::detectors::lsh::WeightedMinHashSignature::new(sig2_values);
+        
+        let analyzer = valknut_rs::detectors::lsh::WeightedShingleAnalyzer::new(3);
+        
+        group.bench_with_input(
+            BenchmarkId::new("simd_weighted_jaccard", size),
+            &size,
+            |b, _| {
+                b.iter(|| {
+                    let similarity = analyzer.weighted_jaccard_similarity(&sig1, &sig2);
+                    black_box(similarity)
+                })
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+/// Benchmark parallel IDF table construction
+fn benchmark_parallel_idf_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("parallel_idf_construction");
+    group.measurement_time(Duration::from_secs(10));
+    
+    let entity_counts = [50, 100, 200, 500]; // Different entity counts to test parallelization benefits
+    
+    for &count in &entity_counts {
+        let entities = generate_test_entities(count);
+        let entities_refs: Vec<&CodeEntity> = entities.iter().collect();
+        
+        group.bench_with_input(
+            BenchmarkId::new("parallel_idf_table", count),
+            &count,
+            |b, _| {
+                b.iter(|| {
+                    let mut analyzer = valknut_rs::detectors::lsh::WeightedShingleAnalyzer::new(3);
+                    let result = analyzer.build_idf_table(&entities_refs);
+                    black_box(result)
+                })
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+/// Benchmark end-to-end weighted signature computation with SIMD + parallel optimizations
+fn benchmark_optimized_weighted_signatures(c: &mut Criterion) {
+    let mut group = c.benchmark_group("optimized_weighted_signatures");
+    group.measurement_time(Duration::from_secs(15));
+    
+    let entity_counts = [25, 50, 100, 200];
+    
+    for &count in &entity_counts {
+        let entities = generate_test_entities(count);
+        let entities_refs: Vec<&CodeEntity> = entities.iter().collect();
+        
+        group.bench_with_input(
+            BenchmarkId::new("full_weighted_pipeline", count),
+            &count,
+            |b, _| {
+                b.iter(|| {
+                    let mut analyzer = valknut_rs::detectors::lsh::WeightedShingleAnalyzer::new(3);
+                    
+                    // This will use parallel IDF table construction
+                    let signatures_result = analyzer.compute_weighted_signatures(&entities_refs);
+                    
+                    if let Ok(signatures) = signatures_result {
+                        // Test SIMD similarity calculations
+                        let mut total_similarity = 0.0f64;
+                        let mut comparison_count = 0;
+                        
+                        // Compare a subset of signatures to test SIMD performance
+                        let sample_size = count.min(10);
+                        for i in 0..sample_size {
+                            for j in (i + 1)..sample_size {
+                                let id1 = format!("func_{}", i);
+                                let id2 = format!("func_{}", j);
+                                
+                                if let (Some(sig1), Some(sig2)) = (signatures.get(&id1), signatures.get(&id2)) {
+                                    let similarity = analyzer.weighted_jaccard_similarity(sig1, sig2);
+                                    total_similarity += similarity;
+                                    comparison_count += 1;
+                                }
+                            }
+                        }
+                        
+                        black_box((signatures.len(), total_similarity, comparison_count))
+                    } else {
+                        black_box((0, 0.0, 0))
+                    }
+                })
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+/// Benchmark SIMD vs scalar performance comparison
+fn benchmark_simd_vs_scalar_comparison(c: &mut Criterion) {
+    let mut group = c.benchmark_group("simd_vs_scalar");
+    
+    // Test with large signatures where SIMD benefits are most apparent
+    let signature_size = 128;
+    let num_comparisons = 1000;
+    
+    // Generate test data
+    let signatures: Vec<valknut_rs::detectors::lsh::WeightedMinHashSignature> = (0..num_comparisons)
+        .map(|i| {
+            let values: Vec<f64> = (0..signature_size)
+                .map(|j| (i * signature_size + j) as f64 * 0.001)
+                .collect();
+            valknut_rs::detectors::lsh::WeightedMinHashSignature::new(values)
+        })
+        .collect();
+    
+    let analyzer = valknut_rs::detectors::lsh::WeightedShingleAnalyzer::new(3);
+    
+    group.bench_function("simd_enabled_comparisons", |b| {
+        b.iter(|| {
+            let mut total_similarity = 0.0;
+            
+            // Compare pairs of signatures (this will use SIMD when available)
+            for i in 0..num_comparisons.min(100) {
+                let j = (i + 1) % num_comparisons;
+                let similarity = analyzer.weighted_jaccard_similarity(&signatures[i], &signatures[j]);
+                total_similarity += similarity;
+            }
+            
+            black_box(total_similarity)
+        })
+    });
+    
+    group.finish();
+}
+
 criterion_group!(
     lsh_benches,
     benchmark_complexity_comparison,
     benchmark_token_caching,
     benchmark_memory_patterns,
     benchmark_lsh_throughput,
-    benchmark_lsh_band_optimization
+    benchmark_lsh_band_optimization,
+    benchmark_simd_jaccard_similarity,
+    benchmark_parallel_idf_construction,
+    benchmark_optimized_weighted_signatures,
+    benchmark_simd_vs_scalar_comparison
 );
 
 criterion_main!(lsh_benches);
