@@ -24,12 +24,12 @@
         if (menu.style.display === 'none') {
             menu.style.display = 'block';
             if (chevron) {
-                chevron.style.transform = 'rotate(180deg)';
+                chevron.setAttribute('data-expanded', 'true');
             }
         } else {
             menu.style.display = 'none';
             if (chevron) {
-                chevron.style.transform = 'rotate(0deg)';
+                chevron.setAttribute('data-expanded', 'false');
             }
         }
     }
@@ -44,7 +44,7 @@
             menu.style.display = 'none';
             const chevron = document.querySelector('#filter-button [data-lucide="chevron-down"]');
             if (chevron) {
-                chevron.style.transform = 'rotate(0deg)';
+                chevron.setAttribute('data-expanded', 'false');
             }
         }
     });
@@ -119,55 +119,8 @@
         console.log(`Filter: Showing ${visibleFiles} of ${totalFiles} files`);
     }
     
-    // Enhanced tree functionality inspired by Arbiter FileTree
-    function toggleTreeNode(headerElement) {
-        const treeNode = headerElement.closest('.tree-node');
-        const chevron = headerElement.querySelector('.tree-chevron');
-        const children = treeNode.querySelector('.tree-children');
-        
-        if (!children) return;
-        
-        const isExpanded = headerElement.getAttribute('aria-expanded') === 'true';
-        
-        // Toggle expanded state
-        headerElement.setAttribute('aria-expanded', !isExpanded);
-        treeNode.classList.toggle('tree-expanded', !isExpanded);
-        
-        // Toggle children visibility with smooth animation
-        if (isExpanded) {
-            children.classList.add('collapsed');
-            children.classList.remove('expanded');
-        } else {
-            children.classList.remove('collapsed');
-            children.classList.add('expanded');
-        }
-        
-        // Rotate chevron
-        if (chevron) {
-            chevron.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
-        }
-    }
-    
-    // Keyboard navigation
-    document.addEventListener('keydown', function(e) {
-        if (e.target.classList.contains('tree-expandable')) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleTreeNode(e.target);
-            }
-        }
-    });
-    
-    // Auto-expand critical and high priority items
+    // Initialize components when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-expand functionality removed to keep all nodes collapsed by default
-        // Users can manually expand file nodes as needed
-        
-        // Initialize all chevrons to point right (collapsed state)
-        document.querySelectorAll('.tree-chevron').forEach(chevron => {
-            chevron.style.transform = 'rotate(0deg)';
-        });
-        
         {{#if enable_animation}}
         // Initialize trefoil animation if enabled
         if (typeof window.initTrefoilAnimation === 'function') {
@@ -210,10 +163,10 @@
         
         if (phaseContent.style.display === 'none') {
             phaseContent.style.display = 'block';
-            chevron.style.transform = 'rotate(90deg)';
+            chevron.setAttribute('data-expanded', 'true');
         } else {
             phaseContent.style.display = 'none';
-            chevron.style.transform = 'rotate(0deg)';
+            chevron.setAttribute('data-expanded', 'false');
         }
     }
 

@@ -31603,7 +31603,8 @@ Use the data prop if you want to provide your own handlers.`);
       children.push(import_react32.default.createElement("i", {
         "data-lucide": chevronIcon,
         key: "chevron",
-        className: "tree-chevron-icon",
+        className: "tree-chevron",
+        "data-expanded": node.isOpen ? "true" : "false",
         style: {
           width: "16px",
           height: "16px",

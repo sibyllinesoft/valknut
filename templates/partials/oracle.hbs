@@ -4,7 +4,7 @@
     <div class="oracle-header">
         <div class="oracle-title">
             <div class="oracle-icon">
-                <i data-lucide="brain" style="width: 32px; height: 32px; color: var(--accent);"></i>
+                <i data-lucide="brain" style="color: var(--accent);" class="oracle-brain-icon"></i>
             </div>
             <div>
                 <h2>AI Refactoring Oracle</h2>
@@ -19,7 +19,7 @@
             <h3>Architecture Assessment</h3>
             <div class="assessment-grid">
                 <div class="assessment-strengths">
-                    <h4><i data-lucide="check-circle" style="width: 16px; height: 16px; color: var(--accent);"></i> Strengths</h4>
+                    <h4><i data-lucide="check-circle" style="color: var(--accent);" class="tree-icon"></i> Strengths</h4>
                     <ul>
                         {{#each oracle_refactoring_plan.assessment.strengths}}
                         <li>{{this}}</li>
@@ -27,7 +27,7 @@
                     </ul>
                 </div>
                 <div class="assessment-weaknesses">
-                    <h4><i data-lucide="alert-triangle" style="width: 16px; height: 16px; color: var(--warning);"></i> Areas for Improvement</h4>
+                    <h4><i data-lucide="alert-triangle" style="color: var(--warning);" class="tree-icon"></i> Areas for Improvement</h4>
                     <ul>
                         {{#each oracle_refactoring_plan.assessment.weaknesses}}
                         <li>{{this}}</li>
@@ -61,7 +61,7 @@
                             <h4>{{name}}</h4>
                         </div>
                         <div class="phase-expand">
-                            <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                            <i data-lucide="chevron-right" class="tree-chevron"></i>
                         </div>
                     </div>
                     <div class="phase-description">{{description}}</div>
@@ -72,7 +72,7 @@
                             <div class="subsystem-header">
                                 <h5>{{name}}</h5>
                                 <div class="subsystem-files">
-                                    <i data-lucide="file" style="width: 14px; height: 14px;"></i>
+                                    <i data-lucide="file" class="tree-icon"></i>
                                     {{#each affected_files}}{{#unless @first}}, {{/unless}}{{this}}{{/each}}
                                 </div>
                             </div>
@@ -83,7 +83,7 @@
                                     <div class="task-header">
                                         <div class="task-title">{{title}}</div>
                                         <div class="task-effort">
-                                            <i data-lucide="clock" style="width: 12px; height: 12px;"></i>
+                                            <i data-lucide="clock" class="tree-icon"></i>
                                             {{estimated_hours}}h
                                         </div>
                                         <div class="task-risk task-risk-{{risk_level}}">{{risk_level}}</div>

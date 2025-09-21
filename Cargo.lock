@@ -3609,6 +3609,7 @@ dependencies = [
  "arc-swap",
  "assert_cmd",
  "async-trait",
+ "base64 0.22.1",
  "bincode",
  "bitvec",
  "blake3",

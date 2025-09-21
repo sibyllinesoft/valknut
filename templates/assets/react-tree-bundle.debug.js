@@ -40215,7 +40215,8 @@ const TreeNode = ({ node, style, innerRef, tree }) => {
         children.push(react__WEBPACK_IMPORTED_MODULE_0___default().createElement('i', {
             'data-lucide': chevronIcon,
             key: 'chevron',
-            className: 'tree-chevron-icon',
+            className: 'tree-chevron',
+            'data-expanded': node.isOpen ? 'true' : 'false',
             style: { 
                 width: '16px', 
                 height: '16px', 

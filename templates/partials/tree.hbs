@@ -72,15 +72,14 @@
                     return;
                 }
 
-                const script = document.createElement('script');
-                script.src = './react-tree-bundle.js';
-                script.async = true;
-                script.onload = mountReactTree;
-                script.onerror = (error) => {
-                    console.error('Failed to load React tree bundle', error);
-                    container.innerHTML = '<div class="valknut-tree-empty"><h3>Failed to load React tree bundle</h3><p>Please check if react-tree-bundle.js is available</p></div>';
-                };
-                document.body.appendChild(script);
+                try {
+                    // Inline React tree bundle - executed directly (no template literals to avoid syntax issues)
+                    {{inline_js "react-tree-bundle.js"}}
+                    mountReactTree();
+                } catch (error) {
+                    console.error('Failed to execute inlined React tree bundle', error);
+                    container.innerHTML = '<div class="valknut-tree-empty"><h3>Failed to load React tree bundle</h3><p>Inlined bundle execution failed: ' + error.message + '</p></div>';
+                }
             }
 
             ensureBundle();

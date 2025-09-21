@@ -11,7 +11,7 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "build": "bun run build:bundle",
-    "build:bundle": "bun build src/tree-component/index.js --outfile=dist/react-tree-bundle.js --format=iife --global-name=ReactTreeBundle --minify",
+    "build:bundle": "webpack --mode=production",
     "build:dev": "bun build src/tree-component/index.js --outfile=dist/react-tree-bundle.debug.js --format=iife --global-name=ReactTreeBundle --sourcemap",
     "dev": "bun run build:dev --watch",
     "clean": "rm -rf dist node_modules",
@@ -30,8 +30,8 @@
   "license": "ISC",
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-arborist": "^3.4.3"
+    "react-arborist": "^3.4.3",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
@@ -41,11 +41,14 @@
     "@types/bun": "latest",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "babel-loader": "^10.0.0",
     "eslint": "^8.0.0",
     "happy-dom": "^12.0.0",
     "playwright": "^1.55.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^6.0.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

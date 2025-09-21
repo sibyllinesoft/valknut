@@ -2,7 +2,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{tool_name}} Analysis Report - Sibylline Design</title>
-    <link rel="stylesheet" href="./sibylline.css">
+    <style>
+        {{inline_css "sibylline.css"}}
+    </style>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -65,14 +67,6 @@
             color: var(--accent);
         }
         
-        .tree-expanded .tree-chevron {
-            transform: rotate(90deg);
-        }
-        
-        .tree-collapsed .tree-children,
-        .tree-children.collapsed {
-            display: none;
-        }
         
         /* Filtering styles */
         .filter-menu {
@@ -103,6 +97,12 @@
         .tree-leaf-subtle:hover {
             border-left-color: var(--primary);
             background: rgba(0, 0, 0, 0.01);
+        }
+        
+        /* Oracle brain icon - larger than standard tree icons */
+        .oracle-brain-icon {
+            width: 2rem !important;
+            height: 2rem !important;
         }
         
         .btn {

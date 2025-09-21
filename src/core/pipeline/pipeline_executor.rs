@@ -790,6 +790,9 @@ impl AnalysisPipeline {
 
     pub fn wrap_results(&self, results: ComprehensiveAnalysisResult) -> PipelineResults {
         let scoring_files = Self::convert_to_scoring_results(&results);
+        
+        // Create feature vectors that correspond to the scoring results
+        let feature_vectors = Self::create_feature_vectors_from_results(&results);
 
         PipelineResults {
             analysis_id: results.analysis_id.clone(),
@@ -809,7 +812,7 @@ impl AnalysisPipeline {
             scoring_results: ScoringResults {
                 files: scoring_files,
             },
-            feature_vectors: Vec::new(),
+            feature_vectors,
         }
     }
 
@@ -1259,6 +1262,82 @@ impl AnalysisPipeline {
         }
 
         scoring_results
+    }
+
+    /// Create feature vectors from comprehensive analysis results
+    fn create_feature_vectors_from_results(
+        results: &ComprehensiveAnalysisResult,
+    ) -> Vec<FeatureVector> {
+        
+        let mut feature_vectors = Vec::new();
+
+        // Create feature vectors from complexity analysis results
+        for complexity_result in &results.complexity.detailed_results {
+            let entity_id = format!(
+                "{}:{}:{}",
+                complexity_result.file_path,
+                complexity_result.entity_type,
+                complexity_result.entity_name
+            );
+
+            let metrics = &complexity_result.metrics;
+            
+            // Create feature vector with features and their values
+            let mut feature_vector = FeatureVector::new(entity_id.clone());
+            
+            // Add raw feature values
+            feature_vector.add_feature("cyclomatic_complexity", metrics.cyclomatic());
+            feature_vector.add_feature("cognitive_complexity", metrics.cognitive());
+            feature_vector.add_feature("max_nesting_depth", metrics.max_nesting_depth);
+            feature_vector.add_feature("lines_of_code", metrics.lines_of_code);
+            feature_vector.add_feature("technical_debt_score", metrics.technical_debt_score);
+            feature_vector.add_feature("maintainability_index", metrics.maintainability_index);
+            
+            // Add normalized versions (simple normalization for now)
+            feature_vector.normalized_features.insert("cyclomatic_complexity".to_string(), (metrics.cyclomatic() / 10.0).min(1.0));
+            feature_vector.normalized_features.insert("cognitive_complexity".to_string(), (metrics.cognitive() / 15.0).min(1.0));
+            feature_vector.normalized_features.insert("max_nesting_depth".to_string(), (metrics.max_nesting_depth / 5.0).min(1.0));
+            feature_vector.normalized_features.insert("lines_of_code".to_string(), (metrics.lines_of_code / 100.0).min(1.0));
+            feature_vector.normalized_features.insert("technical_debt_score".to_string(), metrics.technical_debt_score / 100.0);
+            feature_vector.normalized_features.insert("maintainability_index".to_string(), metrics.maintainability_index / 100.0);
+            
+            // Set metadata
+            feature_vector.add_metadata("entity_type", serde_json::Value::String(complexity_result.entity_type.clone()));
+            feature_vector.add_metadata("file_path", serde_json::Value::String(complexity_result.file_path.clone()));
+            feature_vector.add_metadata("language", serde_json::Value::String("Python".to_string()));
+            feature_vector.add_metadata("line_number", serde_json::Value::Number(complexity_result.start_line.into()));
+            // Note: end_line not available in ComplexityAnalysisResult
+
+            feature_vectors.push(feature_vector);
+        }
+
+        // Create feature vectors from refactoring analysis results
+        for refactoring_result in &results.refactoring.detailed_results {
+            let entity_id = format!(
+                "{}:refactoring:{}",
+                refactoring_result.file_path,
+                refactoring_result.recommendations.len()
+            );
+
+            let mut feature_vector = FeatureVector::new(entity_id.clone());
+            
+            // Add refactoring-specific features
+            feature_vector.add_feature("refactoring_score", refactoring_result.refactoring_score);
+            feature_vector.add_feature("refactoring_recommendations", refactoring_result.recommendations.len() as f64);
+            
+            // Add normalized versions
+            feature_vector.normalized_features.insert("refactoring_score".to_string(), refactoring_result.refactoring_score / 100.0);
+            feature_vector.normalized_features.insert("refactoring_recommendations".to_string(), (refactoring_result.recommendations.len() as f64 / 10.0).min(1.0));
+            
+            // Set metadata
+            feature_vector.add_metadata("entity_type", serde_json::Value::String("refactoring".to_string()));
+            feature_vector.add_metadata("file_path", serde_json::Value::String(refactoring_result.file_path.clone()));
+            feature_vector.add_metadata("language", serde_json::Value::String("Python".to_string()));
+
+            feature_vectors.push(feature_vector);
+        }
+
+        feature_vectors
     }
 }
 

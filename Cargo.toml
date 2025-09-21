@@ -130,6 +130,7 @@ lazy_static = "1.4"
 
 # Template engine for HTML reports
 handlebars = "4.5"
+base64 = "0.22"
 
 # Live reachability dependencies  
 # parquet2 = { version = "0.17", features = ["async"] }  # Disabled for now, using JSON storage

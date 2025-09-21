@@ -32,7 +32,7 @@ function createDistDirectory() {
   }
 }
 
-function buildBundle(mode = 'production') {
+async function buildBundle(mode = 'production') {
   const isProduction = mode === 'production';
   const outputFile = isProduction ? 'react-tree-bundle.js' : 'react-tree-bundle.debug.js';
   
@@ -268,13 +268,13 @@ async function main() {
     // Build both production and debug versions
     log('📦 Building both production and debug bundles...', colors.yellow);
     
-    const prodSuccess = buildBundle('production');
+    const prodSuccess = await buildBundle('production');
     if (prodSuccess) {
       addGlobalWrappers('production');
       validateBundle('production');
     }
     
-    const devSuccess = buildBundle('development');
+    const devSuccess = await buildBundle('development');
     if (devSuccess) {
       addGlobalWrappers('development');
       validateBundle('development');
@@ -293,7 +293,7 @@ async function main() {
     }
   } else {
     // Development mode - build debug version only
-    const success = buildBundle('development');
+    const success = await buildBundle('development');
     if (success) {
       addGlobalWrappers('development');
       validateBundle('development');

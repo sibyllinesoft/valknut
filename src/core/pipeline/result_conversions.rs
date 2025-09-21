@@ -451,13 +451,15 @@ impl AnalysisResults {
         ) -> serde_json::Value {
             let mut children = Vec::new();
 
-            // Use the existing children array from the directory info
-            for child_path in &dir_info.children {
-                let child_path_str = child_path.to_string_lossy();
-                if let Some(child_info) = dir_map.get(child_path_str.as_ref()) {
-                    // Recursively build child node
-                    let child_node = build_node_with_children(&child_path_str, child_info, dir_map);
-                    children.push(child_node);
+            // Find ALL directories that have this directory as their parent
+            for (child_path, child_info) in dir_map {
+                if let Some(parent_path) = &child_info.parent {
+                    let parent_str = parent_path.to_string_lossy();
+                    if parent_str == path {
+                        // This directory is a child of the current directory
+                        let child_node = build_node_with_children(child_path, child_info, dir_map);
+                        children.push(child_node);
+                    }
                 }
             }
 
@@ -1292,14 +1294,13 @@ impl RefactoringCandidate {
             let mut category_emitted = false;
 
             let mut emit = |kind: &str,
-                            description: String,
                             effort: f64,
                             priority_override: Option<f64>,
                             impact_override: Option<f64>| {
                 if emitted.insert(kind.to_string()) {
                     suggestions.push(RefactoringSuggestion {
                         refactoring_type: kind.to_string(),
-                        description,
+                        description: String::new(),
                         priority: priority_override.unwrap_or(base_priority),
                         effort: effort.clamp(0.1, 1.0),
                         impact: impact_override.unwrap_or(base_impact),
@@ -1313,16 +1314,9 @@ impl RefactoringCandidate {
 
                 if name.contains("duplicate_code_count") && raw_value > 0.0 {
                     let duplicates = raw_value.round().max(1.0) as usize;
-                    let description = format!(
-                        "{} contains {} duplicated code block{} detected during analysis. Extract a shared helper or module to collapse the repetition.",
-                        subject,
-                        duplicates,
-                        plural(duplicates)
-                    );
                     let impact = (base_impact + (duplicates as f64 * 0.05)).min(1.0);
                     emit(
-                        "eliminate_duplication",
-                        description,
+                        &format!("eliminate_duplication_{}_blocks", duplicates),
                         0.65,
                         None,
                         Some(impact),
@@ -1330,26 +1324,12 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("extract_method_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
-                    let description = format!(
-                        "{} has {} block{} that can be promoted into focused helper method{}. Pull the logic into well-named helpers to reduce sprawl.",
-                        subject,
-                        occurrences,
-                        plural(occurrences),
-                        plural(occurrences)
-                    );
-                    emit("extract_method", description, 0.55, None, None);
+                    emit(&format!("extract_method_{}_helpers", occurrences), 0.55, None, None);
                     category_emitted = true;
                 } else if name.contains("extract_class_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
-                    let description = format!(
-                        "{} exposes {} cohesive area{} that deserves its own type. Split the responsibilities into dedicated classes or modules.",
-                        subject,
-                        occurrences,
-                        plural(occurrences)
-                    );
                     emit(
-                        "extract_class",
-                        description,
+                        &format!("extract_class_{}_areas", occurrences),
                         0.7,
                         None,
                         Some((base_impact + 0.1).min(1.0)),
@@ -1357,65 +1337,41 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("simplify_conditionals_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
-                    let description = format!(
-                        "{} includes {} complex conditional{} that can be simplified with guard clauses or boolean helpers.",
-                        subject,
-                        occurrences,
-                        plural(occurrences)
-                    );
-                    emit("simplify_conditionals", description, 0.45, None, None);
+                    emit(&format!("simplify_{}_conditionals", occurrences), 0.45, None, None);
                     category_emitted = true;
                 } else if name.contains("cyclomatic") && raw_value > 0.0 {
-                    let description = format!(
-                        "{} has cyclomatic complexity {:.1}. Break branching into smaller helpers and remove redundant paths.",
-                        subject, raw_value
-                    );
+                    let complexity_level = raw_value.round() as u32;
                     emit(
-                        "reduce_complexity",
-                        description,
+                        &format!("reduce_cyclomatic_complexity_{}", complexity_level),
                         0.5,
                         Some((base_priority + 0.1).min(1.0)),
                         None,
                     );
                     category_emitted = true;
                 } else if name.contains("cognitive") && raw_value > 0.0 {
-                    let description = format!(
-                        "{} carries cognitive complexity {:.1}. Isolate the reasoning into named helpers and flatten nested flows.",
-                        subject, raw_value
-                    );
+                    let complexity_level = raw_value.round() as u32;
                     emit(
-                        "reduce_complexity",
-                        description,
+                        &format!("reduce_cognitive_complexity_{}", complexity_level),
                         0.5,
                         Some((base_priority + 0.1).min(1.0)),
                         None,
                     );
                     category_emitted = true;
                 } else if name.contains("fan_in") || name.contains("fan_out") {
-                    let description = format!(
-                        "{} is a hotspot in the dependency graph ({} {:.1}). Introduce seams or interfaces to limit incoming/outgoing references.",
-                        subject,
-                        humanize(&feature.feature_name),
-                        raw_value
-                    );
+                    let fan_level = raw_value.round() as u32;
+                    let fan_type = if name.contains("fan_in") { "fan_in" } else { "fan_out" };
                     emit(
-                        "improve_dependency_health",
-                        description,
+                        &format!("reduce_{}_{}", fan_type, fan_level),
                         0.6,
                         None,
                         Some((base_impact + 0.1).min(1.0)),
                     );
                     category_emitted = true;
                 } else if name.contains("centrality") || name.contains("choke") {
-                    let description = format!(
-                        "{} is acting as a chokepoint in the dependency graph ({} {:.1}). Break the module apart or extract adapters to distribute the load.",
-                        subject,
-                        humanize(&feature.feature_name),
-                        raw_value
-                    );
+                    let centrality_level = raw_value.round() as u32;
+                    let centrality_type = if name.contains("centrality") { "centrality" } else { "chokepoint" };
                     emit(
-                        "improve_dependency_health",
-                        description,
+                        &format!("reduce_{}_{}", centrality_type, centrality_level),
                         0.65,
                         None,
                         Some((base_impact + 0.15).min(1.0)),
@@ -1426,65 +1382,42 @@ impl RefactoringCandidate {
 
             if !category_emitted {
                 let severity = severity_label(issue.severity);
-                let feature_summary = if !issue.contributing_features.is_empty() {
-                    let summary = issue
-                        .contributing_features
-                        .iter()
-                        .take(2)
-                        .map(|f| format!("{} ({:.1})", humanize(&f.feature_name), f.value))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    format!(" Key contributors: {}.", summary)
-                } else {
-                    String::new()
+
+                let kind = match issue.category.as_str() {
+                    "complexity" => match severity {
+                        "very high" | "critical" => "extract_method_high_complexity",
+                        "high" => "extract_method_complex",
+                        "medium" => "reduce_nested_branching",
+                        _ => "simplify_logic",
+                    },
+                    "structure" => match severity {
+                        "very high" | "critical" => "extract_class_large_module",
+                        "high" => "split_responsibilities",
+                        "medium" => "move_method_better_cohesion",
+                        _ => "organize_imports",
+                    },
+                    "graph" => match severity {
+                        "very high" | "critical" => "introduce_facade_decouple_deps",
+                        "high" => "extract_interface_dependency_inversion",
+                        "medium" => "move_method_reduce_coupling",
+                        _ => "inline_temp_simplify_deps",
+                    },
+                    "maintainability" => match severity {
+                        "very high" | "critical" => "rename_class_improve_clarity",
+                        "high" => "rename_method_improve_intent",
+                        "medium" => "extract_variable_clarify_logic",
+                        _ => "add_comments_explain_purpose",
+                    },
+                    "readability" => match severity {
+                        "very high" | "critical" => "extract_method_clarify_intent",
+                        "high" => "rename_variable_descriptive",
+                        "medium" => "replace_magic_number_constant",
+                        _ => "format_code_consistent_style",
+                    },
+                    _ => "refactor_code_quality",
                 };
 
-                let (kind, description) = match issue.category.as_str() {
-                    "complexity" => (
-                        "reduce_complexity",
-                        format!(
-                            "{} has {} complexity. Extract smaller helpers and reduce nested branching to keep the code approachable.{}",
-                            subject, severity, feature_summary
-                        ),
-                    ),
-                    "structure" => (
-                        "improve_structure",
-                        format!(
-                            "{} shows {} structural coupling. Reorganize modules to tighten cohesion and limit cross-package dependencies.{}",
-                            subject, severity, feature_summary
-                        ),
-                    ),
-                    "graph" => (
-                        "improve_dependency_health",
-                        format!(
-                            "{} is under {} dependency pressure in the project graph. Break the dependency chain or introduce interfaces to decouple it.{}",
-                            subject, severity, feature_summary
-                        ),
-                    ),
-                    "maintainability" => (
-                        "improve_maintainability",
-                        format!(
-                            "{} exhibits {} maintainability risk. Improve naming, documentation, and trim obsolete code paths.{}",
-                            subject, severity, feature_summary
-                        ),
-                    ),
-                    "readability" => (
-                        "improve_readability",
-                        format!(
-                            "{} has {} readability issues. Clarify intent with better naming and smaller helpers.{}",
-                            subject, severity, feature_summary
-                        ),
-                    ),
-                    _ => (
-                        "general_refactoring",
-                        format!(
-                            "{} has {} issues in the {} category. Address the highlighted metrics to reduce refactoring risk.{}",
-                            subject, severity, issue.category, feature_summary
-                        ),
-                    ),
-                };
-
-                emit(kind, description, 0.4, None, None);
+                emit(kind, 0.4, None, None);
             }
         }
 

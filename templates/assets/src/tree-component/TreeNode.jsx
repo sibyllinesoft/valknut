@@ -37,6 +37,16 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             });
         };
 
+        // Update chevron icons before creating Lucide icons
+        const chevronElements = document.querySelectorAll('.tree-chevron');
+        chevronElements.forEach((element) => {
+            if (element.dataset.nodeId === node.id) {
+                const shouldBeOpen = node.isOpen;
+                const newIcon = shouldBeOpen ? 'chevron-down' : 'chevron-right';
+                element.setAttribute('data-lucide', newIcon);
+            }
+        });
+
         if (typeof window !== 'undefined' && window.lucide) {
             window.lucide.createIcons();
             window.requestAnimationFrame(applyFallbacks);
@@ -220,14 +230,14 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         
         children.push(React.createElement('i', {
             'data-lucide': chevronIcon,
+            'data-node-id': node.id,
             key: 'chevron',
-            className: 'tree-chevron-icon',
+            className: 'tree-chevron',
             style: { 
-                width: '16px', 
-                height: '16px', 
+                width: '16px',
+                height: '16px',
                 marginRight: '0.25rem',
                 cursor: 'pointer',
-                transition: 'transform 0.2s ease',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -245,7 +255,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         // Add spacing for nodes without children to align with expandable nodes
         children.push(React.createElement('div', {
             key: 'spacer',
-            style: { width: '16px', marginRight: '0.25rem' }
+            style: { width: '1rem', marginRight: '0.25rem' }
         }));
     }
     
@@ -264,7 +274,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         'data-lucide': iconName,
         key: 'icon',
         ref: (el) => registerIcon(el, iconFallbackSymbol),
-        style: { width: '16px', height: '16px', marginRight: '0.5rem' }
+        className: 'tree-icon',
+        style: { marginRight: '0.5rem' }
     }));
     
     // Label
