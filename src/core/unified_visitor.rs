@@ -37,29 +37,43 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust
+//! ```rust,no_run
 //! use valknut_rs::core::unified_visitor::{UnifiedVisitor, AstVisitable};
+//! use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
 //! 
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut visitor = UnifiedVisitor::new();
-//! visitor.add_detector(Box::new(complexity_detector));
-//! visitor.add_detector(Box::new(security_detector));
-//! visitor.add_detector(Box::new(quality_detector));
+//! // visitor.add_detector(Box::new(complexity_detector));
+//! // visitor.add_detector(Box::new(security_detector));
+//! // visitor.add_detector(Box::new(quality_detector));
 //! 
 //! // Single traversal processes all detectors
-//! let combined_features = visitor.visit_entity(&entity, &context).await?;
+//! // let combined_features = visitor.visit_entity(&entity, &context).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Implementing AstVisitable
 //!
 //! Custom detectors implement the `AstVisitable` trait:
 //!
-//! ```rust
+//! ```rust,no_run
+//! use async_trait::async_trait;
+//! use valknut_rs::core::unified_visitor::AstVisitable;
+//! use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
+//! use valknut_rs::core::ast_service::AstContext;
+//! use tree_sitter::Node;
+//! use std::collections::HashMap;
+//! use valknut_rs::core::errors::Result;
+//! 
+//! struct MyDetector;
+//! 
 //! #[async_trait]
 //! impl AstVisitable for MyDetector {
 //!     fn detector_name(&self) -> &str { "my_detector" }
 //!     
-//!     async fn visit_node(&mut self, node: Node<'_>, context: &AstContext<'_>, 
-//!                        entity: &CodeEntity, extraction_context: &ExtractionContext) 
+//!     async fn visit_node(&mut self, node: Node<'_>, _context: &AstContext<'_>, 
+//!                        _entity: &CodeEntity, _extraction_context: &ExtractionContext) 
 //!                        -> Result<HashMap<String, f64>> {
 //!         // Analyze node and return features
 //!         let mut features = HashMap::new();

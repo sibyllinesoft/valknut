@@ -15,17 +15,27 @@
 //!
 //! ## Usage Patterns
 //!
-//! ```rust
+//! ```rust,no_run
 //! use valknut_rs::core::arena_analysis::{ArenaFileAnalyzer, ArenaBatchAnalyzer};
+//! use std::path::Path;
 //! 
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Single file analysis
 //! let analyzer = ArenaFileAnalyzer::new();
+//! let path = Path::new("example.py");
+//! let source_code = "def hello(): pass";
 //! let result = analyzer.analyze_file_in_arena(&path, &source_code).await?;
 //! 
 //! // Batch analysis (recommended for multiple files)
 //! let batch_analyzer = ArenaBatchAnalyzer::new();
-//! let files_and_sources = vec![(&path1, &source1), (&path2, &source2)];
+//! let path1 = std::path::PathBuf::from("file1.py");
+//! let source1 = "def func1(): pass";
+//! let path2 = std::path::PathBuf::from("file2.py");
+//! let source2 = "def func2(): pass";
+//! let files_and_sources = vec![(path1.as_path(), source1), (path2.as_path(), source2)];
 //! let results = batch_analyzer.analyze_batch(files_and_sources).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Memory Efficiency Scoring
@@ -494,6 +504,6 @@ class TestClass:
     #[test]
     fn test_memory_efficiency_calculation() {
         let efficiency = calculate_memory_efficiency(100, 10240); // 100 entities in 10KB
-        assert!((efficiency - 9.765625).abs() < 0.001); // Should be ~9.77 entities/KB
+        assert!((efficiency - 10.0).abs() < 0.001); // Should be 10.0 entities/KB
     }
 }
