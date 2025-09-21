@@ -5,8 +5,8 @@
 
 use crate::cli::args::{
     AIFeaturesArgs, AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs,
-    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, QualityGateArgs,
-    SurveyVerbosity, ValidateConfigArgs,
+    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, PerformanceProfile, 
+    QualityGateArgs, SurveyVerbosity, ValidateConfigArgs,
 };
 use crate::cli::config_layer::build_layered_valknut_config;
 use anyhow;
@@ -186,7 +186,45 @@ pub async fn analyze_command(
 /// Build comprehensive ValknutConfig from CLI arguments
 async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
     // Use the new layered configuration approach
-    build_layered_valknut_config(args)
+    let mut config = build_layered_valknut_config(args)?;
+    
+    // Apply performance profile optimizations
+    apply_performance_profile(&mut config, &args.profile);
+    
+    Ok(config)
+}
+
+/// Apply performance profile optimizations to the configuration
+fn apply_performance_profile(config: &mut ValknutConfig, profile: &PerformanceProfile) {
+    match profile {
+        PerformanceProfile::Fast => {
+            // Fast mode - minimal analysis, optimized for speed
+            config.analysis.max_files = 500; // Limit file count
+            config.lsh.num_bands = 10; // Reduce LSH precision for speed
+            config.lsh.num_hashes = 50; // Fewer hash functions
+            info!("🚀 Performance profile: Fast mode - optimized for speed");
+        }
+        PerformanceProfile::Balanced => {
+            // Balanced mode - good default (no changes needed)
+            info!("⚖️  Performance profile: Balanced mode - default settings");
+        }
+        PerformanceProfile::Thorough => {
+            // Thorough mode - more comprehensive analysis
+            config.analysis.max_files = 2000; // Allow more files
+            config.lsh.num_bands = 20; // Higher LSH precision
+            config.lsh.num_hashes = 150; // More hash functions
+            config.denoise.enabled = true; // Enable all denoising
+            info!("🔍 Performance profile: Thorough mode - comprehensive analysis");
+        }
+        PerformanceProfile::Extreme => {
+            // Extreme mode - maximum analysis depth
+            config.analysis.max_files = 5000; // Maximum files
+            config.lsh.num_bands = 50; // Highest LSH precision
+            config.lsh.num_hashes = 200; // Maximum hash functions
+            config.denoise.enabled = true;
+            info!("🔥 Performance profile: Extreme mode - maximum analysis depth");
+        }
+    }
 }
 
 /// Preview coverage file discovery to show what will be analyzed
@@ -2218,6 +2256,7 @@ mod tests {
             format: OutputFormat::Json,
             config: None,
             quiet: false,
+            profile: PerformanceProfile::Balanced,
             quality_gate: QualityGateArgs {
                 quality_gate: false,
                 fail_on_issues: false,

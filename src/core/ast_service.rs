@@ -5,15 +5,18 @@
 
 use crate::core::errors::{Result, ValknutError};
 use crate::lang::common::{ParsedEntity, SourceLocation};
+use crate::lang::registry::{get_tree_sitter_language, detect_language_from_path};
 use dashmap::DashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tree_sitter::{Language, Node, Parser, Tree};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// Central AST service for unified parsing and caching
 #[derive(Debug)]
 pub struct AstService {
-    /// Cached parsed trees by file path
+    /// Cached parsed trees by content hash for efficient cache hits
     tree_cache: DashMap<String, Arc<CachedTree>>,
 }
 
@@ -24,6 +27,7 @@ pub struct CachedTree {
     pub source: String,
     pub language: String,
     pub last_modified: std::time::SystemTime,
+    pub content_hash: u64,
 }
 
 /// AST analysis context for detectors
@@ -75,97 +79,86 @@ impl AstService {
         }
     }
 
-    /// Get or parse AST for a file
+    /// Calculate fast content hash for cache key
+    fn calculate_content_hash(content: &str, language: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        content.hash(&mut hasher);
+        language.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Generate cache key from file path, content hash, and language
+    fn generate_cache_key(file_path: &str, content_hash: u64, language: &str) -> String {
+        format!("{}:{}:{}", file_path, content_hash, language)
+    }
+
+    /// Get or parse AST for a file using content-based caching
     pub async fn get_ast(&self, file_path: &str, source: &str) -> Result<Arc<CachedTree>> {
-        // Check cache first
-        if let Some(cached) = self.tree_cache.get(file_path) {
-            // TODO: Add file modification time checking
+        let language = self.detect_language(file_path);
+        let content_hash = Self::calculate_content_hash(source, &language);
+        let cache_key = Self::generate_cache_key(file_path, content_hash, &language);
+        
+        // Check cache first using content-based key
+        if let Some(cached) = self.tree_cache.get(&cache_key) {
             return Ok(cached.clone());
         }
 
-        // Parse new tree
-        let tree = self.parse_file(file_path, source).await?;
+        // Parse new tree using spawn_blocking for CPU-bound work
+        let language_clone = language.clone();
+        let source_clone = source.to_string();
+        let file_path_clone = file_path.to_string();
+        
+        let tree = tokio::task::spawn_blocking(move || -> Result<Tree> {
+            let mut parser = Parser::new();
+            let tree_sitter_language = get_tree_sitter_language(&language_clone)?;
+            parser.set_language(&tree_sitter_language).map_err(|e| {
+                ValknutError::parse(&language_clone, format!("Failed to set parser language: {}", e))
+            })?;
+
+            parser
+                .parse(&source_clone, None)
+                .ok_or_else(|| ValknutError::parse(&language_clone, "Failed to parse source code"))
+        }).await.map_err(|e| ValknutError::parse(&language, &format!("Task join error: {}", e)))??;
+
         let cached = Arc::new(CachedTree {
             tree,
             source: source.to_string(),
-            language: self.detect_language(file_path),
+            language,
             last_modified: std::time::SystemTime::now(),
+            content_hash,
         });
 
-        self.tree_cache
-            .insert(file_path.to_string(), cached.clone());
+        self.tree_cache.insert(cache_key, cached.clone());
+        
+        // Clean up old cache entries if cache is getting large
+        if self.tree_cache.len() > 1000 {
+            self.cleanup_cache().await;
+        }
+        
         Ok(cached)
     }
 
-    /// Parse a file using appropriate language parser
-    async fn parse_file(&self, file_path: &str, source: &str) -> Result<Tree> {
-        let language = self.detect_language(file_path);
-        let mut parser = self.get_or_create_parser(&language)?;
-
-        // Parse the source code
-        parser
-            .parse(source, None)
-            .ok_or_else(|| ValknutError::parse(language, "Failed to parse source code"))
-    }
-
-    /// Get or create parser for language
-    fn get_or_create_parser(&self, language: &str) -> Result<Parser> {
-        let mut parser = Parser::new();
-        let tree_sitter_language = self.get_tree_sitter_language(language)?;
-        parser.set_language(&tree_sitter_language).map_err(|e| {
-            ValknutError::parse(language, format!("Failed to set parser language: {}", e))
-        })?;
-
-        Ok(parser)
-    }
-
-    /// Get tree-sitter language for language name
-    fn get_tree_sitter_language(&self, language: &str) -> Result<Language> {
-        match language {
-            "py" | "pyw" => {
-                extern "C" {
-                    fn tree_sitter_python() -> Language;
-                }
-                Ok(unsafe { tree_sitter_python() })
+    /// Clean up old cache entries to prevent unbounded growth
+    async fn cleanup_cache(&self) {
+        let cache_size = self.tree_cache.len();
+        if cache_size > 800 {
+            // Remove random entries to get back to reasonable size
+            let keys_to_remove: Vec<_> = self.tree_cache
+                .iter()
+                .take(cache_size - 800)
+                .map(|entry| entry.key().clone())
+                .collect();
+            
+            for key in keys_to_remove {
+                self.tree_cache.remove(&key);
             }
-            "rs" => {
-                extern "C" {
-                    fn tree_sitter_rust() -> Language;
-                }
-                Ok(unsafe { tree_sitter_rust() })
-            }
-            "js" | "jsx" => {
-                extern "C" {
-                    fn tree_sitter_javascript() -> Language;
-                }
-                Ok(unsafe { tree_sitter_javascript() })
-            }
-            "ts" | "tsx" => {
-                extern "C" {
-                    fn tree_sitter_typescript() -> Language;
-                }
-                Ok(unsafe { tree_sitter_typescript() })
-            }
-            "go" => {
-                extern "C" {
-                    fn tree_sitter_go() -> Language;
-                }
-                Ok(unsafe { tree_sitter_go() })
-            }
-            _ => Err(ValknutError::unsupported(format!(
-                "No tree-sitter grammar for: {}",
-                language
-            ))),
         }
     }
 
+
     /// Detect language from file path
     fn detect_language(&self, file_path: &str) -> String {
-        Path::new(file_path)
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("txt")
-            .to_string()
+        detect_language_from_path(file_path)
     }
 
     /// Create AST context for analysis
@@ -551,8 +544,8 @@ def simple_function():
 
     #[test]
     fn test_unsupported_language() {
-        let service = AstService::new();
-        let result = service.get_tree_sitter_language("xyz");
+        use crate::lang::registry::get_tree_sitter_language;
+        let result = get_tree_sitter_language("xyz");
         assert!(result.is_err());
     }
 

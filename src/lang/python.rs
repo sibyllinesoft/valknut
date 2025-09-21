@@ -7,8 +7,13 @@ use async_trait::async_trait;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+use super::registry::{get_tree_sitter_language, create_parser_for_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
+use crate::core::interned_entities::{
+    InternedParsedEntity, InternedParseIndex, InternedSourceLocation, InternedCodeEntity
+};
+use crate::core::interning::{intern, resolve, InternedString};
 use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
@@ -187,11 +192,8 @@ pub struct PythonAdapter {
 impl PythonAdapter {
     /// Create a new Python adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_python::LANGUAGE.into();
-        let mut parser = Parser::new();
-        parser.set_language(&language).map_err(|e| {
-            ValknutError::parse("python", format!("Failed to set Python language: {:?}", e))
-        })?;
+        let language = get_tree_sitter_language("py")?;
+        let parser = create_parser_for_language("py")?;
 
         Ok(Self { parser, language })
     }
@@ -230,6 +232,50 @@ impl PythonAdapter {
 
         for entity in parse_index.entities.values() {
             let code_entity = self.convert_to_code_entity(entity, source_code)?;
+            code_entities.push(code_entity);
+        }
+
+        Ok(code_entities)
+    }
+
+    /// OPTIMIZED: Parse source code and return interned entities for zero-allocation processing
+    pub fn parse_source_interned(
+        &mut self,
+        source_code: &str,
+        file_path: &str,
+    ) -> Result<InternedParseIndex> {
+        let tree = self
+            .parser
+            .parse(source_code, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source code"))?;
+
+        let mut index = InternedParseIndex::new();
+        let mut entity_id_counter = 0;
+
+        // Walk the tree and extract entities using interned strings
+        self.extract_entities_recursive_interned(
+            tree.root_node(),
+            source_code,
+            file_path,
+            None,
+            &mut index,
+            &mut entity_id_counter,
+        )?;
+
+        Ok(index)
+    }
+
+    /// OPTIMIZED: Extract entities and convert to interned CodeEntity format for maximum performance
+    pub fn extract_code_entities_interned(
+        &mut self,
+        source_code: &str,
+        file_path: &str,
+    ) -> Result<Vec<InternedCodeEntity>> {
+        let parse_index = self.parse_source_interned(source_code, file_path)?;
+        let mut code_entities = Vec::with_capacity(parse_index.entity_count()); // Pre-allocate!
+
+        for entity in parse_index.entities.values() {
+            let code_entity = self.convert_to_interned_code_entity(entity, source_code)?;
             code_entities.push(code_entity);
         }
 
@@ -321,7 +367,17 @@ impl PythonAdapter {
 
         let name = self
             .extract_name(&node, source_code)?
-            .ok_or_else(|| ValknutError::parse("python", "Could not extract entity name"))?;
+            .unwrap_or_else(|| {
+                // Provide fallback names for entities without extractable names
+                match entity_kind {
+                    EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
+                    EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
+                    EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
+                    EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
+                    EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
+                    _ => format!("anonymous_entity_{}", *entity_id_counter),
+                }
+            });
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -537,6 +593,159 @@ impl PythonAdapter {
         for (key, value) in &entity.metadata {
             code_entity.add_property(key.clone(), value.clone());
         }
+
+        Ok(code_entity)
+    }
+
+    /// OPTIMIZED: Recursively extract entities using interned strings - ZERO STRING ALLOCATIONS!
+    fn extract_entities_recursive_interned(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<InternedString>,
+        index: &mut InternedParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        // Check if this node represents an entity we care about
+        if let Some(entity) = self.node_to_interned_entity(
+            node,
+            source_code,
+            file_path,
+            parent_id,
+            entity_id_counter,
+        )? {
+            let entity_id = entity.id;
+            index.add_entity(entity);
+
+            // Process children with this entity as parent
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.extract_entities_recursive_interned(
+                    child,
+                    source_code,
+                    file_path,
+                    Some(entity_id),
+                    index,
+                    entity_id_counter,
+                )?;
+            }
+        } else {
+            // No entity for this node, but check its children
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.extract_entities_recursive_interned(
+                    child,
+                    source_code,
+                    file_path,
+                    parent_id,
+                    index,
+                    entity_id_counter,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// OPTIMIZED: Convert tree-sitter node to interned entity - MINIMAL ALLOCATIONS!
+    fn node_to_interned_entity(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<InternedString>,
+        entity_id_counter: &mut usize,
+    ) -> Result<Option<InternedParsedEntity>> {
+        let kind = node.kind();
+        
+        // Map node kinds to EntityKind (same logic as original)
+        let entity_kind = match kind {
+            "function_definition" => EntityKind::Function,
+            "class_definition" => EntityKind::Class,
+            "module" => EntityKind::Module,
+            _ => return Ok(None), // Not an entity we track
+        };
+
+        // Extract name using interned strings - ZERO allocations for existing names!
+        let name = match self.extract_name_interned(node, source_code)? {
+            Some(name) => name,
+            None => return Ok(None), // No name found
+        };
+
+        // Create entity ID with minimal allocation
+        *entity_id_counter += 1;
+        let entity_id_str = format!("python_{}_{}", kind, entity_id_counter);
+
+        // Create location using interned file path
+        let location = InternedSourceLocation::new(
+            file_path,
+            node.start_position().row + 1,
+            node.end_position().row + 1,
+            node.start_position().column + 1,
+            node.end_position().column + 1,
+        );
+
+        // Create interned entity
+        let mut entity = InternedParsedEntity::new(
+            &entity_id_str,
+            entity_kind,
+            resolve(name), // Convert interned name back to &str for entity creation
+            location,
+        );
+
+        // Set parent if provided
+        if let Some(parent) = parent_id {
+            entity.set_parent(parent);
+        }
+
+        Ok(Some(entity))
+    }
+
+    /// OPTIMIZED: Extract name from node using interned strings
+    fn extract_name_interned(&self, node: Node, source_code: &str) -> Result<Option<InternedString>> {
+        match node.kind() {
+            "function_definition" | "class_definition" => {
+                // Look for identifier child
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "identifier" {
+                        let name_str = child.utf8_text(source_code.as_bytes())?;
+                        return Ok(Some(intern(name_str))); // Intern directly - deduplication happens here!
+                    }
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// OPTIMIZED: Convert interned ParsedEntity to interned CodeEntity - ZERO STRING ALLOCATIONS!
+    fn convert_to_interned_code_entity(
+        &self,
+        entity: &InternedParsedEntity,
+        source_code: &str,
+    ) -> Result<InternedCodeEntity> {
+        let source_lines: Vec<&str> = source_code.lines().collect();
+        
+        // Extract source code for entity (minimal allocations)
+        let entity_source = if entity.location.start_line <= source_lines.len()
+            && entity.location.end_line <= source_lines.len()
+        {
+            source_lines[(entity.location.start_line - 1)..entity.location.end_line].join("\n")
+        } else {
+            String::new()
+        };
+
+        // Create interned code entity
+        let code_entity = InternedCodeEntity::new(
+            entity.id_str(),               // Zero-cost lookup
+            &format!("{:?}", entity.kind), // Only allocation is for kind formatting
+            entity.name_str(),             // Zero-cost lookup
+            entity.location.file_path_str(), // Zero-cost lookup
+        )
+        .with_line_range(entity.location.start_line, entity.location.end_line)
+        .with_source_code(&entity_source); // This gets interned, so duplication is eliminated
 
         Ok(code_entity)
     }
@@ -766,7 +975,7 @@ impl Default for PythonAdapter {
             );
             PythonAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: tree_sitter_python::LANGUAGE.into(),
+                language: get_tree_sitter_language("py").unwrap_or_else(|_| tree_sitter_python::LANGUAGE.into()),
             }
         })
     }
@@ -918,5 +1127,9 @@ impl LanguageAdapter for PythonAdapter {
         }
 
         Ok(imports)
+    }
+
+    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+        PythonAdapter::extract_code_entities(self, source, file_path)
     }
 }

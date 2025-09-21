@@ -33,7 +33,7 @@ impl CallIdentifier {
             return None;
         }
 
-        let mut segments = Vec::new();
+        let mut segments = Vec::with_capacity(4); // Typical call has 2-4 segments
         let mut buffer = String::new();
         let mut chars = trimmed.chars().peekable();
 
@@ -96,7 +96,7 @@ impl CallIdentifier {
     }
 
     fn candidate_keys(&self) -> Vec<String> {
-        let mut keys = Vec::new();
+        let mut keys = Vec::with_capacity(self.segments.len()); // Pre-allocate based on segments
         for start in 0..self.segments.len() {
             let candidate = self.segments[start..].join("::");
             if !keys.contains(&candidate) {
@@ -185,7 +185,7 @@ impl ProjectDependencyAnalysis {
     }
 
     pub fn analyze(files: &[PathBuf]) -> Result<Self> {
-        let mut nodes = HashMap::new();
+        let mut nodes = HashMap::with_capacity(files.len() * 10); // Estimate ~10 functions per file
 
         for path in files {
             let canonical = canonicalize_path(path);
@@ -261,7 +261,7 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
     let path_str = path.to_string_lossy().to_string();
     let parse_index = adapter.parse_source(&source, &path_str)?;
 
-    let mut functions = Vec::new();
+    let mut functions = Vec::with_capacity(parse_index.entities.len()); // Pre-allocate based on parsed entities
 
     for entity in parse_index.entities.values() {
         if !matches!(entity.kind, EntityKind::Function | EntityKind::Method) {
@@ -314,7 +314,7 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
 }
 
 fn build_namespace(entity: &ParsedEntity, index: &ParseIndex) -> Vec<String> {
-    let mut namespace = Vec::new();
+    let mut namespace = Vec::with_capacity(3); // Typical nesting depth is 1-3 levels
     let mut current = entity.parent.clone();
 
     while let Some(parent_id) = current {
@@ -341,8 +341,9 @@ type DependencyGraph = Graph<EntityKey, (), petgraph::Directed>;
 type IndexMap = HashMap<EntityKey, NodeIndex>;
 
 fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, IndexMap) {
-    let mut graph = DependencyGraph::new();
-    let mut index_map = HashMap::new();
+    let node_count = nodes.len();
+    let mut graph = DependencyGraph::with_capacity(node_count, node_count * 2); // Estimate 2 edges per node
+    let mut index_map = HashMap::with_capacity(node_count);
 
     for key in nodes.keys() {
         let index = graph.add_node(key.clone());
@@ -395,7 +396,7 @@ fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, In
 fn build_name_lookup<'a>(
     nodes: &'a HashMap<EntityKey, FunctionNode>,
 ) -> HashMap<String, Vec<&'a EntityKey>> {
-    let mut map: HashMap<String, Vec<&EntityKey>> = HashMap::new();
+    let mut map: HashMap<String, Vec<&EntityKey>> = HashMap::with_capacity(nodes.len());
 
     for (key, node) in nodes {
         map.entry(node.name.to_lowercase()).or_default().push(key);
@@ -542,7 +543,7 @@ fn compute_metrics(
     index_map: &IndexMap,
     nodes: &HashMap<EntityKey, FunctionNode>,
 ) -> HashMap<EntityKey, DependencyMetrics> {
-    let mut metrics = HashMap::new();
+    let mut metrics = HashMap::with_capacity(index_map.len());
 
     for (key, &index) in index_map {
         let fan_out = graph.neighbors_directed(index, Direction::Outgoing).count() as f64;
@@ -576,7 +577,7 @@ fn compute_metrics(
 }
 
 fn compute_closeness(graph: &DependencyGraph, start: NodeIndex) -> f64 {
-    let mut visited: HashMap<NodeIndex, usize> = HashMap::new();
+    let mut visited: HashMap<NodeIndex, usize> = HashMap::with_capacity(16); // Typical BFS explores ~10-20 nodes
     let mut queue = VecDeque::new();
 
     visited.insert(start, 0);
@@ -609,14 +610,14 @@ fn identify_cycles(
     index_map: &IndexMap,
     nodes: &HashMap<EntityKey, FunctionNode>,
 ) -> (Vec<Vec<FunctionNode>>, HashSet<EntityKey>) {
-    let mut cycles = Vec::new();
-    let mut members = HashSet::new();
-
     let sccs = kosaraju_scc(graph);
+    
+    let mut cycles = Vec::with_capacity(sccs.len() / 4); // Estimate ~25% of SCCs are cycles  
+    let mut members = HashSet::with_capacity(nodes.len() / 10); // Estimate ~10% of nodes in cycles
 
     for component in sccs {
         if component.len() > 1 {
-            let mut cycle_nodes = Vec::new();
+            let mut cycle_nodes = Vec::with_capacity(component.len());
             for index in component {
                 if let Some(key) = graph.node_weight(index) {
                     if let Some(node) = nodes.get(key) {

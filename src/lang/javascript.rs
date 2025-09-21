@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+use super::registry::{get_tree_sitter_language, create_parser_for_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
@@ -142,14 +143,8 @@ pub struct JavaScriptAdapter {
 impl JavaScriptAdapter {
     /// Create a new JavaScript adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_javascript::LANGUAGE.into();
-        let mut parser = Parser::new();
-        parser.set_language(&language).map_err(|e| {
-            ValknutError::parse(
-                "javascript",
-                format!("Failed to set JavaScript language: {:?}", e),
-            )
-        })?;
+        let language = get_tree_sitter_language("js")?;
+        let parser = create_parser_for_language("js")?;
 
         Ok(Self { parser, language })
     }
@@ -305,7 +300,17 @@ impl JavaScriptAdapter {
 
         let name = self
             .extract_name(&node, source_code)?
-            .ok_or_else(|| ValknutError::parse("javascript", "Could not extract entity name"))?;
+            .unwrap_or_else(|| {
+                // Provide fallback names for entities without extractable names
+                match entity_kind {
+                    EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
+                    EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
+                    EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
+                    EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
+                    EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
+                    _ => format!("anonymous_entity_{}", *entity_id_counter),
+                }
+            });
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -376,8 +381,14 @@ impl JavaScriptAdapter {
                 }
             }
             "function_expression" | "arrow_function" => {
-                // For anonymous functions, check if they're assigned to a variable
-                return Ok(Some("<anonymous>".to_string()));
+                // For function expressions, try to find if they have a name
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "identifier" {
+                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+                    }
+                }
+                // Return None for truly anonymous functions, will get fallback name
+                return Ok(None);
             }
             "variable_declaration" | "lexical_declaration" => {
                 // Look for variable_declarator and then identifier
@@ -396,7 +407,14 @@ impl JavaScriptAdapter {
                     }
                 }
             }
-            _ => {}
+            _ => {
+                // For any other node type, try to find an identifier child
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "identifier" || child.kind() == "property_identifier" {
+                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+                    }
+                }
+            }
         }
 
         Ok(None)
@@ -696,6 +714,10 @@ impl LanguageAdapter for JavaScriptAdapter {
 
         Ok(imports)
     }
+
+    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+        JavaScriptAdapter::extract_code_entities(self, source, file_path)
+    }
 }
 
 impl Default for JavaScriptAdapter {
@@ -707,7 +729,7 @@ impl Default for JavaScriptAdapter {
             );
             JavaScriptAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: tree_sitter_javascript::LANGUAGE.into(),
+                language: get_tree_sitter_language("js").unwrap_or_else(|_| tree_sitter_javascript::LANGUAGE.into()),
             }
         })
     }

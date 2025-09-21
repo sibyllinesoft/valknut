@@ -85,6 +85,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 pub mod core {
     //! Core analysis algorithms and data structures.
 
+    pub mod arena_analysis;
     pub mod ast_service;
     pub mod ast_utils;
     pub mod bayesian;
@@ -93,8 +94,11 @@ pub mod core {
     pub mod errors;
     pub mod featureset;
     pub mod file_utils;
+    pub mod interned_entities;
+    pub mod interning;
     pub mod pipeline;
     pub mod scoring;
+    pub mod unified_visitor;
 }
 
 // Specialized detection algorithms

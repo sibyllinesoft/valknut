@@ -143,6 +143,8 @@ criterion = { version = "0.5", optional = true }
 proptest = { version = "1.0", optional = true }
 # scribe-analyzer = "0.1.0"  # Temporarily removed due to dependency conflict with security updates
 reqwest = { version = "0.12.23", features = ["json"], default-features = false }
+lasso = { version = "0.7.3", features = ["multi-threaded"] }
+bumpalo = { version = "3.19.0", features = ["collections"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -171,7 +173,16 @@ opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
-strip = "symbols"
+# Enable debug symbols for profiling while keeping optimizations
+debug = "line-tables-only"  # Compromise: symbols for profiling, smaller binary than full debug
+strip = false  # Don't strip symbols for profiling
+
+# Profile optimized for performance profiling
+[profile.profiling]
+inherits = "release"
+debug = true  # Full debug symbols for detailed profiling
+strip = false
+lto = false   # Disable LTO for better symbol resolution
 
 [profile.bench]
 opt-level = 3

@@ -402,6 +402,18 @@ impl AnalysisResults {
             hierarchy.push(dir_node);
         }
 
+        // If no candidates were processed, return a fallback root directory
+        if hierarchy.is_empty() {
+            let root_node = serde_json::json!({
+                "id": "root_directory",
+                "type": "folder",
+                "name": ".",
+                "health_score": 100.0,
+                "children": []
+            });
+            hierarchy.push(root_node);
+        }
+
         hierarchy
     }
 

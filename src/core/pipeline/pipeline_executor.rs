@@ -1,12 +1,14 @@
 //! Main pipeline executor that orchestrates the comprehensive analysis.
 
 use chrono::Utc;
+use futures;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::fs;
 use tracing::{info, warn};
 use uuid::Uuid;
+use walkdir;
 
 use crate::core::ast_service::AstService;
 use crate::core::config::{ScoringConfig, ValknutConfig};
@@ -182,127 +184,156 @@ impl AnalysisPipeline {
         info!("Discovered {} files for analysis", files.len());
 
         if let Some(ref callback) = progress_callback {
-            callback("Analyzing file structure...", 10.0);
+            callback("Running arena-based entity extraction...", 5.0);
         }
 
-        // Stage 2: Structure analysis
-        let structure_results = if self.config.enable_structure_analysis {
-            self.stages.run_structure_analysis(paths).await?
-        } else {
-            super::pipeline_results::StructureAnalysisResults {
-                enabled: false,
-                directory_recommendations: Vec::new(),
-                file_splitting_recommendations: Vec::new(),
-                issues_count: 0,
-            }
-        };
+        // Stage 1.5: Batched file reading for performance
+        if let Some(ref callback) = progress_callback {
+            callback("Reading file contents in batches...", 7.5);
+        }
+        
+        let file_contents = self.read_files_batched(&files).await?;
+        info!("Read {} files in batches", file_contents.len());
+
+        // Stage 1.6: Arena-based entity extraction (performance optimization)
+        let arena_results = self.stages.run_arena_file_analysis_with_content(&file_contents).await?;
+        info!(
+            "Arena analysis completed: {} files processed with {:.2} KB total arena usage",
+            arena_results.len(),
+            arena_results.iter().map(|r| r.arena_kb_used()).sum::<f64>()
+        );
 
         if let Some(ref callback) = progress_callback {
-            callback("Analyzing code complexity...", 30.0);
+            callback("Running parallel analysis stages...", 10.0);
         }
 
-        // Stage 3: Complexity analysis
-        let complexity_results = if self.config.enable_complexity_analysis {
-            self.stages.run_complexity_analysis(&files).await?
-        } else {
-            super::pipeline_results::ComplexityAnalysisResults {
-                enabled: false,
-                detailed_results: Vec::new(),
-                average_cyclomatic_complexity: 0.0,
-                average_cognitive_complexity: 0.0,
-                average_technical_debt_score: 0.0,
-                average_maintainability_index: 100.0,
-                issues_count: 0,
-            }
+        // Parallel execution of independent analysis stages using futures::join!
+        // Group 1: Structure and Coverage (independent, quick)
+        // Group 2: Complexity, Refactoring, Impact, LSH (may have dependencies, but can be parallelized)
+        
+        let group1_future = async {
+            let structure_future = async {
+                if self.config.enable_structure_analysis {
+                    self.stages.run_structure_analysis(paths).await
+                } else {
+                    Ok(super::pipeline_results::StructureAnalysisResults {
+                        enabled: false,
+                        directory_recommendations: Vec::new(),
+                        file_splitting_recommendations: Vec::new(),
+                        issues_count: 0,
+                    })
+                }
+            };
+
+            let coverage_future = async {
+                if self.config.enable_coverage_analysis {
+                    let coverage_config = self
+                        .valknut_config
+                        .as_ref()
+                        .map(|config| &config.coverage)
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let default_path = PathBuf::from(".");
+                    let root_path = paths.first().unwrap_or(&default_path);
+                    self.stages
+                        .run_coverage_analysis(root_path, &coverage_config)
+                        .await
+                } else {
+                    Ok(CoverageAnalysisResults {
+                        enabled: false,
+                        coverage_files_used: Vec::new(),
+                        coverage_gaps: Vec::new(),
+                        gaps_count: 0,
+                        overall_coverage_percentage: None,
+                        analysis_method: "disabled".to_string(),
+                    })
+                }
+            };
+
+            futures::join!(structure_future, coverage_future)
         };
 
-        if let Some(ref callback) = progress_callback {
-            callback("Analyzing refactoring opportunities...", 50.0);
-        }
+        let group2_future = async {
+            let complexity_future = async {
+                if self.config.enable_complexity_analysis {
+                    self.stages.run_complexity_analysis(&files).await
+                } else {
+                    Ok(super::pipeline_results::ComplexityAnalysisResults {
+                        enabled: false,
+                        detailed_results: Vec::new(),
+                        average_cyclomatic_complexity: 0.0,
+                        average_cognitive_complexity: 0.0,
+                        average_technical_debt_score: 0.0,
+                        average_maintainability_index: 100.0,
+                        issues_count: 0,
+                    })
+                }
+            };
 
-        // Stage 4: Refactoring analysis
-        let refactoring_results = if self.config.enable_refactoring_analysis {
-            self.stages.run_refactoring_analysis(&files).await?
-        } else {
-            super::pipeline_results::RefactoringAnalysisResults {
-                enabled: false,
-                detailed_results: Vec::new(),
-                opportunities_count: 0,
-            }
+            let refactoring_future = async {
+                if self.config.enable_refactoring_analysis {
+                    self.stages.run_refactoring_analysis(&files).await
+                } else {
+                    Ok(super::pipeline_results::RefactoringAnalysisResults {
+                        enabled: false,
+                        detailed_results: Vec::new(),
+                        opportunities_count: 0,
+                    })
+                }
+            };
+
+            let impact_future = async {
+                if self.config.enable_impact_analysis {
+                    self.stages.run_impact_analysis(&files).await
+                } else {
+                    Ok(super::pipeline_results::ImpactAnalysisResults {
+                        enabled: false,
+                        dependency_cycles: Vec::new(),
+                        chokepoints: Vec::new(),
+                        clone_groups: Vec::new(),
+                        issues_count: 0,
+                    })
+                }
+            };
+
+            let lsh_future = async {
+                if self.config.enable_lsh_analysis {
+                    let denoise_enabled = self
+                        .valknut_config
+                        .as_ref()
+                        .map(|config| config.denoise.enabled)
+                        .unwrap_or(false);
+                    self.stages
+                        .run_lsh_analysis(&files, denoise_enabled)
+                        .await
+                } else {
+                    Ok(super::pipeline_results::LshAnalysisResults {
+                        enabled: false,
+                        clone_pairs: Vec::new(),
+                        max_similarity: 0.0,
+                        avg_similarity: 0.0,
+                        duplicate_count: 0,
+                        denoising_enabled: false,
+                        tfidf_stats: None,
+                    })
+                }
+            };
+
+            futures::join!(complexity_future, refactoring_future, impact_future, lsh_future)
         };
 
-        if let Some(ref callback) = progress_callback {
-            callback("Analyzing dependencies and impact...", 80.0);
-        }
+        // Execute both groups in parallel
+        let ((structure_result, coverage_result), (complexity_result, refactoring_result, impact_result, lsh_result)) = 
+            futures::join!(group1_future, group2_future);
 
-        // Stage 5: Impact analysis
-        let impact_results = if self.config.enable_impact_analysis {
-            self.stages.run_impact_analysis(&files).await?
-        } else {
-            super::pipeline_results::ImpactAnalysisResults {
-                enabled: false,
-                dependency_cycles: Vec::new(),
-                chokepoints: Vec::new(),
-                clone_groups: Vec::new(),
-                issues_count: 0,
-            }
-        };
-
-        if let Some(ref callback) = progress_callback {
-            callback("Analyzing code clones and duplicates...", 75.0);
-        }
-
-        // Stage 6: LSH analysis for clone detection
-        let lsh_results = if self.config.enable_lsh_analysis {
-            let denoise_enabled = self
-                .valknut_config
-                .as_ref()
-                .map(|config| config.denoise.enabled)
-                .unwrap_or(false);
-            self.stages
-                .run_lsh_analysis(&files, denoise_enabled)
-                .await?
-        } else {
-            super::pipeline_results::LshAnalysisResults {
-                enabled: false,
-                clone_pairs: Vec::new(),
-                max_similarity: 0.0,
-                avg_similarity: 0.0,
-                duplicate_count: 0,
-                denoising_enabled: false,
-                tfidf_stats: None,
-            }
-        };
-
-        if let Some(ref callback) = progress_callback {
-            callback("Running coverage analysis...", 85.0);
-        }
-
-        // Stage 7: Coverage analysis with automatic file discovery
-        let coverage_results = if self.config.enable_coverage_analysis {
-            let coverage_config = self
-                .valknut_config
-                .as_ref()
-                .map(|config| &config.coverage)
-                .cloned()
-                .unwrap_or_default();
-
-            // Use the first analysis path as root for coverage discovery
-            let default_path = PathBuf::from(".");
-            let root_path = paths.first().unwrap_or(&default_path);
-            self.stages
-                .run_coverage_analysis(root_path, &coverage_config)
-                .await?
-        } else {
-            CoverageAnalysisResults {
-                enabled: false,
-                coverage_files_used: Vec::new(),
-                coverage_gaps: Vec::new(),
-                gaps_count: 0,
-                overall_coverage_percentage: None,
-                analysis_method: "disabled".to_string(),
-            }
-        };
+        // Handle results and propagate errors
+        let structure_results = structure_result?;
+        let coverage_results = coverage_result?;
+        let complexity_results = complexity_result?;
+        let refactoring_results = refactoring_result?;
+        let impact_results = impact_result?;
+        let lsh_results = lsh_result?;
 
         if let Some(ref callback) = progress_callback {
             callback("Calculating health metrics...", 90.0);
@@ -351,31 +382,152 @@ impl AnalysisPipeline {
         })
     }
 
-    /// Discover files to analyze
+    /// Discover files to analyze using optimized parallel traversal
     async fn discover_files(&self, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
-        let mut files = Vec::new();
-
-        for path in paths {
-            if path.is_file() {
-                if self.should_include_file(path) {
-                    files.push(path.clone());
-                }
-            } else if path.is_dir() {
-                self.discover_files_recursive(path, &mut files).await?;
+        let start_time = std::time::Instant::now();
+        
+        // Pre-allocate with reasonable capacity
+        let mut files = Vec::with_capacity(1000);
+        
+        // Use parallelization for multiple root paths
+        if paths.len() > 1 {
+            let futures: Vec<_> = paths.iter()
+                .map(|path| self.discover_files_single_path(path))
+                .collect();
+                
+            let results = futures::future::join_all(futures).await;
+            
+            for result in results {
+                let mut path_files = result?;
+                files.append(&mut path_files);
             }
+        } else if let Some(path) = paths.first() {
+            files = self.discover_files_single_path(path).await?;
         }
 
+        let discovery_time = start_time.elapsed();
+        
+        // Sort files for deterministic ordering
+        files.sort_unstable();
+        
         // Limit files if configured
         if self.config.max_files > 0 && files.len() > self.config.max_files {
             warn!(
-                "Limiting analysis to {} files (found {})",
+                "Limiting analysis to {} files (found {} in {:?})",
                 self.config.max_files,
-                files.len()
+                files.len(),
+                discovery_time
             );
             files.truncate(self.config.max_files);
+        } else {
+            info!("Discovered {} files in {:?}", files.len(), discovery_time);
         }
 
         Ok(files)
+    }
+    
+    /// Optimized file discovery for a single path
+    async fn discover_files_single_path(&self, path: &Path) -> Result<Vec<PathBuf>> {
+        if path.is_file() {
+            return if self.should_include_file(path) {
+                Ok(vec![path.to_path_buf()])
+            } else {
+                Ok(Vec::new())
+            };
+        }
+        
+        if !path.is_dir() {
+            return Ok(Vec::new());
+        }
+        
+        // Use walkdir in spawn_blocking for CPU-bound directory traversal
+        let path_clone = path.to_path_buf();
+        let extensions = self.config.file_extensions.clone();
+        let exclude_dirs = self.config.exclude_directories.clone();
+        let max_files = self.config.max_files;
+        
+        tokio::task::spawn_blocking(move || -> Result<Vec<PathBuf>> {
+            use std::path::Path;
+            
+            let mut files = Vec::with_capacity(500);
+            let walker = walkdir::WalkDir::new(&path_clone)
+                .follow_links(false)
+                .max_depth(20)  // Reasonable depth limit
+                .sort_by_file_name();
+                
+            for entry in walker {
+                // Early termination if we've found enough files
+                if max_files > 0 && files.len() >= max_files {
+                    break;
+                }
+                
+                let entry = entry.map_err(|e| {
+                    ValknutError::io(format!("Directory traversal error: {}", e), std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
+                
+                let path = entry.path();
+                
+                if entry.file_type().is_file() {
+                    if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+                        if extensions.contains(&extension.to_string()) {
+                            files.push(path.to_path_buf());
+                        }
+                    }
+                } else if entry.file_type().is_dir() {
+                    if let Some(dir_name) = path.file_name().and_then(|name| name.to_str()) {
+                        if exclude_dirs.contains(&dir_name.to_string()) {
+                            // Skip this directory entirely
+                            continue;
+                        }
+                    }
+                }
+            }
+            
+            Ok(files)
+        }).await.map_err(|e| ValknutError::io(format!("Task join error: {}", e), std::io::Error::new(std::io::ErrorKind::Other, e)))?
+    }
+
+    /// Read multiple files in batches for optimal I/O performance
+    async fn read_files_batched(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
+        let start_time = std::time::Instant::now();
+        const BATCH_SIZE: usize = 50; // Process files in batches
+        
+        let mut file_contents = Vec::with_capacity(files.len());
+        
+        // Process files in batches to control memory usage and optimize I/O
+        for batch in files.chunks(BATCH_SIZE) {
+            let batch_futures: Vec<_> = batch.iter()
+                .map(|file_path| async move {
+                    let content = tokio::fs::read_to_string(file_path).await
+                        .map_err(|e| ValknutError::io(
+                            format!("Failed to read file {}", file_path.display()),
+                            e
+                        ))?;
+                    Ok::<(PathBuf, String), ValknutError>((file_path.clone(), content))
+                })
+                .collect();
+                
+            let batch_results = futures::future::join_all(batch_futures).await;
+            
+            for result in batch_results {
+                let (path, content) = result?;
+                file_contents.push((path, content));
+            }
+        }
+        
+        let read_time = start_time.elapsed();
+        let total_size_mb = file_contents.iter()
+            .map(|(_, content)| content.len())
+            .sum::<usize>() as f64 / (1024.0 * 1024.0);
+            
+        info!(
+            "Read {} files ({:.2} MB) in {:?} using batched I/O",
+            file_contents.len(),
+            total_size_mb,
+            read_time
+        );
+        
+        Ok(file_contents)
     }
 
     /// Recursively discover files in a directory

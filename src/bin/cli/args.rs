@@ -299,6 +299,10 @@ pub struct AnalyzeArgs {
     #[arg(short, long)]
     pub quiet: bool,
 
+    /// Performance optimization profile to balance speed vs thoroughness
+    #[arg(long, value_enum, default_value = "balanced")]
+    pub profile: PerformanceProfile,
+
     #[command(flatten)]
     pub quality_gate: QualityGateArgs,
 
@@ -382,4 +386,17 @@ pub enum SurveyVerbosity {
     Medium,
     High,
     Maximum,
+}
+
+/// Performance optimization profiles
+#[derive(Debug, Clone, ValueEnum)]
+pub enum PerformanceProfile {
+    /// Fast mode - minimal analysis, optimized for speed
+    Fast,
+    /// Balanced mode - good balance of speed and thoroughness (default)
+    Balanced,
+    /// Thorough mode - comprehensive analysis, optimized for accuracy
+    Thorough,
+    /// Extreme mode - maximum analysis depth, all optimizations enabled
+    Extreme,
 }

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+use super::registry::{get_tree_sitter_language, create_parser_for_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
@@ -170,21 +171,8 @@ pub struct RustAdapter {
 impl RustAdapter {
     /// Create a new Rust adapter
     pub fn new() -> Result<Self> {
-        // Simple test to verify tree_sitter_rust access
-        let language = match std::panic::catch_unwind(|| tree_sitter_rust::LANGUAGE.into()) {
-            Ok(lang) => lang,
-            Err(_) => {
-                return Err(ValknutError::parse(
-                    "rust",
-                    "Failed to access tree_sitter_rust::language()".to_string(),
-                ))
-            }
-        };
-
-        let mut parser = Parser::new();
-        parser.set_language(&language).map_err(|e| {
-            ValknutError::parse("rust", format!("Failed to set Rust language: {:?}", e))
-        })?;
+        let language = get_tree_sitter_language("rs")?;
+        let parser = create_parser_for_language("rs")?;
 
         Ok(Self { parser, language })
     }
@@ -889,6 +877,10 @@ impl LanguageAdapter for RustAdapter {
 
         Ok(imports)
     }
+
+    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+        RustAdapter::extract_code_entities(self, source, file_path)
+    }
 }
 
 impl Default for RustAdapter {
@@ -900,7 +892,7 @@ impl Default for RustAdapter {
             );
             RustAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: tree_sitter_rust::LANGUAGE.into(),
+                language: get_tree_sitter_language("rs").unwrap_or_else(|_| tree_sitter_rust::LANGUAGE.into()),
             }
         })
     }

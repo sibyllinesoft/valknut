@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// Common entity types across all languages
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EntityKind {
     Function,
     Method,
@@ -252,6 +252,9 @@ pub trait LanguageAdapter: Send + Sync {
     fn extract_imports(&mut self, _source: &str) -> Result<Vec<ImportStatement>> {
         Ok(Vec::new())
     }
+
+    /// Extract code entities (functions, classes, etc.) from source code
+    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>>;
 }
 
 #[cfg(test)]

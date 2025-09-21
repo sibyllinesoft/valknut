@@ -196,7 +196,7 @@ fn allowed_extensions_from(
             .iter()
             .flat_map(|lang| match lang.as_str() {
                 "python" => vec!["py"],
-                "javascript" => vec!["js", "mjs", "jsx"],
+                "javascript" => vec!["js", "mjs", "cjs", "jsx"],
                 "typescript" => vec!["ts", "tsx"],
                 "rust" => vec!["rs"],
                 "go" => vec!["go"],
@@ -206,7 +206,7 @@ fn allowed_extensions_from(
             .map(|ext| ext.to_ascii_lowercase())
             .collect()
     } else {
-        ["py", "js", "ts", "tsx", "jsx", "rs", "go"]
+        ["py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rs", "go"]
             .iter()
             .map(|ext| ext.to_string())
             .collect()

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+use super::registry::{get_tree_sitter_language, create_parser_for_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
@@ -172,14 +173,8 @@ pub struct TypeScriptAdapter {
 impl TypeScriptAdapter {
     /// Create a new TypeScript adapter
     pub fn new() -> Result<Self> {
-        let language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
-        let mut parser = Parser::new();
-        parser.set_language(&language).map_err(|e| {
-            ValknutError::parse(
-                "typescript",
-                format!("Failed to set TypeScript language: {:?}", e),
-            )
-        })?;
+        let language = get_tree_sitter_language("ts")?;
+        let parser = create_parser_for_language("ts")?;
 
         Ok(Self { parser, language })
     }
@@ -341,7 +336,18 @@ impl TypeScriptAdapter {
 
         let name = self
             .extract_name(&node, source_code)?
-            .ok_or_else(|| ValknutError::parse("typescript", "Could not extract entity name"))?;
+            .unwrap_or_else(|| {
+                // Provide fallback names for entities without extractable names
+                match entity_kind {
+                    EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
+                    EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
+                    EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
+                    EntityKind::Interface => format!("anonymous_interface_{}", *entity_id_counter),
+                    EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
+                    EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
+                    _ => format!("anonymous_entity_{}", *entity_id_counter),
+                }
+            });
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -850,6 +856,10 @@ impl LanguageAdapter for TypeScriptAdapter {
 
         Ok(imports)
     }
+
+    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+        TypeScriptAdapter::extract_code_entities(self, source, file_path)
+    }
 }
 
 impl Default for TypeScriptAdapter {
@@ -861,7 +871,7 @@ impl Default for TypeScriptAdapter {
             );
             TypeScriptAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+                language: get_tree_sitter_language("ts").unwrap_or_else(|_| tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
             }
         })
     }

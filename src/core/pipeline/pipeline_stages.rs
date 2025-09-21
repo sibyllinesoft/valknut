@@ -9,6 +9,7 @@ use super::pipeline_results::{
     ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
     LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
 };
+use crate::core::arena_analysis::{ArenaFileAnalyzer, ArenaBatchAnalyzer};
 use crate::core::ast_service::AstService;
 use crate::core::config::CoverageConfig;
 use crate::core::dependency::ProjectDependencyAnalysis;
@@ -30,6 +31,7 @@ pub struct AnalysisStages {
     pub refactoring_analyzer: RefactoringAnalyzer,
     pub lsh_extractor: Option<LshExtractor>,
     pub coverage_extractor: CoverageExtractor,
+    pub arena_analyzer: ArenaFileAnalyzer,
     pub ast_service: Arc<AstService>,
 }
 
@@ -53,6 +55,7 @@ impl AnalysisStages {
             refactoring_analyzer,
             lsh_extractor: None,
             coverage_extractor: CoverageExtractor::new(Default::default(), ast_service.clone()),
+            arena_analyzer: ArenaFileAnalyzer::with_ast_service(ast_service.clone()),
             ast_service,
         }
     }
@@ -77,6 +80,7 @@ impl AnalysisStages {
             refactoring_analyzer,
             lsh_extractor: Some(lsh_extractor),
             coverage_extractor: CoverageExtractor::new(Default::default(), ast_service.clone()),
+            arena_analyzer: ArenaFileAnalyzer::with_ast_service(ast_service.clone()),
             ast_service,
         }
     }
@@ -341,23 +345,19 @@ impl AnalysisStages {
             let config = Arc::new(ValknutConfig::default());
             let context = ExtractionContext::new(config, "mixed");
 
-            // Convert files to CodeEntity objects for LSH analysis
+            // Extract real entities from files using language adapters
             let mut entities = Vec::new();
             let mut entity_index = HashMap::new();
 
-            for (i, file_path) in files.iter().enumerate() {
+            for file_path in files.iter() {
                 if let Ok(content) = tokio::fs::read_to_string(file_path).await {
-                    let entity_id = format!("entity_{}", i);
-                    let entity = CodeEntity::new(
-                        &entity_id,
-                        "function", // Simplified - in real implementation would parse AST
-                        &format!("file_{}", i),
-                        &file_path.to_string_lossy().to_string(),
-                    )
-                    .with_source_code(&content);
-
-                    entity_index.insert(entity_id.clone(), entity.clone());
-                    entities.push(entity);
+                    // Extract entities using appropriate language adapter
+                    if let Some(extracted_entities) = self.extract_entities_from_file(file_path, &content).await {
+                        for entity in extracted_entities {
+                            entity_index.insert(entity.id.clone(), entity.clone());
+                            entities.push(entity);
+                        }
+                    }
                 }
             }
 
@@ -656,5 +656,123 @@ impl AnalysisStages {
         // Future: Parse JSON coverage and identify gaps
         debug!("Analyzing JSON coverage file");
         Ok(0)
+    }
+
+    /// Extract entities from a file using appropriate language adapter
+    async fn extract_entities_from_file(&self, file_path: &Path, content: &str) -> Option<Vec<crate::core::featureset::CodeEntity>> {
+        use crate::lang::registry::adapter_for_file;
+        
+        // Get appropriate language adapter
+        let mut adapter = match adapter_for_file(file_path) {
+            Ok(adapter) => adapter,
+            Err(e) => {
+                debug!("No language adapter for {}: {}", file_path.display(), e);
+                return None;
+            }
+        };
+
+        // Extract entities using the standardized interface
+        match adapter.extract_code_entities(content, &file_path.to_string_lossy()) {
+            Ok(entities) => {
+                debug!("Extracted {} entities from {}", entities.len(), file_path.display());
+                Some(entities)
+            }
+            Err(e) => {
+                warn!("Failed to extract entities from {}: {}", file_path.display(), e);
+                None
+            }
+        }
+    }
+
+    /// Run arena-based file analysis for optimal memory performance
+    /// 
+    /// This method demonstrates arena allocation benefits by processing files
+    /// with minimal memory allocation overhead using bump-pointer allocation.
+    pub async fn run_arena_file_analysis(&self, files: &[PathBuf]) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
+        debug!("Running arena-based file analysis on {} files", files.len());
+        
+        use tokio::fs;
+        
+        // Prepare file paths and sources for batch arena analysis
+        let mut file_sources = Vec::with_capacity(files.len());
+        
+        for file_path in files {
+            match fs::read_to_string(file_path).await {
+                Ok(source) => {
+                    file_sources.push((file_path.as_path(), source));
+                }
+                Err(e) => {
+                    warn!("Failed to read file {}: {}", file_path.display(), e);
+                    continue;
+                }
+            }
+        }
+        
+        if file_sources.is_empty() {
+            info!("No files could be read for arena analysis");
+            return Ok(Vec::new());
+        }
+        
+        // Use ArenaBatchAnalyzer for optimal memory usage
+        let batch_analyzer = ArenaBatchAnalyzer::new();
+        
+        // Convert to the format expected by batch analyzer
+        let file_refs: Vec<(&std::path::Path, &str)> = file_sources
+            .iter()
+            .map(|(path, source)| (*path, source.as_str()))
+            .collect();
+            
+        let batch_result = batch_analyzer.analyze_batch(file_refs).await?;
+        
+        info!(
+            "Arena batch analysis completed: {} files, {} entities, {:.2} KB arena usage, {:.1} entities/sec",
+            batch_result.total_files,
+            batch_result.total_entities,
+            batch_result.total_arena_kb(),
+            batch_result.entities_per_second()
+        );
+        
+        info!(
+            "Estimated malloc savings: {:.2} KB overhead reduction vs traditional allocation",
+            batch_result.estimated_malloc_savings()
+        );
+        
+        Ok(batch_result.file_results)
+    }
+
+    /// Run arena-based file analysis with pre-loaded file contents (performance optimized)
+    pub async fn run_arena_file_analysis_with_content(&self, file_contents: &[(PathBuf, String)]) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
+        debug!("Running arena-based file analysis on {} pre-loaded files", file_contents.len());
+        
+        if file_contents.is_empty() {
+            info!("No files provided for arena analysis");
+            return Ok(Vec::new());
+        }
+        
+        // Use ArenaBatchAnalyzer for optimal memory usage
+        let batch_analyzer = ArenaBatchAnalyzer::new();
+        
+        // Convert to the format expected by batch analyzer
+        let file_refs: Vec<(&std::path::Path, &str)> = file_contents
+            .iter()
+            .map(|(path, content)| (path.as_path(), content.as_str()))
+            .collect();
+        
+        let batch_result = batch_analyzer.analyze_batch(file_refs).await?;
+        
+        info!(
+            "Arena analysis completed: {} files, {} entities, {:.2} KB arena memory, {:.1} entities/sec",
+            batch_result.total_files,
+            batch_result.total_entities,
+            batch_result.total_arena_kb(),
+            batch_result.entities_per_second()
+        );
+        
+        info!(
+            "Estimated malloc savings: {:.2} KB overhead reduction vs traditional allocation",
+            batch_result.estimated_malloc_savings()
+        );
+        
+        Ok(batch_result.file_results)
     }
 }
