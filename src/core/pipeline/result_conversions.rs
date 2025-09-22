@@ -570,15 +570,16 @@ impl AnalysisResults {
                     // Each scoring result represents one entity
                     *directory_entity_counts.entry(dir_path.clone()).or_insert(0) += 1;
 
-                    // Add all parent directories
+                    // Add parent directories only within project bounds (not absolute paths)
                     let mut current = Some(dir_path);
                     while let Some(dir) = current {
                         if !dir.as_os_str().is_empty() {
                             all_directories.insert(dir.clone());
                         }
+                        // Stop at project root - don't traverse beyond relative paths
                         current = dir
                             .parent()
-                            .filter(|p| !p.as_os_str().is_empty())
+                            .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
                             .map(|p| p.to_path_buf());
                     }
                 }
@@ -596,15 +597,16 @@ impl AnalysisResults {
                     let entity_count = refactoring_result.recommendations.len().max(1); // At least 1 entity per file
                     *directory_entity_counts.entry(dir_path.clone()).or_insert(0) += entity_count;
 
-                    // Add all parent directories
+                    // Add parent directories only within project bounds (not absolute paths)
                     let mut current = Some(dir_path);
                     while let Some(dir) = current {
                         if !dir.as_os_str().is_empty() {
                             all_directories.insert(dir.clone());
                         }
+                        // Stop at project root - don't traverse beyond relative paths
                         current = dir
                             .parent()
-                            .filter(|p| !p.as_os_str().is_empty())
+                            .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
                             .map(|p| p.to_path_buf());
                     }
                 }
@@ -638,16 +640,17 @@ impl AnalysisResults {
                     .or_default()
                     .push(candidate);
 
-                // Add all parent directories, but filter out empty paths
+                // Add parent directories only within project bounds (not absolute paths)
                 let mut current = Some(dir_path);
                 while let Some(dir) = current {
                     // Only add non-empty paths
                     if !dir.as_os_str().is_empty() {
                         all_directories.insert(dir.clone());
                     }
+                    // Stop at project root - don't traverse beyond relative paths
                     current = dir
                         .parent()
-                        .filter(|p| !p.as_os_str().is_empty())
+                        .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
                         .map(|p| p.to_path_buf());
                 }
             }

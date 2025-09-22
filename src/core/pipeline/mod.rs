@@ -41,6 +41,7 @@ pub use pipeline_stages::AnalysisStages;
 pub use result_conversions::*;
 pub use result_types::*;
 
+mod file_discovery;
 mod pipeline_config;
 mod pipeline_executor;
 mod pipeline_results;

@@ -20,6 +20,7 @@ use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use crate::detectors::structure::{StructureConfig, StructureExtractor};
 use std::sync::Arc;
 
+use super::file_discovery;
 use super::pipeline_config::{
     AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
@@ -257,7 +258,8 @@ impl AnalysisPipeline {
         let group2_future = async {
             let complexity_future = async {
                 if self.config.enable_complexity_analysis {
-                    self.stages.run_complexity_analysis(&files).await
+                    // Use arena results instead of re-parsing files
+                    self.stages.run_complexity_analysis_from_arena_results(&arena_results).await
                 } else {
                     Ok(super::pipeline_results::ComplexityAnalysisResults {
                         enabled: false,
@@ -382,33 +384,14 @@ impl AnalysisPipeline {
         })
     }
 
-    /// Discover files to analyze using optimized parallel traversal
+    /// Discover files to analyze using git-aware file discovery
     async fn discover_files(&self, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
         let start_time = std::time::Instant::now();
         
-        // Pre-allocate with reasonable capacity
-        let mut files = Vec::with_capacity(1000);
+        // Use the proper git-aware file discovery
+        let mut files = file_discovery::discover_files(paths, &self.config, self.valknut_config.as_ref())?;
         
-        // Use parallelization for multiple root paths
-        if paths.len() > 1 {
-            let futures: Vec<_> = paths.iter()
-                .map(|path| self.discover_files_single_path(path))
-                .collect();
-                
-            let results = futures::future::join_all(futures).await;
-            
-            for result in results {
-                let mut path_files = result?;
-                files.append(&mut path_files);
-            }
-        } else if let Some(path) = paths.first() {
-            files = self.discover_files_single_path(path).await?;
-        }
-
         let discovery_time = start_time.elapsed();
-        
-        // Sort files for deterministic ordering
-        files.sort_unstable();
         
         // Limit files if configured
         if self.config.max_files > 0 && files.len() > self.config.max_files {
@@ -424,67 +407,6 @@ impl AnalysisPipeline {
         }
 
         Ok(files)
-    }
-    
-    /// Optimized file discovery for a single path
-    async fn discover_files_single_path(&self, path: &Path) -> Result<Vec<PathBuf>> {
-        if path.is_file() {
-            return if self.should_include_file(path) {
-                Ok(vec![path.to_path_buf()])
-            } else {
-                Ok(Vec::new())
-            };
-        }
-        
-        if !path.is_dir() {
-            return Ok(Vec::new());
-        }
-        
-        // Use walkdir in spawn_blocking for CPU-bound directory traversal
-        let path_clone = path.to_path_buf();
-        let extensions = self.config.file_extensions.clone();
-        let exclude_dirs = self.config.exclude_directories.clone();
-        let max_files = self.config.max_files;
-        
-        tokio::task::spawn_blocking(move || -> Result<Vec<PathBuf>> {
-            use std::path::Path;
-            
-            let mut files = Vec::with_capacity(500);
-            let walker = walkdir::WalkDir::new(&path_clone)
-                .follow_links(false)
-                .max_depth(20)  // Reasonable depth limit
-                .sort_by_file_name();
-                
-            for entry in walker {
-                // Early termination if we've found enough files
-                if max_files > 0 && files.len() >= max_files {
-                    break;
-                }
-                
-                let entry = entry.map_err(|e| {
-                    ValknutError::io(format!("Directory traversal error: {}", e), std::io::Error::new(std::io::ErrorKind::Other, e))
-                })?;
-                
-                let path = entry.path();
-                
-                if entry.file_type().is_file() {
-                    if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-                        if extensions.contains(&extension.to_string()) {
-                            files.push(path.to_path_buf());
-                        }
-                    }
-                } else if entry.file_type().is_dir() {
-                    if let Some(dir_name) = path.file_name().and_then(|name| name.to_str()) {
-                        if exclude_dirs.contains(&dir_name.to_string()) {
-                            // Skip this directory entirely
-                            continue;
-                        }
-                    }
-                }
-            }
-            
-            Ok(files)
-        }).await.map_err(|e| ValknutError::io(format!("Task join error: {}", e), std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
 
     /// Read multiple files in batches for optimal I/O performance
@@ -530,58 +452,6 @@ impl AnalysisPipeline {
         Ok(file_contents)
     }
 
-    /// Recursively discover files in a directory
-    fn discover_files_recursive<'a>(
-        &'a self,
-        dir: &'a Path,
-        files: &'a mut Vec<PathBuf>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
-        Box::pin(async move {
-            let mut entries = fs::read_dir(dir).await.map_err(|e| {
-                ValknutError::io(
-                    format!("Failed to read directory {}: {}", dir.display(), e),
-                    e,
-                )
-            })?;
-
-            while let Some(entry) = entries
-                .next_entry()
-                .await
-                .map_err(|e| ValknutError::io("Failed to read directory entry".to_string(), e))?
-            {
-                let path = entry.path();
-
-                if path.is_file() && self.should_include_file(&path) {
-                    files.push(path);
-                } else if path.is_dir() && self.should_include_directory(&path) {
-                    self.discover_files_recursive(&path, files).await?;
-                }
-            }
-
-            Ok(())
-        })
-    }
-
-    /// Check if a file should be included in analysis
-    fn should_include_file(&self, file: &Path) -> bool {
-        if let Some(extension) = file.extension().and_then(|ext| ext.to_str()) {
-            self.config.file_extensions.contains(&extension.to_string())
-        } else {
-            false
-        }
-    }
-
-    /// Check if a directory should be included in analysis
-    fn should_include_directory(&self, dir: &Path) -> bool {
-        if let Some(dir_name) = dir.file_name().and_then(|name| name.to_str()) {
-            !self
-                .config
-                .exclude_directories
-                .contains(&dir_name.to_string())
-        } else {
-            true
-        }
-    }
 
     /// Check if a file should be included for dedupe analysis based on scope filtering
     pub fn should_include_for_dedupe(&self, file: &Path, valknut_config: &ValknutConfig) -> bool {

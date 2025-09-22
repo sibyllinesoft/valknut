@@ -192,6 +192,7 @@ lto = true
 
 [[bench]]
 name = "performance"
+path = "benchmarks/src/performance.rs"
 harness = false
 required-features = ["benchmarks"]
 

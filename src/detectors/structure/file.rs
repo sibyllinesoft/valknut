@@ -832,7 +832,17 @@ impl FileAnalyzer {
     }
 
     fn canonicalize_path(&self, path: &Path) -> PathBuf {
-        std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        // Use relative paths instead of absolute canonicalized paths to prevent
+        // filesystem hierarchy traversal outside the project
+        if path.is_absolute() {
+            // If absolute path, try to make it relative to current directory
+            if let Ok(current_dir) = std::env::current_dir() {
+                if let Ok(relative) = path.strip_prefix(&current_dir) {
+                    return relative.to_path_buf();
+                }
+            }
+        }
+        path.to_path_buf()
     }
 
     /// Extract entities using tree-sitter for accurate parsing

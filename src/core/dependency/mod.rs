@@ -681,8 +681,23 @@ fn compute_chokepoints(
 }
 
 pub fn canonicalize_path(path: &Path) -> PathBuf {
-    match path.canonicalize() {
-        Ok(canonical) => canonical,
-        Err(_) => path.to_path_buf(),
+    // Preserve relative paths to avoid absolute path display issues
+    // Only canonicalize for existence checking if path doesn't exist as-is
+    if path.exists() {
+        path.to_path_buf()
+    } else {
+        match path.canonicalize() {
+            Ok(canonical) => {
+                // Try to convert back to relative if possible
+                if let Ok(current_dir) = std::env::current_dir() {
+                    canonical.strip_prefix(&current_dir)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or(canonical)
+                } else {
+                    canonical
+                }
+            }
+            Err(_) => path.to_path_buf(),
+        }
     }
 }

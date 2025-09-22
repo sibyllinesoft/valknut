@@ -175,7 +175,8 @@ export const filterBySeverity = (data, severityLevels = []) => {
     
     // Check if node has matching severity
     const hasSeverity = severityLevels.some(level => {
-      if (node.priority && node.priority.toLowerCase().includes(level.toLowerCase())) {
+      const priorityStr = String(node.priority || '').toLowerCase();
+      if (node.priority && priorityStr.includes(level.toLowerCase())) {
         return true;
       }
       if (node.severityCounts && node.severityCounts[level.toLowerCase()] > 0) {

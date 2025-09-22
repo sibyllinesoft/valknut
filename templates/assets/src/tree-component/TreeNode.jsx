@@ -92,8 +92,9 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         
         // For issue rows (alert-triangle), check if it's complexity or structure and extract score
         if (isIssueRow) {
-            const isComplexityIssue = data.name.toLowerCase().includes('complexity');
-            const isStructureIssue = data.name.toLowerCase().includes('structure');
+            const nameStr = String(data.name || '');
+            const isComplexityIssue = nameStr.toLowerCase().includes('complexity');
+            const isStructureIssue = nameStr.toLowerCase().includes('structure');
             
             if (isComplexityIssue || isStructureIssue) {
                 // For "very high complexity/structural" descriptions, we need to use the entity score
@@ -180,7 +181,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Priority color mapping with actual styling
     const getPriorityStyle = (priority) => {
-        switch(priority?.toLowerCase()) {
+        const priorityStr = String(priority || '').toLowerCase();
+        switch(priorityStr) {
             case 'critical': 
                 return { 
                     backgroundColor: '#dc354520', 

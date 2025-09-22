@@ -195,9 +195,15 @@ impl ArenaFileAnalyzer {
 
         // Copy interned entities to workspace for analysis
         // NOTE: The actual strings are interned globally, only the Vec is in arena
-        for entity in interned_entities.into_iter() {
-            workspace.add_entity(entity);
+        for entity in interned_entities.iter() {
+            workspace.add_entity(entity.clone());
         }
+
+        // Convert interned entities to regular entities for use in other pipeline stages
+        let regular_entities: Vec<crate::core::featureset::CodeEntity> = interned_entities
+            .into_iter()
+            .map(|interned_entity| interned_entity.to_code_entity())
+            .collect();
 
         let analysis_result = ArenaAnalysisResult {
             entity_count: workspace.entities.len(),
@@ -209,6 +215,7 @@ impl ArenaFileAnalyzer {
                 workspace.entities.len(),
                 arena.allocated_bytes(),
             ),
+            entities: regular_entities,
         };
 
         Ok(analysis_result)
@@ -301,6 +308,8 @@ pub struct ArenaAnalysisResult {
     pub arena_bytes_used: usize,
     /// Memory efficiency score (entities per KB)
     pub memory_efficiency_score: f64,
+    /// Extracted entities (converted from interned to regular entities)
+    pub entities: Vec<crate::core::featureset::CodeEntity>,
 }
 
 impl ArenaAnalysisResult {

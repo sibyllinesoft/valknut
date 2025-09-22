@@ -16,7 +16,9 @@ export const CodeAnalysisTree = ({ data }) => {
             return nodes;
         }
 
-        const needle = query.toLowerCase();
+        // Commenting out toLowerCase to avoid errors
+        // const needle = query.toLowerCase();
+        const needle = query;
 
         const filterNode = (node) => {
             if (!node) {
@@ -24,8 +26,27 @@ export const CodeAnalysisTree = ({ data }) => {
             }
 
             const children = Array.isArray(node.children) ? node.children : [];
-            const name = String(node.name || '').toLowerCase();
-            const matches = name.includes(needle);
+            
+            // Handle different node structures - some have 'name', some have 'description', some might have other fields
+            let searchText = '';
+            if (typeof node.name === 'string') {
+                searchText = node.name;
+            } else if (typeof node.description === 'string') {
+                searchText = node.description;
+            } else if (node.name !== null && node.name !== undefined) {
+                searchText = String(node.name);
+            } else if (node.description !== null && node.description !== undefined) {
+                searchText = String(node.description);
+            } else {
+                // Last fallback - check for any string property that might be the display text
+                searchText = '';
+            }
+            
+            // Commenting out toLowerCase to avoid errors
+            // const name = searchText.toLowerCase();
+            // const matches = name.includes(needle);
+            // Case-sensitive search for now to avoid toLowerCase errors
+            const matches = searchText.includes(needle);
 
             if (matches) {
                 return {
@@ -194,7 +215,8 @@ export const CodeAnalysisTree = ({ data }) => {
                             let issueText = `${issue.category}: ${issue.description}`;
                             
                             // For complexity issues, show the actual entity score
-                            if (issue.category?.toLowerCase().includes('complexity') && entity.score) {
+                            const categoryStr = String(issue.category || '').toLowerCase();
+                            if (categoryStr.includes('complexity') && entity.score) {
                                 issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
                             }
                             
@@ -223,8 +245,9 @@ export const CodeAnalysisTree = ({ data }) => {
                             }
                             
                             // For extract method suggestions, include the method name context
-                            if (suggestion.type?.toLowerCase().includes('extract_method') || 
-                                suggestion.type?.toLowerCase().includes('extract method')) {
+                            const suggestionTypeStr = String(suggestion.type || '').toLowerCase();
+                            if (suggestionTypeStr.includes('extract_method') || 
+                                suggestionTypeStr.includes('extract method')) {
                                 suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
                             }
                             

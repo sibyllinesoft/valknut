@@ -117,7 +117,7 @@ dedupe:
   include:
     - "src/**"
   exclude:
-    - "benches/**"
+    - "benchmarks/**"
     - "examples/**"
     - "datasets/**"
     - "**/generated/**"

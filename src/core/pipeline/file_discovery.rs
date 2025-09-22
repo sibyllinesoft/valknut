@@ -142,17 +142,9 @@ fn canonicalize_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 fn gather_patterns(pipeline_config: &PipelineAnalysisConfig) -> (Vec<String>, Vec<String>) {
-    let include_patterns = if pipeline_config.files.include_patterns.is_empty() {
-        vec!["**/*".to_string()]
-    } else {
-        pipeline_config.files.include_patterns.clone()
-    };
-
-    let mut exclude_patterns = if pipeline_config.files.exclude_patterns.is_empty() {
-        default_exclude_patterns()
-    } else {
-        pipeline_config.files.exclude_patterns.clone()
-    };
+    let include_patterns = vec!["**/*".to_string()]; // Always use default for now
+    
+    let mut exclude_patterns = default_exclude_patterns();
 
     exclude_patterns.sort();
     exclude_patterns.dedup();
@@ -188,29 +180,12 @@ fn allowed_extensions_from(
         }
     }
 
-    // Fallback extensions if language config doesn't provide any
-    if !pipeline_config.languages.enabled.is_empty() {
-        pipeline_config
-            .languages
-            .enabled
-            .iter()
-            .flat_map(|lang| match lang.as_str() {
-                "python" => vec!["py"],
-                "javascript" => vec!["js", "mjs", "cjs", "jsx"],
-                "typescript" => vec!["ts", "tsx"],
-                "rust" => vec!["rs"],
-                "go" => vec!["go"],
-                "java" => vec!["java"],
-                _ => Vec::new(),
-            })
-            .map(|ext| ext.to_ascii_lowercase())
-            .collect()
-    } else {
-        ["py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rs", "go"]
-            .iter()
-            .map(|ext| ext.to_string())
-            .collect()
-    }
+    // Use file_extensions from the pipeline config
+    pipeline_config
+        .file_extensions
+        .iter()
+        .map(|ext| ext.trim_start_matches('.').to_ascii_lowercase())
+        .collect()
 }
 
 fn compile_globset(patterns: &[String]) -> Result<Option<GlobSet>> {

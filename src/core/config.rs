@@ -1448,7 +1448,7 @@ impl Default for DedupeConfig {
         Self {
             include: vec!["src/**".to_string()],
             exclude: vec![
-                "benches/**".to_string(),
+                "benchmarks/**".to_string(),
                 "examples/**".to_string(),
                 "datasets/**".to_string(),
                 "**/generated/**".to_string(),

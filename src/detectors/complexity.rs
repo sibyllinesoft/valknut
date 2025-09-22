@@ -146,6 +146,7 @@ impl ComplexitySeverity {
 }
 
 /// AST-based complexity analyzer - the CORRECT implementation
+#[derive(Clone)]
 pub struct AstComplexityAnalyzer {
     config: ComplexityConfig,
     ast_service: Arc<AstService>,
@@ -478,14 +479,24 @@ impl AstComplexityAnalyzer {
         entities: &mut Vec<CodeEntity>,
         depth: usize,
     ) -> Result<()> {
-        // Extract functions, methods, classes
+        // Extract functions, methods, classes - supporting multiple languages
         match node.kind() {
-            "function_definition" | "function_declaration" | "method_definition" => {
+            // Python function patterns
+            "function_definition" 
+            // JavaScript/TypeScript function patterns
+            | "function_declaration" | "function_expression" | "arrow_function" | "method_definition"
+            // Rust function patterns  
+            | "function_item" 
+            // Go function patterns
+            | "method_declaration" => {
                 if let Some(entity) = self.extract_function_entity(node, context, depth)? {
                     entities.push(entity);
                 }
             }
-            "class_definition" | "class_declaration" => {
+            // Python/JavaScript class patterns
+            "class_definition" | "class_declaration"
+            // Rust struct/impl patterns 
+            | "struct_item" | "impl_item" => {
                 if let Some(entity) = self.extract_class_entity(node, context, depth)? {
                     entities.push(entity);
                 }
@@ -578,7 +589,15 @@ impl AstComplexityAnalyzer {
 
     /// Get text content of an AST node
     fn get_node_text(&self, node: tree_sitter::Node, source: &str) -> String {
-        source[node.start_byte()..node.end_byte()].to_string()
+        let start = node.start_byte();
+        let end = node.end_byte();
+        
+        // Ensure bounds are valid
+        if start > end || start > source.len() || end > source.len() {
+            return String::new();
+        }
+        
+        source[start..end].to_string()
     }
 
     /// Calculate AST-based complexity metrics for an entity

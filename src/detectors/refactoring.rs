@@ -97,6 +97,7 @@ pub struct RefactoringAnalysisResult {
 }
 
 /// Main refactoring analyzer
+#[derive(Clone)]
 pub struct RefactoringAnalyzer {
     config: RefactoringConfig,
     ast_service: Arc<AstService>,
