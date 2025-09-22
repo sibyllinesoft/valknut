@@ -15,9 +15,11 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }
     };
 
+    // Check node types - entities have entity_id, not type
     const isFolder = data.type === 'folder';
     const isFile = data.type === 'file';
-    const isEntity = data.type === 'entity';
+    const isEntity = data.type === 'entity' || !!data.entity_id;
+    const isCategory = data.type === 'category';
     const isInfoRow = data.type === 'info-row';
     const isIssueRow = data.type === 'issue-row';
     const isSuggestionRow = data.type === 'suggestion-row';
@@ -56,7 +58,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     }, [node.id, node.isOpen, data.type, data.name, data.priority]);
     
     // Handle info/issue/suggestion rows
-    if (isInfoRow || isIssueRow || isSuggestionRow) {
+    if (isIssueRow || isSuggestionRow) {
         const manualIndent = (node.level * 24) + 16; // Extra indent for banner rows
         let iconName = 'info';
         let iconColor = 'var(--text-secondary)';
@@ -73,11 +75,6 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             iconColor = 'var(--info, #007acc)';
             backgroundColor = 'rgba(0, 123, 255, 0.05)';
             iconFallbackSymbol = '💡';
-        } else if (isInfoRow) {
-            iconName = 'info';
-            iconColor = 'var(--success, #28a745)';
-            backgroundColor = 'rgba(40, 167, 69, 0.05)';
-            iconFallbackSymbol = 'ℹ️';
         }
         
         // Parse text and score for complexity/structure issues
@@ -169,15 +166,15 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }, ...children);
     }
     
-    // Regular node rendering (folder, file, entity)
-    // Check for children using multiple approaches to ensure chevrons show
-    // Entities can now have children (issue/suggestion banners)
-    const hasChildren = (
-        node.isInternal || 
-        (node.children && node.children.length > 0) || 
-        (data.children && data.children.length > 0) ||
-        node.hasChildren
-    );
+    // Regular node rendering (folder, file, entity, category)
+    // Use React Arborist's canonical signals for determining if a node has children
+    // Also check for actual children array in the data
+    const hasChildren = (!node.isLeaf && (node.childCount ?? 0) > 0) || 
+                       (Array.isArray(data.children) && data.children.length > 0);
+    
+    // Show chevrons for folders, files, entities, and categories that have children
+    // Never show for issue/suggestion/info rows (they're always leaves)
+    const shouldShowChevron = hasChildren && !isIssueRow && !isSuggestionRow && !isInfoRow;
     
     // Priority color mapping with actual styling
     const getPriorityStyle = (priority) => {
@@ -225,8 +222,9 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     
     const children = [];
     
-    // Expand/collapse arrow for nodes with children
-    if (hasChildren) {
+    // Expand/collapse arrow for nodes with children (but not for entities)
+    // Only show chevron for nodes that actually can expand
+    if (shouldShowChevron && hasChildren) {
         const chevronIcon = node.isOpen ? 'chevron-down' : 'chevron-right';
         const fallbackSymbol = node.isOpen ? '▼' : '▶'; // Unicode fallback
         
@@ -270,6 +268,9 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     } else if (isFile) {
         iconName = 'file-code';
         iconFallbackSymbol = '📄';
+    } else if (isCategory) {
+        iconName = 'layers';
+        iconFallbackSymbol = '📚';
     }
 
     children.push(React.createElement('i', {
@@ -283,7 +284,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     // Label
     children.push(React.createElement('span', {
         key: 'label',
-        style: { flex: 1, fontWeight: isFolder ? '500' : 'normal' }
+        style: { flex: 1, fontWeight: (isFolder || isCategory) ? '500' : 'normal' }
     }, data.name));
     
     // Health score for folders
@@ -475,7 +476,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             ...style,
             display: 'flex',
             alignItems: 'center',
-            cursor: hasChildren ? 'pointer' : 'default',
+            cursor: shouldShowChevron ? 'pointer' : 'default',
             padding: '0.5rem 0.5rem 0.5rem 0px',
             marginLeft: `${manualIndent}px`,
             borderRadius: '4px',
@@ -485,6 +486,6 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             minHeight: '32px',
             gap: '0.5rem'
         },
-        onClick: hasChildren ? () => tree.toggle(node.id) : undefined
+        onClick: shouldShowChevron ? () => tree.toggle(node.id) : undefined
     }, ...children.filter(Boolean));
 };

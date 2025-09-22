@@ -211,14 +211,30 @@ export const CodeAnalysisTree = ({ data }) => {
                     // Issues as separate children - FIRST
                     if (entity.issues && Array.isArray(entity.issues)) {
                         entity.issues.forEach((issue, idx) => {
-                            // Fix the score display - use the actual entity score, not the issue severity
-                            let issueText = `${issue.category}: ${issue.description}`;
+                            // Format issue text with proper capitalization and severity
+                            const category = String(issue.category || 'issue');
+                            const categoryCapitalized = category.charAt(0).toUpperCase() + category.slice(1);
                             
-                            // For complexity issues, show the actual entity score
-                            const categoryStr = String(issue.category || '').toLowerCase();
-                            if (categoryStr.includes('complexity') && entity.score) {
-                                issueText = `${issue.category}: ${issue.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                            // Extract key metrics from contributing features
+                            let metrics = [];
+                            if (issue.contributing_features && Array.isArray(issue.contributing_features)) {
+                                issue.contributing_features.forEach(feat => {
+                                    if (feat.feature_name === 'lines_of_code' && feat.value) {
+                                        metrics.push(`${feat.value} LOC`);
+                                    } else if (feat.feature_name === 'cognitive_complexity' && feat.value) {
+                                        metrics.push(`Cognitive: ${feat.value}`);
+                                    } else if (feat.feature_name === 'cyclomatic_complexity' && feat.value) {
+                                        metrics.push(`Cyclomatic: ${feat.value}`);
+                                    } else if (feat.feature_name === 'maintainability_index' && feat.value) {
+                                        metrics.push(`Maintainability: ${feat.value.toFixed(1)}`);
+                                    }
+                                });
                             }
+                            
+                            const metricsStr = metrics.length > 0 ? ` [${metrics.join(', ')}]` : '';
+                            const severityStr = issue.severity ? ` (severity: ${issue.severity.toFixed(1)})` : '';
+                            
+                            let issueText = `${categoryCapitalized}${severityStr}${metricsStr}`;
                             
                             const issueChild = {
                                 id: `issue:${entityNodeId}:${idx}`,
@@ -226,8 +242,8 @@ export const CodeAnalysisTree = ({ data }) => {
                                 type: 'issue-row',
                                 entityScore: entity.score, // Pass through entity score
                                 issueSeverity: issue.severity, // Pass through issue severity
-                                issueCategory: issue.category, // Pass through issue category
-                                children: []
+                                issueCategory: issue.category // Pass through issue category
+                                // No children array - this is a leaf node
                             };
                             entityChildren.push(issueChild);
                         });
@@ -236,26 +252,55 @@ export const CodeAnalysisTree = ({ data }) => {
                     // Suggestions as separate children - SECOND
                     if (entity.suggestions && Array.isArray(entity.suggestions)) {
                         entity.suggestions.forEach((suggestion, idx) => {
-                            // Fix the score display in suggestions too
-                            let suggestionText = `${suggestion.type}: ${suggestion.description}`;
+                            // Format suggestion text properly
+                            const refType = suggestion.refactoring_type || suggestion.type || 'suggestion';
+                            let suggestionText = '';
                             
-                            // For complexity suggestions, show the actual entity score
-                            if (suggestion.description?.includes('score: 0.0') && entity.score) {
-                                suggestionText = `${suggestion.type}: ${suggestion.description.replace('score: 0.0', `score: ${entity.score}`)}`;
+                            // Convert snake_case refactoring types to readable format
+                            if (refType.includes('extract_class')) {
+                                suggestionText = 'Extract Class: Split large module into smaller, focused classes';
+                            } else if (refType.includes('extract_method')) {
+                                suggestionText = `Extract Method: Break down complex logic into smaller functions`;
+                            } else if (refType.includes('reduce_cognitive_complexity')) {
+                                const match = refType.match(/\d+/);
+                                const complexity = match ? match[0] : 'high';
+                                suggestionText = `Reduce Cognitive Complexity (${complexity}): Simplify nested conditions and logic flow`;
+                            } else if (refType.includes('reduce_cyclomatic_complexity')) {
+                                const match = refType.match(/\d+/);
+                                const complexity = match ? match[0] : 'high';
+                                suggestionText = `Reduce Cyclomatic Complexity (${complexity}): Reduce branches and decision points`;
+                            } else {
+                                // Fallback formatting
+                                const formatted = refType.replace(/_/g, ' ')
+                                    .replace(/\b\w/g, l => l.toUpperCase());
+                                suggestionText = formatted;
                             }
                             
-                            // For extract method suggestions, include the method name context
-                            const suggestionTypeStr = String(suggestion.type || '').toLowerCase();
-                            if (suggestionTypeStr.includes('extract_method') || 
-                                suggestionTypeStr.includes('extract method')) {
-                                suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
+                            // Add effort and impact if available
+                            let metadata = [];
+                            if (suggestion.effort) {
+                                const effortPercent = (suggestion.effort * 100).toFixed(0);
+                                metadata.push(`Effort: ${effortPercent}%`);
+                            }
+                            if (suggestion.impact) {
+                                const impactPercent = (suggestion.impact * 100).toFixed(0);
+                                metadata.push(`Impact: ${impactPercent}%`);
+                            }
+                            if (suggestion.priority) {
+                                const priorityVal = typeof suggestion.priority === 'number' ? 
+                                    suggestion.priority.toFixed(2) : suggestion.priority;
+                                metadata.push(`Priority: ${priorityVal}`);
+                            }
+                            
+                            if (metadata.length > 0) {
+                                suggestionText += ` [${metadata.join(', ')}]`;
                             }
                             
                             entityChildren.push({
                                 id: `suggestion:${entityNodeId}:${idx}`,
                                 name: suggestionText,
-                                type: 'suggestion-row',
-                                children: []
+                                type: 'suggestion-row'
+                                // No children array - this is a leaf node
                             });
                         });
                     }
@@ -266,24 +311,24 @@ export const CodeAnalysisTree = ({ data }) => {
                             entityChildren.push({
                                 id: `info:${entityNodeId}:coverage-before`,
                                 name: `Coverage Before: ${(coveragePack.file_info.coverage_before * 100).toFixed(1)}%`,
-                                type: 'info-row',
-                                children: []
+                                type: 'info-row'
+                                // No children array - this is a leaf node
                             });
                         }
                         if (coveragePack.file_info.coverage_after_if_filled !== undefined) {
                             entityChildren.push({
                                 id: `info:${entityNodeId}:coverage-after`,
                                 name: `Coverage After: ${(coveragePack.file_info.coverage_after_if_filled * 100).toFixed(1)}%`,
-                                type: 'info-row',
-                                children: []
+                                type: 'info-row'
+                                // No children array - this is a leaf node
                             });
                         }
                         if (coveragePack.file_info.loc) {
                             entityChildren.push({
                                 id: `info:${entityNodeId}:loc`,
                                 name: `Lines of Code: ${coveragePack.file_info.loc}`,
-                                type: 'info-row',
-                                children: []
+                                type: 'info-row'
+                                // No children array - this is a leaf node
                             });
                         }
                     }
@@ -412,6 +457,87 @@ export const CodeAnalysisTree = ({ data }) => {
         return sortedResult;
     }, []);
 
+    // Normalize tree data to group issues/suggestions under category parents
+    const normalizeTreeData = useCallback((nodes) => {
+        const CATEGORY_ORDER = ['complexity', 'cognitive', 'structure', 'maintainability', 'debt'];
+        
+        const inferCategory = (node) => {
+            const name = String(node.name || '').toLowerCase();
+            const category = String(node.category || node.issueCategory || '').toLowerCase();
+            
+            // Check explicit category first
+            if (category.includes('complexity')) return 'complexity';
+            if (category.includes('cognitive')) return 'cognitive';
+            if (category.includes('structure')) return 'structure';
+            
+            // Then check name patterns
+            if (name.includes('cyclomatic')) return 'complexity';
+            if (name.includes('cognitive')) return 'cognitive';
+            if (name.includes('extract_class') || name.includes('structure')) return 'structure';
+            if (name.includes('reduce_complexity')) return 'complexity';
+            
+            return 'maintainability';
+        };
+        
+        const ensureCategoryParent = (entity, cat) => {
+            const categoryId = `${entity.id}:category:${cat}`;
+            let existing = (entity.children || []).find(
+                c => c.id === categoryId
+            );
+            
+            if (!existing) {
+                existing = {
+                    id: categoryId,
+                    name: cat.charAt(0).toUpperCase() + cat.slice(1),
+                    type: 'category',
+                    children: []
+                };
+                entity.children = entity.children || [];
+                entity.children.push(existing);
+            }
+            
+            return existing;
+        };
+        
+        const visit = (node) => {
+            if (node.type === 'entity' && node.children) {
+                const byCat = {};
+                CATEGORY_ORDER.forEach(cat => {
+                    byCat[cat] = ensureCategoryParent(node, cat);
+                });
+                
+                const newChildren = [];
+                const categorizableTypes = ['issue-row', 'suggestion-row'];
+                
+                node.children.forEach(child => {
+                    if (categorizableTypes.includes(child.type)) {
+                        const cat = inferCategory(child);
+                        byCat[cat].children.push(child);
+                    } else if (child.type !== 'category') {
+                        // Keep other types (like info-row) at entity level
+                        newChildren.push(child);
+                    }
+                });
+                
+                // Add categories with children, remove empty ones
+                const categoriesWithChildren = CATEGORY_ORDER
+                    .map(cat => byCat[cat])
+                    .filter(catNode => catNode.children && catNode.children.length > 0);
+                
+                node.children = [...newChildren, ...categoriesWithChildren];
+            }
+            
+            // Recurse for all children
+            if (node.children) {
+                node.children.forEach(visit);
+            }
+        };
+        
+        const clonedNodes = JSON.parse(JSON.stringify(nodes)); // Deep clone to avoid mutation
+        clonedNodes.forEach(visit);
+        return clonedNodes;
+    }, []);
+
     // Load data from props
     useEffect(() => {
         try {
@@ -420,16 +546,18 @@ export const CodeAnalysisTree = ({ data }) => {
                 const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
                 
                 if (data.unifiedHierarchy) {
-                    // New unified hierarchy format - use directly
-                    setTreeData(hierarchyData);
+                    // New unified hierarchy format - normalize it
+                    const normalized = normalizeTreeData(hierarchyData);
+                    setTreeData(normalized);
                 } else {
-                    // Legacy format - build tree structure
+                    // Legacy format - build tree structure then normalize
                     const treeStructure = buildTreeData(
                         hierarchyData,
                         data.directoryHealthTree,
                         data.coveragePacks || []
                     );
-                    setTreeData(treeStructure);
+                    const normalized = normalizeTreeData(treeStructure);
+                    setTreeData(normalized);
                 }
             } else {
                 setTreeData([]);
@@ -438,7 +566,7 @@ export const CodeAnalysisTree = ({ data }) => {
             console.error('❌ Failed to load tree data:', error);
             setTreeData([]);
         }
-    }, [data, buildTreeData]);
+    }, [data, buildTreeData, normalizeTreeData]);
 
     const handleFilterChange = useCallback((event) => {
         setFilterText(event.target.value);

@@ -33,15 +33,58 @@ export const transformTreeData = (data, parentId = '') => {
       }
     }
 
-    // Recursively transform children
-    const transformedChildren = node.children 
-      ? transformTreeData(node.children, nodeId)
-      : [];
+    // Process children  
+    let processedChildren = [];
+    
+    // For entities (identified by entity_id), create children from issues and suggestions arrays
+    if (node.entity_id) {
+      console.log('Processing entity:', node.name, 'entity_id:', node.entity_id, 'issues:', node.issues?.length, 'suggestions:', node.suggestions?.length);
+      
+      // Add issues as children
+      if (node.issues && Array.isArray(node.issues)) {
+        node.issues.forEach((issue, idx) => {
+          const issueChild = {
+            ...issue,
+            type: 'issue-row',
+            id: `${nodeId}_issue_${idx}`,
+            name: `${issue.category || 'issue'}: ${issue.description || ''}`.trim(),
+            children: []
+          };
+          console.log('Adding issue child:', issueChild.name);
+          processedChildren.push(issueChild);
+        });
+      }
+      
+      // Add suggestions as children
+      if (node.suggestions && Array.isArray(node.suggestions)) {
+        node.suggestions.forEach((suggestion, idx) => {
+          const suggestionChild = {
+            ...suggestion,
+            type: 'suggestion-row',
+            id: `${nodeId}_suggestion_${idx}`,
+            name: `${suggestion.category || 'suggestion'}: ${suggestion.description || ''}`.trim(),
+            children: []
+          };
+          console.log('Adding suggestion child:', suggestionChild.name);
+          processedChildren.push(suggestionChild);
+        });
+      }
+      
+      // Also process any existing children
+      if (node.children && Array.isArray(node.children)) {
+        console.log('Entity also has children:', node.children.length);
+        const transformedChildren = transformTreeData(node.children, nodeId);
+        processedChildren = [...processedChildren, ...transformedChildren];
+      }
+    } else if (node.children && Array.isArray(node.children)) {
+      // Non-entity nodes - recursively transform children normally
+      processedChildren = transformTreeData(node.children, nodeId);
+    }
 
     return {
       ...node,
       id: nodeId,
-      children: transformedChildren.filter(Boolean) // Remove null nodes
+      children: processedChildren.filter(Boolean) // Remove null nodes
     };
   }).filter(Boolean); // Remove null nodes from top level
 };
