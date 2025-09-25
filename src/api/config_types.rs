@@ -129,11 +129,11 @@ impl Default for AnalysisModules {
     fn default() -> Self {
         Self {
             complexity: true,
-            dependencies: true,
-            duplicates: false, // Disabled by default due to performance
-            refactoring: true,
+            dependencies: false,
+            duplicates: false,
+            refactoring: false,
             structure: true,
-            coverage: true,
+            coverage: false,
         }
     }
 }

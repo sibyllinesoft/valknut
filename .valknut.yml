@@ -4,14 +4,14 @@
 # Analysis pipeline configuration
 analysis:
   enable_scoring: true
-  enable_graph_analysis: true
-  enable_lsh_analysis: true
-  enable_refactoring_analysis: true
+  enable_graph_analysis: false
+  enable_lsh_analysis: false
+  enable_refactoring_analysis: false
   enable_structure_analysis: true
   enable_names_analysis: false
-  enable_coverage_analysis: true
+  enable_coverage_analysis: false
   confidence_threshold: 0.7
-  max_files: 0  # 0 = unlimited
+  max_files: 50
   exclude_patterns:
     - "*/node_modules/*"
     - "*/venv/*"

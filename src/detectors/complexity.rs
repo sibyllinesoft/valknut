@@ -592,12 +592,17 @@ impl AstComplexityAnalyzer {
         let start = node.start_byte();
         let end = node.end_byte();
         
-        // Ensure bounds are valid
-        if start > end || start > source.len() || end > source.len() {
+        // Ensure bounds are valid - clamp and check
+        let source_len = source.len();
+        let clamped_start = std::cmp::min(start as usize, source_len);
+        let clamped_end = std::cmp::min(end as usize, source_len);
+        
+        if clamped_start > clamped_end {
+            debug!("Invalid node range: start={}, end={}, source_len={}", start, end, source_len);
             return String::new();
         }
         
-        source[start..end].to_string()
+        source[clamped_start..clamped_end].to_string()
     }
 
     /// Calculate AST-based complexity metrics for an entity
@@ -722,8 +727,17 @@ impl AstComplexityAnalyzer {
         let mut operator_total = 0.0;
         let mut operand_total = 0.0;
 
+        let source_len = context.source.len();
         let mut stack = vec![root_node];
         while let Some(node) = stack.pop() {
+            // Skip invalid nodes with malformed byte ranges
+            let start = node.start_byte();
+            let end = node.end_byte();
+            if (start as usize) > source_len || (end as usize) > source_len || start > end {
+                debug!("Skipping invalid node {} with range {}-{}", node.kind(), start, end);
+                continue;
+            }
+
             if node.is_named() {
                 let kind = node.kind();
 
@@ -739,7 +753,14 @@ impl AstComplexityAnalyzer {
 
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                stack.push(child);
+                // Also skip invalid children before pushing to stack
+                let child_start = child.start_byte();
+                let child_end = child.end_byte();
+                if (child_start as usize) <= source_len && (child_end as usize) <= source_len && child_start <= child_end {
+                    stack.push(child);
+                } else {
+                    debug!("Skipping invalid child node {} with range {}-{}", child.kind(), child_start, child_end);
+                }
             }
         }
 
@@ -817,6 +838,16 @@ impl AstComplexityAnalyzer {
     }
 
     fn operand_representation(&self, node: &tree_sitter::Node, source: &str) -> String {
+        let start = node.start_byte();
+        let end = node.end_byte();
+        
+        // Validate bounds before utf8_text to prevent panic
+        let source_len = source.len();
+        if (start as usize) > source_len || (end as usize) > source_len || start > end {
+            debug!("Invalid operand node range: start={}, end={}, source_len={}", start, end, source_len);
+            return node.kind().to_string();
+        }
+        
         if let Ok(text) = node.utf8_text(source.as_bytes()) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {

@@ -300,7 +300,7 @@ pub struct AnalyzeArgs {
     pub quiet: bool,
 
     /// Performance optimization profile to balance speed vs thoroughness
-    #[arg(long, value_enum, default_value = "balanced")]
+    #[arg(long, value_enum, default_value = "fast")]
     pub profile: PerformanceProfile,
 
     #[command(flatten)]

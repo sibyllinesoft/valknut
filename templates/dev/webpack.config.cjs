@@ -41,6 +41,20 @@ module.exports = {
   resolve: {
     extensions: ['.js', '.jsx']
   },
+  devtool: process.env.NODE_ENV === 'development' ? 'inline-source-map' : false,
+  devServer: {
+    static: {
+      directory: path.join(__dirname, 'public'),
+    },
+    compress: true,
+    port: 8080,
+    hot: true,
+    open: true,
+    historyApiFallback: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+    },
+  },
   // Bundle React instead of treating as external
   // externals: {
   //   'react': 'React',

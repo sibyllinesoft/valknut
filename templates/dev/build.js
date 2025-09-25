@@ -40,11 +40,12 @@ async function buildBundle(mode = 'production') {
   
   const buildResult = spawnSync({
     cmd: [
-      'bun', 'build', 
-      'src/tree-component/index.js',
-      '--outfile', `dist/${outputFile}`,
-      '--format', 'iife',
-      '--global-name', 'ReactTreeBundle',
+      'bun', 'build',
+      'templates/dev/src/tree-component/index.js',
+      '--outdir', 'dist',
+      '--outfile', `${outputFile}`,
+      '--format', 'esm',
+      '--target', 'browser',
       ...(isProduction ? ['--minify'] : ['--sourcemap'])
     ],
     stdout: 'pipe',

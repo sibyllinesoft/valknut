@@ -1,0 +1,109 @@
+analysis:
+  enable_scoring: true
+  enable_graph_analysis: false
+  enable_lsh_analysis: false
+  enable_refactoring_analysis: false
+  enable_structure_analysis: true
+  enable_names_analysis: false
+  enable_coverage_analysis: false
+  confidence_threshold: 0.7
+  max_files: 50
+  exclude_patterns:
+    - "*/node_modules/*"
+    - "*/venv/*"
+    - "*/target/*"
+    - "*/__pycache__/*"
+    - "*.min.js"
+    - "templates/**"
+    - "benchmarks/**"
+    - "datasets/**"
+  include_patterns:
+    - "**/*"
+
+scoring:
+  normalization_scheme: z_score
+  use_bayesian_fallbacks: true
+  confidence_reporting: true
+  weights:
+    complexity: 1.0
+    graph: 0.8
+    structure: 0.9
+    style: 0.5
+    coverage: 0.7
+  statistical_params:
+    confidence_level: 0.95
+    min_sample_size: 10
+    outlier_threshold: 3.0
+
+graph:
+  enable_betweenness: true
+  enable_closeness: false
+  enable_cycle_detection: true
+  max_exact_size: 10000
+  use_approximation: true
+  approximation_sample_rate: 0.1
+
+lsh:
+  num_hashes: 128
+  num_bands: 8
+  shingle_size: 3
+  similarity_threshold: 0.7
+  max_candidates: 100
+  use_semantic_similarity: false
+
+structure:
+  enable_branch_packs: true
+  enable_file_split_packs: true
+  top_packs: 10
+  fsdir:
+    max_files_per_dir: 25
+    max_subdirs_per_dir: 10
+    max_dir_loc: 2000
+    min_branch_recommendation_gain: 0.15
+    min_files_for_split: 5
+    target_loc_per_subdir: 1000
+  fsfile:
+    huge_loc: 800
+    huge_bytes: 128000
+    min_split_loc: 200
+    min_entities_per_split: 3
+  partitioning:
+    balance_tolerance: 0.25
+    max_clusters: 4
+    min_clusters: 2
+    naming_fallbacks:
+      - core
+      - api
+      - util
+      - shared
+
+languages:
+  rust:
+    enabled: true
+    file_extensions: [".rs"]
+    tree_sitter_language: "rust"
+    max_file_size_mb: 10.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+
+io:
+  enable_caching: true
+  cache_ttl_seconds: 3600
+  report_format: "html"
+
+performance:
+  max_threads: null
+  memory_limit_mb: null
+  file_timeout_seconds: 30
+  total_timeout_seconds: null
+  enable_simd: true
+  batch_size: 100
+
+coverage:
+  auto_discover: false
+  search_paths: []
+  file_patterns: []
+  max_age_days: 7
+
+denoise:
+  enabled: false

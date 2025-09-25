@@ -313,7 +313,10 @@ impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
         config.modules.structure = !args.analysis_control.no_structure;
         config.modules.refactoring = !args.analysis_control.no_refactoring;
         config.modules.dependencies = !args.analysis_control.no_impact;
-        config.modules.duplicates = !args.analysis_control.no_lsh;
+        // config.modules.duplicates = !args.analysis_control.no_lsh; // Clone analysis (LSH) disabled by default for performance
+        if args.analysis_control.no_lsh {
+            config.modules.duplicates = false;
+        }
         config.modules.coverage = !args.coverage.no_coverage;
         config.modules.complexity = !args.analysis_control.no_complexity;
 

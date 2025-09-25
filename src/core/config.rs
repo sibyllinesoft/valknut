@@ -218,36 +218,47 @@ impl ValknutConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisConfig {
     /// Enable scoring analysis
+    #[serde(default)]
     pub enable_scoring: bool,
 
     /// Enable graph analysis
+    #[serde(default)]
     pub enable_graph_analysis: bool,
 
     /// Enable LSH-based similarity detection
+    #[serde(default)]
     pub enable_lsh_analysis: bool,
 
     /// Enable refactoring analysis
+    #[serde(default)]
     pub enable_refactoring_analysis: bool,
 
     /// Enable coverage analysis
+    #[serde(default)]
     pub enable_coverage_analysis: bool,
 
     /// Enable structure analysis
+    #[serde(default)]
     pub enable_structure_analysis: bool,
 
     /// Enable code quality analysis
+    #[serde(default)]
     pub enable_names_analysis: bool,
 
     /// Minimum confidence threshold for results
+    #[serde(default)]
     pub confidence_threshold: f64,
 
     /// Maximum number of files to process (0 = unlimited)
+    #[serde(default)]
     pub max_files: usize,
 
     /// File patterns to exclude from analysis
+    #[serde(default)]
     pub exclude_patterns: Vec<String>,
 
     /// File patterns to include in analysis
+    #[serde(default)]
     pub include_patterns: Vec<String>,
 }
 
@@ -258,9 +269,9 @@ impl Default for AnalysisConfig {
         Self {
             enable_scoring: module_defaults.complexity,
             enable_graph_analysis: module_defaults.dependencies,
-            enable_lsh_analysis: module_defaults.duplicates,
+            enable_lsh_analysis: false,
             enable_refactoring_analysis: module_defaults.refactoring,
-            enable_coverage_analysis: module_defaults.coverage,
+            enable_coverage_analysis: false,
             enable_structure_analysis: module_defaults.structure,
             enable_names_analysis: true,
             confidence_threshold: 0.7,
@@ -294,18 +305,23 @@ impl AnalysisConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringConfig {
     /// Normalization scheme to use
+    #[serde(default)]
     pub normalization_scheme: NormalizationScheme,
 
     /// Enable Bayesian normalization fallbacks
+    #[serde(default)]
     pub use_bayesian_fallbacks: bool,
 
     /// Enable confidence reporting
+    #[serde(default)]
     pub confidence_reporting: bool,
 
     /// Feature weights configuration
+    #[serde(default)]
     pub weights: WeightsConfig,
 
     /// Statistical parameters
+    #[serde(default)]
     pub statistical_params: StatisticalParams,
 }
 
@@ -331,10 +347,11 @@ impl ScoringConfig {
 }
 
 /// Available normalization schemes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum NormalizationScheme {
     /// Z-score normalization (standardization)
+    #[default]
     ZScore,
     /// Min-max normalization to [0, 1] range
     MinMax,
@@ -352,18 +369,23 @@ pub enum NormalizationScheme {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WeightsConfig {
     /// Complexity feature weights
+    #[serde(default)]
     pub complexity: f64,
 
     /// Graph-based feature weights
+    #[serde(default)]
     pub graph: f64,
 
     /// Structure-based feature weights
+    #[serde(default)]
     pub structure: f64,
 
     /// Style-based feature weights
+    #[serde(default)]
     pub style: f64,
 
     /// Coverage-based feature weights
+    #[serde(default)]
     pub coverage: f64,
 }
 
@@ -410,12 +432,15 @@ impl WeightsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatisticalParams {
     /// Confidence interval level (0.95 = 95%)
+    #[serde(default)]
     pub confidence_level: f64,
 
     /// Minimum sample size for statistical analysis
+    #[serde(default)]
     pub min_sample_size: usize,
 
     /// Outlier detection threshold (in standard deviations)
+    #[serde(default)]
     pub outlier_threshold: f64,
 }
 
@@ -459,21 +484,27 @@ impl StatisticalParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphConfig {
     /// Enable betweenness centrality calculation
+    #[serde(default)]
     pub enable_betweenness: bool,
 
     /// Enable closeness centrality calculation
+    #[serde(default)]
     pub enable_closeness: bool,
 
     /// Enable cycle detection
+    #[serde(default)]
     pub enable_cycle_detection: bool,
 
     /// Maximum graph size for exact algorithms
+    #[serde(default)]
     pub max_exact_size: usize,
 
     /// Use approximation algorithms for large graphs
+    #[serde(default)]
     pub use_approximation: bool,
 
     /// Sampling rate for approximation algorithms
+    #[serde(default)]
     pub approximation_sample_rate: f64,
 }
 
@@ -507,21 +538,27 @@ impl GraphConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LshConfig {
     /// Number of hash functions per band
+    #[serde(default)]
     pub num_hashes: usize,
 
     /// Number of LSH bands
+    #[serde(default)]
     pub num_bands: usize,
 
     /// Shingle size for text similarity
+    #[serde(default)]
     pub shingle_size: usize,
 
     /// Minimum Jaccard similarity threshold
+    #[serde(default)]
     pub similarity_threshold: f64,
 
     /// Maximum candidates to consider per query
+    #[serde(default)]
     pub max_candidates: usize,
 
     /// Use advanced similarity algorithms
+    #[serde(default)]
     pub use_semantic_similarity: bool,
 }
 
@@ -592,6 +629,7 @@ pub struct LanguageConfig {
     pub complexity_threshold: f64,
 
     /// Additional language-specific settings
+    #[serde(default)]
     pub additional_settings: HashMap<String, serde_json::Value>,
 }
 
@@ -625,19 +663,23 @@ pub struct IoConfig {
     pub cache_dir: Option<PathBuf>,
 
     /// Enable result caching
+    #[serde(default)]
     pub enable_caching: bool,
 
     /// Cache TTL in seconds
+    #[serde(default)]
     pub cache_ttl_seconds: u64,
 
     /// Report output directory
     pub report_dir: Option<PathBuf>,
 
     /// Report format
+    #[serde(default)]
     pub report_format: ReportFormat,
 
     /// Enable database persistence
     #[cfg(feature = "database")]
+    #[serde(default)]
     pub enable_database: bool,
 
     /// Database connection string
@@ -662,10 +704,11 @@ impl Default for IoConfig {
 }
 
 /// Available report formats
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ReportFormat {
     /// JSON format
+    #[default]
     Json,
     /// YAML format
     Yaml,
@@ -685,15 +728,18 @@ pub struct PerformanceConfig {
     pub memory_limit_mb: Option<usize>,
 
     /// Timeout for individual file analysis (seconds)
+    #[serde(default)]
     pub file_timeout_seconds: u64,
 
     /// Timeout for entire analysis (seconds)
     pub total_timeout_seconds: Option<u64>,
 
     /// Enable SIMD optimizations
+    #[serde(default)]
     pub enable_simd: bool,
 
     /// Batch size for parallel processing
+    #[serde(default)]
     pub batch_size: usize,
 }
 
@@ -746,9 +792,11 @@ pub struct CoverageConfig {
     pub auto_discover: bool,
 
     /// Search paths for coverage files (relative to analysis root)
+    #[serde(default)]
     pub search_paths: Vec<String>,
 
     /// File patterns to search for
+    #[serde(default)]
     pub file_patterns: Vec<String>,
 
     /// Maximum age of coverage files in days (0 = no age limit)
@@ -1021,48 +1069,63 @@ impl LiveReachConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DedupeConfig {
     /// File patterns to include in dedupe analysis
+    #[serde(default)]
     pub include: Vec<String>,
 
     /// File patterns to exclude from dedupe analysis
+    #[serde(default)]
     pub exclude: Vec<String>,
 
     /// Minimum number of function tokens to consider
+    #[serde(default)]
     pub min_function_tokens: usize,
 
     /// Minimum number of AST nodes to consider
+    #[serde(default)]
     pub min_ast_nodes: usize,
 
     /// Minimum number of matching tokens for a duplicate
+    #[serde(default)]
     pub min_match_tokens: usize,
 
     /// Minimum coverage ratio for matches
+    #[serde(default)]
     pub min_match_coverage: f64,
 
     /// Shingle size for k-shingles (8-10 for TF-IDF analysis)
+    #[serde(default)]
     pub shingle_k: usize,
 
     /// Require distinct blocks for meaningful matches (≥2 basic blocks)
+    #[serde(default)]
     pub require_distinct_blocks: usize,
 
     /// Feature weights for multi-dimensional similarity
+    #[serde(default)]
     pub weights: DedupeWeights,
 
     /// I/O signature mismatch penalty
+    #[serde(default)]
     pub io_mismatch_penalty: f64,
 
     /// Final similarity threshold
+    #[serde(default)]
     pub threshold_s: f64,
 
     /// String patterns for boilerplate detection (used with tree-sitter AST analysis)
+    #[serde(default)]
     pub stop_phrases: Vec<String>,
 
     /// Ranking criteria for duplicates
+    #[serde(default)]
     pub rank_by: RankingCriteria,
 
     /// Minimum saved tokens to report
+    #[serde(default)]
     pub min_saved_tokens: usize,
 
     /// Keep top N duplicates per file
+    #[serde(default)]
     pub keep_top_per_file: usize,
 
     /// Adaptive denoising configuration
@@ -1074,44 +1137,57 @@ pub struct DedupeConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DenoiseConfig {
     /// Enable clone denoising system (default: true)
+    #[serde(default)]
     pub enabled: bool,
 
     /// Enable automatic threshold calibration and denoising (default: true)
+    #[serde(default)]
     pub auto: bool,
 
     /// Core thresholds (user-configurable)
     /// Minimum number of function tokens to consider (40+ recommended)
+    #[serde(default)]
     pub min_function_tokens: usize,
 
     /// Minimum number of matching tokens for a duplicate (24+ recommended)
+    #[serde(default)]
     pub min_match_tokens: usize,
 
     /// Require minimum distinct blocks for meaningful matches (≥2 basic blocks)
+    #[serde(default)]
     pub require_blocks: usize,
 
     /// Final similarity threshold for clone detection (0.0-1.0)
+    #[serde(default)]
     pub similarity: f64,
 
     /// Advanced settings
     /// Feature weights for multi-dimensional similarity
+    #[serde(default)]
     pub weights: DenoiseWeights,
 
     /// I/O signature mismatch penalty
+    #[serde(default)]
     pub io_mismatch_penalty: f64,
 
     /// Final similarity threshold (alias for similarity)
+    #[serde(default)]
     pub threshold_s: f64,
 
     /// Stop motifs configuration (AST-based boilerplate filtering)
+    #[serde(default)]
     pub stop_motifs: StopMotifsConfig,
 
     /// Auto-calibration configuration
+    #[serde(default)]
     pub auto_calibration: AutoCalibrationConfig,
 
     /// Payoff ranking configuration
+    #[serde(default)]
     pub ranking: RankingConfig,
 
     /// Enable dry-run mode (analyze but don't change behavior)
+    #[serde(default)]
     pub dry_run: bool,
 }
 
@@ -1142,12 +1218,15 @@ impl Default for DenoiseWeights {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopMotifsConfig {
     /// Enable stop motifs filtering
+    #[serde(default)]
     pub enabled: bool,
 
     /// Top percentile of patterns marked as boilerplate (0.0-1.0)
+    #[serde(default)]
     pub percentile: f64,
 
     /// Cache refresh interval in days
+    #[serde(default)]
     pub refresh_days: i64,
 }
 
@@ -1165,15 +1244,19 @@ impl Default for StopMotifsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoCalibrationConfig {
     /// Enable auto-calibration
+    #[serde(default)]
     pub enabled: bool,
 
     /// Quality target (percentage of candidates that must meet quality)
+    #[serde(default)]
     pub quality_target: f64,
 
     /// Sample size for calibration (top N candidates)
+    #[serde(default)]
     pub sample_size: usize,
 
     /// Maximum binary search iterations
+    #[serde(default)]
     pub max_iterations: usize,
 }
 
@@ -1192,23 +1275,28 @@ impl Default for AutoCalibrationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankingConfig {
     /// Ranking criteria
+    #[serde(default)]
     pub by: RankingBy,
 
     /// Minimum saved tokens to report
+    #[serde(default)]
     pub min_saved_tokens: usize,
 
     /// Minimum rarity gain threshold
+    #[serde(default)]
     pub min_rarity_gain: f64,
 
     /// Use live reachability data if available
+    #[serde(default)]
     pub live_reach_boost: bool,
 }
 
 /// Ranking criteria options
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RankingBy {
     /// Rank by potential token savings
+    #[default]
     SavedTokens,
 
     /// Rank by frequency/occurrence count
@@ -1249,6 +1337,10 @@ impl Default for DenoiseConfig {
 impl DenoiseConfig {
     /// Validate denoise configuration
     pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+
         if self.min_function_tokens == 0 {
             return Err(ValknutError::validation(
                 "min_function_tokens must be greater than 0",
@@ -1353,20 +1445,24 @@ impl DenoiseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DedupeWeights {
     /// AST similarity weight
+    #[serde(default)]
     pub ast: f64,
 
-    /// Program dependence graph weight  
+    /// Program dependence graph weight
+    #[serde(default)]
     pub pdg: f64,
 
     /// Embedding similarity weight
+    #[serde(default)]
     pub emb: f64,
 }
 
 /// Ranking criteria for duplicates
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RankingCriteria {
     /// Rank by potential token savings
+    #[default]
     SavedTokens,
 
     /// Rank by similarity score
@@ -1380,45 +1476,59 @@ pub enum RankingCriteria {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptiveDenoiseConfig {
     /// Enable automatic denoising with threshold tuning
+    #[serde(default)]
     pub auto_denoise: bool,
 
     /// Enable adaptive learning of boilerplate patterns
+    #[serde(default)]
     pub adaptive_learning: bool,
 
     /// Enable TF-IDF rarity weighting for structural analysis
+    #[serde(default)]
     pub rarity_weighting: bool,
 
     /// Enable structural validation (PDG motifs, basic blocks)
+    #[serde(default)]
     pub structural_validation: bool,
 
     /// Enable live reachability boost integration
+    #[serde(default)]
     pub live_reach_integration: bool,
 
     /// Stop motif percentile threshold (0.0-1.0, e.g., 0.75 = top 0.75%)
+    #[serde(default)]
     pub stop_motif_percentile: f64,
 
     /// Hub suppression threshold (0.0-1.0, patterns in >60% of files)
+    #[serde(default)]
     pub hub_suppression_threshold: f64,
 
     /// Quality gate percentage (0.0-1.0, 80% of candidates must meet quality)
+    #[serde(default)]
     pub quality_gate_percentage: f64,
 
     /// TF-IDF k-gram size for structural analysis
+    #[serde(default)]
     pub tfidf_kgram_size: usize,
 
     /// Weisfeiler-Lehman hash iterations for PDG motifs
+    #[serde(default)]
     pub wl_iterations: usize,
 
     /// Minimum rarity gain threshold
+    #[serde(default)]
     pub min_rarity_gain: f64,
 
     /// External call Jaccard similarity penalty threshold
+    #[serde(default)]
     pub external_call_jaccard_threshold: f64,
 
     /// Cache refresh interval in days
+    #[serde(default)]
     pub cache_refresh_days: i64,
 
     /// Enable automatic cache refresh
+    #[serde(default)]
     pub auto_refresh_cache: bool,
 }
 

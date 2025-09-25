@@ -1,0 +1,55 @@
+{
+  "unifiedHierarchy": [
+    {
+      "id": "file-1",
+      "name": "src/main.rs",
+      "type": "file",
+      "filePath": "src/main.rs",
+      "highestPriority": "Low",
+      "entityCount": 5,
+      "avgScore": 0.8,
+      "totalIssues": 2,
+      "severityCounts": {
+        "critical": 0,
+        "high": 1,
+        "medium": 1,
+        "low": 0
+      },
+      "children": [
+        {
+          "id": "entity-1-0",
+          "name": "main function",
+          "type": "entity",
+          "priority": "Medium",
+          "score": 0.75,
+          "issueCount": 1,
+          "suggestionCount": 1,
+          "severityCounts": {
+            "critical": 0,
+            "high": 1,
+            "medium": 0,
+            "low": 0
+          },
+          "children": [
+            {
+              "id": "issue:entity-1-0:0",
+              "name": "Complexity Issue (severity: 8.5)",
+              "type": "issue-row",
+              "entityScore": 0.75,
+              "issueSeverity": 8.5,
+              "issueCategory": "complexity"
+            },
+            {
+              "id": "suggestion:entity-1-0:0",
+              "name": "Extract Method: Break down complex logic into smaller functions [Effort: 40%, Impact: 70%, Priority: 0.85]",
+              "type": "suggestion-row"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "refactoringCandidatesByFile": [],
+  "directoryHealthTree": null,
+  "coveragePacks": []
+}

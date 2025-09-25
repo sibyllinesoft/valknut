@@ -59,7 +59,6 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     
     // Handle info/issue/suggestion rows
     if (isIssueRow || isSuggestionRow) {
-        const manualIndent = (node.level * 24) + 16; // Extra indent for banner rows
         let iconName = 'info';
         let iconColor = 'var(--text-secondary)';
         let backgroundColor = 'transparent';
@@ -133,9 +132,9 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 'data-lucide': iconName,
                 key: 'icon',
                 ref: (el) => registerIcon(el, iconFallbackSymbol),
-                style: { 
-                    width: '14px', 
-                    height: '14px', 
+                style: {
+                    width: '14px',
+                    height: '14px',
                     marginRight: '0.5rem',
                     color: iconColor,
                     flexShrink: 0
@@ -155,12 +154,10 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 display: 'flex',
                 alignItems: 'center',
                 padding: '0.4rem 0.5rem',
-                marginLeft: `${manualIndent}px`,
                 backgroundColor: backgroundColor,
                 borderLeft: `3px solid ${iconColor}`,
                 fontSize: '0.85rem',
                 color: 'var(--text)',
-                width: `calc(100% - ${manualIndent}px)`,
                 boxSizing: 'border-box'
             }
         }, ...children);
