@@ -1,14 +1,14 @@
 //! Individual analysis stages for the pipeline.
 
+use futures::future;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
-use futures::future;
 
 use super::pipeline_results::{
     ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
     LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
 };
-use crate::core::arena_analysis::{ArenaFileAnalyzer, ArenaBatchAnalyzer};
+use crate::core::arena_analysis::{ArenaBatchAnalyzer, ArenaFileAnalyzer};
 use crate::core::ast_service::AstService;
 use crate::core::config::CoverageConfig;
 use crate::core::dependency::ProjectDependencyAnalysis;
@@ -17,6 +17,7 @@ use crate::core::featureset::FeatureExtractor;
 use crate::core::file_utils::{CoverageDiscovery, CoverageFile, CoverageFormat};
 use crate::detectors::complexity::{AstComplexityAnalyzer, ComplexityAnalyzer};
 use crate::detectors::coverage::CoverageExtractor;
+use crate::detectors::graph::SimilarityCliquePartitioner;
 use crate::detectors::lsh::LshExtractor;
 use crate::detectors::refactoring::RefactoringAnalyzer;
 use crate::detectors::structure::StructureExtractor;
@@ -131,8 +132,11 @@ impl AnalysisStages {
         &self,
         arena_results: &[crate::core::arena_analysis::ArenaAnalysisResult],
     ) -> Result<ComplexityAnalysisResults> {
-        debug!("Running complexity analysis from {} arena results", arena_results.len());
-    
+        debug!(
+            "Running complexity analysis from {} arena results",
+            arena_results.len()
+        );
+
         // Use the configured analyzer instance and run analyses in parallel.
         let analysis_futures = arena_results.iter().map(|arena_result| {
             let analyzer = self.ast_complexity_analyzer.clone(); // Clone Arc'd analyzer
@@ -140,12 +144,20 @@ impl AnalysisStages {
             // Source code is not in ArenaAnalysisResult, so we must read it.
             // A better optimization would be to pass the source map down.
             let file_path = PathBuf::from(&file_path_str);
-    
+
             tokio::spawn(async move {
                 match tokio::fs::read_to_string(&file_path).await {
-                    Ok(source) => analyzer.analyze_file_with_results(&file_path_str, &source).await,
+                    Ok(source) => {
+                        analyzer
+                            .analyze_file_with_results(&file_path_str, &source)
+                            .await
+                    }
                     Err(e) => {
-                        warn!("Could not read file for complexity analysis {}: {}", file_path.display(), e);
+                        warn!(
+                            "Could not read file for complexity analysis {}: {}",
+                            file_path.display(),
+                            e
+                        );
                         Ok(Vec::new())
                     }
                 }
@@ -153,7 +165,7 @@ impl AnalysisStages {
         });
 
         let results_of_results = future::join_all(analysis_futures).await;
-    
+
         // Collect and flatten the results
         let mut detailed_results = Vec::new();
         for result in results_of_results {
@@ -163,15 +175,11 @@ impl AnalysisStages {
                 Err(e) => warn!("Tokio spawn failed for complexity analysis: {}", e),
             }
         }
-    
+
         // Calculate averages
         let count = detailed_results.len() as f64;
-        let (
-            total_cyclomatic,
-            total_cognitive,
-            total_debt,
-            total_maintainability,
-        ) = if count > 0.0 {
+        let (total_cyclomatic, total_cognitive, total_debt, total_maintainability) = if count > 0.0
+        {
             let total_cyclomatic: f64 = detailed_results
                 .iter()
                 .map(|r| r.metrics.cyclomatic())
@@ -185,27 +193,44 @@ impl AnalysisStages {
                 .iter()
                 .map(|r| r.metrics.maintainability_index)
                 .sum();
-            (total_cyclomatic, total_cognitive, total_debt, total_maintainability)
+            (
+                total_cyclomatic,
+                total_cognitive,
+                total_debt,
+                total_maintainability,
+            )
         } else {
             (0.0, 0.0, 0.0, 100.0)
         };
-    
+
         let issues_count = detailed_results.iter().map(|r| r.issues.len()).sum();
-    
+
         debug!(
             "Complexity analysis completed: {} entities, avg cyclomatic: {:.2}, avg cognitive: {:.2}",
             detailed_results.len(),
             if count > 0.0 { total_cyclomatic / count } else { 0.0 },
             if count > 0.0 { total_cognitive / count } else { 0.0 }
         );
-    
+
         Ok(ComplexityAnalysisResults {
             enabled: true,
             detailed_results,
-            average_cyclomatic_complexity: if count > 0.0 { total_cyclomatic / count } else { 0.0 },
-            average_cognitive_complexity: if count > 0.0 { total_cognitive / count } else { 0.0 },
+            average_cyclomatic_complexity: if count > 0.0 {
+                total_cyclomatic / count
+            } else {
+                0.0
+            },
+            average_cognitive_complexity: if count > 0.0 {
+                total_cognitive / count
+            } else {
+                0.0
+            },
             average_technical_debt_score: if count > 0.0 { total_debt / count } else { 0.0 },
-            average_maintainability_index: if count > 0.0 { total_maintainability / count } else { 100.0 },
+            average_maintainability_index: if count > 0.0 {
+                total_maintainability / count
+            } else {
+                100.0
+            },
             issues_count,
         })
     }
@@ -221,7 +246,7 @@ impl AnalysisStages {
         let analysis_futures = files.iter().map(|file_path| {
             let analyzer = self.ast_complexity_analyzer.clone();
             let path = file_path.clone();
-            
+
             tokio::spawn(async move {
                 let file_refs = vec![path.as_path()];
                 analyzer.analyze_files(&file_refs).await
@@ -300,10 +325,8 @@ impl AnalysisStages {
             // Clone the Arc'd analyzer, which is cheap
             let analyzer = self.refactoring_analyzer.clone();
             let path = file_path.clone();
-            
-            tokio::spawn(async move {
-                analyzer.analyze_files(&[path]).await
-            })
+
+            tokio::spawn(async move { analyzer.analyze_files(&[path]).await })
         });
 
         // Wait for all concurrent analyses to complete
@@ -407,6 +430,7 @@ impl AnalysisStages {
         files: &[PathBuf],
         denoise_enabled: bool,
     ) -> Result<LshAnalysisResults> {
+        const MAX_ENTITIES_PER_FILE_FOR_LSH: usize = 1500;
         debug!(
             "Running LSH analysis for clone detection on {} files",
             files.len()
@@ -420,7 +444,7 @@ impl AnalysisStages {
 
             // Create extraction context
             let config = Arc::new(ValknutConfig::default());
-            let context = ExtractionContext::new(config, "mixed");
+            let mut context = ExtractionContext::new(config, "mixed");
 
             // Extract real entities from files using language adapters
             let mut entities = Vec::new();
@@ -429,7 +453,18 @@ impl AnalysisStages {
             for file_path in files.iter() {
                 if let Ok(content) = tokio::fs::read_to_string(file_path).await {
                     // Extract entities using appropriate language adapter
-                    if let Some(extracted_entities) = self.extract_entities_from_file(file_path, &content).await {
+                    if let Some(extracted_entities) =
+                        self.extract_entities_from_file(file_path, &content).await
+                    {
+                        if extracted_entities.len() > MAX_ENTITIES_PER_FILE_FOR_LSH {
+                            info!(
+                                file = %file_path.display(),
+                                entities = extracted_entities.len(),
+                                "Skipping LSH for file with excessive entity count"
+                            );
+                            continue;
+                        }
+
                         for entity in extracted_entities {
                             entity_index.insert(entity.id.clone(), entity.clone());
                             entities.push(entity);
@@ -438,11 +473,44 @@ impl AnalysisStages {
                 }
             }
 
-            // Update context with entities
-            let context = ExtractionContext {
-                entity_index,
-                ..context
-            };
+            // Attach entity index and clique partitions to context
+            context.entity_index = entity_index;
+
+            if entities.is_empty() {
+                info!("No entities available for LSH after filtering; skipping clone analysis");
+                return Ok(LshAnalysisResults {
+                    enabled: true,
+                    clone_pairs: Vec::new(),
+                    max_similarity: 0.0,
+                    avg_similarity: 0.0,
+                    duplicate_count: 0,
+                    denoising_enabled: denoise_enabled,
+                    tfidf_stats: None,
+                });
+            }
+
+            let partitions = SimilarityCliquePartitioner::new().partition(&entities);
+            if !partitions.is_empty() {
+                let partition_count = partitions.len();
+                let total_peers: usize = partitions.values().map(|group| group.len()).sum();
+                let max_peers = partitions
+                    .values()
+                    .map(|group| group.len())
+                    .max()
+                    .unwrap_or(0);
+                let avg_peers = if partition_count > 0 {
+                    total_peers as f64 / partition_count as f64
+                } else {
+                    0.0
+                };
+                info!(
+                    entities_with_peers = partition_count,
+                    avg_peers = avg_peers,
+                    max_peers = max_peers,
+                    "Similarity clique pre-filter enabled"
+                );
+                context.candidate_partitions = Some(Arc::new(partitions));
+            }
 
             // Run LSH analysis on each entity in parallel
             // Note: LSH analysis will remain sequential for now due to shared state concerns
@@ -451,7 +519,7 @@ impl AnalysisStages {
             let mut max_similarity: f64 = 0.0;
             let mut total_similarity = 0.0;
             let mut duplicate_count = 0;
-            
+
             // For now, we'll keep LSH sequential but optimize other stages
             // TODO: Parallelize LSH with proper shared state management
             for entity in &entities {
@@ -736,9 +804,13 @@ impl AnalysisStages {
     }
 
     /// Extract entities from a file using appropriate language adapter
-    async fn extract_entities_from_file(&self, file_path: &Path, content: &str) -> Option<Vec<crate::core::featureset::CodeEntity>> {
+    async fn extract_entities_from_file(
+        &self,
+        file_path: &Path,
+        content: &str,
+    ) -> Option<Vec<crate::core::featureset::CodeEntity>> {
         use crate::lang::registry::adapter_for_file;
-        
+
         // Get appropriate language adapter
         let mut adapter = match adapter_for_file(file_path) {
             Ok(adapter) => adapter,
@@ -751,28 +823,39 @@ impl AnalysisStages {
         // Extract entities using the standardized interface
         match adapter.extract_code_entities(content, &file_path.to_string_lossy()) {
             Ok(entities) => {
-                debug!("Extracted {} entities from {}", entities.len(), file_path.display());
+                debug!(
+                    "Extracted {} entities from {}",
+                    entities.len(),
+                    file_path.display()
+                );
                 Some(entities)
             }
             Err(e) => {
-                warn!("Failed to extract entities from {}: {}", file_path.display(), e);
+                warn!(
+                    "Failed to extract entities from {}: {}",
+                    file_path.display(),
+                    e
+                );
                 None
             }
         }
     }
 
     /// Run arena-based file analysis for optimal memory performance
-    /// 
+    ///
     /// This method demonstrates arena allocation benefits by processing files
     /// with minimal memory allocation overhead using bump-pointer allocation.
-    pub async fn run_arena_file_analysis(&self, files: &[PathBuf]) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
+    pub async fn run_arena_file_analysis(
+        &self,
+        files: &[PathBuf],
+    ) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
         debug!("Running arena-based file analysis on {} files", files.len());
-        
+
         use tokio::fs;
-        
+
         // Prepare file paths and sources for batch arena analysis
         let mut file_sources = Vec::with_capacity(files.len());
-        
+
         for file_path in files {
             match fs::read_to_string(file_path).await {
                 Ok(source) => {
@@ -784,23 +867,23 @@ impl AnalysisStages {
                 }
             }
         }
-        
+
         if file_sources.is_empty() {
             info!("No files could be read for arena analysis");
             return Ok(Vec::new());
         }
-        
+
         // Use ArenaBatchAnalyzer for optimal memory usage
         let batch_analyzer = ArenaBatchAnalyzer::new();
-        
+
         // Convert to the format expected by batch analyzer
         let file_refs: Vec<(&std::path::Path, &str)> = file_sources
             .iter()
             .map(|(path, source)| (*path, source.as_str()))
             .collect();
-            
+
         let batch_result = batch_analyzer.analyze_batch(file_refs).await?;
-        
+
         info!(
             "Arena batch analysis completed: {} files, {} entities, {:.2} KB arena usage, {:.1} entities/sec",
             batch_result.total_files,
@@ -808,35 +891,41 @@ impl AnalysisStages {
             batch_result.total_arena_kb(),
             batch_result.entities_per_second()
         );
-        
+
         info!(
             "Estimated malloc savings: {:.2} KB overhead reduction vs traditional allocation",
             batch_result.estimated_malloc_savings()
         );
-        
+
         Ok(batch_result.file_results)
     }
 
     /// Run arena-based file analysis with pre-loaded file contents (performance optimized)
-    pub async fn run_arena_file_analysis_with_content(&self, file_contents: &[(PathBuf, String)]) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
-        debug!("Running arena-based file analysis on {} pre-loaded files", file_contents.len());
-        
+    pub async fn run_arena_file_analysis_with_content(
+        &self,
+        file_contents: &[(PathBuf, String)],
+    ) -> Result<Vec<crate::core::arena_analysis::ArenaAnalysisResult>> {
+        debug!(
+            "Running arena-based file analysis on {} pre-loaded files",
+            file_contents.len()
+        );
+
         if file_contents.is_empty() {
             info!("No files provided for arena analysis");
             return Ok(Vec::new());
         }
-        
+
         // Use ArenaBatchAnalyzer for optimal memory usage
         let batch_analyzer = ArenaBatchAnalyzer::new();
-        
+
         // Convert to the format expected by batch analyzer
         let file_refs: Vec<(&std::path::Path, &str)> = file_contents
             .iter()
             .map(|(path, content)| (path.as_path(), content.as_str()))
             .collect();
-        
+
         let batch_result = batch_analyzer.analyze_batch(file_refs).await?;
-        
+
         info!(
             "Arena analysis completed: {} files, {} entities, {:.2} KB arena memory, {:.1} entities/sec",
             batch_result.total_files,
@@ -844,12 +933,12 @@ impl AnalysisStages {
             batch_result.total_arena_kb(),
             batch_result.entities_per_second()
         );
-        
+
         info!(
             "Estimated malloc savings: {:.2} KB overhead reduction vs traditional allocation",
             batch_result.estimated_malloc_savings()
         );
-        
+
         Ok(batch_result.file_results)
     }
 }

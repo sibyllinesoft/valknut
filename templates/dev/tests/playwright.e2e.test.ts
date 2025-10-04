@@ -37,7 +37,9 @@ async function openSampleReport() {
     })
     .catch((error) => {
       const message = String(error instanceof Error ? error.message : error);
-      if (message.includes('sandbox_host_linux') || message.includes('Operation not permitted')) {
+      const missingBinary = message.includes("Executable doesn't exist");
+      const sandboxBlocked = message.includes('sandbox_host_linux') || message.includes('Operation not permitted');
+      if (sandboxBlocked || missingBinary) {
         playwrightUnavailable = true;
         throw new PlaywrightUnavailableError(message);
       }
@@ -68,8 +70,8 @@ test('playwright: renders analysis summary in sample report', async () => {
   }
 
   try {
-    await expect(await page.locator('h1', { hasText: 'Repository Analysis' }).isVisible()).toBe(true);
-    await expect(await page.locator('.stat-label', { hasText: 'Files Selected' }).isVisible()).toBe(true);
+    await expect(await page.locator('.hero-title', { hasText: 'Valknut Analysis Report' }).isVisible()).toBe(true);
+    await expect(await page.locator('.demo-metric-card h3', { hasText: 'Files Selected' }).isVisible()).toBe(true);
   } finally {
     await browser.close();
   }
@@ -95,7 +97,7 @@ test('playwright: exposes tree container and file metadata', async () => {
 
   try {
     await expect(await page.locator('#file-tree-container').isVisible()).toBe(true);
-    const metaText = await page.locator('.file-meta').first().innerText();
+    const metaText = await page.locator('.analysis-subheader').first().innerText();
     expect(metaText).toContain('Score');
   } finally {
     await browser.close();

@@ -100,7 +100,7 @@ impl AnalysisResults {
 
         self.refactoring_candidates_by_file =
             AnalysisResults::group_candidates_by_file(&self.refactoring_candidates);
-            
+
         // Rebuild unified hierarchy after merge to restore proper hierarchical structure
         if let Some(ref directory_health_tree) = self.directory_health_tree {
             self.unified_hierarchy = Self::build_unified_hierarchy_with_fallback(

@@ -7,11 +7,11 @@ use async_trait::async_trait;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
-use super::registry::{get_tree_sitter_language, create_parser_for_language};
+use super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
 use crate::core::interned_entities::{
-    InternedParsedEntity, InternedParseIndex, InternedSourceLocation, InternedCodeEntity
+    InternedCodeEntity, InternedParseIndex, InternedParsedEntity, InternedSourceLocation,
 };
 use crate::core::interning::{intern, resolve, InternedString};
 use crate::detectors::structure::config::ImportStatement;
@@ -365,19 +365,17 @@ impl PythonAdapter {
             _ => return Ok(None),
         };
 
-        let name = self
-            .extract_name(&node, source_code)?
-            .unwrap_or_else(|| {
-                // Provide fallback names for entities without extractable names
-                match entity_kind {
-                    EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
-                    EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
-                    EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
-                    EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
-                    EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
-                    _ => format!("anonymous_entity_{}", *entity_id_counter),
-                }
-            });
+        let name = self.extract_name(&node, source_code)?.unwrap_or_else(|| {
+            // Provide fallback names for entities without extractable names
+            match entity_kind {
+                EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
+                EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
+                EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
+                EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
+                EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
+                _ => format!("anonymous_entity_{}", *entity_id_counter),
+            }
+        });
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -658,7 +656,7 @@ impl PythonAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<Option<InternedParsedEntity>> {
         let kind = node.kind();
-        
+
         // Map node kinds to EntityKind (same logic as original)
         let entity_kind = match kind {
             "function_definition" => EntityKind::Function,
@@ -703,7 +701,11 @@ impl PythonAdapter {
     }
 
     /// OPTIMIZED: Extract name from node using interned strings
-    fn extract_name_interned(&self, node: Node, source_code: &str) -> Result<Option<InternedString>> {
+    fn extract_name_interned(
+        &self,
+        node: Node,
+        source_code: &str,
+    ) -> Result<Option<InternedString>> {
         match node.kind() {
             "function_definition" | "class_definition" => {
                 // Look for identifier child
@@ -727,7 +729,7 @@ impl PythonAdapter {
         source_code: &str,
     ) -> Result<InternedCodeEntity> {
         let source_lines: Vec<&str> = source_code.lines().collect();
-        
+
         // Extract source code for entity (minimal allocations)
         let entity_source = if entity.location.start_line <= source_lines.len()
             && entity.location.end_line <= source_lines.len()
@@ -739,9 +741,9 @@ impl PythonAdapter {
 
         // Create interned code entity
         let code_entity = InternedCodeEntity::new(
-            entity.id_str(),               // Zero-cost lookup
-            &format!("{:?}", entity.kind), // Only allocation is for kind formatting
-            entity.name_str(),             // Zero-cost lookup
+            entity.id_str(),                 // Zero-cost lookup
+            &format!("{:?}", entity.kind),   // Only allocation is for kind formatting
+            entity.name_str(),               // Zero-cost lookup
             entity.location.file_path_str(), // Zero-cost lookup
         )
         .with_line_range(entity.location.start_line, entity.location.end_line)
@@ -975,7 +977,8 @@ impl Default for PythonAdapter {
             );
             PythonAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: get_tree_sitter_language("py").unwrap_or_else(|_| tree_sitter_python::LANGUAGE.into()),
+                language: get_tree_sitter_language("py")
+                    .unwrap_or_else(|_| tree_sitter_python::LANGUAGE.into()),
             }
         })
     }
@@ -1129,12 +1132,20 @@ impl LanguageAdapter for PythonAdapter {
         Ok(imports)
     }
 
-    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+    fn extract_code_entities(
+        &mut self,
+        source: &str,
+        file_path: &str,
+    ) -> Result<Vec<crate::core::featureset::CodeEntity>> {
         PythonAdapter::extract_code_entities(self, source, file_path)
     }
 
     /// Optimized interned extraction - bypasses string allocations entirely
-    fn extract_code_entities_interned(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
+    fn extract_code_entities_interned(
+        &mut self,
+        source: &str,
+        file_path: &str,
+    ) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
         PythonAdapter::extract_code_entities_interned(self, source, file_path)
     }
 }

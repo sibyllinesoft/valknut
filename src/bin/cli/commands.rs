@@ -5,7 +5,7 @@
 
 use crate::cli::args::{
     AIFeaturesArgs, AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs,
-    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, PerformanceProfile, 
+    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, PerformanceProfile,
     QualityGateArgs, SurveyVerbosity, ValidateConfigArgs,
 };
 use crate::cli::config_layer::build_layered_valknut_config;
@@ -187,10 +187,10 @@ pub async fn analyze_command(
 async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
     // Use the new layered configuration approach
     let mut config = build_layered_valknut_config(args)?;
-    
+
     // Apply performance profile optimizations
     apply_performance_profile(&mut config, &args.profile);
-    
+
     Ok(config)
 }
 

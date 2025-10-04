@@ -11,8 +11,8 @@ use tracing::{debug, error, info};
 use crate::mcp::protocol::{
     create_analyze_code_schema, create_analyze_file_quality_schema,
     create_refactoring_suggestions_schema, create_validate_quality_gates_schema, error_codes,
-    JsonRpcRequest, JsonRpcResponse, McpCapabilities, McpInitResult, McpServerInfo, McpTool,
-    ToolCallParams, ToolResult, ContentItem,
+    ContentItem, JsonRpcRequest, JsonRpcResponse, McpCapabilities, McpInitResult, McpServerInfo,
+    McpTool, ToolCallParams, ToolResult,
 };
 use crate::mcp::tools::{
     execute_analyze_code, execute_analyze_file_quality, execute_refactoring_suggestions,
@@ -67,29 +67,40 @@ impl McpServer {
     /// Cache analysis results for a path
     async fn cache_analysis(&self, path: PathBuf, results: AnalysisResults) {
         let mut cache = self.analysis_cache.lock().await;
-        
+
         // Limit cache size to prevent memory growth
         if cache.len() >= 10 {
             // Remove oldest entry
-            if let Some(oldest_key) = cache.iter()
+            if let Some(oldest_key) = cache
+                .iter()
                 .min_by_key(|(_, entry)| entry.timestamp)
-                .map(|(key, _)| key.clone()) {
+                .map(|(key, _)| key.clone())
+            {
                 cache.remove(&oldest_key);
                 info!("Evicted oldest cache entry: {}", oldest_key.display());
             }
         }
-        
-        cache.insert(path.clone(), AnalysisCache {
-            path: path.clone(),
-            results: Arc::new(results),
-            timestamp: std::time::Instant::now(),
-        });
+
+        cache.insert(
+            path.clone(),
+            AnalysisCache {
+                path: path.clone(),
+                results: Arc::new(results),
+                timestamp: std::time::Instant::now(),
+            },
+        );
         info!("Cached analysis results for: {}", path.display());
     }
 
     /// Execute analyze_code with session-level caching
-    async fn execute_analyze_code_cached(&self, params: AnalyzeCodeParams) -> Result<ToolResult, (i32, String)> {
-        info!("Executing analyze_code tool with caching for path: {}", params.path);
+    async fn execute_analyze_code_cached(
+        &self,
+        params: AnalyzeCodeParams,
+    ) -> Result<ToolResult, (i32, String)> {
+        info!(
+            "Executing analyze_code tool with caching for path: {}",
+            params.path
+        );
 
         // Validate path exists
         let path = std::path::Path::new(&params.path);
@@ -100,22 +111,22 @@ impl McpServer {
             ));
         }
 
-        let canonical_path = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Check cache first
         if let Some(cached_results) = self.get_cached_analysis(&canonical_path).await {
             // Format cached results according to requested format
-            let formatted_output = match self.format_analysis_results(&cached_results, &params.format) {
-                Ok(output) => output,
-                Err(e) => {
-                    error!("Failed to format cached results: {}", e);
-                    return Err((
-                        error_codes::INTERNAL_ERROR,
-                        format!("Failed to format cached results: {}", e),
-                    ));
-                }
-            };
+            let formatted_output =
+                match self.format_analysis_results(&cached_results, &params.format) {
+                    Ok(output) => output,
+                    Err(e) => {
+                        error!("Failed to format cached results: {}", e);
+                        return Err((
+                            error_codes::INTERNAL_ERROR,
+                            format!("Failed to format cached results: {}", e),
+                        ));
+                    }
+                };
 
             return Ok(ToolResult {
                 content: vec![ContentItem {
@@ -182,7 +193,11 @@ impl McpServer {
     }
 
     /// Format analysis results according to requested format
-    fn format_analysis_results(&self, results: &AnalysisResults, format: &str) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_analysis_results(
+        &self,
+        results: &AnalysisResults,
+        format: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         match format {
             "json" => {
                 // Direct JSON serialization for JSON format

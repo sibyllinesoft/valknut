@@ -9,17 +9,17 @@ pub use config::{
     DenoiseWeights, LshConfig, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
 };
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use ahash::AHasher;
-use xxhash_rust::xxh3::Xxh3;
 use async_trait::async_trait;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{debug, info, warn};
+use xxhash_rust::xxh3::Xxh3;
 
 #[cfg(feature = "simd")]
 use wide::u64x4;
@@ -29,7 +29,9 @@ use crate::core::ast_utils::{
     count_control_blocks, count_named_nodes, find_entity_node, node_text,
 };
 use crate::core::errors::{Result, ValknutError};
-use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
+use crate::core::featureset::{
+    CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
+};
 use crate::core::interning::{global_interner, intern, resolve, InternedString};
 use crate::lang::common::LanguageAdapter;
 use crate::lang::{
@@ -275,6 +277,18 @@ impl LshExtractor {
         context: &ExtractionContext,
     ) -> Option<Arc<LshSimilarityContext>> {
         self.get_similarity_context(context)
+    }
+
+    fn candidate_filter<'a>(
+        &self,
+        entity: &CodeEntity,
+        context: &'a ExtractionContext,
+    ) -> Option<&'a Vec<EntityId>> {
+        context
+            .candidate_partitions
+            .as_ref()
+            .and_then(|partitions| partitions.get(&entity.id))
+            .filter(|candidates| !candidates.is_empty())
     }
 
     /// Check whether an entity passes the fragment thresholds configured for dedupe analysis
@@ -738,10 +752,10 @@ impl LshExtractor {
             // Process 4 hashes at a time with SIMD - vectorized hashing
             for chunk_idx in 0..chunks {
                 let base_idx = chunk_idx * 4;
-                
+
                 // Vectorized hash computation using SIMD
                 let hashes = self.hash_with_seeds_simd(&shingle, base_idx);
-                
+
                 // Load current signatures into SIMD vector
                 let current_sigs = u64x4::from([
                     signature[base_idx],
@@ -753,7 +767,7 @@ impl LshExtractor {
                 // Element-wise minimum using comparison masks
                 let comparison_mask = hashes.cmp_lt(current_sigs);
                 let min_vec = comparison_mask.blend(hashes, current_sigs);
-                
+
                 // Store results back to signature
                 let min_array = min_vec.to_array();
                 signature[base_idx] = min_array[0];
@@ -784,7 +798,7 @@ impl LshExtractor {
             (base_seed + 2) as u64,
             (base_seed + 3) as u64,
         ];
-        
+
         // Compute 4 hashes in parallel
         let hashes = [
             self.hash_with_seed_fast(data, seeds[0]),
@@ -792,7 +806,7 @@ impl LshExtractor {
             self.hash_with_seed_fast(data, seeds[2]),
             self.hash_with_seed_fast(data, seeds[3]),
         ];
-        
+
         u64x4::from(hashes)
     }
 
@@ -892,7 +906,7 @@ impl LshExtractor {
 
         // Hash interned strings directly - this is much faster than String hashing
         for shingle in shingles {
-            let shingle_str = resolve(shingle);  // Zero-cost lookup to original string
+            let shingle_str = resolve(shingle); // Zero-cost lookup to original string
             for i in 0..self.num_hashes {
                 let hash = self.hash_with_seed(shingle_str, i as u64);
                 if hash < signature[i] {
@@ -903,7 +917,7 @@ impl LshExtractor {
 
         // Clone before returning to pool (cache if needed)
         let signature_clone = signature.clone();
-        
+
         // Return signature vector to memory pool for reuse
         self.memory_pools.return_signature_vec(signature);
 
@@ -1262,6 +1276,37 @@ impl LshExtractor {
         context: &ExtractionContext,
         signature: &[u64],
     ) -> (f64, f64, f64) {
+        let (candidate_filter, candidate_lookup): (Option<&Vec<EntityId>>, Option<HashSet<&str>>) =
+            if let Some(filter) = self.candidate_filter(entity, context) {
+                let lookup = filter.iter().map(|s| s.as_str()).collect::<HashSet<&str>>();
+                (Some(filter), Some(lookup))
+            } else {
+                (None, None)
+            };
+
+        let partitions_available = context
+            .candidate_partitions
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+
+        if candidate_filter.is_some() {
+            return self.compare_with_others_bruteforce(
+                entity,
+                context,
+                signature,
+                candidate_filter,
+            );
+        }
+
+        if partitions_available {
+            debug!(
+                entity = %entity.id,
+                "No clique peers found; skipping similarity comparisons"
+            );
+            return (0.0, 0.0, 0.0);
+        }
+
         if let Some(similarity_context) = self.get_similarity_context(context) {
             let max_results = if self.lsh_config.max_candidates == 0 {
                 None
@@ -1272,8 +1317,19 @@ impl LshExtractor {
             let mut similarities: Vec<f64> = similarity_context
                 .find_similar_entities(&entity.id, max_results)
                 .into_iter()
-                .map(|(_, similarity)| similarity)
-                .filter(|similarity| *similarity >= self.lsh_config.similarity_threshold)
+                .filter_map(|(candidate_id, similarity)| {
+                    if let Some(ref lookup) = candidate_lookup {
+                        if !lookup.contains(candidate_id.as_str()) {
+                            return None;
+                        }
+                    }
+
+                    if similarity >= self.lsh_config.similarity_threshold {
+                        Some(similarity)
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
             if !similarities.is_empty() {
@@ -1286,7 +1342,7 @@ impl LshExtractor {
             }
         }
 
-        self.compare_with_others_bruteforce(entity, context, signature)
+        self.compare_with_others_bruteforce(entity, context, signature, candidate_filter)
     }
 
     fn compare_with_others_bruteforce(
@@ -1294,8 +1350,11 @@ impl LshExtractor {
         entity: &CodeEntity,
         context: &ExtractionContext,
         signature: &[u64],
+        candidate_filter: Option<&Vec<EntityId>>,
     ) -> (f64, f64, f64) {
-        let mut similarities = Vec::with_capacity(context.entity_index.len().min(100)); // Limit similarity comparisons
+        let candidate_count =
+            candidate_filter.map_or(context.entity_index.len(), |filter| filter.len());
+        let mut similarities = Vec::with_capacity(candidate_count.min(100));
         let comparison_start = std::time::Instant::now();
 
         if let Some(ref analyzer) = self.weighted_analyzer {
@@ -1304,16 +1363,50 @@ impl LshExtractor {
                 self.get_or_compute_weighted_signatures_with_current(&context_entities, entity)
             {
                 if let Some(entity_sig) = weighted_signatures.get(&entity.id) {
-                    for (other_id, _) in &context.entity_index {
-                        if other_id == &entity.id {
-                            continue;
-                        }
+                    let max_candidates = if self.lsh_config.max_candidates == 0 {
+                        candidate_count
+                    } else {
+                        self.lsh_config.max_candidates.min(candidate_count)
+                    };
 
-                        if let Some(other_sig) = weighted_signatures.get(other_id) {
-                            let similarity =
-                                analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                            if similarity >= self.lsh_config.similarity_threshold {
-                                similarities.push(similarity);
+                    let mut processed = 0usize;
+
+                    if let Some(filter) = candidate_filter {
+                        for other_id in filter {
+                            if processed >= max_candidates {
+                                break;
+                            }
+
+                            if other_id == &entity.id {
+                                continue;
+                            }
+
+                            if let Some(other_sig) = weighted_signatures.get(other_id) {
+                                let similarity =
+                                    analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
+                                if similarity >= self.lsh_config.similarity_threshold {
+                                    similarities.push(similarity);
+                                }
+                                processed += 1;
+                            }
+                        }
+                    } else {
+                        for (other_id, _) in &context.entity_index {
+                            if processed >= max_candidates {
+                                break;
+                            }
+
+                            if other_id == &entity.id {
+                                continue;
+                            }
+
+                            if let Some(other_sig) = weighted_signatures.get(other_id) {
+                                let similarity =
+                                    analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
+                                if similarity >= self.lsh_config.similarity_threshold {
+                                    similarities.push(similarity);
+                                }
+                                processed += 1;
                             }
                         }
                     }
@@ -1322,31 +1415,55 @@ impl LshExtractor {
         }
 
         if similarities.is_empty() {
-            let mut comparison_count = 0;
-            let max_comparisons = self
-                .lsh_config
-                .max_candidates
-                .min(context.entity_index.len());
+            let max_comparisons = if self.lsh_config.max_candidates == 0 {
+                candidate_count
+            } else {
+                self.lsh_config.max_candidates.min(candidate_count)
+            };
 
-            for (other_id, other_entity) in &context.entity_index {
-                if other_id == &entity.id {
-                    continue;
+            let mut comparison_count = 0usize;
+
+            if let Some(filter) = candidate_filter {
+                for other_id in filter {
+                    if comparison_count >= max_comparisons {
+                        break;
+                    }
+
+                    if other_id == &entity.id {
+                        continue;
+                    }
+
+                    if let Some(other_entity) = context.entity_index.get(other_id) {
+                        let other_signature = self
+                            .generate_minhash_signature_cached(&other_entity.source_code, other_id);
+                        let similarity = self.jaccard_similarity(signature, &other_signature);
+
+                        if similarity >= self.lsh_config.similarity_threshold {
+                            similarities.push(similarity);
+                        }
+                        comparison_count += 1;
+                    }
                 }
+            } else {
+                for (other_id, other_entity) in &context.entity_index {
+                    if comparison_count >= max_comparisons {
+                        break;
+                    }
 
-                if comparison_count >= max_comparisons {
-                    break;
+                    if other_id == &entity.id {
+                        continue;
+                    }
+
+                    let other_signature =
+                        self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
+                    let similarity = self.jaccard_similarity(signature, &other_signature);
+
+                    if similarity >= self.lsh_config.similarity_threshold {
+                        similarities.push(similarity);
+                    }
+
+                    comparison_count += 1;
                 }
-
-                // Use cached signature generation instead of internal method to avoid redundant work
-                let other_signature =
-                    self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
-                let similarity = self.jaccard_similarity(signature, &other_signature);
-
-                if similarity >= self.lsh_config.similarity_threshold {
-                    similarities.push(similarity);
-                }
-
-                comparison_count += 1;
             }
         }
 
@@ -1387,14 +1504,14 @@ impl LshExtractor {
         // Process in chunks of 4 using SIMD
         for chunk_idx in 0..chunks {
             let base_idx = chunk_idx * 4;
-            
+
             let vec1 = u64x4::from([
                 sig1[base_idx],
                 sig1[base_idx + 1],
                 sig1[base_idx + 2],
                 sig1[base_idx + 3],
             ]);
-            
+
             let vec2 = u64x4::from([
                 sig2[base_idx],
                 sig2[base_idx + 1],
@@ -1404,7 +1521,7 @@ impl LshExtractor {
 
             // Element-wise comparison
             let eq_mask = vec1.cmp_eq(vec2);
-            
+
             // Count matching elements (each lane is either 0 or all 1s)
             let matches = eq_mask.to_array();
             for &match_val in &matches {
@@ -1575,7 +1692,7 @@ impl LshIndex {
         Self {
             num_bands,
             bands: vec![HashMap::with_capacity(32); num_bands], // Estimate 32 entities per band
-            signatures: HashMap::with_capacity(256), // Estimate 256 total entities
+            signatures: HashMap::with_capacity(256),            // Estimate 256 total entities
         }
     }
 
@@ -1726,13 +1843,13 @@ impl WeightedShingleAnalyzer {
         {
             use rayon::prelude::*;
             use std::collections::HashMap;
-            
+
             // Parallel map: process entities in chunks to generate local frequency maps
             let local_frequency_maps: Vec<HashMap<String, usize>> = entities
                 .par_chunks(50) // Process in chunks of 50 entities for good load balancing
                 .map(|chunk| {
                     let mut local_frequencies = HashMap::new();
-                    
+
                     for entity in chunk {
                         let kgrams = self.generate_kgrams(&entity.source_code);
                         let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
@@ -1742,7 +1859,7 @@ impl WeightedShingleAnalyzer {
                             *local_frequencies.entry(kgram).or_insert(0) += 1;
                         }
                     }
-                    
+
                     local_frequencies
                 })
                 .collect();
@@ -1754,7 +1871,7 @@ impl WeightedShingleAnalyzer {
                 }
             }
         }
-        
+
         // Fallback to sequential processing if parallel feature is disabled
         #[cfg(not(feature = "parallel"))]
         {
@@ -1952,26 +2069,26 @@ impl WeightedShingleAnalyzer {
     #[cfg(feature = "simd")]
     fn weighted_jaccard_similarity_simd(&self, sig1: &[f64], sig2: &[f64]) -> f64 {
         use wide::{f64x4, CmpLt};
-        
+
         let len = sig1.len();
         let chunks = len / 4;
         let remainder = len % 4;
         let mut matching_count = 0usize;
-        
+
         // Create epsilon vector for floating-point comparison
         let epsilon = f64x4::splat(1e-6);
 
         // Process in chunks of 4 using SIMD
         for chunk_idx in 0..chunks {
             let base_idx = chunk_idx * 4;
-            
+
             let vec1 = f64x4::from([
                 sig1[base_idx],
                 sig1[base_idx + 1],
                 sig1[base_idx + 2],
                 sig1[base_idx + 3],
             ]);
-            
+
             let vec2 = f64x4::from([
                 sig2[base_idx],
                 sig2[base_idx + 1],
@@ -1981,14 +2098,15 @@ impl WeightedShingleAnalyzer {
 
             // Calculate absolute difference: |a - b|
             let diff = (vec1 - vec2).abs();
-            
+
             // Compare with epsilon: |a - b| < 1e-6
             let lt_epsilon = diff.cmp_lt(epsilon);
-            
+
             // Count matching elements (each lane is either 0 or all 1s)
             let matches = lt_epsilon.to_array();
             for &match_val in &matches {
-                if match_val != 0.0 {  // Non-zero means match (all bits set)
+                if match_val != 0.0 {
+                    // Non-zero means match (all bits set)
                     matching_count += 1;
                 }
             }
@@ -2098,15 +2216,15 @@ mod tests {
     fn test_interned_shingle_creation() {
         let extractor = LshExtractor::with_params(64, 2);
         let code = "def func():\n    return 1";
-        
+
         // Test interned shingles
         let interned_shingles = extractor.create_shingles_interned(code);
         assert!(!interned_shingles.is_empty());
-        
+
         // Test normal shingles for comparison
         let normal_shingles = extractor.create_shingles(code);
         assert_eq!(interned_shingles.len(), normal_shingles.len());
-        
+
         // Verify content matches by resolving interned strings
         for (interned, normal) in interned_shingles.iter().zip(normal_shingles.iter()) {
             let resolved = resolve(*interned);
@@ -2118,16 +2236,16 @@ mod tests {
     fn test_interned_minhash_signature() {
         let extractor = LshExtractor::with_params(16, 2);
         let code = "def test(): return 1";
-        
+
         // Test interned signature
         let interned_signature = extractor.generate_minhash_signature_interned(code);
         assert_eq!(interned_signature.len(), 16);
         assert!(interned_signature.iter().any(|&x| x != u64::MAX));
-        
+
         // Test normal signature for comparison
         let normal_signature = extractor.generate_minhash_signature(code);
         assert_eq!(interned_signature.len(), normal_signature.len());
-        
+
         // Both should produce identical results
         assert_eq!(interned_signature, normal_signature);
     }

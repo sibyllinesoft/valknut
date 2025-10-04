@@ -213,9 +213,8 @@ pub async fn analyze_with_session_cache(
     path: &Path,
     cache: &AnalysisCacheRef,
 ) -> Result<Arc<AnalysisResults>, ValknutError> {
-    let canonical_path = path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
-    
+    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
     // Check cache first
     {
         let cache_guard = cache.lock().await;
@@ -229,36 +228,41 @@ pub async fn analyze_with_session_cache(
             }
         }
     }
-    
+
     // Cache miss - run analysis
     info!("Running fresh analysis for: {}", path.display());
     let mut engine = ValknutEngine::new(config.clone()).await?;
     let results = engine.analyze_directory(path).await?;
     let results_arc = Arc::new(results);
-    
+
     // Cache the results
     {
         let mut cache_guard = cache.lock().await;
-        
+
         // Limit cache size to prevent memory growth
         if cache_guard.len() >= 10 {
             // Remove oldest entry
-            if let Some(oldest_key) = cache_guard.iter()
+            if let Some(oldest_key) = cache_guard
+                .iter()
                 .min_by_key(|(_, entry)| entry.timestamp)
-                .map(|(key, _)| key.clone()) {
+                .map(|(key, _)| key.clone())
+            {
                 cache_guard.remove(&oldest_key);
                 info!("Evicted oldest cache entry: {}", oldest_key.display());
             }
         }
-        
-        cache_guard.insert(canonical_path.clone(), AnalysisCache {
-            path: canonical_path,
-            results: results_arc.clone(),
-            timestamp: std::time::Instant::now(),
-        });
+
+        cache_guard.insert(
+            canonical_path.clone(),
+            AnalysisCache {
+                path: canonical_path,
+                results: results_arc.clone(),
+                timestamp: std::time::Instant::now(),
+            },
+        );
         info!("Cached analysis results for: {}", path.display());
     }
-    
+
     Ok(results_arc)
 }
 
@@ -745,19 +749,31 @@ fn create_markdown_report(results: &AnalysisResults) -> Result<String, DynError>
             if !candidate.issues.is_empty() {
                 markdown.push_str("- **Issues**:\n");
                 for issue in &candidate.issues {
-                    markdown.push_str(&format!("  - {}: {}\n", issue.category, issue.description));
+                    let issue_title = results
+                        .code_dictionary
+                        .issues
+                        .get(&issue.code)
+                        .map(|entry| entry.title.as_str())
+                        .unwrap_or(issue.category.as_str());
+                    markdown.push_str(&format!(
+                        "  - {}: {} (severity {:.2})\n",
+                        issue.code, issue_title, issue.severity
+                    ));
                 }
             }
 
             if !candidate.suggestions.is_empty() {
                 markdown.push_str("- **Suggestions**:\n");
                 for suggestion in &candidate.suggestions {
+                    let suggestion_title = results
+                        .code_dictionary
+                        .suggestions
+                        .get(&suggestion.code)
+                        .map(|entry| entry.title.as_str())
+                        .unwrap_or(suggestion.refactoring_type.as_str());
                     markdown.push_str(&format!(
                         "  - {}: {} (Priority: {:.2}, Effort: {:.2})\n",
-                        suggestion.refactoring_type,
-                        suggestion.description,
-                        suggestion.priority,
-                        suggestion.effort
+                        suggestion.code, suggestion_title, suggestion.priority, suggestion.effort
                     ));
                 }
             }

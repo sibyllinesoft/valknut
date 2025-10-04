@@ -260,6 +260,10 @@ pub struct AnalysisConfig {
     /// File patterns to include in analysis
     #[serde(default)]
     pub include_patterns: Vec<String>,
+
+    /// Additional ignore patterns applied after include/exclude
+    #[serde(default)]
+    pub ignore_patterns: Vec<String>,
 }
 
 impl Default for AnalysisConfig {
@@ -284,6 +288,7 @@ impl Default for AnalysisConfig {
                 "*.min.js".to_string(),
             ],
             include_patterns: vec!["**/*".to_string()],
+            ignore_patterns: Vec::new(),
         }
     }
 }
@@ -566,7 +571,7 @@ impl Default for LshConfig {
     fn default() -> Self {
         Self {
             num_hashes: 128,
-            num_bands: 8,  // Reduced from 16 -> 8 for faster candidate filtering (16 rows per band)
+            num_bands: 8, // Reduced from 16 -> 8 for faster candidate filtering (16 rows per band)
             shingle_size: 3,
             similarity_threshold: 0.7,
             max_candidates: 100,
@@ -1317,15 +1322,15 @@ impl Default for RankingConfig {
 impl Default for DenoiseConfig {
     fn default() -> Self {
         Self {
-            enabled: false, // Changed to opt-in for better default performance
-            auto: true,    // Default auto-calibration enabled
-            min_function_tokens: 60,  // Increased from 40 -> 60 to filter smaller functions
-            min_match_tokens: 32,     // Increased from 24 -> 32 to reduce comparison workload
+            enabled: false,          // Changed to opt-in for better default performance
+            auto: true,              // Default auto-calibration enabled
+            min_function_tokens: 60, // Increased from 40 -> 60 to filter smaller functions
+            min_match_tokens: 32,    // Increased from 24 -> 32 to reduce comparison workload
             require_blocks: 2,
-            similarity: 0.80,         // Lowered from 0.82 -> 0.80 for faster threshold checks
+            similarity: 0.80, // Lowered from 0.82 -> 0.80 for faster threshold checks
             weights: DenoiseWeights::default(),
             io_mismatch_penalty: 0.25,
-            threshold_s: 0.80,        // Updated to match similarity field
+            threshold_s: 0.80, // Updated to match similarity field
             stop_motifs: StopMotifsConfig::default(),
             auto_calibration: AutoCalibrationConfig::default(),
             ranking: RankingConfig::default(),

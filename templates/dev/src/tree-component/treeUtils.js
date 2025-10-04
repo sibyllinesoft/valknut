@@ -2,19 +2,20 @@
 // These are extracted for easier testing and reusability
 
 /**
- * Transforms tree data to ensure all nodes have required 'id' properties for React Arborist
+ * Normalises tree data so every node has a stable `id` (required by the
+ * virtualised TanStack tree renderer and our accessibility helpers).
  * @param {Array} data - Array of tree node objects
  * @param {string} parentId - Parent ID for ID generation
  * @returns {Array} Transformed data with guaranteed ID properties
  */
-export const transformTreeData = (data, parentId = '') => {
+export const transformTreeData = (data, parentId = '', codeDictionary = { issues: {}, suggestions: {} }) => {
   if (!Array.isArray(data)) {
     return [];
   }
 
   return data.map((node, index) => {
     if (!node || typeof node !== 'object') {
-      console.warn('⚠️ Invalid node detected, skipping:', node);
+      console.warn('[treeUtils] Invalid node detected, skipping:', node);
       return null;
     }
 
@@ -38,47 +39,68 @@ export const transformTreeData = (data, parentId = '') => {
     
     // For entities (identified by entity_id), create children from issues and suggestions arrays
     if (node.entity_id) {
-      console.log('Processing entity:', node.name, 'entity_id:', node.entity_id, 'issues:', node.issues?.length, 'suggestions:', node.suggestions?.length);
       
       // Add issues as children
       if (node.issues && Array.isArray(node.issues)) {
         node.issues.forEach((issue, idx) => {
+          const issueMeta = issue.code && codeDictionary.issues
+            ? codeDictionary.issues[issue.code]
+            : undefined;
+          const categoryLabel = String(issue.category || 'issue');
+          const issueCode = issue.code || issueMeta?.code || categoryLabel.toUpperCase();
+          const issueTitle = issueMeta?.title || categoryLabel;
+          const issueSummary = issueMeta?.summary || issue.description || '';
+
           const issueChild = {
             ...issue,
             type: 'issue-row',
             id: `${nodeId}_issue_${idx}`,
-            name: `${issue.category || 'issue'}: ${issue.description || ''}`.trim(),
+            name: `${issueCode}: ${issueTitle}`.trim(),
+            code: issueCode,
+            title: issueTitle,
+            summary: issueSummary,
+            badges: [],
             children: []
           };
-          console.log('Adding issue child:', issueChild.name);
           processedChildren.push(issueChild);
         });
       }
-      
+
       // Add suggestions as children
       if (node.suggestions && Array.isArray(node.suggestions)) {
         node.suggestions.forEach((suggestion, idx) => {
+          const suggestionMeta = suggestion.code && codeDictionary.suggestions
+            ? codeDictionary.suggestions[suggestion.code]
+            : undefined;
+          const suggestionLabel = String(suggestion.refactoring_type || suggestion.type || suggestion.category || 'suggestion');
+          const formattedLabel = suggestionLabel.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          const suggestionCode = suggestion.code || suggestionMeta?.code || formattedLabel.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'SUGGEST';
+          const suggestionTitle = suggestionMeta?.title || formattedLabel;
+          const suggestionSummary = suggestionMeta?.summary || suggestion.description || '';
+
           const suggestionChild = {
             ...suggestion,
             type: 'suggestion-row',
             id: `${nodeId}_suggestion_${idx}`,
-            name: `${suggestion.category || 'suggestion'}: ${suggestion.description || ''}`.trim(),
+            name: `${suggestionCode}: ${suggestionTitle}`.trim(),
+            code: suggestionCode,
+            title: suggestionTitle,
+            summary: suggestionSummary,
+            badges: [],
             children: []
           };
-          console.log('Adding suggestion child:', suggestionChild.name);
           processedChildren.push(suggestionChild);
         });
       }
-      
+
       // Also process any existing children
       if (node.children && Array.isArray(node.children)) {
-        console.log('Entity also has children:', node.children.length);
-        const transformedChildren = transformTreeData(node.children, nodeId);
+        const transformedChildren = transformTreeData(node.children, nodeId, codeDictionary);
         processedChildren = [...processedChildren, ...transformedChildren];
       }
     } else if (node.children && Array.isArray(node.children)) {
       // Non-entity nodes - recursively transform children normally
-      processedChildren = transformTreeData(node.children, nodeId);
+      processedChildren = transformTreeData(node.children, nodeId, codeDictionary);
     }
 
     return {
@@ -90,7 +112,7 @@ export const transformTreeData = (data, parentId = '') => {
 };
 
 /**
- * Validates that tree data has required ID properties for React Arborist
+ * Validates that tree data has the structural guarantees expected by the virtual tree.
  * @param {Array} data - Tree data to validate
  * @returns {Object} Validation result with isValid boolean and errors array
  */

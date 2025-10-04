@@ -93,27 +93,10 @@ function addGlobalWrappers(mode = 'production') {
   if (typeof global.ReactDOM === 'undefined') {
     throw new Error('ReactDOM is required but not found on window. Please include ReactDOM before this bundle.');
   }
-  if (typeof global.ReactArborist === 'undefined') {
-    console.warn('ReactArborist not found on window. Tree component may not work properly.');
-  }
-  
-  // Mock react-arborist if not available (for testing)
-  if (!global.ReactArborist) {
-    global.ReactArborist = {
-      Tree: function(props) {
-        return global.React.createElement('div', 
-          { className: 'mock-tree' }, 
-          'Tree component requires react-arborist'
-        );
-      }
-    };
-  }
-  
   // Provide modules for the bundle
   const modules = {
     'react': global.React,
-    'react-dom': global.ReactDOM,
-    'react-arborist': global.ReactArborist
+    'react-dom': global.ReactDOM
   };
   
   // Original bundle content
@@ -122,7 +105,10 @@ function addGlobalWrappers(mode = 'production') {
 })(typeof window !== 'undefined' ? window : this);
 `;
     
-    writeFileSync(filePath, wrapper);
+    // Escape closing script tags so HTML inlining doesn't break the bundle
+    const escapedWrapper = wrapper.replace(/<\/script>/g, '<\\/script>');
+
+    writeFileSync(filePath, escapedWrapper);
     log(`🔧 Added global wrappers to ${outputFile}`, colors.magenta);
     
   } catch (error) {
@@ -177,7 +163,6 @@ function copyCompatibilityFiles() {
     <!-- Include React dependencies -->
     <script crossorigin src="../react.min.js"></script>
     <script crossorigin src="../react-dom.min.js"></script>
-    <script crossorigin src="../react-arborist.min.js"></script>
     
     <!-- Include our bundle -->
     <script src="./react-tree-bundle.js"></script>

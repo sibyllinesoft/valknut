@@ -81,7 +81,7 @@ describe('Malformed Data Fix', () => {
     
     if (!nodeType && !nodeName && node.children && Array.isArray(node.children)) {
       // This appears to be a malformed root directory node - infer from structure
-      nodeType = 'folder'; // React Arborist expects 'folder', not 'directory'
+      nodeType = 'folder'; // The virtual tree expects 'folder', not 'directory'
       
       // Try to infer name from first child's path
       if (node.children.length > 0 && node.children[0].path) {

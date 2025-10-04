@@ -46,6 +46,10 @@ pub struct AnalysisResults {
 
     /// Any warnings or issues encountered
     pub warnings: Vec<String>,
+
+    /// Dictionary describing issue/suggestion codes for downstream consumers
+    #[serde(default, skip_serializing_if = "CodeDictionary::is_empty")]
+    pub code_dictionary: CodeDictionary,
 }
 
 /// Summary of analysis results
@@ -134,11 +138,11 @@ pub struct RefactoringCandidate {
 /// A specific refactoring issue within an entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefactoringIssue {
+    /// Machine-readable code identifying the issue type
+    pub code: String,
+
     /// Issue category (complexity, structure, etc.)
     pub category: String,
-
-    /// Issue description
-    pub description: String,
 
     /// Severity score
     pub severity: f64,
@@ -169,8 +173,8 @@ pub struct RefactoringSuggestion {
     /// Type of refactoring (extract_method, reduce_complexity, etc.)
     pub refactoring_type: String,
 
-    /// Human-readable description
-    pub description: String,
+    /// Machine-readable code identifying the suggestion type
+    pub code: String,
 
     /// Priority level (0.0-1.0)
     pub priority: f64,
@@ -180,6 +184,41 @@ pub struct RefactoringSuggestion {
 
     /// Expected impact (0.0-1.0)
     pub impact: f64,
+}
+
+/// Dictionary of refactoring issue and suggestion codes
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CodeDictionary {
+    /// Issue code definitions keyed by code
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub issues: std::collections::HashMap<String, CodeDefinition>,
+
+    /// Suggestion code definitions keyed by code
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub suggestions: std::collections::HashMap<String, CodeDefinition>,
+}
+
+impl CodeDictionary {
+    pub fn is_empty(&self) -> bool {
+        self.issues.is_empty() && self.suggestions.is_empty()
+    }
+}
+
+/// Human-friendly description of a code emitted by the analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeDefinition {
+    /// Short machine-readable code
+    pub code: String,
+
+    /// Concise human-facing title
+    pub title: String,
+
+    /// Longer explanation or remediation guidance
+    pub summary: String,
+
+    /// Optional category the code belongs to
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
 }
 
 /// Refactoring candidates grouped by file for reporting

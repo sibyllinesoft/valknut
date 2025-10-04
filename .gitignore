@@ -141,6 +141,8 @@ trefoil-animation.js
 
 # Templates assets build artifacts (keep source, ignore build output)
 templates/assets/dist/
+templates/dev/src/tree-component/react-tree-bundle.debug.js
+templates/dev/src/tree-component/react-tree-bundle.debug.js.map
 
 # Cache directories
 .cache/

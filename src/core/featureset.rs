@@ -420,6 +420,9 @@ pub struct ExtractionContext {
 
     /// Additional context data
     pub context_data: HashMap<String, serde_json::Value>,
+
+    /// Optional pre-filter of candidate similarity peers per entity
+    pub candidate_partitions: Option<Arc<HashMap<EntityId, Vec<EntityId>>>>,
 }
 
 impl ExtractionContext {
@@ -433,6 +436,7 @@ impl ExtractionContext {
             entity_index: HashMap::new(),
             language: language.into(),
             context_data: HashMap::new(),
+            candidate_partitions: None,
         }
     }
 
@@ -449,6 +453,15 @@ impl ExtractionContext {
     /// Add context data
     pub fn add_context_data(&mut self, key: impl Into<String>, value: serde_json::Value) {
         self.context_data.insert(key.into(), value);
+    }
+
+    /// Attach clique partitions for downstream similarity detectors.
+    pub fn with_candidate_partitions(
+        mut self,
+        partitions: Arc<HashMap<EntityId, Vec<EntityId>>>,
+    ) -> Self {
+        self.candidate_partitions = Some(partitions);
+        self
     }
 }
 

@@ -12,8 +12,8 @@
     "test:coverage": "bun test --coverage",
     "build": "bun run build:bundle",
     "build:bundle": "webpack --mode=production",
-    "build:dev": "bun build src/tree-component/index.js --outfile=dist/react-tree-bundle.debug.js --format=iife --global-name=ReactTreeBundle --sourcemap",
-    "dev": "node scripts/extract-data.cjs && webpack serve --mode=development --port=8080 --open",
+    "build:dev": "bun build src/tree-component/index.js --outfile=../assets/react-tree-bundle.js --format=iife --global-name=ReactTreeBundle --target=browser --sourcemap",
+    "dev": "node scripts/dev-server.cjs",
     "clean": "rm -rf dist node_modules public/data.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ tests/",
@@ -29,8 +29,9 @@
   "author": "Valknut",
   "license": "ISC",
   "dependencies": {
+    "@floating-ui/react": "^0.27.16",
+    "@tanstack/react-virtual": "^3.13.12",
     "react": "^18.2.0",
-    "react-arborist": "^3.4.3",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
@@ -43,6 +44,8 @@
     "@types/react-dom": "^18.2.0",
     "babel-loader": "^10.0.0",
     "cheerio": "^1.0.0-rc.12",
+    "chokidar": "^3.6.0",
+    "handlebars": "^4.7.8",
     "eslint": "^8.0.0",
     "happy-dom": "^12.0.0",
     "playwright": "^1.55.0",

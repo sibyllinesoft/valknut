@@ -192,12 +192,15 @@ impl AnalysisPipeline {
         if let Some(ref callback) = progress_callback {
             callback("Reading file contents in batches...", 7.5);
         }
-        
+
         let file_contents = self.read_files_batched(&files).await?;
         info!("Read {} files in batches", file_contents.len());
 
         // Stage 1.6: Arena-based entity extraction (performance optimization)
-        let arena_results = self.stages.run_arena_file_analysis_with_content(&file_contents).await?;
+        let arena_results = self
+            .stages
+            .run_arena_file_analysis_with_content(&file_contents)
+            .await?;
         info!(
             "Arena analysis completed: {} files processed with {:.2} KB total arena usage",
             arena_results.len(),
@@ -211,7 +214,7 @@ impl AnalysisPipeline {
         // Parallel execution of independent analysis stages using futures::join!
         // Group 1: Structure and Coverage (independent, quick)
         // Group 2: Complexity, Refactoring, Impact, LSH (may have dependencies, but can be parallelized)
-        
+
         let group1_future = async {
             let structure_future = async {
                 if self.config.enable_structure_analysis {
@@ -259,7 +262,9 @@ impl AnalysisPipeline {
             let complexity_future = async {
                 if self.config.enable_complexity_analysis {
                     // Use arena results instead of re-parsing files
-                    self.stages.run_complexity_analysis_from_arena_results(&arena_results).await
+                    self.stages
+                        .run_complexity_analysis_from_arena_results(&arena_results)
+                        .await
                 } else {
                     Ok(super::pipeline_results::ComplexityAnalysisResults {
                         enabled: false,
@@ -306,9 +311,7 @@ impl AnalysisPipeline {
                         .as_ref()
                         .map(|config| config.denoise.enabled)
                         .unwrap_or(false);
-                    self.stages
-                        .run_lsh_analysis(&files, denoise_enabled)
-                        .await
+                    self.stages.run_lsh_analysis(&files, denoise_enabled).await
                 } else {
                     Ok(super::pipeline_results::LshAnalysisResults {
                         enabled: false,
@@ -322,12 +325,19 @@ impl AnalysisPipeline {
                 }
             };
 
-            futures::join!(complexity_future, refactoring_future, impact_future, lsh_future)
+            futures::join!(
+                complexity_future,
+                refactoring_future,
+                impact_future,
+                lsh_future
+            )
         };
 
         // Execute both groups in parallel
-        let ((structure_result, coverage_result), (complexity_result, refactoring_result, impact_result, lsh_result)) = 
-            futures::join!(group1_future, group2_future);
+        let (
+            (structure_result, coverage_result),
+            (complexity_result, refactoring_result, impact_result, lsh_result),
+        ) = futures::join!(group1_future, group2_future);
 
         // Handle results and propagate errors
         let structure_results = structure_result?;
@@ -387,12 +397,13 @@ impl AnalysisPipeline {
     /// Discover files to analyze using git-aware file discovery
     async fn discover_files(&self, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
         let start_time = std::time::Instant::now();
-        
+
         // Use the proper git-aware file discovery
-        let mut files = file_discovery::discover_files(paths, &self.config, self.valknut_config.as_ref())?;
-        
+        let mut files =
+            file_discovery::discover_files(paths, &self.config, self.valknut_config.as_ref())?;
+
         let discovery_time = start_time.elapsed();
-        
+
         // Limit files if configured
         if self.config.max_files > 0 && files.len() > self.config.max_files {
             warn!(
@@ -413,45 +424,45 @@ impl AnalysisPipeline {
     async fn read_files_batched(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
         let start_time = std::time::Instant::now();
         const BATCH_SIZE: usize = 200; // Optimized batch size to reduce context switching
-        
+
         let mut file_contents = Vec::with_capacity(files.len());
-        
+
         // Process files in batches to control memory usage and optimize I/O
         for batch in files.chunks(BATCH_SIZE) {
-            let batch_futures: Vec<_> = batch.iter()
+            let batch_futures: Vec<_> = batch
+                .iter()
                 .map(|file_path| async move {
-                    let content = tokio::fs::read_to_string(file_path).await
-                        .map_err(|e| ValknutError::io(
-                            format!("Failed to read file {}", file_path.display()),
-                            e
-                        ))?;
+                    let content = tokio::fs::read_to_string(file_path).await.map_err(|e| {
+                        ValknutError::io(format!("Failed to read file {}", file_path.display()), e)
+                    })?;
                     Ok::<(PathBuf, String), ValknutError>((file_path.clone(), content))
                 })
                 .collect();
-                
+
             let batch_results = futures::future::join_all(batch_futures).await;
-            
+
             for result in batch_results {
                 let (path, content) = result?;
                 file_contents.push((path, content));
             }
         }
-        
+
         let read_time = start_time.elapsed();
-        let total_size_mb = file_contents.iter()
+        let total_size_mb = file_contents
+            .iter()
             .map(|(_, content)| content.len())
-            .sum::<usize>() as f64 / (1024.0 * 1024.0);
-            
+            .sum::<usize>() as f64
+            / (1024.0 * 1024.0);
+
         info!(
             "Read {} files ({:.2} MB) in {:?} using batched I/O",
             file_contents.len(),
             total_size_mb,
             read_time
         );
-        
+
         Ok(file_contents)
     }
-
 
     /// Check if a file should be included for dedupe analysis based on scope filtering
     pub fn should_include_for_dedupe(&self, file: &Path, valknut_config: &ValknutConfig) -> bool {
@@ -812,7 +823,7 @@ impl AnalysisPipeline {
 
     pub fn wrap_results(&self, results: ComprehensiveAnalysisResult) -> PipelineResults {
         let scoring_files = Self::convert_to_scoring_results(&results);
-        
+
         // Create feature vectors that correspond to the scoring results
         let feature_vectors = Self::create_feature_vectors_from_results(&results);
 
@@ -1290,7 +1301,6 @@ impl AnalysisPipeline {
     fn create_feature_vectors_from_results(
         results: &ComprehensiveAnalysisResult,
     ) -> Vec<FeatureVector> {
-        
         let mut feature_vectors = Vec::new();
 
         // Create feature vectors from complexity analysis results
@@ -1303,10 +1313,10 @@ impl AnalysisPipeline {
             );
 
             let metrics = &complexity_result.metrics;
-            
+
             // Create feature vector with features and their values
             let mut feature_vector = FeatureVector::new(entity_id.clone());
-            
+
             // Add raw feature values
             feature_vector.add_feature("cyclomatic_complexity", metrics.cyclomatic());
             feature_vector.add_feature("cognitive_complexity", metrics.cognitive());
@@ -1314,20 +1324,48 @@ impl AnalysisPipeline {
             feature_vector.add_feature("lines_of_code", metrics.lines_of_code);
             feature_vector.add_feature("technical_debt_score", metrics.technical_debt_score);
             feature_vector.add_feature("maintainability_index", metrics.maintainability_index);
-            
+
             // Add normalized versions (simple normalization for now)
-            feature_vector.normalized_features.insert("cyclomatic_complexity".to_string(), (metrics.cyclomatic() / 10.0).min(1.0));
-            feature_vector.normalized_features.insert("cognitive_complexity".to_string(), (metrics.cognitive() / 15.0).min(1.0));
-            feature_vector.normalized_features.insert("max_nesting_depth".to_string(), (metrics.max_nesting_depth / 5.0).min(1.0));
-            feature_vector.normalized_features.insert("lines_of_code".to_string(), (metrics.lines_of_code / 100.0).min(1.0));
-            feature_vector.normalized_features.insert("technical_debt_score".to_string(), metrics.technical_debt_score / 100.0);
-            feature_vector.normalized_features.insert("maintainability_index".to_string(), metrics.maintainability_index / 100.0);
-            
+            feature_vector.normalized_features.insert(
+                "cyclomatic_complexity".to_string(),
+                (metrics.cyclomatic() / 10.0).min(1.0),
+            );
+            feature_vector.normalized_features.insert(
+                "cognitive_complexity".to_string(),
+                (metrics.cognitive() / 15.0).min(1.0),
+            );
+            feature_vector.normalized_features.insert(
+                "max_nesting_depth".to_string(),
+                (metrics.max_nesting_depth / 5.0).min(1.0),
+            );
+            feature_vector.normalized_features.insert(
+                "lines_of_code".to_string(),
+                (metrics.lines_of_code / 100.0).min(1.0),
+            );
+            feature_vector.normalized_features.insert(
+                "technical_debt_score".to_string(),
+                metrics.technical_debt_score / 100.0,
+            );
+            feature_vector.normalized_features.insert(
+                "maintainability_index".to_string(),
+                metrics.maintainability_index / 100.0,
+            );
+
             // Set metadata
-            feature_vector.add_metadata("entity_type", serde_json::Value::String(complexity_result.entity_type.clone()));
-            feature_vector.add_metadata("file_path", serde_json::Value::String(complexity_result.file_path.clone()));
-            feature_vector.add_metadata("language", serde_json::Value::String("Python".to_string()));
-            feature_vector.add_metadata("line_number", serde_json::Value::Number(complexity_result.start_line.into()));
+            feature_vector.add_metadata(
+                "entity_type",
+                serde_json::Value::String(complexity_result.entity_type.clone()),
+            );
+            feature_vector.add_metadata(
+                "file_path",
+                serde_json::Value::String(complexity_result.file_path.clone()),
+            );
+            feature_vector
+                .add_metadata("language", serde_json::Value::String("Python".to_string()));
+            feature_vector.add_metadata(
+                "line_number",
+                serde_json::Value::Number(complexity_result.start_line.into()),
+            );
             // Note: end_line not available in ComplexityAnalysisResult
 
             feature_vectors.push(feature_vector);
@@ -1342,19 +1380,35 @@ impl AnalysisPipeline {
             );
 
             let mut feature_vector = FeatureVector::new(entity_id.clone());
-            
+
             // Add refactoring-specific features
             feature_vector.add_feature("refactoring_score", refactoring_result.refactoring_score);
-            feature_vector.add_feature("refactoring_recommendations", refactoring_result.recommendations.len() as f64);
-            
+            feature_vector.add_feature(
+                "refactoring_recommendations",
+                refactoring_result.recommendations.len() as f64,
+            );
+
             // Add normalized versions
-            feature_vector.normalized_features.insert("refactoring_score".to_string(), refactoring_result.refactoring_score / 100.0);
-            feature_vector.normalized_features.insert("refactoring_recommendations".to_string(), (refactoring_result.recommendations.len() as f64 / 10.0).min(1.0));
-            
+            feature_vector.normalized_features.insert(
+                "refactoring_score".to_string(),
+                refactoring_result.refactoring_score / 100.0,
+            );
+            feature_vector.normalized_features.insert(
+                "refactoring_recommendations".to_string(),
+                (refactoring_result.recommendations.len() as f64 / 10.0).min(1.0),
+            );
+
             // Set metadata
-            feature_vector.add_metadata("entity_type", serde_json::Value::String("refactoring".to_string()));
-            feature_vector.add_metadata("file_path", serde_json::Value::String(refactoring_result.file_path.clone()));
-            feature_vector.add_metadata("language", serde_json::Value::String("Python".to_string()));
+            feature_vector.add_metadata(
+                "entity_type",
+                serde_json::Value::String("refactoring".to_string()),
+            );
+            feature_vector.add_metadata(
+                "file_path",
+                serde_json::Value::String(refactoring_result.file_path.clone()),
+            );
+            feature_vector
+                .add_metadata("language", serde_json::Value::String("Python".to_string()));
 
             feature_vectors.push(feature_vector);
         }

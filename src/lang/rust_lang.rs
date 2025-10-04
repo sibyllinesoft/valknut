@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
-use super::registry::{get_tree_sitter_language, create_parser_for_language};
+use super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
@@ -878,7 +878,11 @@ impl LanguageAdapter for RustAdapter {
         Ok(imports)
     }
 
-    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+    fn extract_code_entities(
+        &mut self,
+        source: &str,
+        file_path: &str,
+    ) -> Result<Vec<crate::core::featureset::CodeEntity>> {
         RustAdapter::extract_code_entities(self, source, file_path)
     }
 }
@@ -892,7 +896,8 @@ impl Default for RustAdapter {
             );
             RustAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: get_tree_sitter_language("rs").unwrap_or_else(|_| tree_sitter_rust::LANGUAGE.into()),
+                language: get_tree_sitter_language("rs")
+                    .unwrap_or_else(|_| tree_sitter_rust::LANGUAGE.into()),
             }
         })
     }

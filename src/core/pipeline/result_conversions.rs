@@ -8,6 +8,10 @@ use crate::core::featureset::FeatureVector;
 use crate::core::pipeline::{PipelineResults, ResultSummary};
 use crate::core::scoring::{Priority, ScoringResult};
 
+use super::code_dictionary::{
+    issue_code_for_category, issue_definition_for_category, suggestion_code_for_kind,
+    suggestion_definition_for_kind,
+};
 use super::result_types::*;
 
 impl AnalysisResults {
@@ -51,6 +55,7 @@ impl AnalysisResults {
             unified_hierarchy: Vec::new(),
             warnings: Vec::new(),
             health_metrics: None,
+            code_dictionary: CodeDictionary::default(),
         }
     }
 
@@ -136,7 +141,7 @@ impl AnalysisResults {
 
         // Convert scoring results to refactoring candidates
         // Processing scoring results
-        
+
         let refactoring_candidates: Vec<RefactoringCandidate> = pipeline_results
             .scoring_results
             .files
@@ -244,6 +249,23 @@ impl AnalysisResults {
 
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
 
+        let mut code_dictionary = CodeDictionary::default();
+        for candidate in &refactoring_candidates {
+            for issue in &candidate.issues {
+                code_dictionary
+                    .issues
+                    .entry(issue.code.clone())
+                    .or_insert_with(|| issue_definition_for_category(&issue.category));
+            }
+            for suggestion in &candidate.suggestions {
+                code_dictionary
+                    .suggestions
+                    .entry(suggestion.code.clone())
+                    .or_insert_with(|| {
+                        suggestion_definition_for_kind(&suggestion.refactoring_type)
+                    });
+            }
+        }
 
         Self {
             summary,
@@ -257,6 +279,7 @@ impl AnalysisResults {
             warnings,
             coverage_packs,
             health_metrics,
+            code_dictionary,
         }
     }
 
@@ -269,7 +292,7 @@ impl AnalysisResults {
         if !directory_health_tree.directories.is_empty() {
             return Self::build_unified_hierarchy_from_directory_tree(directory_health_tree);
         }
-        
+
         // Fallback to candidates-based hierarchy only if no directory health tree
         if !candidates.is_empty() {
             return Self::build_unified_hierarchy_from_candidates(candidates);
@@ -279,7 +302,9 @@ impl AnalysisResults {
     }
 
     /// Build unified hierarchy from flat refactoring candidates list
-    fn build_unified_hierarchy_from_candidates(candidates: &[RefactoringCandidate]) -> Vec<serde_json::Value> {
+    fn build_unified_hierarchy_from_candidates(
+        candidates: &[RefactoringCandidate],
+    ) -> Vec<serde_json::Value> {
         use std::collections::BTreeMap;
         use std::path::Path;
 
@@ -331,7 +356,8 @@ impl AnalysisResults {
                         let issue_node = serde_json::json!({
                             "id": format!("issue_{}_{}", candidate.entity_id, issue_idx),
                             "type": "issue",
-                            "name": format!("{}: {}", issue.category, issue.description),
+                            "name": format!("{}: {}", issue.code, issue.category),
+                            "code": issue.code,
                             "priority": format!("{:?}", candidate.priority),
                             "score": issue.severity
                         });
@@ -343,7 +369,8 @@ impl AnalysisResults {
                         let suggestion_node = serde_json::json!({
                             "id": format!("suggestion_{}_{}", candidate.entity_id, suggestion_idx),
                             "type": "suggestion",
-                            "name": format!("{}: {}", suggestion.refactoring_type, suggestion.description),
+                            "name": format!("{}: {}", suggestion.code, suggestion.refactoring_type),
+                            "code": suggestion.code,
                             "priority": format!("{:?}", candidate.priority),
                             "refactoring_type": suggestion.refactoring_type
                         });
@@ -393,7 +420,7 @@ impl AnalysisResults {
 
             let dir_node = serde_json::json!({
                 "id": format!("folder_{}", dir_path),
-                "type": "folder", // Use "folder" instead of "directory" for React Arborist compatibility
+                "type": "folder", // Normalised label expected by the interactive tree renderer
                 "name": dir_path,
                 "health_score": health_score,
                 "children": dir_children
@@ -509,8 +536,8 @@ impl AnalysisResults {
                 None => true, // No parent, this is a top-level directory
                 Some(parent_path) => {
                     let parent_str = parent_path.to_string_lossy();
-                    Self::is_trivial_directory(&parent_str) || 
-                    !dir_map.contains_key(parent_str.as_ref())
+                    Self::is_trivial_directory(&parent_str)
+                        || !dir_map.contains_key(parent_str.as_ref())
                 }
             };
 
@@ -579,7 +606,9 @@ impl AnalysisResults {
                         // Stop at project root - don't traverse beyond relative paths
                         current = dir
                             .parent()
-                            .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
+                            .filter(|p| {
+                                !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
+                            })
                             .map(|p| p.to_path_buf());
                     }
                 }
@@ -587,7 +616,13 @@ impl AnalysisResults {
         }
 
         // FALLBACK: If no scoring results, use refactoring analysis results to build the tree
-        if directory_entity_counts.is_empty() && !pipeline_results.results.refactoring.detailed_results.is_empty() {
+        if directory_entity_counts.is_empty()
+            && !pipeline_results
+                .results
+                .refactoring
+                .detailed_results
+                .is_empty()
+        {
             for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
                 // Extract file path from refactoring result
                 let file_path = Path::new(&refactoring_result.file_path);
@@ -606,7 +641,9 @@ impl AnalysisResults {
                         // Stop at project root - don't traverse beyond relative paths
                         current = dir
                             .parent()
-                            .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
+                            .filter(|p| {
+                                !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
+                            })
                             .map(|p| p.to_path_buf());
                     }
                 }
@@ -615,9 +652,15 @@ impl AnalysisResults {
 
         // Also track files by directory for fallback file counting
         let mut directory_files: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
-        
+
         // FALLBACK: Use refactoring analysis results to track files if no candidates exist
-        if refactoring_candidates.is_empty() && !pipeline_results.results.refactoring.detailed_results.is_empty() {
+        if refactoring_candidates.is_empty()
+            && !pipeline_results
+                .results
+                .refactoring
+                .detailed_results
+                .is_empty()
+        {
             for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
                 let file_path = Path::new(&refactoring_result.file_path);
                 if let Some(dir_path) = file_path.parent() {
@@ -650,7 +693,9 @@ impl AnalysisResults {
                     // Stop at project root - don't traverse beyond relative paths
                     current = dir
                         .parent()
-                        .filter(|p| !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/'))
+                        .filter(|p| {
+                            !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
+                        })
                         .map(|p| p.to_path_buf());
                 }
             }
@@ -701,7 +746,10 @@ impl AnalysisResults {
                 files_in_dir.len()
             } else {
                 // FALLBACK: Use files from refactoring analysis
-                directory_files.get(dir_path).map(|files| files.len()).unwrap_or(0)
+                directory_files
+                    .get(dir_path)
+                    .map(|files| files.len())
+                    .unwrap_or(0)
             };
 
             // Calculate directory statistics
@@ -1179,8 +1227,8 @@ impl RefactoringCandidate {
                     .collect();
 
                 let issue = RefactoringIssue {
+                    code: issue_code_for_category(category),
                     category: category.clone(),
-                    description: Self::generate_issue_description(category, score),
                     severity: score,
                     contributing_features,
                 };
@@ -1219,26 +1267,6 @@ impl RefactoringCandidate {
         }
     }
 
-    /// Generate issue description based on category and severity
-    fn generate_issue_description(category: &str, severity: f64) -> String {
-        let severity_level = if severity >= 2.0 {
-            "very high"
-        } else if severity >= 1.5 {
-            "high"
-        } else if severity >= 1.0 {
-            "moderate"
-        } else {
-            "low"
-        };
-
-        match category {
-            "complexity" => format!("This entity has {} complexity that may make it difficult to understand and maintain", severity_level),
-            "structure" => format!("This entity has {} structural issues that may indicate design problems", severity_level),
-            "graph" => format!("This entity has {} coupling or dependency issues", severity_level),
-            _ => format!("This entity has {} issues in the {} category", severity_level, category),
-        }
-    }
-
     /// Generate refactoring suggestions based on issues
     /// Generate refactoring suggestions based on issues and entity context
     fn generate_suggestions(
@@ -1253,29 +1281,6 @@ impl RefactoringCandidate {
             return suggestions;
         }
 
-        let entity_label = {
-            let trimmed = entity_name.trim();
-            if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
-                "This code".to_string()
-            } else {
-                format!("`{}`", trimmed)
-            }
-        };
-
-        let location_hint = line_range
-            .and_then(|(start, end)| {
-                if start == 0 && end == 0 {
-                    None
-                } else if start == end {
-                    Some(format!(" (line {})", start))
-                } else {
-                    Some(format!(" (lines {}-{})", start, end))
-                }
-            })
-            .unwrap_or_default();
-
-        let subject = format!("{}{}", entity_label, location_hint);
-
         let severity_label = |score: f64| {
             if score >= 2.0 {
                 "very high"
@@ -1288,18 +1293,7 @@ impl RefactoringCandidate {
             }
         };
 
-        let plural = |count: usize| if count == 1 { "" } else { "s" };
-
-        let humanize = |name: &str| {
-            name.replace('_', " ")
-                .replace("refactoring ", "")
-                .replace("complexity ", "complexity ")
-                .replace("duplicate code", "duplicated code")
-                .trim()
-                .to_string()
-        };
-
-        let mut emitted = HashSet::new();
+        let mut emitted_codes: HashSet<String> = HashSet::new();
 
         for issue in issues {
             let severity_factor = (issue.severity / 2.0).clamp(0.1, 1.0);
@@ -1312,10 +1306,11 @@ impl RefactoringCandidate {
                             effort: f64,
                             priority_override: Option<f64>,
                             impact_override: Option<f64>| {
-                if emitted.insert(kind.to_string()) {
+                let code = suggestion_code_for_kind(kind);
+                if emitted_codes.insert(code.clone()) {
                     suggestions.push(RefactoringSuggestion {
                         refactoring_type: kind.to_string(),
-                        description: String::new(),
+                        code,
                         priority: priority_override.unwrap_or(base_priority),
                         effort: effort.clamp(0.1, 1.0),
                         impact: impact_override.unwrap_or(base_impact),
@@ -1339,7 +1334,12 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("extract_method_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
-                    emit(&format!("extract_method_{}_helpers", occurrences), 0.55, None, None);
+                    emit(
+                        &format!("extract_method_{}_helpers", occurrences),
+                        0.55,
+                        None,
+                        None,
+                    );
                     category_emitted = true;
                 } else if name.contains("extract_class_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
@@ -1352,7 +1352,12 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("simplify_conditionals_count") && raw_value > 0.0 {
                     let occurrences = raw_value.round().max(1.0) as usize;
-                    emit(&format!("simplify_{}_conditionals", occurrences), 0.45, None, None);
+                    emit(
+                        &format!("simplify_{}_conditionals", occurrences),
+                        0.45,
+                        None,
+                        None,
+                    );
                     category_emitted = true;
                 } else if name.contains("cyclomatic") && raw_value > 0.0 {
                     let complexity_level = raw_value.round() as u32;
@@ -1374,7 +1379,11 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("fan_in") || name.contains("fan_out") {
                     let fan_level = raw_value.round() as u32;
-                    let fan_type = if name.contains("fan_in") { "fan_in" } else { "fan_out" };
+                    let fan_type = if name.contains("fan_in") {
+                        "fan_in"
+                    } else {
+                        "fan_out"
+                    };
                     emit(
                         &format!("reduce_{}_{}", fan_type, fan_level),
                         0.6,
@@ -1384,7 +1393,11 @@ impl RefactoringCandidate {
                     category_emitted = true;
                 } else if name.contains("centrality") || name.contains("choke") {
                     let centrality_level = raw_value.round() as u32;
-                    let centrality_type = if name.contains("centrality") { "centrality" } else { "chokepoint" };
+                    let centrality_type = if name.contains("centrality") {
+                        "centrality"
+                    } else {
+                        "chokepoint"
+                    };
                     emit(
                         &format!("reduce_{}_{}", centrality_type, centrality_level),
                         0.65,
@@ -1537,14 +1550,14 @@ mod tests {
             score: 2.0,
             confidence: 0.8,
             issues: vec![RefactoringIssue {
+                code: "CMPLX".to_string(),
                 category: "complexity".to_string(),
-                description: "High complexity detected".to_string(),
                 severity: 1.5,
                 contributing_features: vec![],
             }],
             suggestions: vec![RefactoringSuggestion {
                 refactoring_type: "extract_method".to_string(),
-                description: "Extract helper method".to_string(),
+                code: "XTRMTH".to_string(),
                 priority: 0.7,
                 effort: 0.5,
                 impact: 0.8,
@@ -1561,33 +1574,45 @@ mod tests {
 
         // Get the first directory node
         let dir_node = &hierarchy[0];
-        
+
         // Verify directory node has an id
         assert!(dir_node.get("id").is_some());
-        assert_eq!(dir_node.get("type").and_then(|v| v.as_str()), Some("folder"));
-        
+        assert_eq!(
+            dir_node.get("type").and_then(|v| v.as_str()),
+            Some("folder")
+        );
+
         // Get file children
         let children = dir_node.get("children").and_then(|v| v.as_array()).unwrap();
         assert!(!children.is_empty());
-        
+
         // Verify file node has an id
         let file_node = &children[0];
         assert!(file_node.get("id").is_some());
         assert_eq!(file_node.get("type").and_then(|v| v.as_str()), Some("file"));
-        
+
         // Get entity children
-        let file_children = file_node.get("children").and_then(|v| v.as_array()).unwrap();
+        let file_children = file_node
+            .get("children")
+            .and_then(|v| v.as_array())
+            .unwrap();
         assert!(!file_children.is_empty());
-        
+
         // Verify entity node has an id
         let entity_node = &file_children[0];
         assert!(entity_node.get("id").is_some());
-        assert_eq!(entity_node.get("type").and_then(|v| v.as_str()), Some("entity"));
-        
+        assert_eq!(
+            entity_node.get("type").and_then(|v| v.as_str()),
+            Some("entity")
+        );
+
         // Get issue/suggestion children
-        let entity_children = entity_node.get("children").and_then(|v| v.as_array()).unwrap();
+        let entity_children = entity_node
+            .get("children")
+            .and_then(|v| v.as_array())
+            .unwrap();
         assert!(!entity_children.is_empty());
-        
+
         // Verify issue/suggestion nodes have ids
         for child in entity_children {
             assert!(child.get("id").is_some());
@@ -1608,11 +1633,20 @@ mod tests {
 
         let root_node = &hierarchy[0];
         assert!(root_node.get("id").is_some());
-        assert_eq!(root_node.get("id").and_then(|v| v.as_str()), Some("root_directory"));
-        assert_eq!(root_node.get("type").and_then(|v| v.as_str()), Some("folder"));
+        assert_eq!(
+            root_node.get("id").and_then(|v| v.as_str()),
+            Some("root_directory")
+        );
+        assert_eq!(
+            root_node.get("type").and_then(|v| v.as_str()),
+            Some("folder")
+        );
         assert_eq!(root_node.get("name").and_then(|v| v.as_str()), Some("."));
-        
-        let children = root_node.get("children").and_then(|v| v.as_array()).unwrap();
+
+        let children = root_node
+            .get("children")
+            .and_then(|v| v.as_array())
+            .unwrap();
         assert!(children.is_empty());
     }
 }

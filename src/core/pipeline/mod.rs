@@ -28,6 +28,7 @@
 //! println!("Health score: {}", results.health_metrics.overall_health_score);
 //! ```
 
+pub use code_dictionary::*;
 pub use pipeline_config::{
     AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
@@ -41,6 +42,7 @@ pub use pipeline_stages::AnalysisStages;
 pub use result_conversions::*;
 pub use result_types::*;
 
+mod code_dictionary;
 mod file_discovery;
 mod pipeline_config;
 mod pipeline_executor;

@@ -47,6 +47,83 @@
                 return;
             }
 
+            function aggregateNode(node) {
+                if (!node || typeof node !== 'object') {
+                    return { totalIssues: 0, entityCount: 0, fileCount: 0, severityCounts: { critical: 0, high: 0, medium: 0, low: 0 }, avgScore: null, scoreSum: 0, scoreWeight: 0 };
+                }
+
+                const children = Array.isArray(node.children) ? node.children : [];
+                let totalIssues = Number(node.totalIssues ?? node.total_issues ?? node.refactoringNeeded ?? node.refactoring_needed ?? node.issueCount ?? node.issue_count ?? 0) || 0;
+                let entityCount = Number(node.entityCount ?? node.entity_count ?? 0) || 0;
+                let fileCount = Number(node.fileCount ?? node.file_count ?? 0) || 0;
+                const severityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+                const mergeSeverity = (counts) => {
+                    if (!counts) return;
+                    severityCounts.critical += Number(counts.critical || 0);
+                    severityCounts.high += Number(counts.high || 0);
+                    severityCounts.medium += Number(counts.medium || 0);
+                    severityCounts.low += Number(counts.low || 0);
+                };
+                mergeSeverity(node.severityCounts || node.severity_counts);
+
+                let scoreSum = 0;
+                let scoreWeight = 0;
+                const valueOrNull = (val) => {
+                    const numeric = Number(val);
+                    return Number.isFinite(numeric) ? numeric : null;
+                };
+                const nodeScore = valueOrNull(node.avgScore ?? node.avg_score ?? node.score);
+                if (nodeScore != null) {
+                    const weight = node.type === 'entity' ? 1 : node.type === 'file' ? (entityCount > 0 ? entityCount : 1) : 1;
+                    scoreSum += nodeScore * weight;
+                    scoreWeight += weight;
+                }
+
+                children.forEach((child) => {
+                    const aggregate = aggregateNode(child);
+                    totalIssues += aggregate.totalIssues;
+                    entityCount += aggregate.entityCount;
+                    fileCount += aggregate.fileCount;
+                    mergeSeverity(aggregate.severityCounts);
+                    scoreSum += aggregate.scoreSum;
+                    scoreWeight += aggregate.scoreWeight;
+                });
+
+                if (node.type === 'folder') {
+                    node.totalIssues = totalIssues;
+                    node.total_issues = totalIssues;
+                    node.entityCount = entityCount;
+                    node.entity_count = entityCount;
+                    node.fileCount = fileCount;
+                    node.file_count = fileCount;
+                    node.severityCounts = severityCounts;
+                    node.severity_counts = severityCounts;
+                    node.avgScore = scoreWeight > 0 ? scoreSum / scoreWeight : nodeScore;
+                    node.avgScore = valueOrNull(node.avgScore);
+                }
+
+                return {
+                    totalIssues,
+                    entityCount,
+                    fileCount,
+                    severityCounts,
+                    scoreSum,
+                    scoreWeight,
+                };
+            }
+
+            function aggregateHierarchy(nodes) {
+                if (!Array.isArray(nodes)) {
+                    return;
+                }
+                nodes.forEach((node) => {
+                    aggregateNode(node);
+                    if (Array.isArray(node.children)) {
+                        aggregateHierarchy(node.children);
+                    }
+                });
+            }
+
             function mountReactTree() {
                 try {
                     const React = window.React;
@@ -57,7 +134,11 @@
                         throw new Error('React tree bundle not available');
                     }
 
-                    console.log('Mounting React Arborist tree with data:', payload);
+                    if (Array.isArray(payload.unifiedHierarchy)) {
+                        aggregateHierarchy(payload.unifiedHierarchy);
+                    }
+
+                    console.log('Mounting Valknut virtualized tree with data:', payload);
                     const root = ReactDOM.createRoot(container);
                     root.render(React.createElement(TreeComponent, { data: payload }));
                 } catch (error) {

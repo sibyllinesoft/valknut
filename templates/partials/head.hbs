@@ -87,16 +87,14 @@
             display: none !important;
         }
         
-        /* Subtle tree-leaf styling with left border accent */
+        /* Subtle tree-leaf spacing */
         .tree-leaf-subtle {
-            border-left: 2px solid var(--accent);
             padding: 1rem;
             padding-left: 1.5rem;
         }
         
         .tree-leaf-subtle:hover {
-            border-left-color: var(--primary);
-            background: rgba(0, 0, 0, 0.01);
+            color: var(--primary);
         }
         
         /* Oracle brain icon - larger than standard tree icons */
@@ -134,23 +132,17 @@
         
         .tree-node[data-level="1"] {
             margin-left: 2rem;
-            border-left: 2px solid var(--keyline);
             padding-left: 1rem;
-            background: rgba(0, 0, 0, 0.02);
         }
         
         .tree-node[data-level="2"] {
             margin-left: 4rem;
-            border-left: 2px solid var(--muted);
             padding-left: 1rem;
-            background: rgba(0, 0, 0, 0.04);
         }
         
         .tree-node[data-level="3"] {
             margin-left: 6rem;
-            border-left: 2px solid var(--muted);
             padding-left: 1rem;
-            background: rgba(0, 0, 0, 0.06);
         }
         
         /* Function nodes (level 1) special styling */
@@ -166,14 +158,11 @@
         
         /* Directory nodes special styling */
         .directory-node {
-            border-bottom: 1px solid var(--keyline);
             margin-bottom: 0.5rem;
         }
         
         .directory-node .tree-header {
-            background: var(--surface);
             padding: 0.75rem;
-            border-radius: 6px;
         }
         
         .directory-node .tree-icon {

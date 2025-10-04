@@ -427,7 +427,7 @@
             }
           }
         }
-        var ReactElement = function(type, key, ref, self2, source, owner, props) {
+        var ReactElement = function(type, key, ref, self, source, owner, props) {
           var element = {
             $$typeof: REACT_ELEMENT_TYPE,
             type,
@@ -448,7 +448,7 @@
               configurable: false,
               enumerable: false,
               writable: false,
-              value: self2
+              value: self
             });
             Object.defineProperty(element, "_source", {
               configurable: false,
@@ -468,7 +468,7 @@
           var props = {};
           var key = null;
           var ref = null;
-          var self2 = null;
+          var self = null;
           var source = null;
           if (config != null) {
             if (hasValidRef(config)) {
@@ -483,7 +483,7 @@
               }
               key = "" + config.key;
             }
-            self2 = config.__self === undefined ? null : config.__self;
+            self = config.__self === undefined ? null : config.__self;
             source = config.__source === undefined ? null : config.__source;
             for (propName in config) {
               if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
@@ -525,7 +525,7 @@
               }
             }
           }
-          return ReactElement(type, key, ref, self2, source, ReactCurrentOwner.current, props);
+          return ReactElement(type, key, ref, self, source, ReactCurrentOwner.current, props);
         }
         function cloneAndReplaceKey(oldElement, newKey) {
           var newElement = ReactElement(oldElement.type, newKey, oldElement.ref, oldElement._self, oldElement._source, oldElement._owner, oldElement.props);
@@ -539,7 +539,7 @@
           var props = assign({}, element.props);
           var key = element.key;
           var ref = element.ref;
-          var self2 = element._self;
+          var self = element._self;
           var source = element._source;
           var owner = element._owner;
           if (config != null) {
@@ -577,7 +577,7 @@
             }
             props.children = childArray;
           }
-          return ReactElement(element.type, key, ref, self2, source, owner, props);
+          return ReactElement(element.type, key, ref, self, source, owner, props);
         }
         function isValidElement(object) {
           return typeof object === "object" && object !== null && object.$$typeof === REACT_ELEMENT_TYPE;
@@ -22784,7 +22784,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
   var require_react_jsx_runtime_development = __commonJS((exports) => {
     if (true) {
       (function() {
-        var React = require_react();
+        var React3 = require_react();
         var REACT_ELEMENT_TYPE = Symbol.for("react.element");
         var REACT_PORTAL_TYPE = Symbol.for("react.portal");
         var REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
@@ -22810,7 +22810,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
           }
           return null;
         }
-        var ReactSharedInternals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+        var ReactSharedInternals = React3.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
         function error(format) {
           {
             {
@@ -23292,9 +23292,9 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
           }
           return config.key !== undefined;
         }
-        function warnIfStringRefCannotBeAutoConverted(config, self2) {
+        function warnIfStringRefCannotBeAutoConverted(config, self) {
           {
-            if (typeof config.ref === "string" && ReactCurrentOwner.current && self2 && ReactCurrentOwner.current.stateNode !== self2) {
+            if (typeof config.ref === "string" && ReactCurrentOwner.current && self && ReactCurrentOwner.current.stateNode !== self) {
               var componentName = getComponentNameFromType(ReactCurrentOwner.current.type);
               if (!didWarnAboutStringRefs[componentName]) {
                 error('Component "%s" contains the string ref "%s". ' + "Support for string refs will be removed in a future major release. " + "This case cannot be automatically converted to an arrow function. " + "We ask you to manually fix this case by using useRef() or createRef() instead. " + "Learn more about using refs safely here: " + "https://reactjs.org/link/strict-mode-string-ref", getComponentNameFromType(ReactCurrentOwner.current.type), config.ref);
@@ -23333,7 +23333,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
             });
           }
         }
-        var ReactElement = function(type, key, ref, self2, source, owner, props) {
+        var ReactElement = function(type, key, ref, self, source, owner, props) {
           var element = {
             $$typeof: REACT_ELEMENT_TYPE,
             type,
@@ -23354,7 +23354,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
               configurable: false,
               enumerable: false,
               writable: false,
-              value: self2
+              value: self
             });
             Object.defineProperty(element, "_source", {
               configurable: false,
@@ -23369,7 +23369,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
           }
           return element;
         };
-        function jsxDEV(type, config, maybeKey, source, self2) {
+        function jsxDEV(type, config, maybeKey, source, self) {
           {
             var propName;
             var props = {};
@@ -23389,7 +23389,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
             }
             if (hasValidRef(config)) {
               ref = config.ref;
-              warnIfStringRefCannotBeAutoConverted(config, self2);
+              warnIfStringRefCannotBeAutoConverted(config, self);
             }
             for (propName in config) {
               if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
@@ -23413,7 +23413,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
                 defineRefPropWarningGetter(props, displayName);
               }
             }
-            return ReactElement(type, key, ref, self2, source, ReactCurrentOwner.current, props);
+            return ReactElement(type, key, ref, self, source, ReactCurrentOwner.current, props);
           }
         }
         var ReactCurrentOwner$1 = ReactSharedInternals.ReactCurrentOwner;
@@ -23577,7 +23577,7 @@ Check the top-level render call using <` + parentName + ">.";
           }
         }
         var didWarnAboutKeySpread = {};
-        function jsxWithValidation(type, props, key, isStaticChildren, source, self2) {
+        function jsxWithValidation(type, props, key, isStaticChildren, source, self) {
           {
             var validType = isValidElementType(type);
             if (!validType) {
@@ -23604,7 +23604,7 @@ Check the top-level render call using <` + parentName + ">.";
               }
               error("React.jsx: type is invalid -- expected a string (for " + "built-in components) or a class/function (for composite " + "components) but got: %s.%s", typeString, info);
             }
-            var element = jsxDEV(type, props, key, source, self2);
+            var element = jsxDEV(type, props, key, source, self);
             if (element == null) {
               return element;
             }
@@ -23680,104 +23680,892 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
-  var require_use_sync_external_store_shim_development = __commonJS((exports) => {
-    (function() {
-      function is(x, y) {
-        return x === y && (x !== 0 || 1 / x === 1 / y) || x !== x && y !== y;
-      }
-      function useSyncExternalStore$2(subscribe, getSnapshot) {
-        didWarnOld18Alpha || React.startTransition === undefined || (didWarnOld18Alpha = true, console.error("You are using an outdated, pre-release alpha of React 18 that does not support useSyncExternalStore. The use-sync-external-store shim will not work correctly. Upgrade to a newer pre-release."));
-        var value = getSnapshot();
-        if (!didWarnUncachedGetSnapshot) {
-          var cachedValue = getSnapshot();
-          objectIs(value, cachedValue) || (console.error("The result of getSnapshot should be cached to avoid an infinite loop"), didWarnUncachedGetSnapshot = true);
+  // node_modules/react/cjs/react-jsx-dev-runtime.development.js
+  var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
+    if (true) {
+      (function() {
+        var React5 = require_react();
+        var REACT_ELEMENT_TYPE = Symbol.for("react.element");
+        var REACT_PORTAL_TYPE = Symbol.for("react.portal");
+        var REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
+        var REACT_STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
+        var REACT_PROFILER_TYPE = Symbol.for("react.profiler");
+        var REACT_PROVIDER_TYPE = Symbol.for("react.provider");
+        var REACT_CONTEXT_TYPE = Symbol.for("react.context");
+        var REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+        var REACT_SUSPENSE_TYPE = Symbol.for("react.suspense");
+        var REACT_SUSPENSE_LIST_TYPE = Symbol.for("react.suspense_list");
+        var REACT_MEMO_TYPE = Symbol.for("react.memo");
+        var REACT_LAZY_TYPE = Symbol.for("react.lazy");
+        var REACT_OFFSCREEN_TYPE = Symbol.for("react.offscreen");
+        var MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
+        var FAUX_ITERATOR_SYMBOL = "@@iterator";
+        function getIteratorFn(maybeIterable) {
+          if (maybeIterable === null || typeof maybeIterable !== "object") {
+            return null;
+          }
+          var maybeIterator = MAYBE_ITERATOR_SYMBOL && maybeIterable[MAYBE_ITERATOR_SYMBOL] || maybeIterable[FAUX_ITERATOR_SYMBOL];
+          if (typeof maybeIterator === "function") {
+            return maybeIterator;
+          }
+          return null;
         }
-        cachedValue = useState({
-          inst: { value, getSnapshot }
-        });
-        var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
-        useLayoutEffect(function() {
-          inst.value = value;
-          inst.getSnapshot = getSnapshot;
-          checkIfSnapshotChanged(inst) && forceUpdate({ inst });
-        }, [subscribe, value, getSnapshot]);
-        useEffect(function() {
-          checkIfSnapshotChanged(inst) && forceUpdate({ inst });
-          return subscribe(function() {
-            checkIfSnapshotChanged(inst) && forceUpdate({ inst });
-          });
-        }, [subscribe]);
-        useDebugValue(value);
-        return value;
-      }
-      function checkIfSnapshotChanged(inst) {
-        var latestGetSnapshot = inst.getSnapshot;
-        inst = inst.value;
-        try {
-          var nextValue = latestGetSnapshot();
-          return !objectIs(inst, nextValue);
-        } catch (error) {
-          return true;
+        var ReactSharedInternals = React5.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+        function error2(format) {
+          {
+            {
+              for (var _len2 = arguments.length, args = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1;_key2 < _len2; _key2++) {
+                args[_key2 - 1] = arguments[_key2];
+              }
+              printWarning("error", format, args);
+            }
+          }
         }
-      }
-      function useSyncExternalStore$1(subscribe, getSnapshot) {
-        return getSnapshot();
-      }
-      typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart === "function" && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require_react(), objectIs = typeof Object.is === "function" ? Object.is : is, useState = React.useState, useEffect = React.useEffect, useLayoutEffect = React.useLayoutEffect, useDebugValue = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = typeof window === "undefined" || typeof window.document === "undefined" || typeof window.document.createElement === "undefined" ? useSyncExternalStore$1 : useSyncExternalStore$2;
-      exports.useSyncExternalStore = React.useSyncExternalStore !== undefined ? React.useSyncExternalStore : shim;
-      typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop === "function" && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
-    })();
-  });
+        function printWarning(level, format, args) {
+          {
+            var ReactDebugCurrentFrame2 = ReactSharedInternals.ReactDebugCurrentFrame;
+            var stack = ReactDebugCurrentFrame2.getStackAddendum();
+            if (stack !== "") {
+              format += "%s";
+              args = args.concat([stack]);
+            }
+            var argsWithFormat = args.map(function(item) {
+              return String(item);
+            });
+            argsWithFormat.unshift("Warning: " + format);
+            Function.prototype.apply.call(console[level], console, argsWithFormat);
+          }
+        }
+        var enableScopeAPI = false;
+        var enableCacheElement = false;
+        var enableTransitionTracing = false;
+        var enableLegacyHidden = false;
+        var enableDebugTracing = false;
+        var REACT_MODULE_REFERENCE;
+        {
+          REACT_MODULE_REFERENCE = Symbol.for("react.module.reference");
+        }
+        function isValidElementType(type) {
+          if (typeof type === "string" || typeof type === "function") {
+            return true;
+          }
+          if (type === REACT_FRAGMENT_TYPE || type === REACT_PROFILER_TYPE || enableDebugTracing || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || type === REACT_SUSPENSE_LIST_TYPE || enableLegacyHidden || type === REACT_OFFSCREEN_TYPE || enableScopeAPI || enableCacheElement || enableTransitionTracing) {
+            return true;
+          }
+          if (typeof type === "object" && type !== null) {
+            if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || type.$$typeof === REACT_MODULE_REFERENCE || type.getModuleId !== undefined) {
+              return true;
+            }
+          }
+          return false;
+        }
+        function getWrappedName(outerType, innerType, wrapperName) {
+          var displayName = outerType.displayName;
+          if (displayName) {
+            return displayName;
+          }
+          var functionName = innerType.displayName || innerType.name || "";
+          return functionName !== "" ? wrapperName + "(" + functionName + ")" : wrapperName;
+        }
+        function getContextName(type) {
+          return type.displayName || "Context";
+        }
+        function getComponentNameFromType(type) {
+          if (type == null) {
+            return null;
+          }
+          {
+            if (typeof type.tag === "number") {
+              error2("Received an unexpected object in getComponentNameFromType(). " + "This is likely a bug in React. Please file an issue.");
+            }
+          }
+          if (typeof type === "function") {
+            return type.displayName || type.name || null;
+          }
+          if (typeof type === "string") {
+            return type;
+          }
+          switch (type) {
+            case REACT_FRAGMENT_TYPE:
+              return "Fragment";
+            case REACT_PORTAL_TYPE:
+              return "Portal";
+            case REACT_PROFILER_TYPE:
+              return "Profiler";
+            case REACT_STRICT_MODE_TYPE:
+              return "StrictMode";
+            case REACT_SUSPENSE_TYPE:
+              return "Suspense";
+            case REACT_SUSPENSE_LIST_TYPE:
+              return "SuspenseList";
+          }
+          if (typeof type === "object") {
+            switch (type.$$typeof) {
+              case REACT_CONTEXT_TYPE:
+                var context = type;
+                return getContextName(context) + ".Consumer";
+              case REACT_PROVIDER_TYPE:
+                var provider = type;
+                return getContextName(provider._context) + ".Provider";
+              case REACT_FORWARD_REF_TYPE:
+                return getWrappedName(type, type.render, "ForwardRef");
+              case REACT_MEMO_TYPE:
+                var outerName = type.displayName || null;
+                if (outerName !== null) {
+                  return outerName;
+                }
+                return getComponentNameFromType(type.type) || "Memo";
+              case REACT_LAZY_TYPE: {
+                var lazyComponent = type;
+                var payload = lazyComponent._payload;
+                var init = lazyComponent._init;
+                try {
+                  return getComponentNameFromType(init(payload));
+                } catch (x) {
+                  return null;
+                }
+              }
+            }
+          }
+          return null;
+        }
+        var assign = Object.assign;
+        var disabledDepth = 0;
+        var prevLog;
+        var prevInfo;
+        var prevWarn;
+        var prevError;
+        var prevGroup;
+        var prevGroupCollapsed;
+        var prevGroupEnd;
+        function disabledLog() {}
+        disabledLog.__reactDisabledLog = true;
+        function disableLogs() {
+          {
+            if (disabledDepth === 0) {
+              prevLog = console.log;
+              prevInfo = console.info;
+              prevWarn = console.warn;
+              prevError = console.error;
+              prevGroup = console.group;
+              prevGroupCollapsed = console.groupCollapsed;
+              prevGroupEnd = console.groupEnd;
+              var props = {
+                configurable: true,
+                enumerable: true,
+                value: disabledLog,
+                writable: true
+              };
+              Object.defineProperties(console, {
+                info: props,
+                log: props,
+                warn: props,
+                error: props,
+                group: props,
+                groupCollapsed: props,
+                groupEnd: props
+              });
+            }
+            disabledDepth++;
+          }
+        }
+        function reenableLogs() {
+          {
+            disabledDepth--;
+            if (disabledDepth === 0) {
+              var props = {
+                configurable: true,
+                enumerable: true,
+                writable: true
+              };
+              Object.defineProperties(console, {
+                log: assign({}, props, {
+                  value: prevLog
+                }),
+                info: assign({}, props, {
+                  value: prevInfo
+                }),
+                warn: assign({}, props, {
+                  value: prevWarn
+                }),
+                error: assign({}, props, {
+                  value: prevError
+                }),
+                group: assign({}, props, {
+                  value: prevGroup
+                }),
+                groupCollapsed: assign({}, props, {
+                  value: prevGroupCollapsed
+                }),
+                groupEnd: assign({}, props, {
+                  value: prevGroupEnd
+                })
+              });
+            }
+            if (disabledDepth < 0) {
+              error2("disabledDepth fell below zero. " + "This is a bug in React. Please file an issue.");
+            }
+          }
+        }
+        var ReactCurrentDispatcher = ReactSharedInternals.ReactCurrentDispatcher;
+        var prefix;
+        function describeBuiltInComponentFrame(name, source, ownerFn) {
+          {
+            if (prefix === undefined) {
+              try {
+                throw Error();
+              } catch (x) {
+                var match = x.stack.trim().match(/\n( *(at )?)/);
+                prefix = match && match[1] || "";
+              }
+            }
+            return `
+` + prefix + name;
+          }
+        }
+        var reentry = false;
+        var componentFrameCache;
+        {
+          var PossiblyWeakMap = typeof WeakMap === "function" ? WeakMap : Map;
+          componentFrameCache = new PossiblyWeakMap;
+        }
+        function describeNativeComponentFrame(fn, construct) {
+          if (!fn || reentry) {
+            return "";
+          }
+          {
+            var frame = componentFrameCache.get(fn);
+            if (frame !== undefined) {
+              return frame;
+            }
+          }
+          var control;
+          reentry = true;
+          var previousPrepareStackTrace = Error.prepareStackTrace;
+          Error.prepareStackTrace = undefined;
+          var previousDispatcher;
+          {
+            previousDispatcher = ReactCurrentDispatcher.current;
+            ReactCurrentDispatcher.current = null;
+            disableLogs();
+          }
+          try {
+            if (construct) {
+              var Fake = function() {
+                throw Error();
+              };
+              Object.defineProperty(Fake.prototype, "props", {
+                set: function() {
+                  throw Error();
+                }
+              });
+              if (typeof Reflect === "object" && Reflect.construct) {
+                try {
+                  Reflect.construct(Fake, []);
+                } catch (x) {
+                  control = x;
+                }
+                Reflect.construct(fn, [], Fake);
+              } else {
+                try {
+                  Fake.call();
+                } catch (x) {
+                  control = x;
+                }
+                fn.call(Fake.prototype);
+              }
+            } else {
+              try {
+                throw Error();
+              } catch (x) {
+                control = x;
+              }
+              fn();
+            }
+          } catch (sample) {
+            if (sample && control && typeof sample.stack === "string") {
+              var sampleLines = sample.stack.split(`
+`);
+              var controlLines = control.stack.split(`
+`);
+              var s = sampleLines.length - 1;
+              var c = controlLines.length - 1;
+              while (s >= 1 && c >= 0 && sampleLines[s] !== controlLines[c]) {
+                c--;
+              }
+              for (;s >= 1 && c >= 0; s--, c--) {
+                if (sampleLines[s] !== controlLines[c]) {
+                  if (s !== 1 || c !== 1) {
+                    do {
+                      s--;
+                      c--;
+                      if (c < 0 || sampleLines[s] !== controlLines[c]) {
+                        var _frame = `
+` + sampleLines[s].replace(" at new ", " at ");
+                        if (fn.displayName && _frame.includes("<anonymous>")) {
+                          _frame = _frame.replace("<anonymous>", fn.displayName);
+                        }
+                        {
+                          if (typeof fn === "function") {
+                            componentFrameCache.set(fn, _frame);
+                          }
+                        }
+                        return _frame;
+                      }
+                    } while (s >= 1 && c >= 0);
+                  }
+                  break;
+                }
+              }
+            }
+          } finally {
+            reentry = false;
+            {
+              ReactCurrentDispatcher.current = previousDispatcher;
+              reenableLogs();
+            }
+            Error.prepareStackTrace = previousPrepareStackTrace;
+          }
+          var name = fn ? fn.displayName || fn.name : "";
+          var syntheticFrame = name ? describeBuiltInComponentFrame(name) : "";
+          {
+            if (typeof fn === "function") {
+              componentFrameCache.set(fn, syntheticFrame);
+            }
+          }
+          return syntheticFrame;
+        }
+        function describeFunctionComponentFrame(fn, source, ownerFn) {
+          {
+            return describeNativeComponentFrame(fn, false);
+          }
+        }
+        function shouldConstruct(Component) {
+          var prototype = Component.prototype;
+          return !!(prototype && prototype.isReactComponent);
+        }
+        function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
+          if (type == null) {
+            return "";
+          }
+          if (typeof type === "function") {
+            {
+              return describeNativeComponentFrame(type, shouldConstruct(type));
+            }
+          }
+          if (typeof type === "string") {
+            return describeBuiltInComponentFrame(type);
+          }
+          switch (type) {
+            case REACT_SUSPENSE_TYPE:
+              return describeBuiltInComponentFrame("Suspense");
+            case REACT_SUSPENSE_LIST_TYPE:
+              return describeBuiltInComponentFrame("SuspenseList");
+          }
+          if (typeof type === "object") {
+            switch (type.$$typeof) {
+              case REACT_FORWARD_REF_TYPE:
+                return describeFunctionComponentFrame(type.render);
+              case REACT_MEMO_TYPE:
+                return describeUnknownElementTypeFrameInDEV(type.type, source, ownerFn);
+              case REACT_LAZY_TYPE: {
+                var lazyComponent = type;
+                var payload = lazyComponent._payload;
+                var init = lazyComponent._init;
+                try {
+                  return describeUnknownElementTypeFrameInDEV(init(payload), source, ownerFn);
+                } catch (x) {}
+              }
+            }
+          }
+          return "";
+        }
+        var hasOwnProperty = Object.prototype.hasOwnProperty;
+        var loggedTypeFailures = {};
+        var ReactDebugCurrentFrame = ReactSharedInternals.ReactDebugCurrentFrame;
+        function setCurrentlyValidatingElement(element) {
+          {
+            if (element) {
+              var owner = element._owner;
+              var stack = describeUnknownElementTypeFrameInDEV(element.type, element._source, owner ? owner.type : null);
+              ReactDebugCurrentFrame.setExtraStackFrame(stack);
+            } else {
+              ReactDebugCurrentFrame.setExtraStackFrame(null);
+            }
+          }
+        }
+        function checkPropTypes(typeSpecs, values, location, componentName, element) {
+          {
+            var has = Function.call.bind(hasOwnProperty);
+            for (var typeSpecName in typeSpecs) {
+              if (has(typeSpecs, typeSpecName)) {
+                var error$1 = undefined;
+                try {
+                  if (typeof typeSpecs[typeSpecName] !== "function") {
+                    var err = Error((componentName || "React class") + ": " + location + " type `" + typeSpecName + "` is invalid; " + "it must be a function, usually from the `prop-types` package, but received `" + typeof typeSpecs[typeSpecName] + "`." + "This often happens because of typos such as `PropTypes.function` instead of `PropTypes.func`.");
+                    err.name = "Invariant Violation";
+                    throw err;
+                  }
+                  error$1 = typeSpecs[typeSpecName](values, typeSpecName, componentName, location, null, "SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED");
+                } catch (ex) {
+                  error$1 = ex;
+                }
+                if (error$1 && !(error$1 instanceof Error)) {
+                  setCurrentlyValidatingElement(element);
+                  error2("%s: type specification of %s" + " `%s` is invalid; the type checker " + "function must return `null` or an `Error` but returned a %s. " + "You may have forgotten to pass an argument to the type checker " + "creator (arrayOf, instanceOf, objectOf, oneOf, oneOfType, and " + "shape all require an argument).", componentName || "React class", location, typeSpecName, typeof error$1);
+                  setCurrentlyValidatingElement(null);
+                }
+                if (error$1 instanceof Error && !(error$1.message in loggedTypeFailures)) {
+                  loggedTypeFailures[error$1.message] = true;
+                  setCurrentlyValidatingElement(element);
+                  error2("Failed %s type: %s", location, error$1.message);
+                  setCurrentlyValidatingElement(null);
+                }
+              }
+            }
+          }
+        }
+        var isArrayImpl = Array.isArray;
+        function isArray(a) {
+          return isArrayImpl(a);
+        }
+        function typeName(value) {
+          {
+            var hasToStringTag = typeof Symbol === "function" && Symbol.toStringTag;
+            var type = hasToStringTag && value[Symbol.toStringTag] || value.constructor.name || "Object";
+            return type;
+          }
+        }
+        function willCoercionThrow(value) {
+          {
+            try {
+              testStringCoercion(value);
+              return false;
+            } catch (e) {
+              return true;
+            }
+          }
+        }
+        function testStringCoercion(value) {
+          return "" + value;
+        }
+        function checkKeyStringCoercion(value) {
+          {
+            if (willCoercionThrow(value)) {
+              error2("The provided key is an unsupported type %s." + " This value must be coerced to a string before before using it here.", typeName(value));
+              return testStringCoercion(value);
+            }
+          }
+        }
+        var ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
+        var RESERVED_PROPS = {
+          key: true,
+          ref: true,
+          __self: true,
+          __source: true
+        };
+        var specialPropKeyWarningShown;
+        var specialPropRefWarningShown;
+        var didWarnAboutStringRefs;
+        {
+          didWarnAboutStringRefs = {};
+        }
+        function hasValidRef(config) {
+          {
+            if (hasOwnProperty.call(config, "ref")) {
+              var getter = Object.getOwnPropertyDescriptor(config, "ref").get;
+              if (getter && getter.isReactWarning) {
+                return false;
+              }
+            }
+          }
+          return config.ref !== undefined;
+        }
+        function hasValidKey(config) {
+          {
+            if (hasOwnProperty.call(config, "key")) {
+              var getter = Object.getOwnPropertyDescriptor(config, "key").get;
+              if (getter && getter.isReactWarning) {
+                return false;
+              }
+            }
+          }
+          return config.key !== undefined;
+        }
+        function warnIfStringRefCannotBeAutoConverted(config, self) {
+          {
+            if (typeof config.ref === "string" && ReactCurrentOwner.current && self && ReactCurrentOwner.current.stateNode !== self) {
+              var componentName = getComponentNameFromType(ReactCurrentOwner.current.type);
+              if (!didWarnAboutStringRefs[componentName]) {
+                error2('Component "%s" contains the string ref "%s". ' + "Support for string refs will be removed in a future major release. " + "This case cannot be automatically converted to an arrow function. " + "We ask you to manually fix this case by using useRef() or createRef() instead. " + "Learn more about using refs safely here: " + "https://reactjs.org/link/strict-mode-string-ref", getComponentNameFromType(ReactCurrentOwner.current.type), config.ref);
+                didWarnAboutStringRefs[componentName] = true;
+              }
+            }
+          }
+        }
+        function defineKeyPropWarningGetter(props, displayName) {
+          {
+            var warnAboutAccessingKey = function() {
+              if (!specialPropKeyWarningShown) {
+                specialPropKeyWarningShown = true;
+                error2("%s: `key` is not a prop. Trying to access it will result " + "in `undefined` being returned. If you need to access the same " + "value within the child component, you should pass it as a different " + "prop. (https://reactjs.org/link/special-props)", displayName);
+              }
+            };
+            warnAboutAccessingKey.isReactWarning = true;
+            Object.defineProperty(props, "key", {
+              get: warnAboutAccessingKey,
+              configurable: true
+            });
+          }
+        }
+        function defineRefPropWarningGetter(props, displayName) {
+          {
+            var warnAboutAccessingRef = function() {
+              if (!specialPropRefWarningShown) {
+                specialPropRefWarningShown = true;
+                error2("%s: `ref` is not a prop. Trying to access it will result " + "in `undefined` being returned. If you need to access the same " + "value within the child component, you should pass it as a different " + "prop. (https://reactjs.org/link/special-props)", displayName);
+              }
+            };
+            warnAboutAccessingRef.isReactWarning = true;
+            Object.defineProperty(props, "ref", {
+              get: warnAboutAccessingRef,
+              configurable: true
+            });
+          }
+        }
+        var ReactElement = function(type, key, ref, self, source, owner, props) {
+          var element = {
+            $$typeof: REACT_ELEMENT_TYPE,
+            type,
+            key,
+            ref,
+            props,
+            _owner: owner
+          };
+          {
+            element._store = {};
+            Object.defineProperty(element._store, "validated", {
+              configurable: false,
+              enumerable: false,
+              writable: true,
+              value: false
+            });
+            Object.defineProperty(element, "_self", {
+              configurable: false,
+              enumerable: false,
+              writable: false,
+              value: self
+            });
+            Object.defineProperty(element, "_source", {
+              configurable: false,
+              enumerable: false,
+              writable: false,
+              value: source
+            });
+            if (Object.freeze) {
+              Object.freeze(element.props);
+              Object.freeze(element);
+            }
+          }
+          return element;
+        };
+        function jsxDEV(type, config, maybeKey, source, self) {
+          {
+            var propName;
+            var props = {};
+            var key = null;
+            var ref = null;
+            if (maybeKey !== undefined) {
+              {
+                checkKeyStringCoercion(maybeKey);
+              }
+              key = "" + maybeKey;
+            }
+            if (hasValidKey(config)) {
+              {
+                checkKeyStringCoercion(config.key);
+              }
+              key = "" + config.key;
+            }
+            if (hasValidRef(config)) {
+              ref = config.ref;
+              warnIfStringRefCannotBeAutoConverted(config, self);
+            }
+            for (propName in config) {
+              if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
+                props[propName] = config[propName];
+              }
+            }
+            if (type && type.defaultProps) {
+              var defaultProps = type.defaultProps;
+              for (propName in defaultProps) {
+                if (props[propName] === undefined) {
+                  props[propName] = defaultProps[propName];
+                }
+              }
+            }
+            if (key || ref) {
+              var displayName = typeof type === "function" ? type.displayName || type.name || "Unknown" : type;
+              if (key) {
+                defineKeyPropWarningGetter(props, displayName);
+              }
+              if (ref) {
+                defineRefPropWarningGetter(props, displayName);
+              }
+            }
+            return ReactElement(type, key, ref, self, source, ReactCurrentOwner.current, props);
+          }
+        }
+        var ReactCurrentOwner$1 = ReactSharedInternals.ReactCurrentOwner;
+        var ReactDebugCurrentFrame$1 = ReactSharedInternals.ReactDebugCurrentFrame;
+        function setCurrentlyValidatingElement$1(element) {
+          {
+            if (element) {
+              var owner = element._owner;
+              var stack = describeUnknownElementTypeFrameInDEV(element.type, element._source, owner ? owner.type : null);
+              ReactDebugCurrentFrame$1.setExtraStackFrame(stack);
+            } else {
+              ReactDebugCurrentFrame$1.setExtraStackFrame(null);
+            }
+          }
+        }
+        var propTypesMisspellWarningShown;
+        {
+          propTypesMisspellWarningShown = false;
+        }
+        function isValidElement(object) {
+          {
+            return typeof object === "object" && object !== null && object.$$typeof === REACT_ELEMENT_TYPE;
+          }
+        }
+        function getDeclarationErrorAddendum() {
+          {
+            if (ReactCurrentOwner$1.current) {
+              var name = getComponentNameFromType(ReactCurrentOwner$1.current.type);
+              if (name) {
+                return `
 
-  // node_modules/use-sync-external-store/shim/index.js
-  var require_shim = __commonJS((exports, module) => {
-    if (false) {} else {
-      module.exports = require_use_sync_external_store_shim_development();
+Check the render method of \`` + name + "`.";
+              }
+            }
+            return "";
+          }
+        }
+        function getSourceInfoErrorAddendum(source) {
+          {
+            if (source !== undefined) {
+              var fileName = source.fileName.replace(/^.*[\\\/]/, "");
+              var lineNumber = source.lineNumber;
+              return `
+
+Check your code at ` + fileName + ":" + lineNumber + ".";
+            }
+            return "";
+          }
+        }
+        var ownerHasKeyUseWarning = {};
+        function getCurrentComponentErrorInfo(parentType) {
+          {
+            var info = getDeclarationErrorAddendum();
+            if (!info) {
+              var parentName = typeof parentType === "string" ? parentType : parentType.displayName || parentType.name;
+              if (parentName) {
+                info = `
+
+Check the top-level render call using <` + parentName + ">.";
+              }
+            }
+            return info;
+          }
+        }
+        function validateExplicitKey(element, parentType) {
+          {
+            if (!element._store || element._store.validated || element.key != null) {
+              return;
+            }
+            element._store.validated = true;
+            var currentComponentErrorInfo = getCurrentComponentErrorInfo(parentType);
+            if (ownerHasKeyUseWarning[currentComponentErrorInfo]) {
+              return;
+            }
+            ownerHasKeyUseWarning[currentComponentErrorInfo] = true;
+            var childOwner = "";
+            if (element && element._owner && element._owner !== ReactCurrentOwner$1.current) {
+              childOwner = " It was passed a child from " + getComponentNameFromType(element._owner.type) + ".";
+            }
+            setCurrentlyValidatingElement$1(element);
+            error2('Each child in a list should have a unique "key" prop.' + "%s%s See https://reactjs.org/link/warning-keys for more information.", currentComponentErrorInfo, childOwner);
+            setCurrentlyValidatingElement$1(null);
+          }
+        }
+        function validateChildKeys(node, parentType) {
+          {
+            if (typeof node !== "object") {
+              return;
+            }
+            if (isArray(node)) {
+              for (var i = 0;i < node.length; i++) {
+                var child = node[i];
+                if (isValidElement(child)) {
+                  validateExplicitKey(child, parentType);
+                }
+              }
+            } else if (isValidElement(node)) {
+              if (node._store) {
+                node._store.validated = true;
+              }
+            } else if (node) {
+              var iteratorFn = getIteratorFn(node);
+              if (typeof iteratorFn === "function") {
+                if (iteratorFn !== node.entries) {
+                  var iterator = iteratorFn.call(node);
+                  var step;
+                  while (!(step = iterator.next()).done) {
+                    if (isValidElement(step.value)) {
+                      validateExplicitKey(step.value, parentType);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        function validatePropTypes(element) {
+          {
+            var type = element.type;
+            if (type === null || type === undefined || typeof type === "string") {
+              return;
+            }
+            var propTypes;
+            if (typeof type === "function") {
+              propTypes = type.propTypes;
+            } else if (typeof type === "object" && (type.$$typeof === REACT_FORWARD_REF_TYPE || type.$$typeof === REACT_MEMO_TYPE)) {
+              propTypes = type.propTypes;
+            } else {
+              return;
+            }
+            if (propTypes) {
+              var name = getComponentNameFromType(type);
+              checkPropTypes(propTypes, element.props, "prop", name, element);
+            } else if (type.PropTypes !== undefined && !propTypesMisspellWarningShown) {
+              propTypesMisspellWarningShown = true;
+              var _name = getComponentNameFromType(type);
+              error2("Component %s declared `PropTypes` instead of `propTypes`. Did you misspell the property assignment?", _name || "Unknown");
+            }
+            if (typeof type.getDefaultProps === "function" && !type.getDefaultProps.isReactClassApproved) {
+              error2("getDefaultProps is only used on classic React.createClass " + "definitions. Use a static property named `defaultProps` instead.");
+            }
+          }
+        }
+        function validateFragmentProps(fragment) {
+          {
+            var keys = Object.keys(fragment.props);
+            for (var i = 0;i < keys.length; i++) {
+              var key = keys[i];
+              if (key !== "children" && key !== "key") {
+                setCurrentlyValidatingElement$1(fragment);
+                error2("Invalid prop `%s` supplied to `React.Fragment`. " + "React.Fragment can only have `key` and `children` props.", key);
+                setCurrentlyValidatingElement$1(null);
+                break;
+              }
+            }
+            if (fragment.ref !== null) {
+              setCurrentlyValidatingElement$1(fragment);
+              error2("Invalid attribute `ref` supplied to `React.Fragment`.");
+              setCurrentlyValidatingElement$1(null);
+            }
+          }
+        }
+        var didWarnAboutKeySpread = {};
+        function jsxWithValidation(type, props, key, isStaticChildren, source, self) {
+          {
+            var validType = isValidElementType(type);
+            if (!validType) {
+              var info = "";
+              if (type === undefined || typeof type === "object" && type !== null && Object.keys(type).length === 0) {
+                info += " You likely forgot to export your component from the file " + "it's defined in, or you might have mixed up default and named imports.";
+              }
+              var sourceInfo = getSourceInfoErrorAddendum(source);
+              if (sourceInfo) {
+                info += sourceInfo;
+              } else {
+                info += getDeclarationErrorAddendum();
+              }
+              var typeString;
+              if (type === null) {
+                typeString = "null";
+              } else if (isArray(type)) {
+                typeString = "array";
+              } else if (type !== undefined && type.$$typeof === REACT_ELEMENT_TYPE) {
+                typeString = "<" + (getComponentNameFromType(type.type) || "Unknown") + " />";
+                info = " Did you accidentally export a JSX literal instead of a component?";
+              } else {
+                typeString = typeof type;
+              }
+              error2("React.jsx: type is invalid -- expected a string (for " + "built-in components) or a class/function (for composite " + "components) but got: %s.%s", typeString, info);
+            }
+            var element = jsxDEV(type, props, key, source, self);
+            if (element == null) {
+              return element;
+            }
+            if (validType) {
+              var children = props.children;
+              if (children !== undefined) {
+                if (isStaticChildren) {
+                  if (isArray(children)) {
+                    for (var i = 0;i < children.length; i++) {
+                      validateChildKeys(children[i], type);
+                    }
+                    if (Object.freeze) {
+                      Object.freeze(children);
+                    }
+                  } else {
+                    error2("React.jsx: Static children should always be an array. " + "You are likely explicitly calling React.jsxs or React.jsxDEV. " + "Use the Babel transform instead.");
+                  }
+                } else {
+                  validateChildKeys(children, type);
+                }
+              }
+            }
+            {
+              if (hasOwnProperty.call(props, "key")) {
+                var componentName = getComponentNameFromType(type);
+                var keys = Object.keys(props).filter(function(k) {
+                  return k !== "key";
+                });
+                var beforeExample = keys.length > 0 ? "{key: someKey, " + keys.join(": ..., ") + ": ...}" : "{key: someKey}";
+                if (!didWarnAboutKeySpread[componentName + beforeExample]) {
+                  var afterExample = keys.length > 0 ? "{" + keys.join(": ..., ") + ": ...}" : "{}";
+                  error2(`A props object containing a "key" prop is being spread into JSX:
+` + `  let props = %s;
+` + `  <%s {...props} />
+` + `React keys must be passed directly to JSX without using spread:
+` + `  let props = %s;
+` + "  <%s key={someKey} {...props} />", beforeExample, componentName, afterExample, componentName);
+                  didWarnAboutKeySpread[componentName + beforeExample] = true;
+                }
+              }
+            }
+            if (type === REACT_FRAGMENT_TYPE) {
+              validateFragmentProps(element);
+            } else {
+              validatePropTypes(element);
+            }
+            return element;
+          }
+        }
+        var jsxDEV$1 = jsxWithValidation;
+        exports.Fragment = REACT_FRAGMENT_TYPE;
+        exports.jsxDEV = jsxDEV$1;
+      })();
     }
   });
 
-  // node_modules/fast-deep-equal/index.js
-  var require_fast_deep_equal = __commonJS((exports, module) => {
-    module.exports = function equal(a, b) {
-      if (a === b)
-        return true;
-      if (a && b && typeof a == "object" && typeof b == "object") {
-        if (a.constructor !== b.constructor)
-          return false;
-        var length, i, keys;
-        if (Array.isArray(a)) {
-          length = a.length;
-          if (length != b.length)
-            return false;
-          for (i = length;i-- !== 0; )
-            if (!equal(a[i], b[i]))
-              return false;
-          return true;
-        }
-        if (a.constructor === RegExp)
-          return a.source === b.source && a.flags === b.flags;
-        if (a.valueOf !== Object.prototype.valueOf)
-          return a.valueOf() === b.valueOf();
-        if (a.toString !== Object.prototype.toString)
-          return a.toString() === b.toString();
-        keys = Object.keys(a);
-        length = keys.length;
-        if (length !== Object.keys(b).length)
-          return false;
-        for (i = length;i-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b, keys[i]))
-            return false;
-        for (i = length;i-- !== 0; ) {
-          var key = keys[i];
-          if (!equal(a[key], b[key]))
-            return false;
-        }
-        return true;
-      }
-      return a !== a && b !== b;
-    };
+  // node_modules/react/jsx-dev-runtime.js
+  var require_jsx_dev_runtime = __commonJS((exports, module) => {
+    if (false) {} else {
+      module.exports = require_react_jsx_dev_runtime_development();
+    }
   });
 
   // src/tree-component/index.js
@@ -23792,7646 +24580,4587 @@ Check the top-level render call using <` + parentName + ">.";
     countSeverityLevels: () => countSeverityLevels,
     CodeAnalysisTree: () => CodeAnalysisTree
   });
-  var import_react34 = __toESM(require_react());
+  var import_react7 = __toESM(require_react());
   var import_client = __toESM(require_client());
 
   // src/tree-component/CodeAnalysisTree.jsx
-  var import_react33 = __toESM(require_react());
-
-  // node_modules/react-arborist/dist/module/components/tree.js
-  var import_jsx_runtime14 = __toESM(require_jsx_runtime());
-  var import_react31 = __toESM(require_react());
-
-  // node_modules/react-arborist/dist/module/components/provider.js
-  var import_jsx_runtime11 = __toESM(require_jsx_runtime());
-  var import_react29 = __toESM(require_react());
-  var import_shim = __toESM(require_shim());
-
-  // node_modules/react-arborist/dist/module/context.js
-  var import_react = __toESM(require_react());
-  var TreeApiContext = import_react.createContext(null);
-  function useTreeApi() {
-    const value = import_react.useContext(TreeApiContext);
-    if (value === null)
-      throw new Error("No Tree Api Provided");
-    return value;
-  }
-  var NodesContext = import_react.createContext(null);
-  function useNodesContext() {
-    const value = import_react.useContext(NodesContext);
-    if (value === null)
-      throw new Error("Provide a NodesContext");
-    return value;
-  }
-  var DndContext = import_react.createContext(null);
-  function useDndContext() {
-    const value = import_react.useContext(DndContext);
-    if (value === null)
-      throw new Error("Provide a DnDContext");
-    return value;
-  }
-  var DataUpdatesContext = import_react.createContext(0);
-  function useDataUpdates() {
-    import_react.useContext(DataUpdatesContext);
-  }
-
-  // node_modules/react-arborist/dist/module/utils.js
-  var exports_utils = {};
-  __export(exports_utils, {
-    walk: () => walk,
-    waitFor: () => waitFor,
-    safeRun: () => safeRun,
-    noop: () => noop,
-    mergeRefs: () => mergeRefs,
-    isOpenWithEmptyChildren: () => isOpenWithEmptyChildren,
-    isItem: () => isItem,
-    isDescendant: () => isDescendant,
-    isClosed: () => isClosed,
-    indexOf: () => indexOf,
-    identifyNull: () => identifyNull,
-    identify: () => identify,
-    getInsertParentId: () => getInsertParentId,
-    getInsertIndex: () => getInsertIndex,
-    focusPrevElement: () => focusPrevElement,
-    focusNextElement: () => focusNextElement,
-    dfs: () => dfs,
-    bound: () => bound,
-    access: () => access
-  });
-  function bound(n, min, max) {
-    return Math.max(Math.min(n, max), min);
-  }
-  function isItem(node) {
-    return node && node.isLeaf;
-  }
-  function isClosed(node) {
-    return node && node.isInternal && !node.isOpen;
-  }
-  function isOpenWithEmptyChildren(node) {
-    var _a;
-    return node && node.isOpen && !((_a = node.children) === null || _a === undefined ? undefined : _a.length);
-  }
-  var isDescendant = (a, b) => {
-    let n = a;
-    while (n) {
-      if (n.id === b.id)
-        return true;
-      n = n.parent;
-    }
-    return false;
-  };
-  var indexOf = (node) => {
-    if (!node.parent)
-      throw Error("Node does not have a parent");
-    return node.parent.children.findIndex((c) => c.id === node.id);
-  };
-  function noop() {}
-  function dfs(node, id) {
-    if (!node)
-      return null;
-    if (node.id === id)
-      return node;
-    if (node.children) {
-      for (let child of node.children) {
-        const result = dfs(child, id);
-        if (result)
-          return result;
-      }
-    }
-    return null;
-  }
-  function walk(node, fn) {
-    fn(node);
-    if (node.children) {
-      for (let child of node.children) {
-        walk(child, fn);
-      }
-    }
-  }
-  function focusNextElement(target) {
-    const elements = getFocusable(target);
-    let next;
-    for (let i = 0;i < elements.length; ++i) {
-      const item = elements[i];
-      if (item === target) {
-        next = nextItem(elements, i);
-        break;
-      }
-    }
-    next === null || next === undefined || next.focus();
-  }
-  function focusPrevElement(target) {
-    const elements = getFocusable(target);
-    let next;
-    for (let i = 0;i < elements.length; ++i) {
-      const item = elements[i];
-      if (item === target) {
-        next = prevItem(elements, i);
-        break;
-      }
-    }
-    next === null || next === undefined || next.focus();
-  }
-  function nextItem(list, index) {
-    if (index + 1 < list.length) {
-      return list[index + 1];
-    } else {
-      return list[0];
-    }
-  }
-  function prevItem(list, index) {
-    if (index - 1 >= 0) {
-      return list[index - 1];
-    } else {
-      return list[list.length - 1];
-    }
-  }
-  function getFocusable(target) {
-    return Array.from(document.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled]), details:not([disabled]), summary:not(:disabled)')).filter((e) => e === target || !target.contains(e));
-  }
-  function access(obj, accessor) {
-    if (typeof accessor === "boolean")
-      return accessor;
-    if (typeof accessor === "string")
-      return obj[accessor];
-    return accessor(obj);
-  }
-  function identifyNull(obj) {
-    if (obj === null)
-      return null;
-    else
-      return identify(obj);
-  }
-  function identify(obj) {
-    return typeof obj === "string" ? obj : obj.id;
-  }
-  function mergeRefs(...refs) {
-    return (instance) => {
-      refs.forEach((ref) => {
-        if (typeof ref === "function") {
-          ref(instance);
-        } else if (ref != null) {
-          ref.current = instance;
-        }
-      });
-    };
-  }
-  function safeRun(fn, ...args) {
-    if (fn)
-      return fn(...args);
-  }
-  function waitFor(fn) {
-    return new Promise((resolve, reject) => {
-      let tries = 0;
-      function check() {
-        tries += 1;
-        if (tries === 100)
-          reject();
-        if (fn())
-          resolve();
-        else
-          setTimeout(check, 10);
-      }
-      check();
-    });
-  }
-  function getInsertIndex(tree) {
-    var _a, _b;
-    const focus = tree.focusedNode;
-    if (!focus)
-      return (_b = (_a = tree.root.children) === null || _a === undefined ? undefined : _a.length) !== null && _b !== undefined ? _b : 0;
-    if (focus.isOpen)
-      return 0;
-    if (focus.parent)
-      return focus.childIndex + 1;
-    return 0;
-  }
-  function getInsertParentId(tree) {
-    const focus = tree.focusedNode;
-    if (!focus)
-      return null;
-    if (focus.isOpen)
-      return focus.id;
-    if (focus.parent && !focus.parent.isRoot)
-      return focus.parent.id;
-    return null;
-  }
-
-  // node_modules/react-arborist/dist/module/components/default-cursor.js
-  var import_jsx_runtime = __toESM(require_jsx_runtime());
-  var import_react2 = __toESM(require_react());
-  var placeholderStyle = {
-    display: "flex",
-    alignItems: "center",
-    zIndex: 1
-  };
-  var lineStyle = {
-    flex: 1,
-    height: "2px",
-    background: "#4B91E2",
-    borderRadius: "1px"
-  };
-  var circleStyle = {
-    width: "4px",
-    height: "4px",
-    boxShadow: "0 0 0 3px #4B91E2",
-    borderRadius: "50%"
-  };
-  var DefaultCursor = import_react2.default.memo(function DefaultCursor2({ top, left, indent }) {
-    const style = {
-      position: "absolute",
-      pointerEvents: "none",
-      top: top - 2 + "px",
-      left: left + "px",
-      right: indent + "px"
-    };
-    return import_jsx_runtime.jsxs("div", { style: Object.assign(Object.assign({}, placeholderStyle), style), children: [import_jsx_runtime.jsx("div", { style: Object.assign({}, circleStyle) }), import_jsx_runtime.jsx("div", { style: Object.assign({}, lineStyle) })] });
-  });
-
-  // node_modules/react-arborist/dist/module/components/default-row.js
-  var import_jsx_runtime2 = __toESM(require_jsx_runtime());
-  function DefaultRow({ node, attrs, innerRef, children }) {
-    return import_jsx_runtime2.jsx("div", Object.assign({}, attrs, { ref: innerRef, onFocus: (e) => e.stopPropagation(), onClick: node.handleClick, children }));
-  }
-
-  // node_modules/react-arborist/dist/module/components/default-node.js
-  var import_jsx_runtime3 = __toESM(require_jsx_runtime());
-  var import_react3 = __toESM(require_react());
-  function DefaultNode(props) {
-    return import_jsx_runtime3.jsxs("div", { ref: props.dragHandle, style: props.style, children: [import_jsx_runtime3.jsx("span", { onClick: (e) => {
-      e.stopPropagation();
-      props.node.toggle();
-    }, children: props.node.isLeaf ? "\uD83C\uDF33" : props.node.isOpen ? "\uD83D\uDDC1" : "\uD83D\uDDC0" }), " ", props.node.isEditing ? import_jsx_runtime3.jsx(Edit, Object.assign({}, props)) : import_jsx_runtime3.jsx(Show, Object.assign({}, props))] });
-  }
-  function Show(props) {
-    return import_jsx_runtime3.jsx(import_jsx_runtime3.Fragment, { children: import_jsx_runtime3.jsx("span", { children: props.node.data.name }) });
-  }
-  function Edit({ node }) {
-    const input = import_react3.useRef();
-    import_react3.useEffect(() => {
-      var _a, _b;
-      (_a = input.current) === null || _a === undefined || _a.focus();
-      (_b = input.current) === null || _b === undefined || _b.select();
-    }, []);
-    return import_jsx_runtime3.jsx("input", {
-      ref: input,
-      defaultValue: node.data.name,
-      onBlur: () => node.reset(),
-      onKeyDown: (e) => {
-        var _a;
-        if (e.key === "Escape")
-          node.reset();
-        if (e.key === "Enter")
-          node.submit(((_a = input.current) === null || _a === undefined ? undefined : _a.value) || "");
-      }
-    });
-  }
-
-  // node_modules/react-arborist/dist/module/state/edit-slice.js
-  function edit(id) {
-    return { type: "EDIT", id };
-  }
-  function reducer(state = { id: null }, action) {
-    if (action.type === "EDIT") {
-      return Object.assign(Object.assign({}, state), { id: action.id });
-    } else {
-      return state;
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/state/focus-slice.js
-  function focus(id) {
-    return { type: "FOCUS", id };
-  }
-  function treeBlur() {
-    return { type: "TREE_BLUR" };
-  }
-  function reducer2(state = { id: null, treeFocused: false }, action) {
-    if (action.type === "FOCUS") {
-      return Object.assign(Object.assign({}, state), { id: action.id, treeFocused: true });
-    } else if (action.type === "TREE_BLUR") {
-      return Object.assign(Object.assign({}, state), { treeFocused: false });
-    } else {
-      return state;
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/interfaces/node-api.js
-  class NodeApi {
-    constructor(params) {
-      this.handleClick = (e) => {
-        if (e.metaKey && !this.tree.props.disableMultiSelection) {
-          this.isSelected ? this.deselect() : this.selectMulti();
-        } else if (e.shiftKey && !this.tree.props.disableMultiSelection) {
-          this.selectContiguous();
-        } else {
-          this.select();
-          this.activate();
-        }
-      };
-      this.tree = params.tree;
-      this.id = params.id;
-      this.data = params.data;
-      this.level = params.level;
-      this.children = params.children;
-      this.parent = params.parent;
-      this.isDraggable = params.isDraggable;
-      this.rowIndex = params.rowIndex;
-    }
-    get isRoot() {
-      return this.id === ROOT_ID;
-    }
-    get isLeaf() {
-      return !Array.isArray(this.children);
-    }
-    get isInternal() {
-      return !this.isLeaf;
-    }
-    get isOpen() {
-      return this.isLeaf ? false : this.tree.isOpen(this.id);
-    }
-    get isClosed() {
-      return this.isLeaf ? false : !this.tree.isOpen(this.id);
-    }
-    get isEditable() {
-      return this.tree.isEditable(this.data);
-    }
-    get isEditing() {
-      return this.tree.editingId === this.id;
-    }
-    get isSelected() {
-      return this.tree.isSelected(this.id);
-    }
-    get isOnlySelection() {
-      return this.isSelected && this.tree.hasOneSelection;
-    }
-    get isSelectedStart() {
-      var _a;
-      return this.isSelected && !((_a = this.prev) === null || _a === undefined ? undefined : _a.isSelected);
-    }
-    get isSelectedEnd() {
-      var _a;
-      return this.isSelected && !((_a = this.next) === null || _a === undefined ? undefined : _a.isSelected);
-    }
-    get isFocused() {
-      return this.tree.isFocused(this.id);
-    }
-    get isDragging() {
-      return this.tree.isDragging(this.id);
-    }
-    get willReceiveDrop() {
-      return this.tree.willReceiveDrop(this.id);
-    }
-    get state() {
-      return {
-        isClosed: this.isClosed,
-        isDragging: this.isDragging,
-        isEditing: this.isEditing,
-        isFocused: this.isFocused,
-        isInternal: this.isInternal,
-        isLeaf: this.isLeaf,
-        isOpen: this.isOpen,
-        isSelected: this.isSelected,
-        isSelectedEnd: this.isSelectedEnd,
-        isSelectedStart: this.isSelectedStart,
-        willReceiveDrop: this.willReceiveDrop
-      };
-    }
-    get childIndex() {
-      if (this.parent && this.parent.children) {
-        return this.parent.children.findIndex((child) => child.id === this.id);
-      } else {
-        return -1;
-      }
-    }
-    get next() {
-      if (this.rowIndex === null)
-        return null;
-      return this.tree.at(this.rowIndex + 1);
-    }
-    get prev() {
-      if (this.rowIndex === null)
-        return null;
-      return this.tree.at(this.rowIndex - 1);
-    }
-    get nextSibling() {
-      var _a, _b;
-      const i = this.childIndex;
-      return (_b = (_a = this.parent) === null || _a === undefined ? undefined : _a.children[i + 1]) !== null && _b !== undefined ? _b : null;
-    }
-    isAncestorOf(node) {
-      if (!node)
-        return false;
-      let ancestor = node;
-      while (ancestor) {
-        if (ancestor.id === this.id)
-          return true;
-        ancestor = ancestor.parent;
-      }
-      return false;
-    }
-    select() {
-      this.tree.select(this);
-    }
-    deselect() {
-      this.tree.deselect(this);
-    }
-    selectMulti() {
-      this.tree.selectMulti(this);
-    }
-    selectContiguous() {
-      this.tree.selectContiguous(this);
-    }
-    activate() {
-      this.tree.activate(this);
-    }
-    focus() {
-      this.tree.focus(this);
-    }
-    toggle() {
-      this.tree.toggle(this);
-    }
-    open() {
-      this.tree.open(this);
-    }
-    openParents() {
-      this.tree.openParents(this);
-    }
-    close() {
-      this.tree.close(this);
-    }
-    submit(value) {
-      this.tree.submit(this, value);
-    }
-    reset() {
-      this.tree.reset();
-    }
-    clone() {
-      return new NodeApi(Object.assign({}, this));
-    }
-    edit() {
-      return this.tree.edit(this);
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/data/create-root.js
-  var ROOT_ID = "__REACT_ARBORIST_INTERNAL_ROOT__";
-  function createRoot(tree) {
-    var _a;
-    function visitSelfAndChildren(data2, level, parent) {
-      const id = tree.accessId(data2);
-      const node = new NodeApi({
-        tree,
-        data: data2,
-        level,
-        parent,
-        id,
-        children: null,
-        isDraggable: tree.isDraggable(data2),
-        rowIndex: null
-      });
-      const children = tree.accessChildren(data2);
-      if (children) {
-        node.children = children.map((child) => visitSelfAndChildren(child, level + 1, node));
-      }
-      return node;
-    }
-    const root = new NodeApi({
-      tree,
-      id: ROOT_ID,
-      data: { id: ROOT_ID },
-      level: -1,
-      parent: null,
-      children: null,
-      isDraggable: true,
-      rowIndex: null
-    });
-    const data = (_a = tree.props.data) !== null && _a !== undefined ? _a : [];
-    root.children = data.map((child) => {
-      return visitSelfAndChildren(child, 0, root);
-    });
-    return root;
-  }
-
-  // node_modules/react-arborist/dist/module/state/open-slice.js
-  var actions = {
-    open(id, filtered) {
-      return { type: "VISIBILITY_OPEN", id, filtered };
-    },
-    close(id, filtered) {
-      return { type: "VISIBILITY_CLOSE", id, filtered };
-    },
-    toggle(id, filtered) {
-      return { type: "VISIBILITY_TOGGLE", id, filtered };
-    },
-    clear(filtered) {
-      return { type: "VISIBILITY_CLEAR", filtered };
-    }
-  };
-  function openMapReducer(state = {}, action) {
-    if (action.type === "VISIBILITY_OPEN") {
-      return Object.assign(Object.assign({}, state), { [action.id]: true });
-    } else if (action.type === "VISIBILITY_CLOSE") {
-      return Object.assign(Object.assign({}, state), { [action.id]: false });
-    } else if (action.type === "VISIBILITY_TOGGLE") {
-      const prev = state[action.id];
-      return Object.assign(Object.assign({}, state), { [action.id]: !prev });
-    } else if (action.type === "VISIBILITY_CLEAR") {
-      return {};
-    } else {
-      return state;
-    }
-  }
-  function reducer3(state = { filtered: {}, unfiltered: {} }, action) {
-    if (!action.type.startsWith("VISIBILITY"))
-      return state;
-    if (action.filtered) {
-      return Object.assign(Object.assign({}, state), { filtered: openMapReducer(state.filtered, action) });
-    } else {
-      return Object.assign(Object.assign({}, state), { unfiltered: openMapReducer(state.unfiltered, action) });
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/state/initial.js
-  var initialState = (props) => {
-    var _a;
-    return {
-      nodes: {
-        open: { filtered: {}, unfiltered: (_a = props === null || props === undefined ? undefined : props.initialOpenState) !== null && _a !== undefined ? _a : {} },
-        focus: { id: null, treeFocused: false },
-        edit: { id: null },
-        drag: {
-          id: null,
-          selectedIds: [],
-          destinationParentId: null,
-          destinationIndex: null
-        },
-        selection: { ids: new Set, anchor: null, mostRecent: null }
-      },
-      dnd: {
-        cursor: { type: "none" },
-        dragId: null,
-        dragIds: [],
-        parentId: null,
-        index: -1
-      }
-    };
-  };
-
-  // node_modules/react-arborist/dist/module/state/selection-slice.js
-  var actions2 = {
-    clear: () => ({ type: "SELECTION_CLEAR" }),
-    only: (id) => ({
-      type: "SELECTION_ONLY",
-      id: identify(id)
-    }),
-    add: (id) => ({
-      type: "SELECTION_ADD",
-      ids: (Array.isArray(id) ? id : [id]).map(identify)
-    }),
-    remove: (id) => ({
-      type: "SELECTION_REMOVE",
-      ids: (Array.isArray(id) ? id : [id]).map(identify)
-    }),
-    set: (args) => Object.assign({ type: "SELECTION_SET" }, args),
-    mostRecent: (id) => ({
-      type: "SELECTION_MOST_RECENT",
-      id: id === null ? null : identify(id)
-    }),
-    anchor: (id) => ({
-      type: "SELECTION_ANCHOR",
-      id: id === null ? null : identify(id)
-    })
-  };
-  function reducer4(state = initialState()["nodes"]["selection"], action) {
-    const ids = state.ids;
-    switch (action.type) {
-      case "SELECTION_CLEAR":
-        return Object.assign(Object.assign({}, state), { ids: new Set });
-      case "SELECTION_ONLY":
-        return Object.assign(Object.assign({}, state), { ids: new Set([action.id]) });
-      case "SELECTION_ADD":
-        if (action.ids.length === 0)
-          return state;
-        action.ids.forEach((id) => ids.add(id));
-        return Object.assign(Object.assign({}, state), { ids: new Set(ids) });
-      case "SELECTION_REMOVE":
-        if (action.ids.length === 0)
-          return state;
-        action.ids.forEach((id) => ids.delete(id));
-        return Object.assign(Object.assign({}, state), { ids: new Set(ids) });
-      case "SELECTION_SET":
-        return Object.assign(Object.assign({}, state), { ids: action.ids, mostRecent: action.mostRecent, anchor: action.anchor });
-      case "SELECTION_MOST_RECENT":
-        return Object.assign(Object.assign({}, state), { mostRecent: action.id });
-      case "SELECTION_ANCHOR":
-        return Object.assign(Object.assign({}, state), { anchor: action.id });
-      default:
-        return state;
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/state/dnd-slice.js
-  var actions3 = {
-    cursor(cursor) {
-      return { type: "DND_CURSOR", cursor };
-    },
-    dragStart(id, dragIds) {
-      return { type: "DND_DRAG_START", id, dragIds };
-    },
-    dragEnd() {
-      return { type: "DND_DRAG_END" };
-    },
-    hovering(parentId, index) {
-      return { type: "DND_HOVERING", parentId, index };
-    }
-  };
-  function reducer5(state = initialState()["dnd"], action) {
-    switch (action.type) {
-      case "DND_CURSOR":
-        return Object.assign(Object.assign({}, state), { cursor: action.cursor });
-      case "DND_DRAG_START":
-        return Object.assign(Object.assign({}, state), { dragId: action.id, dragIds: action.dragIds });
-      case "DND_DRAG_END":
-        return initialState()["dnd"];
-      case "DND_HOVERING":
-        return Object.assign(Object.assign({}, state), { parentId: action.parentId, index: action.index });
-      default:
-        return state;
-    }
-  }
-
-  // node_modules/react-arborist/dist/module/components/default-drag-preview.js
-  var import_jsx_runtime4 = __toESM(require_jsx_runtime());
-  var import_react4 = __toESM(require_react());
-  var layerStyles = {
-    position: "fixed",
-    pointerEvents: "none",
-    zIndex: 100,
-    left: 0,
-    top: 0,
-    width: "100%",
-    height: "100%"
-  };
-  var getStyle = (offset) => {
-    if (!offset)
-      return { display: "none" };
-    const { x, y } = offset;
-    return { transform: `translate(${x}px, ${y}px)` };
-  };
-  var getCountStyle = (offset) => {
-    if (!offset)
-      return { display: "none" };
-    const { x, y } = offset;
-    return { transform: `translate(${x + 10}px, ${y + 10}px)` };
-  };
-  function DefaultDragPreview({ offset, mouse, id, dragIds, isDragging }) {
-    return import_jsx_runtime4.jsxs(Overlay, { isDragging, children: [import_jsx_runtime4.jsx(Position, { offset, children: import_jsx_runtime4.jsx(PreviewNode, { id, dragIds }) }), import_jsx_runtime4.jsx(Count, { mouse, count: dragIds.length })] });
-  }
-  var Overlay = import_react4.memo(function Overlay2(props) {
-    if (!props.isDragging)
-      return null;
-    return import_jsx_runtime4.jsx("div", { style: layerStyles, children: props.children });
-  });
-  function Position(props) {
-    return import_jsx_runtime4.jsx("div", { className: "row preview", style: getStyle(props.offset), children: props.children });
-  }
-  function Count(props) {
-    const { count, mouse } = props;
-    if (count > 1)
-      return import_jsx_runtime4.jsx("div", { className: "selected-count", style: getCountStyle(mouse), children: count });
-    else
-      return null;
-  }
-  var PreviewNode = import_react4.memo(function PreviewNode2(props) {
-    const tree = useTreeApi();
-    const node = tree.get(props.id);
-    if (!node)
-      return null;
-    return import_jsx_runtime4.jsx(tree.renderNode, { preview: true, node, style: {
-      paddingLeft: node.level * tree.indent,
-      opacity: 0.2,
-      background: "transparent"
-    }, tree });
-  });
-
-  // node_modules/react-arborist/dist/module/components/default-container.js
-  var import_jsx_runtime10 = __toESM(require_jsx_runtime());
-
-  // node_modules/@babel/runtime/helpers/esm/extends.js
-  function _extends() {
-    return _extends = Object.assign ? Object.assign.bind() : function(n) {
-      for (var e = 1;e < arguments.length; e++) {
-        var t = arguments[e];
-        for (var r in t)
-          ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]);
-      }
-      return n;
-    }, _extends.apply(null, arguments);
-  }
-
-  // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
-  function _assertThisInitialized(e) {
-    if (e === undefined)
-      throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
-    return e;
-  }
-
-  // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
-  function _setPrototypeOf(t, e) {
-    return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t2, e2) {
-      return t2.__proto__ = e2, t2;
-    }, _setPrototypeOf(t, e);
-  }
-
-  // node_modules/@babel/runtime/helpers/esm/inheritsLoose.js
-  function _inheritsLoose(t, o) {
-    t.prototype = Object.create(o.prototype), t.prototype.constructor = t, _setPrototypeOf(t, o);
-  }
-
-  // node_modules/memoize-one/dist/memoize-one.esm.js
-  var safeIsNaN = Number.isNaN || function ponyfill(value) {
-    return typeof value === "number" && value !== value;
-  };
-  function isEqual(first, second) {
-    if (first === second) {
-      return true;
-    }
-    if (safeIsNaN(first) && safeIsNaN(second)) {
-      return true;
-    }
-    return false;
-  }
-  function areInputsEqual(newInputs, lastInputs) {
-    if (newInputs.length !== lastInputs.length) {
-      return false;
-    }
-    for (var i = 0;i < newInputs.length; i++) {
-      if (!isEqual(newInputs[i], lastInputs[i])) {
-        return false;
-      }
-    }
-    return true;
-  }
-  function memoizeOne(resultFn, isEqual2) {
-    if (isEqual2 === undefined) {
-      isEqual2 = areInputsEqual;
-    }
-    var lastThis;
-    var lastArgs = [];
-    var lastResult;
-    var calledOnce = false;
-    function memoized() {
-      var newArgs = [];
-      for (var _i = 0;_i < arguments.length; _i++) {
-        newArgs[_i] = arguments[_i];
-      }
-      if (calledOnce && lastThis === this && isEqual2(newArgs, lastArgs)) {
-        return lastResult;
-      }
-      lastResult = resultFn.apply(this, newArgs);
-      calledOnce = true;
-      lastThis = this;
-      lastArgs = newArgs;
-      return lastResult;
-    }
-    return memoized;
-  }
-  var memoize_one_esm_default = memoizeOne;
-
-  // node_modules/react-window/dist/index.esm.js
-  var import_react5 = __toESM(require_react());
-  var hasNativePerformanceNow = typeof performance === "object" && typeof performance.now === "function";
-  var now = hasNativePerformanceNow ? function() {
-    return performance.now();
-  } : function() {
-    return Date.now();
-  };
-  function cancelTimeout(timeoutID) {
-    cancelAnimationFrame(timeoutID.id);
-  }
-  function requestTimeout(callback, delay) {
-    var start = now();
-    function tick() {
-      if (now() - start >= delay) {
-        callback.call(null);
-      } else {
-        timeoutID.id = requestAnimationFrame(tick);
-      }
-    }
-    var timeoutID = {
-      id: requestAnimationFrame(tick)
-    };
-    return timeoutID;
-  }
-  var size = -1;
-  function getScrollbarSize(recalculate) {
-    if (recalculate === undefined) {
-      recalculate = false;
-    }
-    if (size === -1 || recalculate) {
-      var div = document.createElement("div");
-      var style = div.style;
-      style.width = "50px";
-      style.height = "50px";
-      style.overflow = "scroll";
-      document.body.appendChild(div);
-      size = div.offsetWidth - div.clientWidth;
-      document.body.removeChild(div);
-    }
-    return size;
-  }
-  var cachedRTLResult = null;
-  function getRTLOffsetType(recalculate) {
-    if (recalculate === undefined) {
-      recalculate = false;
-    }
-    if (cachedRTLResult === null || recalculate) {
-      var outerDiv = document.createElement("div");
-      var outerStyle = outerDiv.style;
-      outerStyle.width = "50px";
-      outerStyle.height = "50px";
-      outerStyle.overflow = "scroll";
-      outerStyle.direction = "rtl";
-      var innerDiv = document.createElement("div");
-      var innerStyle = innerDiv.style;
-      innerStyle.width = "100px";
-      innerStyle.height = "100px";
-      outerDiv.appendChild(innerDiv);
-      document.body.appendChild(outerDiv);
-      if (outerDiv.scrollLeft > 0) {
-        cachedRTLResult = "positive-descending";
-      } else {
-        outerDiv.scrollLeft = 1;
-        if (outerDiv.scrollLeft === 0) {
-          cachedRTLResult = "negative";
-        } else {
-          cachedRTLResult = "positive-ascending";
-        }
-      }
-      document.body.removeChild(outerDiv);
-      return cachedRTLResult;
-    }
-    return cachedRTLResult;
-  }
-  var devWarningsOverscanCount = null;
-  var devWarningsOverscanRowsColumnsCount = null;
-  var devWarningsTagName = null;
-  if (true) {
-    if (typeof window !== "undefined" && typeof window.WeakSet !== "undefined") {
-      devWarningsOverscanCount = /* @__PURE__ */ new WeakSet;
-      devWarningsOverscanRowsColumnsCount = /* @__PURE__ */ new WeakSet;
-      devWarningsTagName = /* @__PURE__ */ new WeakSet;
-    }
-  }
-  var IS_SCROLLING_DEBOUNCE_INTERVAL$1 = 150;
-  var defaultItemKey$1 = function defaultItemKey(index, data) {
-    return index;
-  };
-  var devWarningsDirection = null;
-  var devWarningsTagName$1 = null;
-  if (true) {
-    if (typeof window !== "undefined" && typeof window.WeakSet !== "undefined") {
-      devWarningsDirection = /* @__PURE__ */ new WeakSet;
-      devWarningsTagName$1 = /* @__PURE__ */ new WeakSet;
-    }
-  }
-  function createListComponent(_ref) {
-    var _class;
-    var { getItemOffset, getEstimatedTotalSize, getItemSize, getOffsetForIndexAndAlignment, getStartIndexForOffset, getStopIndexForStartIndex, initInstanceProps, shouldResetStyleCacheOnItemSizeChange, validateProps } = _ref;
-    return _class = /* @__PURE__ */ function(_PureComponent) {
-      _inheritsLoose(List, _PureComponent);
-      function List(props) {
-        var _this;
-        _this = _PureComponent.call(this, props) || this;
-        _this._instanceProps = initInstanceProps(_this.props, _assertThisInitialized(_this));
-        _this._outerRef = undefined;
-        _this._resetIsScrollingTimeoutId = null;
-        _this.state = {
-          instance: _assertThisInitialized(_this),
-          isScrolling: false,
-          scrollDirection: "forward",
-          scrollOffset: typeof _this.props.initialScrollOffset === "number" ? _this.props.initialScrollOffset : 0,
-          scrollUpdateWasRequested: false
-        };
-        _this._callOnItemsRendered = undefined;
-        _this._callOnItemsRendered = memoize_one_esm_default(function(overscanStartIndex, overscanStopIndex, visibleStartIndex, visibleStopIndex) {
-          return _this.props.onItemsRendered({
-            overscanStartIndex,
-            overscanStopIndex,
-            visibleStartIndex,
-            visibleStopIndex
-          });
-        });
-        _this._callOnScroll = undefined;
-        _this._callOnScroll = memoize_one_esm_default(function(scrollDirection, scrollOffset, scrollUpdateWasRequested) {
-          return _this.props.onScroll({
-            scrollDirection,
-            scrollOffset,
-            scrollUpdateWasRequested
-          });
-        });
-        _this._getItemStyle = undefined;
-        _this._getItemStyle = function(index) {
-          var _this$props = _this.props, direction = _this$props.direction, itemSize = _this$props.itemSize, layout = _this$props.layout;
-          var itemStyleCache = _this._getItemStyleCache(shouldResetStyleCacheOnItemSizeChange && itemSize, shouldResetStyleCacheOnItemSizeChange && layout, shouldResetStyleCacheOnItemSizeChange && direction);
-          var style;
-          if (itemStyleCache.hasOwnProperty(index)) {
-            style = itemStyleCache[index];
-          } else {
-            var _offset = getItemOffset(_this.props, index, _this._instanceProps);
-            var size2 = getItemSize(_this.props, index, _this._instanceProps);
-            var isHorizontal = direction === "horizontal" || layout === "horizontal";
-            var isRtl = direction === "rtl";
-            var offsetHorizontal = isHorizontal ? _offset : 0;
-            itemStyleCache[index] = style = {
-              position: "absolute",
-              left: isRtl ? undefined : offsetHorizontal,
-              right: isRtl ? offsetHorizontal : undefined,
-              top: !isHorizontal ? _offset : 0,
-              height: !isHorizontal ? size2 : "100%",
-              width: isHorizontal ? size2 : "100%"
-            };
-          }
-          return style;
-        };
-        _this._getItemStyleCache = undefined;
-        _this._getItemStyleCache = memoize_one_esm_default(function(_, __, ___) {
-          return {};
-        });
-        _this._onScrollHorizontal = function(event) {
-          var _event$currentTarget = event.currentTarget, clientWidth = _event$currentTarget.clientWidth, scrollLeft = _event$currentTarget.scrollLeft, scrollWidth = _event$currentTarget.scrollWidth;
-          _this.setState(function(prevState) {
-            if (prevState.scrollOffset === scrollLeft) {
-              return null;
-            }
-            var direction = _this.props.direction;
-            var scrollOffset = scrollLeft;
-            if (direction === "rtl") {
-              switch (getRTLOffsetType()) {
-                case "negative":
-                  scrollOffset = -scrollLeft;
-                  break;
-                case "positive-descending":
-                  scrollOffset = scrollWidth - clientWidth - scrollLeft;
-                  break;
-              }
-            }
-            scrollOffset = Math.max(0, Math.min(scrollOffset, scrollWidth - clientWidth));
-            return {
-              isScrolling: true,
-              scrollDirection: prevState.scrollOffset < scrollOffset ? "forward" : "backward",
-              scrollOffset,
-              scrollUpdateWasRequested: false
-            };
-          }, _this._resetIsScrollingDebounced);
-        };
-        _this._onScrollVertical = function(event) {
-          var _event$currentTarget2 = event.currentTarget, clientHeight = _event$currentTarget2.clientHeight, scrollHeight = _event$currentTarget2.scrollHeight, scrollTop = _event$currentTarget2.scrollTop;
-          _this.setState(function(prevState) {
-            if (prevState.scrollOffset === scrollTop) {
-              return null;
-            }
-            var scrollOffset = Math.max(0, Math.min(scrollTop, scrollHeight - clientHeight));
-            return {
-              isScrolling: true,
-              scrollDirection: prevState.scrollOffset < scrollOffset ? "forward" : "backward",
-              scrollOffset,
-              scrollUpdateWasRequested: false
-            };
-          }, _this._resetIsScrollingDebounced);
-        };
-        _this._outerRefSetter = function(ref) {
-          var outerRef = _this.props.outerRef;
-          _this._outerRef = ref;
-          if (typeof outerRef === "function") {
-            outerRef(ref);
-          } else if (outerRef != null && typeof outerRef === "object" && outerRef.hasOwnProperty("current")) {
-            outerRef.current = ref;
-          }
-        };
-        _this._resetIsScrollingDebounced = function() {
-          if (_this._resetIsScrollingTimeoutId !== null) {
-            cancelTimeout(_this._resetIsScrollingTimeoutId);
-          }
-          _this._resetIsScrollingTimeoutId = requestTimeout(_this._resetIsScrolling, IS_SCROLLING_DEBOUNCE_INTERVAL$1);
-        };
-        _this._resetIsScrolling = function() {
-          _this._resetIsScrollingTimeoutId = null;
-          _this.setState({
-            isScrolling: false
-          }, function() {
-            _this._getItemStyleCache(-1, null);
-          });
-        };
-        return _this;
-      }
-      List.getDerivedStateFromProps = function getDerivedStateFromProps(nextProps, prevState) {
-        validateSharedProps$1(nextProps, prevState);
-        validateProps(nextProps);
-        return null;
-      };
-      var _proto = List.prototype;
-      _proto.scrollTo = function scrollTo(scrollOffset) {
-        scrollOffset = Math.max(0, scrollOffset);
-        this.setState(function(prevState) {
-          if (prevState.scrollOffset === scrollOffset) {
-            return null;
-          }
-          return {
-            scrollDirection: prevState.scrollOffset < scrollOffset ? "forward" : "backward",
-            scrollOffset,
-            scrollUpdateWasRequested: true
-          };
-        }, this._resetIsScrollingDebounced);
-      };
-      _proto.scrollToItem = function scrollToItem(index, align) {
-        if (align === undefined) {
-          align = "auto";
-        }
-        var _this$props2 = this.props, itemCount = _this$props2.itemCount, layout = _this$props2.layout;
-        var scrollOffset = this.state.scrollOffset;
-        index = Math.max(0, Math.min(index, itemCount - 1));
-        var scrollbarSize = 0;
-        if (this._outerRef) {
-          var outerRef = this._outerRef;
-          if (layout === "vertical") {
-            scrollbarSize = outerRef.scrollWidth > outerRef.clientWidth ? getScrollbarSize() : 0;
-          } else {
-            scrollbarSize = outerRef.scrollHeight > outerRef.clientHeight ? getScrollbarSize() : 0;
-          }
-        }
-        this.scrollTo(getOffsetForIndexAndAlignment(this.props, index, align, scrollOffset, this._instanceProps, scrollbarSize));
-      };
-      _proto.componentDidMount = function componentDidMount() {
-        var _this$props3 = this.props, direction = _this$props3.direction, initialScrollOffset = _this$props3.initialScrollOffset, layout = _this$props3.layout;
-        if (typeof initialScrollOffset === "number" && this._outerRef != null) {
-          var outerRef = this._outerRef;
-          if (direction === "horizontal" || layout === "horizontal") {
-            outerRef.scrollLeft = initialScrollOffset;
-          } else {
-            outerRef.scrollTop = initialScrollOffset;
-          }
-        }
-        this._callPropsCallbacks();
-      };
-      _proto.componentDidUpdate = function componentDidUpdate() {
-        var _this$props4 = this.props, direction = _this$props4.direction, layout = _this$props4.layout;
-        var _this$state = this.state, scrollOffset = _this$state.scrollOffset, scrollUpdateWasRequested = _this$state.scrollUpdateWasRequested;
-        if (scrollUpdateWasRequested && this._outerRef != null) {
-          var outerRef = this._outerRef;
-          if (direction === "horizontal" || layout === "horizontal") {
-            if (direction === "rtl") {
-              switch (getRTLOffsetType()) {
-                case "negative":
-                  outerRef.scrollLeft = -scrollOffset;
-                  break;
-                case "positive-ascending":
-                  outerRef.scrollLeft = scrollOffset;
-                  break;
-                default:
-                  var { clientWidth, scrollWidth } = outerRef;
-                  outerRef.scrollLeft = scrollWidth - clientWidth - scrollOffset;
-                  break;
-              }
-            } else {
-              outerRef.scrollLeft = scrollOffset;
-            }
-          } else {
-            outerRef.scrollTop = scrollOffset;
-          }
-        }
-        this._callPropsCallbacks();
-      };
-      _proto.componentWillUnmount = function componentWillUnmount() {
-        if (this._resetIsScrollingTimeoutId !== null) {
-          cancelTimeout(this._resetIsScrollingTimeoutId);
-        }
-      };
-      _proto.render = function render() {
-        var _this$props5 = this.props, children = _this$props5.children, className = _this$props5.className, direction = _this$props5.direction, height = _this$props5.height, innerRef = _this$props5.innerRef, innerElementType = _this$props5.innerElementType, innerTagName = _this$props5.innerTagName, itemCount = _this$props5.itemCount, itemData = _this$props5.itemData, _this$props5$itemKey = _this$props5.itemKey, itemKey = _this$props5$itemKey === undefined ? defaultItemKey$1 : _this$props5$itemKey, layout = _this$props5.layout, outerElementType = _this$props5.outerElementType, outerTagName = _this$props5.outerTagName, style = _this$props5.style, useIsScrolling = _this$props5.useIsScrolling, width = _this$props5.width;
-        var isScrolling = this.state.isScrolling;
-        var isHorizontal = direction === "horizontal" || layout === "horizontal";
-        var onScroll = isHorizontal ? this._onScrollHorizontal : this._onScrollVertical;
-        var _this$_getRangeToRend = this._getRangeToRender(), startIndex = _this$_getRangeToRend[0], stopIndex = _this$_getRangeToRend[1];
-        var items = [];
-        if (itemCount > 0) {
-          for (var _index = startIndex;_index <= stopIndex; _index++) {
-            items.push(import_react5.createElement(children, {
-              data: itemData,
-              key: itemKey(_index, itemData),
-              index: _index,
-              isScrolling: useIsScrolling ? isScrolling : undefined,
-              style: this._getItemStyle(_index)
-            }));
-          }
-        }
-        var estimatedTotalSize = getEstimatedTotalSize(this.props, this._instanceProps);
-        return import_react5.createElement(outerElementType || outerTagName || "div", {
-          className,
-          onScroll,
-          ref: this._outerRefSetter,
-          style: _extends({
-            position: "relative",
-            height,
-            width,
-            overflow: "auto",
-            WebkitOverflowScrolling: "touch",
-            willChange: "transform",
-            direction
-          }, style)
-        }, import_react5.createElement(innerElementType || innerTagName || "div", {
-          children: items,
-          ref: innerRef,
-          style: {
-            height: isHorizontal ? "100%" : estimatedTotalSize,
-            pointerEvents: isScrolling ? "none" : undefined,
-            width: isHorizontal ? estimatedTotalSize : "100%"
-          }
-        }));
-      };
-      _proto._callPropsCallbacks = function _callPropsCallbacks() {
-        if (typeof this.props.onItemsRendered === "function") {
-          var itemCount = this.props.itemCount;
-          if (itemCount > 0) {
-            var _this$_getRangeToRend2 = this._getRangeToRender(), _overscanStartIndex = _this$_getRangeToRend2[0], _overscanStopIndex = _this$_getRangeToRend2[1], _visibleStartIndex = _this$_getRangeToRend2[2], _visibleStopIndex = _this$_getRangeToRend2[3];
-            this._callOnItemsRendered(_overscanStartIndex, _overscanStopIndex, _visibleStartIndex, _visibleStopIndex);
-          }
-        }
-        if (typeof this.props.onScroll === "function") {
-          var _this$state2 = this.state, _scrollDirection = _this$state2.scrollDirection, _scrollOffset = _this$state2.scrollOffset, _scrollUpdateWasRequested = _this$state2.scrollUpdateWasRequested;
-          this._callOnScroll(_scrollDirection, _scrollOffset, _scrollUpdateWasRequested);
-        }
-      };
-      _proto._getRangeToRender = function _getRangeToRender() {
-        var _this$props6 = this.props, itemCount = _this$props6.itemCount, overscanCount = _this$props6.overscanCount;
-        var _this$state3 = this.state, isScrolling = _this$state3.isScrolling, scrollDirection = _this$state3.scrollDirection, scrollOffset = _this$state3.scrollOffset;
-        if (itemCount === 0) {
-          return [0, 0, 0, 0];
-        }
-        var startIndex = getStartIndexForOffset(this.props, scrollOffset, this._instanceProps);
-        var stopIndex = getStopIndexForStartIndex(this.props, startIndex, scrollOffset, this._instanceProps);
-        var overscanBackward = !isScrolling || scrollDirection === "backward" ? Math.max(1, overscanCount) : 1;
-        var overscanForward = !isScrolling || scrollDirection === "forward" ? Math.max(1, overscanCount) : 1;
-        return [Math.max(0, startIndex - overscanBackward), Math.max(0, Math.min(itemCount - 1, stopIndex + overscanForward)), startIndex, stopIndex];
-      };
-      return List;
-    }(import_react5.PureComponent), _class.defaultProps = {
-      direction: "ltr",
-      itemData: undefined,
-      layout: "vertical",
-      overscanCount: 2,
-      useIsScrolling: false
-    }, _class;
-  }
-  var validateSharedProps$1 = function validateSharedProps(_ref2, _ref3) {
-    var { children, direction, height, layout, innerTagName, outerTagName, width } = _ref2;
-    var instance = _ref3.instance;
-    if (true) {
-      if (innerTagName != null || outerTagName != null) {
-        if (devWarningsTagName$1 && !devWarningsTagName$1.has(instance)) {
-          devWarningsTagName$1.add(instance);
-          console.warn("The innerTagName and outerTagName props have been deprecated. " + "Please use the innerElementType and outerElementType props instead.");
-        }
-      }
-      var isHorizontal = direction === "horizontal" || layout === "horizontal";
-      switch (direction) {
-        case "horizontal":
-        case "vertical":
-          if (devWarningsDirection && !devWarningsDirection.has(instance)) {
-            devWarningsDirection.add(instance);
-            console.warn('The direction prop should be either "ltr" (default) or "rtl". ' + 'Please use the layout prop to specify "vertical" (default) or "horizontal" orientation.');
-          }
-          break;
-        case "ltr":
-        case "rtl":
-          break;
-        default:
-          throw Error('An invalid "direction" prop has been specified. ' + 'Value should be either "ltr" or "rtl". ' + ('"' + direction + '" was specified.'));
-      }
-      switch (layout) {
-        case "horizontal":
-        case "vertical":
-          break;
-        default:
-          throw Error('An invalid "layout" prop has been specified. ' + 'Value should be either "horizontal" or "vertical". ' + ('"' + layout + '" was specified.'));
-      }
-      if (children == null) {
-        throw Error('An invalid "children" prop has been specified. ' + "Value should be a React component. " + ('"' + (children === null ? "null" : typeof children) + '" was specified.'));
-      }
-      if (isHorizontal && typeof width !== "number") {
-        throw Error('An invalid "width" prop has been specified. ' + "Horizontal lists must specify a number for width. " + ('"' + (width === null ? "null" : typeof width) + '" was specified.'));
-      } else if (!isHorizontal && typeof height !== "number") {
-        throw Error('An invalid "height" prop has been specified. ' + "Vertical lists must specify a number for height. " + ('"' + (height === null ? "null" : typeof height) + '" was specified.'));
-      }
-    }
-  };
-  var FixedSizeList = /* @__PURE__ */ createListComponent({
-    getItemOffset: function getItemOffset(_ref, index) {
-      var itemSize = _ref.itemSize;
-      return index * itemSize;
-    },
-    getItemSize: function getItemSize(_ref2, index) {
-      var itemSize = _ref2.itemSize;
-      return itemSize;
-    },
-    getEstimatedTotalSize: function getEstimatedTotalSize(_ref3) {
-      var { itemCount, itemSize } = _ref3;
-      return itemSize * itemCount;
-    },
-    getOffsetForIndexAndAlignment: function getOffsetForIndexAndAlignment(_ref4, index, align, scrollOffset, instanceProps, scrollbarSize) {
-      var { direction, height, itemCount, itemSize, layout, width } = _ref4;
-      var isHorizontal = direction === "horizontal" || layout === "horizontal";
-      var size2 = isHorizontal ? width : height;
-      var lastItemOffset = Math.max(0, itemCount * itemSize - size2);
-      var maxOffset = Math.min(lastItemOffset, index * itemSize);
-      var minOffset = Math.max(0, index * itemSize - size2 + itemSize + scrollbarSize);
-      if (align === "smart") {
-        if (scrollOffset >= minOffset - size2 && scrollOffset <= maxOffset + size2) {
-          align = "auto";
-        } else {
-          align = "center";
-        }
-      }
-      switch (align) {
-        case "start":
-          return maxOffset;
-        case "end":
-          return minOffset;
-        case "center": {
-          var middleOffset = Math.round(minOffset + (maxOffset - minOffset) / 2);
-          if (middleOffset < Math.ceil(size2 / 2)) {
-            return 0;
-          } else if (middleOffset > lastItemOffset + Math.floor(size2 / 2)) {
-            return lastItemOffset;
-          } else {
-            return middleOffset;
-          }
-        }
-        case "auto":
-        default:
-          if (scrollOffset >= minOffset && scrollOffset <= maxOffset) {
-            return scrollOffset;
-          } else if (scrollOffset < minOffset) {
-            return minOffset;
-          } else {
-            return maxOffset;
-          }
-      }
-    },
-    getStartIndexForOffset: function getStartIndexForOffset(_ref5, offset) {
-      var { itemCount, itemSize } = _ref5;
-      return Math.max(0, Math.min(itemCount - 1, Math.floor(offset / itemSize)));
-    },
-    getStopIndexForStartIndex: function getStopIndexForStartIndex(_ref6, startIndex, scrollOffset) {
-      var { direction, height, itemCount, itemSize, layout, width } = _ref6;
-      var isHorizontal = direction === "horizontal" || layout === "horizontal";
-      var offset = startIndex * itemSize;
-      var size2 = isHorizontal ? width : height;
-      var numVisibleItems = Math.ceil((size2 + scrollOffset - offset) / itemSize);
-      return Math.max(0, Math.min(itemCount - 1, startIndex + numVisibleItems - 1));
-    },
-    initInstanceProps: function initInstanceProps(props) {},
-    shouldResetStyleCacheOnItemSizeChange: true,
-    validateProps: function validateProps(_ref7) {
-      var itemSize = _ref7.itemSize;
-      if (true) {
-        if (typeof itemSize !== "number") {
-          throw Error('An invalid "itemSize" prop has been specified. ' + "Value should be a number. " + ('"' + (itemSize === null ? "null" : typeof itemSize) + '" was specified.'));
-        }
-      }
-    }
-  });
-
-  // node_modules/react-arborist/dist/module/components/list-outer-element.js
-  var import_jsx_runtime6 = __toESM(require_jsx_runtime());
   var import_react6 = __toESM(require_react());
 
-  // node_modules/react-arborist/dist/module/components/cursor.js
-  var import_jsx_runtime5 = __toESM(require_jsx_runtime());
-  function Cursor() {
+  // node_modules/@tanstack/react-virtual/dist/esm/index.js
+  var React = __toESM(require_react());
+  var import_react_dom = __toESM(require_react_dom());
+
+  // node_modules/@tanstack/virtual-core/dist/esm/utils.js
+  function memo(getDeps, fn, opts) {
+    let deps = opts.initialDeps ?? [];
+    let result;
+    function memoizedFunction() {
+      var _a, _b, _c, _d;
+      let depTime;
+      if (opts.key && ((_a = opts.debug) == null ? undefined : _a.call(opts)))
+        depTime = Date.now();
+      const newDeps = getDeps();
+      const depsChanged = newDeps.length !== deps.length || newDeps.some((dep, index) => deps[index] !== dep);
+      if (!depsChanged) {
+        return result;
+      }
+      deps = newDeps;
+      let resultTime;
+      if (opts.key && ((_b = opts.debug) == null ? undefined : _b.call(opts)))
+        resultTime = Date.now();
+      result = fn(...newDeps);
+      if (opts.key && ((_c = opts.debug) == null ? undefined : _c.call(opts))) {
+        const depEndTime = Math.round((Date.now() - depTime) * 100) / 100;
+        const resultEndTime = Math.round((Date.now() - resultTime) * 100) / 100;
+        const resultFpsPercentage = resultEndTime / 16;
+        const pad = (str, num) => {
+          str = String(str);
+          while (str.length < num) {
+            str = " " + str;
+          }
+          return str;
+        };
+        console.info(`%c⏱ ${pad(resultEndTime, 5)} /${pad(depEndTime, 5)} ms`, `
+            font-size: .6rem;
+            font-weight: bold;
+            color: hsl(${Math.max(0, Math.min(120 - 120 * resultFpsPercentage, 120))}deg 100% 31%);`, opts == null ? undefined : opts.key);
+      }
+      (_d = opts == null ? undefined : opts.onChange) == null || _d.call(opts, result);
+      return result;
+    }
+    memoizedFunction.updateDeps = (newDeps) => {
+      deps = newDeps;
+    };
+    return memoizedFunction;
+  }
+  function notUndefined(value, msg) {
+    if (value === undefined) {
+      throw new Error(`Unexpected undefined${msg ? `: ${msg}` : ""}`);
+    } else {
+      return value;
+    }
+  }
+  var approxEqual = (a, b) => Math.abs(a - b) < 1.01;
+  var debounce = (targetWindow, fn, ms) => {
+    let timeoutId;
+    return function(...args) {
+      targetWindow.clearTimeout(timeoutId);
+      timeoutId = targetWindow.setTimeout(() => fn.apply(this, args), ms);
+    };
+  };
+
+  // node_modules/@tanstack/virtual-core/dist/esm/index.js
+  var getRect = (element) => {
+    const { offsetWidth, offsetHeight } = element;
+    return { width: offsetWidth, height: offsetHeight };
+  };
+  var defaultKeyExtractor = (index) => index;
+  var defaultRangeExtractor = (range) => {
+    const start = Math.max(range.startIndex - range.overscan, 0);
+    const end = Math.min(range.endIndex + range.overscan, range.count - 1);
+    const arr = [];
+    for (let i = start;i <= end; i++) {
+      arr.push(i);
+    }
+    return arr;
+  };
+  var observeElementRect = (instance, cb) => {
+    const element = instance.scrollElement;
+    if (!element) {
+      return;
+    }
+    const targetWindow = instance.targetWindow;
+    if (!targetWindow) {
+      return;
+    }
+    const handler = (rect) => {
+      const { width, height } = rect;
+      cb({ width: Math.round(width), height: Math.round(height) });
+    };
+    handler(getRect(element));
+    if (!targetWindow.ResizeObserver) {
+      return () => {};
+    }
+    const observer = new targetWindow.ResizeObserver((entries) => {
+      const run = () => {
+        const entry = entries[0];
+        if (entry == null ? undefined : entry.borderBoxSize) {
+          const box = entry.borderBoxSize[0];
+          if (box) {
+            handler({ width: box.inlineSize, height: box.blockSize });
+            return;
+          }
+        }
+        handler(getRect(element));
+      };
+      instance.options.useAnimationFrameWithResizeObserver ? requestAnimationFrame(run) : run();
+    });
+    observer.observe(element, { box: "border-box" });
+    return () => {
+      observer.unobserve(element);
+    };
+  };
+  var addEventListenerOptions = {
+    passive: true
+  };
+  var supportsScrollend = typeof window == "undefined" ? true : ("onscrollend" in window);
+  var observeElementOffset = (instance, cb) => {
+    const element = instance.scrollElement;
+    if (!element) {
+      return;
+    }
+    const targetWindow = instance.targetWindow;
+    if (!targetWindow) {
+      return;
+    }
+    let offset = 0;
+    const fallback = instance.options.useScrollendEvent && supportsScrollend ? () => {
+      return;
+    } : debounce(targetWindow, () => {
+      cb(offset, false);
+    }, instance.options.isScrollingResetDelay);
+    const createHandler = (isScrolling) => () => {
+      const { horizontal, isRtl } = instance.options;
+      offset = horizontal ? element["scrollLeft"] * (isRtl && -1 || 1) : element["scrollTop"];
+      fallback();
+      cb(offset, isScrolling);
+    };
+    const handler = createHandler(true);
+    const endHandler = createHandler(false);
+    endHandler();
+    element.addEventListener("scroll", handler, addEventListenerOptions);
+    const registerScrollendEvent = instance.options.useScrollendEvent && supportsScrollend;
+    if (registerScrollendEvent) {
+      element.addEventListener("scrollend", endHandler, addEventListenerOptions);
+    }
+    return () => {
+      element.removeEventListener("scroll", handler);
+      if (registerScrollendEvent) {
+        element.removeEventListener("scrollend", endHandler);
+      }
+    };
+  };
+  var measureElement = (element, entry, instance) => {
+    if (entry == null ? undefined : entry.borderBoxSize) {
+      const box = entry.borderBoxSize[0];
+      if (box) {
+        const size = Math.round(box[instance.options.horizontal ? "inlineSize" : "blockSize"]);
+        return size;
+      }
+    }
+    return element[instance.options.horizontal ? "offsetWidth" : "offsetHeight"];
+  };
+  var elementScroll = (offset, {
+    adjustments = 0,
+    behavior
+  }, instance) => {
     var _a, _b;
-    const tree = useTreeApi();
-    const state = useDndContext();
-    const cursor = state.cursor;
-    if (!cursor || cursor.type !== "line")
-      return null;
-    const indent = tree.indent;
-    const top = tree.rowHeight * cursor.index + ((_b = (_a = tree.props.padding) !== null && _a !== undefined ? _a : tree.props.paddingTop) !== null && _b !== undefined ? _b : 0);
-    const left = indent * cursor.level;
-    const Cursor2 = tree.renderCursor;
-    return import_jsx_runtime5.jsx(Cursor2, { top, left, indent });
-  }
-
-  // node_modules/react-arborist/dist/module/components/list-outer-element.js
-  var __rest = function(s, e) {
-    var t = {};
-    for (var p in s)
-      if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-      for (var i = 0, p = Object.getOwnPropertySymbols(s);i < p.length; i++) {
-        if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-          t[p[i]] = s[p[i]];
-      }
-    return t;
-  };
-  var ListOuterElement = import_react6.forwardRef(function Outer(props, ref) {
-    const { children } = props, rest = __rest(props, ["children"]);
-    const tree = useTreeApi();
-    return import_jsx_runtime6.jsxs("div", Object.assign({
-      ref
-    }, rest, { onClick: (e) => {
-      if (e.currentTarget === e.target)
-        tree.deselectAll();
-    }, children: [import_jsx_runtime6.jsx(DropContainer, {}), children] }));
-  });
-  var DropContainer = () => {
-    const tree = useTreeApi();
-    return import_jsx_runtime6.jsx("div", { style: {
-      height: tree.visibleNodes.length * tree.rowHeight,
-      width: "100%",
-      position: "absolute",
-      left: "0",
-      right: "0"
-    }, children: import_jsx_runtime6.jsx(Cursor, {}) });
+    const toOffset = offset + adjustments;
+    (_b = (_a = instance.scrollElement) == null ? undefined : _a.scrollTo) == null || _b.call(_a, {
+      [instance.options.horizontal ? "left" : "top"]: toOffset,
+      behavior
+    });
   };
 
-  // node_modules/react-arborist/dist/module/components/list-inner-element.js
-  var import_jsx_runtime7 = __toESM(require_jsx_runtime());
-  var import_react7 = __toESM(require_react());
-  var __rest2 = function(s, e) {
-    var t = {};
-    for (var p in s)
-      if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-      for (var i = 0, p = Object.getOwnPropertySymbols(s);i < p.length; i++) {
-        if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-          t[p[i]] = s[p[i]];
-      }
-    return t;
-  };
-  var ListInnerElement = import_react7.forwardRef(function InnerElement(_a, ref) {
-    var _b, _c, _d, _e;
-    var { style } = _a, rest = __rest2(_a, ["style"]);
-    const tree = useTreeApi();
-    const paddingTop = (_c = (_b = tree.props.padding) !== null && _b !== undefined ? _b : tree.props.paddingTop) !== null && _c !== undefined ? _c : 0;
-    const paddingBottom = (_e = (_d = tree.props.padding) !== null && _d !== undefined ? _d : tree.props.paddingBottom) !== null && _e !== undefined ? _e : 0;
-    return import_jsx_runtime7.jsx("div", Object.assign({ ref, style: Object.assign(Object.assign({}, style), { height: `${parseFloat(style.height) + paddingTop + paddingBottom}px` }) }, rest));
-  });
-
-  // node_modules/react-arborist/dist/module/components/row-container.js
-  var import_jsx_runtime9 = __toESM(require_jsx_runtime());
-  var import_react28 = __toESM(require_react());
-
-  // node_modules/react-arborist/dist/module/dnd/drag-hook.js
-  var import_react26 = __toESM(require_react());
-
-  // node_modules/react-dnd/dist/esm/core/DndContext.js
-  var import_react8 = __toESM(require_react());
-  var DndContext2 = import_react8.createContext({
-    dragDropManager: undefined
-  });
-
-  // node_modules/react-dnd/dist/esm/core/DndProvider.js
-  var import_jsx_runtime8 = __toESM(require_jsx_runtime());
-  var import_react9 = __toESM(require_react());
-
-  // node_modules/dnd-core/dist/esm/interfaces.js
-  var HandlerRole;
-  (function(HandlerRole2) {
-    HandlerRole2["SOURCE"] = "SOURCE";
-    HandlerRole2["TARGET"] = "TARGET";
-  })(HandlerRole || (HandlerRole = {}));
-
-  // node_modules/@react-dnd/invariant/dist/invariant.esm.js
-  function invariant(condition, format) {
-    for (var _len = arguments.length, args = new Array(_len > 2 ? _len - 2 : 0), _key = 2;_key < _len; _key++) {
-      args[_key - 2] = arguments[_key];
-    }
-    if (true) {
-      if (format === undefined) {
-        throw new Error("invariant requires an error message argument");
-      }
-    }
-    if (!condition) {
-      var error;
-      if (format === undefined) {
-        error = new Error("Minified exception occurred; use the non-minified dev environment " + "for the full error message and additional helpful warnings.");
-      } else {
-        var argIndex = 0;
-        error = new Error(format.replace(/%s/g, function() {
-          return args[argIndex++];
-        }));
-        error.name = "Invariant Violation";
-      }
-      error.framesToPop = 1;
-      throw error;
-    }
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/types.js
-  var INIT_COORDS = "dnd-core/INIT_COORDS";
-  var BEGIN_DRAG = "dnd-core/BEGIN_DRAG";
-  var PUBLISH_DRAG_SOURCE = "dnd-core/PUBLISH_DRAG_SOURCE";
-  var HOVER = "dnd-core/HOVER";
-  var DROP = "dnd-core/DROP";
-  var END_DRAG = "dnd-core/END_DRAG";
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/local/setClientOffset.js
-  function setClientOffset(clientOffset, sourceClientOffset) {
-    return {
-      type: INIT_COORDS,
-      payload: {
-        sourceClientOffset: sourceClientOffset || null,
-        clientOffset: clientOffset || null
-      }
-    };
-  }
-
-  // node_modules/dnd-core/dist/esm/utils/js_utils.js
-  function _typeof(obj) {
-    "@babel/helpers - typeof";
-    if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
-      _typeof = function _typeof(obj2) {
-        return typeof obj2;
-      };
-    } else {
-      _typeof = function _typeof(obj2) {
-        return obj2 && typeof Symbol === "function" && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
-      };
-    }
-    return _typeof(obj);
-  }
-  function get(obj, path, defaultValue) {
-    return path.split(".").reduce(function(a, c) {
-      return a && a[c] ? a[c] : defaultValue || null;
-    }, obj);
-  }
-  function without(items, item) {
-    return items.filter(function(i) {
-      return i !== item;
-    });
-  }
-  function isObject(input) {
-    return _typeof(input) === "object";
-  }
-  function xor(itemsA, itemsB) {
-    var map = new Map;
-    var insertItem = function insertItem(item) {
-      map.set(item, map.has(item) ? map.get(item) + 1 : 1);
-    };
-    itemsA.forEach(insertItem);
-    itemsB.forEach(insertItem);
-    var result = [];
-    map.forEach(function(count, key) {
-      if (count === 1) {
-        result.push(key);
-      }
-    });
-    return result;
-  }
-  function intersection(itemsA, itemsB) {
-    return itemsA.filter(function(t) {
-      return itemsB.indexOf(t) > -1;
-    });
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/beginDrag.js
-  var ResetCoordinatesAction = {
-    type: INIT_COORDS,
-    payload: {
-      clientOffset: null,
-      sourceClientOffset: null
-    }
-  };
-  function createBeginDrag(manager) {
-    return function beginDrag() {
-      var sourceIds = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
-      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
-        publishSource: true
-      };
-      var _options$publishSourc = options.publishSource, publishSource = _options$publishSourc === undefined ? true : _options$publishSourc, clientOffset = options.clientOffset, getSourceClientOffset = options.getSourceClientOffset;
-      var monitor = manager.getMonitor();
-      var registry = manager.getRegistry();
-      manager.dispatch(setClientOffset(clientOffset));
-      verifyInvariants(sourceIds, monitor, registry);
-      var sourceId = getDraggableSource(sourceIds, monitor);
-      if (sourceId === null) {
-        manager.dispatch(ResetCoordinatesAction);
-        return;
-      }
-      var sourceClientOffset = null;
-      if (clientOffset) {
-        if (!getSourceClientOffset) {
-          throw new Error("getSourceClientOffset must be defined");
-        }
-        verifyGetSourceClientOffsetIsFunction(getSourceClientOffset);
-        sourceClientOffset = getSourceClientOffset(sourceId);
-      }
-      manager.dispatch(setClientOffset(clientOffset, sourceClientOffset));
-      var source = registry.getSource(sourceId);
-      var item = source.beginDrag(monitor, sourceId);
-      if (item == null) {
-        return;
-      }
-      verifyItemIsObject(item);
-      registry.pinSource(sourceId);
-      var itemType = registry.getSourceType(sourceId);
-      return {
-        type: BEGIN_DRAG,
-        payload: {
-          itemType,
-          item,
-          sourceId,
-          clientOffset: clientOffset || null,
-          sourceClientOffset: sourceClientOffset || null,
-          isSourcePublic: !!publishSource
-        }
-      };
-    };
-  }
-  function verifyInvariants(sourceIds, monitor, registry) {
-    invariant(!monitor.isDragging(), "Cannot call beginDrag while dragging.");
-    sourceIds.forEach(function(sourceId) {
-      invariant(registry.getSource(sourceId), "Expected sourceIds to be registered.");
-    });
-  }
-  function verifyGetSourceClientOffsetIsFunction(getSourceClientOffset) {
-    invariant(typeof getSourceClientOffset === "function", "When clientOffset is provided, getSourceClientOffset must be a function.");
-  }
-  function verifyItemIsObject(item) {
-    invariant(isObject(item), "Item must be an object.");
-  }
-  function getDraggableSource(sourceIds, monitor) {
-    var sourceId = null;
-    for (var i = sourceIds.length - 1;i >= 0; i--) {
-      if (monitor.canDragSource(sourceIds[i])) {
-        sourceId = sourceIds[i];
-        break;
-      }
-    }
-    return sourceId;
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/publishDragSource.js
-  function createPublishDragSource(manager) {
-    return function publishDragSource() {
-      var monitor = manager.getMonitor();
-      if (monitor.isDragging()) {
-        return {
-          type: PUBLISH_DRAG_SOURCE
-        };
-      }
-    };
-  }
-
-  // node_modules/dnd-core/dist/esm/utils/matchesType.js
-  function matchesType(targetType, draggedItemType) {
-    if (draggedItemType === null) {
-      return targetType === null;
-    }
-    return Array.isArray(targetType) ? targetType.some(function(t) {
-      return t === draggedItemType;
-    }) : targetType === draggedItemType;
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/hover.js
-  function createHover(manager) {
-    return function hover(targetIdsArg) {
-      var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {}, clientOffset = _ref.clientOffset;
-      verifyTargetIdsIsArray(targetIdsArg);
-      var targetIds = targetIdsArg.slice(0);
-      var monitor = manager.getMonitor();
-      var registry = manager.getRegistry();
-      checkInvariants(targetIds, monitor, registry);
-      var draggedItemType = monitor.getItemType();
-      removeNonMatchingTargetIds(targetIds, registry, draggedItemType);
-      hoverAllTargets(targetIds, monitor, registry);
-      return {
-        type: HOVER,
-        payload: {
-          targetIds,
-          clientOffset: clientOffset || null
-        }
-      };
-    };
-  }
-  function verifyTargetIdsIsArray(targetIdsArg) {
-    invariant(Array.isArray(targetIdsArg), "Expected targetIds to be an array.");
-  }
-  function checkInvariants(targetIds, monitor, registry) {
-    invariant(monitor.isDragging(), "Cannot call hover while not dragging.");
-    invariant(!monitor.didDrop(), "Cannot call hover after drop.");
-    for (var i = 0;i < targetIds.length; i++) {
-      var targetId = targetIds[i];
-      invariant(targetIds.lastIndexOf(targetId) === i, "Expected targetIds to be unique in the passed array.");
-      var target = registry.getTarget(targetId);
-      invariant(target, "Expected targetIds to be registered.");
-    }
-  }
-  function removeNonMatchingTargetIds(targetIds, registry, draggedItemType) {
-    for (var i = targetIds.length - 1;i >= 0; i--) {
-      var targetId = targetIds[i];
-      var targetType = registry.getTargetType(targetId);
-      if (!matchesType(targetType, draggedItemType)) {
-        targetIds.splice(i, 1);
-      }
-    }
-  }
-  function hoverAllTargets(targetIds, monitor, registry) {
-    targetIds.forEach(function(targetId) {
-      var target = registry.getTarget(targetId);
-      target.hover(monitor, targetId);
-    });
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/drop.js
-  function ownKeys(object, enumerableOnly) {
-    var keys = Object.keys(object);
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object);
-      if (enumerableOnly) {
-        symbols = symbols.filter(function(sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-      keys.push.apply(keys, symbols);
-    }
-    return keys;
-  }
-  function _objectSpread(target) {
-    for (var i = 1;i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-      if (i % 2) {
-        ownKeys(Object(source), true).forEach(function(key) {
-          _defineProperty(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys(Object(source)).forEach(function(key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
-    }
-    return target;
-  }
-  function _defineProperty(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  function createDrop(manager) {
-    return function drop() {
-      var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      var monitor = manager.getMonitor();
-      var registry = manager.getRegistry();
-      verifyInvariants2(monitor);
-      var targetIds = getDroppableTargets(monitor);
-      targetIds.forEach(function(targetId, index) {
-        var dropResult = determineDropResult(targetId, index, registry, monitor);
-        var action = {
-          type: DROP,
-          payload: {
-            dropResult: _objectSpread(_objectSpread({}, options), dropResult)
+  class Virtualizer {
+    constructor(opts) {
+      this.unsubs = [];
+      this.scrollElement = null;
+      this.targetWindow = null;
+      this.isScrolling = false;
+      this.measurementsCache = [];
+      this.itemSizeCache = /* @__PURE__ */ new Map;
+      this.pendingMeasuredCacheIndexes = [];
+      this.scrollRect = null;
+      this.scrollOffset = null;
+      this.scrollDirection = null;
+      this.scrollAdjustments = 0;
+      this.elementsCache = /* @__PURE__ */ new Map;
+      this.observer = /* @__PURE__ */ (() => {
+        let _ro = null;
+        const get = () => {
+          if (_ro) {
+            return _ro;
           }
-        };
-        manager.dispatch(action);
-      });
-    };
-  }
-  function verifyInvariants2(monitor) {
-    invariant(monitor.isDragging(), "Cannot call drop while not dragging.");
-    invariant(!monitor.didDrop(), "Cannot call drop twice during one drag operation.");
-  }
-  function determineDropResult(targetId, index, registry, monitor) {
-    var target = registry.getTarget(targetId);
-    var dropResult = target ? target.drop(monitor, targetId) : undefined;
-    verifyDropResultType(dropResult);
-    if (typeof dropResult === "undefined") {
-      dropResult = index === 0 ? {} : monitor.getDropResult();
-    }
-    return dropResult;
-  }
-  function verifyDropResultType(dropResult) {
-    invariant(typeof dropResult === "undefined" || isObject(dropResult), "Drop result must either be an object or undefined.");
-  }
-  function getDroppableTargets(monitor) {
-    var targetIds = monitor.getTargetIds().filter(monitor.canDropOnTarget, monitor);
-    targetIds.reverse();
-    return targetIds;
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/endDrag.js
-  function createEndDrag(manager) {
-    return function endDrag() {
-      var monitor = manager.getMonitor();
-      var registry = manager.getRegistry();
-      verifyIsDragging(monitor);
-      var sourceId = monitor.getSourceId();
-      if (sourceId != null) {
-        var source = registry.getSource(sourceId, true);
-        source.endDrag(monitor, sourceId);
-        registry.unpinSource();
-      }
-      return {
-        type: END_DRAG
-      };
-    };
-  }
-  function verifyIsDragging(monitor) {
-    invariant(monitor.isDragging(), "Cannot call endDrag while not dragging.");
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/dragDrop/index.js
-  function createDragDropActions(manager) {
-    return {
-      beginDrag: createBeginDrag(manager),
-      publishDragSource: createPublishDragSource(manager),
-      hover: createHover(manager),
-      drop: createDrop(manager),
-      endDrag: createEndDrag(manager)
-    };
-  }
-
-  // node_modules/dnd-core/dist/esm/classes/DragDropManagerImpl.js
-  function _classCallCheck(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty2(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var DragDropManagerImpl = /* @__PURE__ */ function() {
-    function DragDropManagerImpl2(store, monitor) {
-      var _this = this;
-      _classCallCheck(this, DragDropManagerImpl2);
-      _defineProperty2(this, "store", undefined);
-      _defineProperty2(this, "monitor", undefined);
-      _defineProperty2(this, "backend", undefined);
-      _defineProperty2(this, "isSetUp", false);
-      _defineProperty2(this, "handleRefCountChange", function() {
-        var shouldSetUp = _this.store.getState().refCount > 0;
-        if (_this.backend) {
-          if (shouldSetUp && !_this.isSetUp) {
-            _this.backend.setup();
-            _this.isSetUp = true;
-          } else if (!shouldSetUp && _this.isSetUp) {
-            _this.backend.teardown();
-            _this.isSetUp = false;
+          if (!this.targetWindow || !this.targetWindow.ResizeObserver) {
+            return null;
           }
-        }
-      });
-      this.store = store;
-      this.monitor = monitor;
-      store.subscribe(this.handleRefCountChange);
-    }
-    _createClass(DragDropManagerImpl2, [{
-      key: "receiveBackend",
-      value: function receiveBackend(backend) {
-        this.backend = backend;
-      }
-    }, {
-      key: "getMonitor",
-      value: function getMonitor() {
-        return this.monitor;
-      }
-    }, {
-      key: "getBackend",
-      value: function getBackend() {
-        return this.backend;
-      }
-    }, {
-      key: "getRegistry",
-      value: function getRegistry() {
-        return this.monitor.registry;
-      }
-    }, {
-      key: "getActions",
-      value: function getActions() {
-        var manager = this;
-        var dispatch = this.store.dispatch;
-        function bindActionCreator(actionCreator) {
-          return function() {
-            for (var _len = arguments.length, args = new Array(_len), _key = 0;_key < _len; _key++) {
-              args[_key] = arguments[_key];
-            }
-            var action = actionCreator.apply(manager, args);
-            if (typeof action !== "undefined") {
-              dispatch(action);
-            }
-          };
-        }
-        var actions4 = createDragDropActions(this);
-        return Object.keys(actions4).reduce(function(boundActions, key) {
-          var action = actions4[key];
-          boundActions[key] = bindActionCreator(action);
-          return boundActions;
-        }, {});
-      }
-    }, {
-      key: "dispatch",
-      value: function dispatch(action) {
-        this.store.dispatch(action);
-      }
-    }]);
-    return DragDropManagerImpl2;
-  }();
-
-  // node_modules/dnd-core/node_modules/redux/es/redux.js
-  var $$observable = function() {
-    return typeof Symbol === "function" && Symbol.observable || "@@observable";
-  }();
-  var randomString = function randomString2() {
-    return Math.random().toString(36).substring(7).split("").join(".");
-  };
-  var ActionTypes = {
-    INIT: "@@redux/INIT" + randomString(),
-    REPLACE: "@@redux/REPLACE" + randomString(),
-    PROBE_UNKNOWN_ACTION: function PROBE_UNKNOWN_ACTION() {
-      return "@@redux/PROBE_UNKNOWN_ACTION" + randomString();
-    }
-  };
-  function isPlainObject(obj) {
-    if (typeof obj !== "object" || obj === null)
-      return false;
-    var proto = obj;
-    while (Object.getPrototypeOf(proto) !== null) {
-      proto = Object.getPrototypeOf(proto);
-    }
-    return Object.getPrototypeOf(obj) === proto;
-  }
-  function miniKindOf(val) {
-    if (val === undefined)
-      return "undefined";
-    if (val === null)
-      return "null";
-    var type = typeof val;
-    switch (type) {
-      case "boolean":
-      case "string":
-      case "number":
-      case "symbol":
-      case "function": {
-        return type;
-      }
-    }
-    if (Array.isArray(val))
-      return "array";
-    if (isDate(val))
-      return "date";
-    if (isError(val))
-      return "error";
-    var constructorName = ctorName(val);
-    switch (constructorName) {
-      case "Symbol":
-      case "Promise":
-      case "WeakMap":
-      case "WeakSet":
-      case "Map":
-      case "Set":
-        return constructorName;
-    }
-    return type.slice(8, -1).toLowerCase().replace(/\s/g, "");
-  }
-  function ctorName(val) {
-    return typeof val.constructor === "function" ? val.constructor.name : null;
-  }
-  function isError(val) {
-    return val instanceof Error || typeof val.message === "string" && val.constructor && typeof val.constructor.stackTraceLimit === "number";
-  }
-  function isDate(val) {
-    if (val instanceof Date)
-      return true;
-    return typeof val.toDateString === "function" && typeof val.getDate === "function" && typeof val.setDate === "function";
-  }
-  function kindOf(val) {
-    var typeOfVal = typeof val;
-    if (true) {
-      typeOfVal = miniKindOf(val);
-    }
-    return typeOfVal;
-  }
-  function createStore(reducer6, preloadedState, enhancer) {
-    var _ref2;
-    if (typeof preloadedState === "function" && typeof enhancer === "function" || typeof enhancer === "function" && typeof arguments[3] === "function") {
-      throw new Error("It looks like you are passing several store enhancers to " + "createStore(). This is not supported. Instead, compose them " + "together to a single function. See https://redux.js.org/tutorials/fundamentals/part-4-store#creating-a-store-with-enhancers for an example.");
-    }
-    if (typeof preloadedState === "function" && typeof enhancer === "undefined") {
-      enhancer = preloadedState;
-      preloadedState = undefined;
-    }
-    if (typeof enhancer !== "undefined") {
-      if (typeof enhancer !== "function") {
-        throw new Error("Expected the enhancer to be a function. Instead, received: '" + kindOf(enhancer) + "'");
-      }
-      return enhancer(createStore)(reducer6, preloadedState);
-    }
-    if (typeof reducer6 !== "function") {
-      throw new Error("Expected the root reducer to be a function. Instead, received: '" + kindOf(reducer6) + "'");
-    }
-    var currentReducer = reducer6;
-    var currentState = preloadedState;
-    var currentListeners = [];
-    var nextListeners = currentListeners;
-    var isDispatching = false;
-    function ensureCanMutateNextListeners() {
-      if (nextListeners === currentListeners) {
-        nextListeners = currentListeners.slice();
-      }
-    }
-    function getState() {
-      if (isDispatching) {
-        throw new Error("You may not call store.getState() while the reducer is executing. " + "The reducer has already received the state as an argument. " + "Pass it down from the top reducer instead of reading it from the store.");
-      }
-      return currentState;
-    }
-    function subscribe(listener) {
-      if (typeof listener !== "function") {
-        throw new Error("Expected the listener to be a function. Instead, received: '" + kindOf(listener) + "'");
-      }
-      if (isDispatching) {
-        throw new Error("You may not call store.subscribe() while the reducer is executing. " + "If you would like to be notified after the store has been updated, subscribe from a " + "component and invoke store.getState() in the callback to access the latest state. " + "See https://redux.js.org/api/store#subscribelistener for more details.");
-      }
-      var isSubscribed = true;
-      ensureCanMutateNextListeners();
-      nextListeners.push(listener);
-      return function unsubscribe() {
-        if (!isSubscribed) {
-          return;
-        }
-        if (isDispatching) {
-          throw new Error("You may not unsubscribe from a store listener while the reducer is executing. " + "See https://redux.js.org/api/store#subscribelistener for more details.");
-        }
-        isSubscribed = false;
-        ensureCanMutateNextListeners();
-        var index = nextListeners.indexOf(listener);
-        nextListeners.splice(index, 1);
-        currentListeners = null;
-      };
-    }
-    function dispatch(action) {
-      if (!isPlainObject(action)) {
-        throw new Error("Actions must be plain objects. Instead, the actual type was: '" + kindOf(action) + "'. You may need to add middleware to your store setup to handle dispatching other values, such as 'redux-thunk' to handle dispatching functions. See https://redux.js.org/tutorials/fundamentals/part-4-store#middleware and https://redux.js.org/tutorials/fundamentals/part-6-async-logic#using-the-redux-thunk-middleware for examples.");
-      }
-      if (typeof action.type === "undefined") {
-        throw new Error('Actions may not have an undefined "type" property. You may have misspelled an action type string constant.');
-      }
-      if (isDispatching) {
-        throw new Error("Reducers may not dispatch actions.");
-      }
-      try {
-        isDispatching = true;
-        currentState = currentReducer(currentState, action);
-      } finally {
-        isDispatching = false;
-      }
-      var listeners = currentListeners = nextListeners;
-      for (var i = 0;i < listeners.length; i++) {
-        var listener = listeners[i];
-        listener();
-      }
-      return action;
-    }
-    function replaceReducer(nextReducer) {
-      if (typeof nextReducer !== "function") {
-        throw new Error("Expected the nextReducer to be a function. Instead, received: '" + kindOf(nextReducer));
-      }
-      currentReducer = nextReducer;
-      dispatch({
-        type: ActionTypes.REPLACE
-      });
-    }
-    function observable() {
-      var _ref;
-      var outerSubscribe = subscribe;
-      return _ref = {
-        subscribe: function subscribe(observer) {
-          if (typeof observer !== "object" || observer === null) {
-            throw new Error("Expected the observer to be an object. Instead, received: '" + kindOf(observer) + "'");
-          }
-          function observeState() {
-            if (observer.next) {
-              observer.next(getState());
-            }
-          }
-          observeState();
-          var unsubscribe = outerSubscribe(observeState);
-          return {
-            unsubscribe
-          };
-        }
-      }, _ref[$$observable] = function() {
-        return this;
-      }, _ref;
-    }
-    dispatch({
-      type: ActionTypes.INIT
-    });
-    return _ref2 = {
-      dispatch,
-      subscribe,
-      getState,
-      replaceReducer
-    }, _ref2[$$observable] = observable, _ref2;
-  }
-
-  // node_modules/dnd-core/dist/esm/utils/equality.js
-  var strictEquality = function strictEquality2(a, b) {
-    return a === b;
-  };
-  function areCoordsEqual(offsetA, offsetB) {
-    if (!offsetA && !offsetB) {
-      return true;
-    } else if (!offsetA || !offsetB) {
-      return false;
-    } else {
-      return offsetA.x === offsetB.x && offsetA.y === offsetB.y;
-    }
-  }
-  function areArraysEqual(a, b) {
-    var isEqual2 = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : strictEquality;
-    if (a.length !== b.length) {
-      return false;
-    }
-    for (var i = 0;i < a.length; ++i) {
-      if (!isEqual2(a[i], b[i])) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/dragOffset.js
-  function ownKeys2(object, enumerableOnly) {
-    var keys = Object.keys(object);
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object);
-      if (enumerableOnly) {
-        symbols = symbols.filter(function(sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-      keys.push.apply(keys, symbols);
-    }
-    return keys;
-  }
-  function _objectSpread3(target) {
-    for (var i = 1;i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-      if (i % 2) {
-        ownKeys2(Object(source), true).forEach(function(key) {
-          _defineProperty4(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys2(Object(source)).forEach(function(key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
-    }
-    return target;
-  }
-  function _defineProperty4(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var initialState2 = {
-    initialSourceClientOffset: null,
-    initialClientOffset: null,
-    clientOffset: null
-  };
-  function reduce() {
-    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : initialState2;
-    var action = arguments.length > 1 ? arguments[1] : undefined;
-    var payload = action.payload;
-    switch (action.type) {
-      case INIT_COORDS:
-      case BEGIN_DRAG:
-        return {
-          initialSourceClientOffset: payload.sourceClientOffset,
-          initialClientOffset: payload.clientOffset,
-          clientOffset: payload.clientOffset
-        };
-      case HOVER:
-        if (areCoordsEqual(state.clientOffset, payload.clientOffset)) {
-          return state;
-        }
-        return _objectSpread3(_objectSpread3({}, state), {}, {
-          clientOffset: payload.clientOffset
-        });
-      case END_DRAG:
-      case DROP:
-        return initialState2;
-      default:
-        return state;
-    }
-  }
-
-  // node_modules/dnd-core/dist/esm/actions/registry.js
-  var ADD_SOURCE = "dnd-core/ADD_SOURCE";
-  var ADD_TARGET = "dnd-core/ADD_TARGET";
-  var REMOVE_SOURCE = "dnd-core/REMOVE_SOURCE";
-  var REMOVE_TARGET = "dnd-core/REMOVE_TARGET";
-  function addSource(sourceId) {
-    return {
-      type: ADD_SOURCE,
-      payload: {
-        sourceId
-      }
-    };
-  }
-  function addTarget(targetId) {
-    return {
-      type: ADD_TARGET,
-      payload: {
-        targetId
-      }
-    };
-  }
-  function removeSource(sourceId) {
-    return {
-      type: REMOVE_SOURCE,
-      payload: {
-        sourceId
-      }
-    };
-  }
-  function removeTarget(targetId) {
-    return {
-      type: REMOVE_TARGET,
-      payload: {
-        targetId
-      }
-    };
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/dragOperation.js
-  function ownKeys3(object, enumerableOnly) {
-    var keys = Object.keys(object);
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object);
-      if (enumerableOnly) {
-        symbols = symbols.filter(function(sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-      keys.push.apply(keys, symbols);
-    }
-    return keys;
-  }
-  function _objectSpread5(target) {
-    for (var i = 1;i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-      if (i % 2) {
-        ownKeys3(Object(source), true).forEach(function(key) {
-          _defineProperty5(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys3(Object(source)).forEach(function(key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
-    }
-    return target;
-  }
-  function _defineProperty5(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var initialState3 = {
-    itemType: null,
-    item: null,
-    sourceId: null,
-    targetIds: [],
-    dropResult: null,
-    didDrop: false,
-    isSourcePublic: null
-  };
-  function reduce2() {
-    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : initialState3;
-    var action = arguments.length > 1 ? arguments[1] : undefined;
-    var payload = action.payload;
-    switch (action.type) {
-      case BEGIN_DRAG:
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          itemType: payload.itemType,
-          item: payload.item,
-          sourceId: payload.sourceId,
-          isSourcePublic: payload.isSourcePublic,
-          dropResult: null,
-          didDrop: false
-        });
-      case PUBLISH_DRAG_SOURCE:
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          isSourcePublic: true
-        });
-      case HOVER:
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          targetIds: payload.targetIds
-        });
-      case REMOVE_TARGET:
-        if (state.targetIds.indexOf(payload.targetId) === -1) {
-          return state;
-        }
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          targetIds: without(state.targetIds, payload.targetId)
-        });
-      case DROP:
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          dropResult: payload.dropResult,
-          didDrop: true,
-          targetIds: []
-        });
-      case END_DRAG:
-        return _objectSpread5(_objectSpread5({}, state), {}, {
-          itemType: null,
-          item: null,
-          sourceId: null,
-          dropResult: null,
-          didDrop: false,
-          isSourcePublic: null,
-          targetIds: []
-        });
-      default:
-        return state;
-    }
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/refCount.js
-  function reduce3() {
-    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
-    var action = arguments.length > 1 ? arguments[1] : undefined;
-    switch (action.type) {
-      case ADD_SOURCE:
-      case ADD_TARGET:
-        return state + 1;
-      case REMOVE_SOURCE:
-      case REMOVE_TARGET:
-        return state - 1;
-      default:
-        return state;
-    }
-  }
-
-  // node_modules/dnd-core/dist/esm/utils/dirtiness.js
-  var NONE = [];
-  var ALL = [];
-  NONE.__IS_NONE__ = true;
-  ALL.__IS_ALL__ = true;
-  function areDirty(dirtyIds, handlerIds) {
-    if (dirtyIds === NONE) {
-      return false;
-    }
-    if (dirtyIds === ALL || typeof handlerIds === "undefined") {
-      return true;
-    }
-    var commonIds = intersection(handlerIds, dirtyIds);
-    return commonIds.length > 0;
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/dirtyHandlerIds.js
-  function reduce4() {
-    var _state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : NONE;
-    var action = arguments.length > 1 ? arguments[1] : undefined;
-    switch (action.type) {
-      case HOVER:
-        break;
-      case ADD_SOURCE:
-      case ADD_TARGET:
-      case REMOVE_TARGET:
-      case REMOVE_SOURCE:
-        return NONE;
-      case BEGIN_DRAG:
-      case PUBLISH_DRAG_SOURCE:
-      case END_DRAG:
-      case DROP:
-      default:
-        return ALL;
-    }
-    var _action$payload = action.payload, _action$payload$targe = _action$payload.targetIds, targetIds = _action$payload$targe === undefined ? [] : _action$payload$targe, _action$payload$prevT = _action$payload.prevTargetIds, prevTargetIds = _action$payload$prevT === undefined ? [] : _action$payload$prevT;
-    var result = xor(targetIds, prevTargetIds);
-    var didChange = result.length > 0 || !areArraysEqual(targetIds, prevTargetIds);
-    if (!didChange) {
-      return NONE;
-    }
-    var prevInnermostTargetId = prevTargetIds[prevTargetIds.length - 1];
-    var innermostTargetId = targetIds[targetIds.length - 1];
-    if (prevInnermostTargetId !== innermostTargetId) {
-      if (prevInnermostTargetId) {
-        result.push(prevInnermostTargetId);
-      }
-      if (innermostTargetId) {
-        result.push(innermostTargetId);
-      }
-    }
-    return result;
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/stateId.js
-  function reduce5() {
-    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
-    return state + 1;
-  }
-
-  // node_modules/dnd-core/dist/esm/reducers/index.js
-  function ownKeys4(object, enumerableOnly) {
-    var keys = Object.keys(object);
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object);
-      if (enumerableOnly) {
-        symbols = symbols.filter(function(sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-      keys.push.apply(keys, symbols);
-    }
-    return keys;
-  }
-  function _objectSpread6(target) {
-    for (var i = 1;i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-      if (i % 2) {
-        ownKeys4(Object(source), true).forEach(function(key) {
-          _defineProperty6(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys4(Object(source)).forEach(function(key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
-    }
-    return target;
-  }
-  function _defineProperty6(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  function reduce6() {
-    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-    var action = arguments.length > 1 ? arguments[1] : undefined;
-    return {
-      dirtyHandlerIds: reduce4(state.dirtyHandlerIds, {
-        type: action.type,
-        payload: _objectSpread6(_objectSpread6({}, action.payload), {}, {
-          prevTargetIds: get(state, "dragOperation.targetIds", [])
-        })
-      }),
-      dragOffset: reduce(state.dragOffset, action),
-      refCount: reduce3(state.refCount, action),
-      dragOperation: reduce2(state.dragOperation, action),
-      stateId: reduce5(state.stateId)
-    };
-  }
-
-  // node_modules/dnd-core/dist/esm/utils/coords.js
-  function add(a, b) {
-    return {
-      x: a.x + b.x,
-      y: a.y + b.y
-    };
-  }
-  function subtract(a, b) {
-    return {
-      x: a.x - b.x,
-      y: a.y - b.y
-    };
-  }
-  function getSourceClientOffset(state) {
-    var { clientOffset, initialClientOffset, initialSourceClientOffset } = state;
-    if (!clientOffset || !initialClientOffset || !initialSourceClientOffset) {
-      return null;
-    }
-    return subtract(add(clientOffset, initialSourceClientOffset), initialClientOffset);
-  }
-  function getDifferenceFromInitialOffset(state) {
-    var { clientOffset, initialClientOffset } = state;
-    if (!clientOffset || !initialClientOffset) {
-      return null;
-    }
-    return subtract(clientOffset, initialClientOffset);
-  }
-
-  // node_modules/dnd-core/dist/esm/classes/DragDropMonitorImpl.js
-  function _classCallCheck2(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties2(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass2(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties2(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties2(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty7(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var DragDropMonitorImpl = /* @__PURE__ */ function() {
-    function DragDropMonitorImpl2(store, registry) {
-      _classCallCheck2(this, DragDropMonitorImpl2);
-      _defineProperty7(this, "store", undefined);
-      _defineProperty7(this, "registry", undefined);
-      this.store = store;
-      this.registry = registry;
-    }
-    _createClass2(DragDropMonitorImpl2, [{
-      key: "subscribeToStateChange",
-      value: function subscribeToStateChange(listener) {
-        var _this = this;
-        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
-          handlerIds: undefined
-        };
-        var handlerIds = options.handlerIds;
-        invariant(typeof listener === "function", "listener must be a function.");
-        invariant(typeof handlerIds === "undefined" || Array.isArray(handlerIds), "handlerIds, when specified, must be an array of strings.");
-        var prevStateId = this.store.getState().stateId;
-        var handleChange = function handleChange() {
-          var state = _this.store.getState();
-          var currentStateId = state.stateId;
-          try {
-            var canSkipListener = currentStateId === prevStateId || currentStateId === prevStateId + 1 && !areDirty(state.dirtyHandlerIds, handlerIds);
-            if (!canSkipListener) {
-              listener();
-            }
-          } finally {
-            prevStateId = currentStateId;
-          }
-        };
-        return this.store.subscribe(handleChange);
-      }
-    }, {
-      key: "subscribeToOffsetChange",
-      value: function subscribeToOffsetChange(listener) {
-        var _this2 = this;
-        invariant(typeof listener === "function", "listener must be a function.");
-        var previousState = this.store.getState().dragOffset;
-        var handleChange = function handleChange() {
-          var nextState = _this2.store.getState().dragOffset;
-          if (nextState === previousState) {
-            return;
-          }
-          previousState = nextState;
-          listener();
-        };
-        return this.store.subscribe(handleChange);
-      }
-    }, {
-      key: "canDragSource",
-      value: function canDragSource(sourceId) {
-        if (!sourceId) {
-          return false;
-        }
-        var source = this.registry.getSource(sourceId);
-        invariant(source, "Expected to find a valid source. sourceId=".concat(sourceId));
-        if (this.isDragging()) {
-          return false;
-        }
-        return source.canDrag(this, sourceId);
-      }
-    }, {
-      key: "canDropOnTarget",
-      value: function canDropOnTarget(targetId) {
-        if (!targetId) {
-          return false;
-        }
-        var target = this.registry.getTarget(targetId);
-        invariant(target, "Expected to find a valid target. targetId=".concat(targetId));
-        if (!this.isDragging() || this.didDrop()) {
-          return false;
-        }
-        var targetType = this.registry.getTargetType(targetId);
-        var draggedItemType = this.getItemType();
-        return matchesType(targetType, draggedItemType) && target.canDrop(this, targetId);
-      }
-    }, {
-      key: "isDragging",
-      value: function isDragging() {
-        return Boolean(this.getItemType());
-      }
-    }, {
-      key: "isDraggingSource",
-      value: function isDraggingSource(sourceId) {
-        if (!sourceId) {
-          return false;
-        }
-        var source = this.registry.getSource(sourceId, true);
-        invariant(source, "Expected to find a valid source. sourceId=".concat(sourceId));
-        if (!this.isDragging() || !this.isSourcePublic()) {
-          return false;
-        }
-        var sourceType = this.registry.getSourceType(sourceId);
-        var draggedItemType = this.getItemType();
-        if (sourceType !== draggedItemType) {
-          return false;
-        }
-        return source.isDragging(this, sourceId);
-      }
-    }, {
-      key: "isOverTarget",
-      value: function isOverTarget(targetId) {
-        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
-          shallow: false
-        };
-        if (!targetId) {
-          return false;
-        }
-        var shallow = options.shallow;
-        if (!this.isDragging()) {
-          return false;
-        }
-        var targetType = this.registry.getTargetType(targetId);
-        var draggedItemType = this.getItemType();
-        if (draggedItemType && !matchesType(targetType, draggedItemType)) {
-          return false;
-        }
-        var targetIds = this.getTargetIds();
-        if (!targetIds.length) {
-          return false;
-        }
-        var index = targetIds.indexOf(targetId);
-        if (shallow) {
-          return index === targetIds.length - 1;
-        } else {
-          return index > -1;
-        }
-      }
-    }, {
-      key: "getItemType",
-      value: function getItemType() {
-        return this.store.getState().dragOperation.itemType;
-      }
-    }, {
-      key: "getItem",
-      value: function getItem() {
-        return this.store.getState().dragOperation.item;
-      }
-    }, {
-      key: "getSourceId",
-      value: function getSourceId() {
-        return this.store.getState().dragOperation.sourceId;
-      }
-    }, {
-      key: "getTargetIds",
-      value: function getTargetIds() {
-        return this.store.getState().dragOperation.targetIds;
-      }
-    }, {
-      key: "getDropResult",
-      value: function getDropResult() {
-        return this.store.getState().dragOperation.dropResult;
-      }
-    }, {
-      key: "didDrop",
-      value: function didDrop() {
-        return this.store.getState().dragOperation.didDrop;
-      }
-    }, {
-      key: "isSourcePublic",
-      value: function isSourcePublic() {
-        return Boolean(this.store.getState().dragOperation.isSourcePublic);
-      }
-    }, {
-      key: "getInitialClientOffset",
-      value: function getInitialClientOffset() {
-        return this.store.getState().dragOffset.initialClientOffset;
-      }
-    }, {
-      key: "getInitialSourceClientOffset",
-      value: function getInitialSourceClientOffset() {
-        return this.store.getState().dragOffset.initialSourceClientOffset;
-      }
-    }, {
-      key: "getClientOffset",
-      value: function getClientOffset() {
-        return this.store.getState().dragOffset.clientOffset;
-      }
-    }, {
-      key: "getSourceClientOffset",
-      value: function getSourceClientOffset() {
-        return getSourceClientOffset(this.store.getState().dragOffset);
-      }
-    }, {
-      key: "getDifferenceFromInitialOffset",
-      value: function getDifferenceFromInitialOffset() {
-        return getDifferenceFromInitialOffset(this.store.getState().dragOffset);
-      }
-    }]);
-    return DragDropMonitorImpl2;
-  }();
-
-  // node_modules/dnd-core/dist/esm/utils/getNextUniqueId.js
-  var nextUniqueId = 0;
-  function getNextUniqueId() {
-    return nextUniqueId++;
-  }
-
-  // node_modules/dnd-core/dist/esm/contracts.js
-  function _typeof3(obj) {
-    "@babel/helpers - typeof";
-    if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
-      _typeof3 = function _typeof(obj2) {
-        return typeof obj2;
-      };
-    } else {
-      _typeof3 = function _typeof(obj2) {
-        return obj2 && typeof Symbol === "function" && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
-      };
-    }
-    return _typeof3(obj);
-  }
-  function validateSourceContract(source) {
-    invariant(typeof source.canDrag === "function", "Expected canDrag to be a function.");
-    invariant(typeof source.beginDrag === "function", "Expected beginDrag to be a function.");
-    invariant(typeof source.endDrag === "function", "Expected endDrag to be a function.");
-  }
-  function validateTargetContract(target) {
-    invariant(typeof target.canDrop === "function", "Expected canDrop to be a function.");
-    invariant(typeof target.hover === "function", "Expected hover to be a function.");
-    invariant(typeof target.drop === "function", "Expected beginDrag to be a function.");
-  }
-  function validateType(type, allowArray) {
-    if (allowArray && Array.isArray(type)) {
-      type.forEach(function(t) {
-        return validateType(t, false);
-      });
-      return;
-    }
-    invariant(typeof type === "string" || _typeof3(type) === "symbol", allowArray ? "Type can only be a string, a symbol, or an array of either." : "Type can only be a string or a symbol.");
-  }
-
-  // node_modules/@react-dnd/asap/dist/esm/makeRequestCall.mjs
-  var scope = typeof global !== "undefined" ? global : self;
-  var BrowserMutationObserver = scope.MutationObserver || scope.WebKitMutationObserver;
-  function makeRequestCallFromTimer(callback) {
-    return function requestCall() {
-      const timeoutHandle = setTimeout(handleTimer, 0);
-      const intervalHandle = setInterval(handleTimer, 50);
-      function handleTimer() {
-        clearTimeout(timeoutHandle);
-        clearInterval(intervalHandle);
-        callback();
-      }
-    };
-  }
-  function makeRequestCallFromMutationObserver(callback) {
-    let toggle = 1;
-    const observer = new BrowserMutationObserver(callback);
-    const node = document.createTextNode("");
-    observer.observe(node, {
-      characterData: true
-    });
-    return function requestCall() {
-      toggle = -toggle;
-      node.data = toggle;
-    };
-  }
-  var makeRequestCall = typeof BrowserMutationObserver === "function" ? makeRequestCallFromMutationObserver : makeRequestCallFromTimer;
-
-  // node_modules/@react-dnd/asap/dist/esm/AsapQueue.mjs
-  class AsapQueue {
-    enqueueTask(task) {
-      const { queue: q, requestFlush } = this;
-      if (!q.length) {
-        requestFlush();
-        this.flushing = true;
-      }
-      q[q.length] = task;
-    }
-    constructor() {
-      this.queue = [];
-      this.pendingErrors = [];
-      this.flushing = false;
-      this.index = 0;
-      this.capacity = 1024;
-      this.flush = () => {
-        const { queue: q } = this;
-        while (this.index < q.length) {
-          const currentIndex = this.index;
-          this.index++;
-          q[currentIndex].call();
-          if (this.index > this.capacity) {
-            for (let scan = 0, newLength = q.length - this.index;scan < newLength; scan++) {
-              q[scan] = q[scan + this.index];
-            }
-            q.length -= this.index;
-            this.index = 0;
-          }
-        }
-        q.length = 0;
-        this.index = 0;
-        this.flushing = false;
-      };
-      this.registerPendingError = (err) => {
-        this.pendingErrors.push(err);
-        this.requestErrorThrow();
-      };
-      this.requestFlush = makeRequestCall(this.flush);
-      this.requestErrorThrow = makeRequestCallFromTimer(() => {
-        if (this.pendingErrors.length) {
-          throw this.pendingErrors.shift();
-        }
-      });
-    }
-  }
-
-  // node_modules/@react-dnd/asap/dist/esm/RawTask.mjs
-  class RawTask {
-    call() {
-      try {
-        this.task && this.task();
-      } catch (error) {
-        this.onError(error);
-      } finally {
-        this.task = null;
-        this.release(this);
-      }
-    }
-    constructor(onError, release) {
-      this.onError = onError;
-      this.release = release;
-      this.task = null;
-    }
-  }
-
-  // node_modules/@react-dnd/asap/dist/esm/TaskFactory.mjs
-  class TaskFactory {
-    create(task) {
-      const tasks = this.freeTasks;
-      const t1 = tasks.length ? tasks.pop() : new RawTask(this.onError, (t) => tasks[tasks.length] = t);
-      t1.task = task;
-      return t1;
-    }
-    constructor(onError) {
-      this.onError = onError;
-      this.freeTasks = [];
-    }
-  }
-
-  // node_modules/@react-dnd/asap/dist/esm/asap.mjs
-  var asapQueue = new AsapQueue;
-  var taskFactory = new TaskFactory(asapQueue.registerPendingError);
-  function asap(task) {
-    asapQueue.enqueueTask(taskFactory.create(task));
-  }
-  // node_modules/dnd-core/dist/esm/classes/HandlerRegistryImpl.js
-  function _classCallCheck3(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties3(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass3(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties3(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties3(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty8(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  function _slicedToArray(arr, i) {
-    return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
-  }
-  function _nonIterableRest() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray(o, minLen);
-  }
-  function _arrayLikeToArray(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function getNextHandlerId(role) {
-    var id = getNextUniqueId().toString();
-    switch (role) {
-      case HandlerRole.SOURCE:
-        return "S".concat(id);
-      case HandlerRole.TARGET:
-        return "T".concat(id);
-      default:
-        throw new Error("Unknown Handler Role: ".concat(role));
-    }
-  }
-  function parseRoleFromHandlerId(handlerId) {
-    switch (handlerId[0]) {
-      case "S":
-        return HandlerRole.SOURCE;
-      case "T":
-        return HandlerRole.TARGET;
-      default:
-        invariant(false, "Cannot parse handler ID: ".concat(handlerId));
-    }
-  }
-  function mapContainsValue(map, searchValue) {
-    var entries = map.entries();
-    var isDone = false;
-    do {
-      var _entries$next = entries.next(), done = _entries$next.done, _entries$next$value = _slicedToArray(_entries$next.value, 2), value = _entries$next$value[1];
-      if (value === searchValue) {
-        return true;
-      }
-      isDone = !!done;
-    } while (!isDone);
-    return false;
-  }
-  var HandlerRegistryImpl = /* @__PURE__ */ function() {
-    function HandlerRegistryImpl2(store) {
-      _classCallCheck3(this, HandlerRegistryImpl2);
-      _defineProperty8(this, "types", new Map);
-      _defineProperty8(this, "dragSources", new Map);
-      _defineProperty8(this, "dropTargets", new Map);
-      _defineProperty8(this, "pinnedSourceId", null);
-      _defineProperty8(this, "pinnedSource", null);
-      _defineProperty8(this, "store", undefined);
-      this.store = store;
-    }
-    _createClass3(HandlerRegistryImpl2, [{
-      key: "addSource",
-      value: function addSource(type, source) {
-        validateType(type);
-        validateSourceContract(source);
-        var sourceId = this.addHandler(HandlerRole.SOURCE, type, source);
-        this.store.dispatch(addSource(sourceId));
-        return sourceId;
-      }
-    }, {
-      key: "addTarget",
-      value: function addTarget(type, target) {
-        validateType(type, true);
-        validateTargetContract(target);
-        var targetId = this.addHandler(HandlerRole.TARGET, type, target);
-        this.store.dispatch(addTarget(targetId));
-        return targetId;
-      }
-    }, {
-      key: "containsHandler",
-      value: function containsHandler(handler) {
-        return mapContainsValue(this.dragSources, handler) || mapContainsValue(this.dropTargets, handler);
-      }
-    }, {
-      key: "getSource",
-      value: function getSource(sourceId) {
-        var includePinned = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
-        invariant(this.isSourceId(sourceId), "Expected a valid source ID.");
-        var isPinned = includePinned && sourceId === this.pinnedSourceId;
-        var source = isPinned ? this.pinnedSource : this.dragSources.get(sourceId);
-        return source;
-      }
-    }, {
-      key: "getTarget",
-      value: function getTarget(targetId) {
-        invariant(this.isTargetId(targetId), "Expected a valid target ID.");
-        return this.dropTargets.get(targetId);
-      }
-    }, {
-      key: "getSourceType",
-      value: function getSourceType(sourceId) {
-        invariant(this.isSourceId(sourceId), "Expected a valid source ID.");
-        return this.types.get(sourceId);
-      }
-    }, {
-      key: "getTargetType",
-      value: function getTargetType(targetId) {
-        invariant(this.isTargetId(targetId), "Expected a valid target ID.");
-        return this.types.get(targetId);
-      }
-    }, {
-      key: "isSourceId",
-      value: function isSourceId(handlerId) {
-        var role = parseRoleFromHandlerId(handlerId);
-        return role === HandlerRole.SOURCE;
-      }
-    }, {
-      key: "isTargetId",
-      value: function isTargetId(handlerId) {
-        var role = parseRoleFromHandlerId(handlerId);
-        return role === HandlerRole.TARGET;
-      }
-    }, {
-      key: "removeSource",
-      value: function removeSource(sourceId) {
-        var _this = this;
-        invariant(this.getSource(sourceId), "Expected an existing source.");
-        this.store.dispatch(removeSource(sourceId));
-        asap(function() {
-          _this.dragSources.delete(sourceId);
-          _this.types.delete(sourceId);
-        });
-      }
-    }, {
-      key: "removeTarget",
-      value: function removeTarget(targetId) {
-        invariant(this.getTarget(targetId), "Expected an existing target.");
-        this.store.dispatch(removeTarget(targetId));
-        this.dropTargets.delete(targetId);
-        this.types.delete(targetId);
-      }
-    }, {
-      key: "pinSource",
-      value: function pinSource(sourceId) {
-        var source = this.getSource(sourceId);
-        invariant(source, "Expected an existing source.");
-        this.pinnedSourceId = sourceId;
-        this.pinnedSource = source;
-      }
-    }, {
-      key: "unpinSource",
-      value: function unpinSource() {
-        invariant(this.pinnedSource, "No source is pinned at the time.");
-        this.pinnedSourceId = null;
-        this.pinnedSource = null;
-      }
-    }, {
-      key: "addHandler",
-      value: function addHandler(role, type, handler) {
-        var id = getNextHandlerId(role);
-        this.types.set(id, type);
-        if (role === HandlerRole.SOURCE) {
-          this.dragSources.set(id, handler);
-        } else if (role === HandlerRole.TARGET) {
-          this.dropTargets.set(id, handler);
-        }
-        return id;
-      }
-    }]);
-    return HandlerRegistryImpl2;
-  }();
-
-  // node_modules/dnd-core/dist/esm/createDragDropManager.js
-  function createDragDropManager(backendFactory) {
-    var globalContext = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : undefined;
-    var backendOptions = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
-    var debugMode = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : false;
-    var store = makeStoreInstance(debugMode);
-    var monitor = new DragDropMonitorImpl(store, new HandlerRegistryImpl(store));
-    var manager = new DragDropManagerImpl(store, monitor);
-    var backend = backendFactory(manager, globalContext, backendOptions);
-    manager.receiveBackend(backend);
-    return manager;
-  }
-  function makeStoreInstance(debugMode) {
-    var reduxDevTools = typeof window !== "undefined" && window.__REDUX_DEVTOOLS_EXTENSION__;
-    return createStore(reduce6, debugMode && reduxDevTools && reduxDevTools({
-      name: "dnd-core",
-      instanceId: "dnd-core"
-    }));
-  }
-
-  // node_modules/react-dnd/dist/esm/core/DndProvider.js
-  var _excluded = ["children"];
-  function _slicedToArray2(arr, i) {
-    return _arrayWithHoles2(arr) || _iterableToArrayLimit2(arr, i) || _unsupportedIterableToArray2(arr, i) || _nonIterableRest2();
-  }
-  function _nonIterableRest2() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray2(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray2(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray2(o, minLen);
-  }
-  function _arrayLikeToArray2(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit2(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles2(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function _objectWithoutProperties(source, excluded) {
-    if (source == null)
-      return {};
-    var target = _objectWithoutPropertiesLoose2(source, excluded);
-    var key, i;
-    if (Object.getOwnPropertySymbols) {
-      var sourceSymbolKeys = Object.getOwnPropertySymbols(source);
-      for (i = 0;i < sourceSymbolKeys.length; i++) {
-        key = sourceSymbolKeys[i];
-        if (excluded.indexOf(key) >= 0)
-          continue;
-        if (!Object.prototype.propertyIsEnumerable.call(source, key))
-          continue;
-        target[key] = source[key];
-      }
-    }
-    return target;
-  }
-  function _objectWithoutPropertiesLoose2(source, excluded) {
-    if (source == null)
-      return {};
-    var target = {};
-    var sourceKeys = Object.keys(source);
-    var key, i;
-    for (i = 0;i < sourceKeys.length; i++) {
-      key = sourceKeys[i];
-      if (excluded.indexOf(key) >= 0)
-        continue;
-      target[key] = source[key];
-    }
-    return target;
-  }
-  var refCount = 0;
-  var INSTANCE_SYM = Symbol.for("__REACT_DND_CONTEXT_INSTANCE__");
-  var DndProvider = import_react9.memo(function DndProvider2(_ref) {
-    var children = _ref.children, props = _objectWithoutProperties(_ref, _excluded);
-    var _getDndContextValue = getDndContextValue(props), _getDndContextValue2 = _slicedToArray2(_getDndContextValue, 2), manager = _getDndContextValue2[0], isGlobalInstance = _getDndContextValue2[1];
-    import_react9.useEffect(function() {
-      if (isGlobalInstance) {
-        var context = getGlobalContext();
-        ++refCount;
-        return function() {
-          if (--refCount === 0) {
-            context[INSTANCE_SYM] = null;
-          }
-        };
-      }
-    }, []);
-    return import_jsx_runtime8.jsx(DndContext2.Provider, Object.assign({
-      value: manager
-    }, {
-      children
-    }), undefined);
-  });
-  function getDndContextValue(props) {
-    if ("manager" in props) {
-      var _manager = {
-        dragDropManager: props.manager
-      };
-      return [_manager, false];
-    }
-    var manager = createSingletonDndContext(props.backend, props.context, props.options, props.debugMode);
-    var isGlobalInstance = !props.context;
-    return [manager, isGlobalInstance];
-  }
-  function createSingletonDndContext(backend) {
-    var context = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : getGlobalContext();
-    var options = arguments.length > 2 ? arguments[2] : undefined;
-    var debugMode = arguments.length > 3 ? arguments[3] : undefined;
-    var ctx = context;
-    if (!ctx[INSTANCE_SYM]) {
-      ctx[INSTANCE_SYM] = {
-        dragDropManager: createDragDropManager(backend, context, options, debugMode)
-      };
-    }
-    return ctx[INSTANCE_SYM];
-  }
-  function getGlobalContext() {
-    return typeof global !== "undefined" ? global : window;
-  }
-
-  // node_modules/react-dnd/dist/esm/internals/DragSourceMonitorImpl.js
-  function _classCallCheck4(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties4(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass4(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties4(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties4(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty9(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var isCallingCanDrag = false;
-  var isCallingIsDragging = false;
-  var DragSourceMonitorImpl = /* @__PURE__ */ function() {
-    function DragSourceMonitorImpl2(manager) {
-      _classCallCheck4(this, DragSourceMonitorImpl2);
-      _defineProperty9(this, "internalMonitor", undefined);
-      _defineProperty9(this, "sourceId", null);
-      this.internalMonitor = manager.getMonitor();
-    }
-    _createClass4(DragSourceMonitorImpl2, [{
-      key: "receiveHandlerId",
-      value: function receiveHandlerId(sourceId) {
-        this.sourceId = sourceId;
-      }
-    }, {
-      key: "getHandlerId",
-      value: function getHandlerId() {
-        return this.sourceId;
-      }
-    }, {
-      key: "canDrag",
-      value: function canDrag() {
-        invariant(!isCallingCanDrag, "You may not call monitor.canDrag() inside your canDrag() implementation. " + "Read more: http://react-dnd.github.io/react-dnd/docs/api/drag-source-monitor");
-        try {
-          isCallingCanDrag = true;
-          return this.internalMonitor.canDragSource(this.sourceId);
-        } finally {
-          isCallingCanDrag = false;
-        }
-      }
-    }, {
-      key: "isDragging",
-      value: function isDragging() {
-        if (!this.sourceId) {
-          return false;
-        }
-        invariant(!isCallingIsDragging, "You may not call monitor.isDragging() inside your isDragging() implementation. " + "Read more: http://react-dnd.github.io/react-dnd/docs/api/drag-source-monitor");
-        try {
-          isCallingIsDragging = true;
-          return this.internalMonitor.isDraggingSource(this.sourceId);
-        } finally {
-          isCallingIsDragging = false;
-        }
-      }
-    }, {
-      key: "subscribeToStateChange",
-      value: function subscribeToStateChange(listener, options) {
-        return this.internalMonitor.subscribeToStateChange(listener, options);
-      }
-    }, {
-      key: "isDraggingSource",
-      value: function isDraggingSource(sourceId) {
-        return this.internalMonitor.isDraggingSource(sourceId);
-      }
-    }, {
-      key: "isOverTarget",
-      value: function isOverTarget(targetId, options) {
-        return this.internalMonitor.isOverTarget(targetId, options);
-      }
-    }, {
-      key: "getTargetIds",
-      value: function getTargetIds() {
-        return this.internalMonitor.getTargetIds();
-      }
-    }, {
-      key: "isSourcePublic",
-      value: function isSourcePublic() {
-        return this.internalMonitor.isSourcePublic();
-      }
-    }, {
-      key: "getSourceId",
-      value: function getSourceId() {
-        return this.internalMonitor.getSourceId();
-      }
-    }, {
-      key: "subscribeToOffsetChange",
-      value: function subscribeToOffsetChange(listener) {
-        return this.internalMonitor.subscribeToOffsetChange(listener);
-      }
-    }, {
-      key: "canDragSource",
-      value: function canDragSource(sourceId) {
-        return this.internalMonitor.canDragSource(sourceId);
-      }
-    }, {
-      key: "canDropOnTarget",
-      value: function canDropOnTarget(targetId) {
-        return this.internalMonitor.canDropOnTarget(targetId);
-      }
-    }, {
-      key: "getItemType",
-      value: function getItemType() {
-        return this.internalMonitor.getItemType();
-      }
-    }, {
-      key: "getItem",
-      value: function getItem() {
-        return this.internalMonitor.getItem();
-      }
-    }, {
-      key: "getDropResult",
-      value: function getDropResult() {
-        return this.internalMonitor.getDropResult();
-      }
-    }, {
-      key: "didDrop",
-      value: function didDrop() {
-        return this.internalMonitor.didDrop();
-      }
-    }, {
-      key: "getInitialClientOffset",
-      value: function getInitialClientOffset() {
-        return this.internalMonitor.getInitialClientOffset();
-      }
-    }, {
-      key: "getInitialSourceClientOffset",
-      value: function getInitialSourceClientOffset() {
-        return this.internalMonitor.getInitialSourceClientOffset();
-      }
-    }, {
-      key: "getSourceClientOffset",
-      value: function getSourceClientOffset() {
-        return this.internalMonitor.getSourceClientOffset();
-      }
-    }, {
-      key: "getClientOffset",
-      value: function getClientOffset() {
-        return this.internalMonitor.getClientOffset();
-      }
-    }, {
-      key: "getDifferenceFromInitialOffset",
-      value: function getDifferenceFromInitialOffset() {
-        return this.internalMonitor.getDifferenceFromInitialOffset();
-      }
-    }]);
-    return DragSourceMonitorImpl2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/internals/DropTargetMonitorImpl.js
-  function _classCallCheck5(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties5(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass5(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties5(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties5(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty10(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var isCallingCanDrop = false;
-  var DropTargetMonitorImpl = /* @__PURE__ */ function() {
-    function DropTargetMonitorImpl2(manager) {
-      _classCallCheck5(this, DropTargetMonitorImpl2);
-      _defineProperty10(this, "internalMonitor", undefined);
-      _defineProperty10(this, "targetId", null);
-      this.internalMonitor = manager.getMonitor();
-    }
-    _createClass5(DropTargetMonitorImpl2, [{
-      key: "receiveHandlerId",
-      value: function receiveHandlerId(targetId) {
-        this.targetId = targetId;
-      }
-    }, {
-      key: "getHandlerId",
-      value: function getHandlerId() {
-        return this.targetId;
-      }
-    }, {
-      key: "subscribeToStateChange",
-      value: function subscribeToStateChange(listener, options) {
-        return this.internalMonitor.subscribeToStateChange(listener, options);
-      }
-    }, {
-      key: "canDrop",
-      value: function canDrop() {
-        if (!this.targetId) {
-          return false;
-        }
-        invariant(!isCallingCanDrop, "You may not call monitor.canDrop() inside your canDrop() implementation. " + "Read more: http://react-dnd.github.io/react-dnd/docs/api/drop-target-monitor");
-        try {
-          isCallingCanDrop = true;
-          return this.internalMonitor.canDropOnTarget(this.targetId);
-        } finally {
-          isCallingCanDrop = false;
-        }
-      }
-    }, {
-      key: "isOver",
-      value: function isOver(options) {
-        if (!this.targetId) {
-          return false;
-        }
-        return this.internalMonitor.isOverTarget(this.targetId, options);
-      }
-    }, {
-      key: "getItemType",
-      value: function getItemType() {
-        return this.internalMonitor.getItemType();
-      }
-    }, {
-      key: "getItem",
-      value: function getItem() {
-        return this.internalMonitor.getItem();
-      }
-    }, {
-      key: "getDropResult",
-      value: function getDropResult() {
-        return this.internalMonitor.getDropResult();
-      }
-    }, {
-      key: "didDrop",
-      value: function didDrop() {
-        return this.internalMonitor.didDrop();
-      }
-    }, {
-      key: "getInitialClientOffset",
-      value: function getInitialClientOffset() {
-        return this.internalMonitor.getInitialClientOffset();
-      }
-    }, {
-      key: "getInitialSourceClientOffset",
-      value: function getInitialSourceClientOffset() {
-        return this.internalMonitor.getInitialSourceClientOffset();
-      }
-    }, {
-      key: "getSourceClientOffset",
-      value: function getSourceClientOffset() {
-        return this.internalMonitor.getSourceClientOffset();
-      }
-    }, {
-      key: "getClientOffset",
-      value: function getClientOffset() {
-        return this.internalMonitor.getClientOffset();
-      }
-    }, {
-      key: "getDifferenceFromInitialOffset",
-      value: function getDifferenceFromInitialOffset() {
-        return this.internalMonitor.getDifferenceFromInitialOffset();
-      }
-    }]);
-    return DropTargetMonitorImpl2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/internals/wrapConnectorHooks.js
-  var import_react10 = __toESM(require_react());
-  function throwIfCompositeComponentElement(element) {
-    if (typeof element.type === "string") {
-      return;
-    }
-    var displayName = element.type.displayName || element.type.name || "the component";
-    throw new Error("Only native element nodes can now be passed to React DnD connectors." + "You can either wrap ".concat(displayName, " into a <div>, or turn it into a ") + "drag source or a drop target itself.");
-  }
-  function wrapHookToRecognizeElement(hook) {
-    return function() {
-      var elementOrNode = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
-      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
-      if (!import_react10.isValidElement(elementOrNode)) {
-        var node = elementOrNode;
-        hook(node, options);
-        return node;
-      }
-      var element = elementOrNode;
-      throwIfCompositeComponentElement(element);
-      var ref = options ? function(node2) {
-        return hook(node2, options);
-      } : hook;
-      return cloneWithRef(element, ref);
-    };
-  }
-  function wrapConnectorHooks(hooks) {
-    var wrappedHooks = {};
-    Object.keys(hooks).forEach(function(key) {
-      var hook = hooks[key];
-      if (key.endsWith("Ref")) {
-        wrappedHooks[key] = hooks[key];
-      } else {
-        var wrappedHook = wrapHookToRecognizeElement(hook);
-        wrappedHooks[key] = function() {
-          return wrappedHook;
-        };
-      }
-    });
-    return wrappedHooks;
-  }
-  function setRef(ref, node) {
-    if (typeof ref === "function") {
-      ref(node);
-    } else {
-      ref.current = node;
-    }
-  }
-  function cloneWithRef(element, newRef) {
-    var previousRef = element.ref;
-    invariant(typeof previousRef !== "string", "Cannot connect React DnD to an element with an existing string ref. " + "Please convert it to use a callback ref instead, or wrap it into a <span> or <div>. " + "Read more: https://reactjs.org/docs/refs-and-the-dom.html#callback-refs");
-    if (!previousRef) {
-      return import_react10.cloneElement(element, {
-        ref: newRef
-      });
-    } else {
-      return import_react10.cloneElement(element, {
-        ref: function ref(node) {
-          setRef(previousRef, node);
-          setRef(newRef, node);
-        }
-      });
-    }
-  }
-
-  // node_modules/react-dnd/dist/esm/internals/isRef.js
-  function _typeof4(obj) {
-    "@babel/helpers - typeof";
-    if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
-      _typeof4 = function _typeof(obj2) {
-        return typeof obj2;
-      };
-    } else {
-      _typeof4 = function _typeof(obj2) {
-        return obj2 && typeof Symbol === "function" && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
-      };
-    }
-    return _typeof4(obj);
-  }
-  function isRef(obj) {
-    return obj !== null && _typeof4(obj) === "object" && Object.prototype.hasOwnProperty.call(obj, "current");
-  }
-
-  // node_modules/@react-dnd/shallowequal/dist/shallowequal.esm.js
-  function shallowEqual(objA, objB, compare, compareContext) {
-    var compareResult = compare ? compare.call(compareContext, objA, objB) : undefined;
-    if (compareResult !== undefined) {
-      return !!compareResult;
-    }
-    if (objA === objB) {
-      return true;
-    }
-    if (typeof objA !== "object" || !objA || typeof objB !== "object" || !objB) {
-      return false;
-    }
-    var keysA = Object.keys(objA);
-    var keysB = Object.keys(objB);
-    if (keysA.length !== keysB.length) {
-      return false;
-    }
-    var bHasOwnProperty = Object.prototype.hasOwnProperty.bind(objB);
-    for (var idx = 0;idx < keysA.length; idx++) {
-      var key = keysA[idx];
-      if (!bHasOwnProperty(key)) {
-        return false;
-      }
-      var valueA = objA[key];
-      var valueB = objB[key];
-      compareResult = compare ? compare.call(compareContext, valueA, valueB, key) : undefined;
-      if (compareResult === false || compareResult === undefined && valueA !== valueB) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // node_modules/react-dnd/dist/esm/internals/SourceConnector.js
-  function _classCallCheck6(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties6(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass6(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties6(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties6(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty11(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var SourceConnector = /* @__PURE__ */ function() {
-    function SourceConnector2(backend) {
-      var _this = this;
-      _classCallCheck6(this, SourceConnector2);
-      _defineProperty11(this, "hooks", wrapConnectorHooks({
-        dragSource: function dragSource(node, options) {
-          _this.clearDragSource();
-          _this.dragSourceOptions = options || null;
-          if (isRef(node)) {
-            _this.dragSourceRef = node;
-          } else {
-            _this.dragSourceNode = node;
-          }
-          _this.reconnectDragSource();
-        },
-        dragPreview: function dragPreview(node, options) {
-          _this.clearDragPreview();
-          _this.dragPreviewOptions = options || null;
-          if (isRef(node)) {
-            _this.dragPreviewRef = node;
-          } else {
-            _this.dragPreviewNode = node;
-          }
-          _this.reconnectDragPreview();
-        }
-      }));
-      _defineProperty11(this, "handlerId", null);
-      _defineProperty11(this, "dragSourceRef", null);
-      _defineProperty11(this, "dragSourceNode", undefined);
-      _defineProperty11(this, "dragSourceOptionsInternal", null);
-      _defineProperty11(this, "dragSourceUnsubscribe", undefined);
-      _defineProperty11(this, "dragPreviewRef", null);
-      _defineProperty11(this, "dragPreviewNode", undefined);
-      _defineProperty11(this, "dragPreviewOptionsInternal", null);
-      _defineProperty11(this, "dragPreviewUnsubscribe", undefined);
-      _defineProperty11(this, "lastConnectedHandlerId", null);
-      _defineProperty11(this, "lastConnectedDragSource", null);
-      _defineProperty11(this, "lastConnectedDragSourceOptions", null);
-      _defineProperty11(this, "lastConnectedDragPreview", null);
-      _defineProperty11(this, "lastConnectedDragPreviewOptions", null);
-      _defineProperty11(this, "backend", undefined);
-      this.backend = backend;
-    }
-    _createClass6(SourceConnector2, [{
-      key: "receiveHandlerId",
-      value: function receiveHandlerId(newHandlerId) {
-        if (this.handlerId === newHandlerId) {
-          return;
-        }
-        this.handlerId = newHandlerId;
-        this.reconnect();
-      }
-    }, {
-      key: "connectTarget",
-      get: function get() {
-        return this.dragSource;
-      }
-    }, {
-      key: "dragSourceOptions",
-      get: function get() {
-        return this.dragSourceOptionsInternal;
-      },
-      set: function set(options) {
-        this.dragSourceOptionsInternal = options;
-      }
-    }, {
-      key: "dragPreviewOptions",
-      get: function get() {
-        return this.dragPreviewOptionsInternal;
-      },
-      set: function set(options) {
-        this.dragPreviewOptionsInternal = options;
-      }
-    }, {
-      key: "reconnect",
-      value: function reconnect() {
-        this.reconnectDragSource();
-        this.reconnectDragPreview();
-      }
-    }, {
-      key: "reconnectDragSource",
-      value: function reconnectDragSource() {
-        var dragSource = this.dragSource;
-        var didChange = this.didHandlerIdChange() || this.didConnectedDragSourceChange() || this.didDragSourceOptionsChange();
-        if (didChange) {
-          this.disconnectDragSource();
-        }
-        if (!this.handlerId) {
-          return;
-        }
-        if (!dragSource) {
-          this.lastConnectedDragSource = dragSource;
-          return;
-        }
-        if (didChange) {
-          this.lastConnectedHandlerId = this.handlerId;
-          this.lastConnectedDragSource = dragSource;
-          this.lastConnectedDragSourceOptions = this.dragSourceOptions;
-          this.dragSourceUnsubscribe = this.backend.connectDragSource(this.handlerId, dragSource, this.dragSourceOptions);
-        }
-      }
-    }, {
-      key: "reconnectDragPreview",
-      value: function reconnectDragPreview() {
-        var dragPreview = this.dragPreview;
-        var didChange = this.didHandlerIdChange() || this.didConnectedDragPreviewChange() || this.didDragPreviewOptionsChange();
-        if (didChange) {
-          this.disconnectDragPreview();
-        }
-        if (!this.handlerId) {
-          return;
-        }
-        if (!dragPreview) {
-          this.lastConnectedDragPreview = dragPreview;
-          return;
-        }
-        if (didChange) {
-          this.lastConnectedHandlerId = this.handlerId;
-          this.lastConnectedDragPreview = dragPreview;
-          this.lastConnectedDragPreviewOptions = this.dragPreviewOptions;
-          this.dragPreviewUnsubscribe = this.backend.connectDragPreview(this.handlerId, dragPreview, this.dragPreviewOptions);
-        }
-      }
-    }, {
-      key: "didHandlerIdChange",
-      value: function didHandlerIdChange() {
-        return this.lastConnectedHandlerId !== this.handlerId;
-      }
-    }, {
-      key: "didConnectedDragSourceChange",
-      value: function didConnectedDragSourceChange() {
-        return this.lastConnectedDragSource !== this.dragSource;
-      }
-    }, {
-      key: "didConnectedDragPreviewChange",
-      value: function didConnectedDragPreviewChange() {
-        return this.lastConnectedDragPreview !== this.dragPreview;
-      }
-    }, {
-      key: "didDragSourceOptionsChange",
-      value: function didDragSourceOptionsChange() {
-        return !shallowEqual(this.lastConnectedDragSourceOptions, this.dragSourceOptions);
-      }
-    }, {
-      key: "didDragPreviewOptionsChange",
-      value: function didDragPreviewOptionsChange() {
-        return !shallowEqual(this.lastConnectedDragPreviewOptions, this.dragPreviewOptions);
-      }
-    }, {
-      key: "disconnectDragSource",
-      value: function disconnectDragSource() {
-        if (this.dragSourceUnsubscribe) {
-          this.dragSourceUnsubscribe();
-          this.dragSourceUnsubscribe = undefined;
-        }
-      }
-    }, {
-      key: "disconnectDragPreview",
-      value: function disconnectDragPreview() {
-        if (this.dragPreviewUnsubscribe) {
-          this.dragPreviewUnsubscribe();
-          this.dragPreviewUnsubscribe = undefined;
-          this.dragPreviewNode = null;
-          this.dragPreviewRef = null;
-        }
-      }
-    }, {
-      key: "dragSource",
-      get: function get() {
-        return this.dragSourceNode || this.dragSourceRef && this.dragSourceRef.current;
-      }
-    }, {
-      key: "dragPreview",
-      get: function get() {
-        return this.dragPreviewNode || this.dragPreviewRef && this.dragPreviewRef.current;
-      }
-    }, {
-      key: "clearDragSource",
-      value: function clearDragSource() {
-        this.dragSourceNode = null;
-        this.dragSourceRef = null;
-      }
-    }, {
-      key: "clearDragPreview",
-      value: function clearDragPreview() {
-        this.dragPreviewNode = null;
-        this.dragPreviewRef = null;
-      }
-    }]);
-    return SourceConnector2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/internals/TargetConnector.js
-  function _classCallCheck7(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties7(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass7(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties7(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties7(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty12(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var TargetConnector = /* @__PURE__ */ function() {
-    function TargetConnector2(backend) {
-      var _this = this;
-      _classCallCheck7(this, TargetConnector2);
-      _defineProperty12(this, "hooks", wrapConnectorHooks({
-        dropTarget: function dropTarget(node, options) {
-          _this.clearDropTarget();
-          _this.dropTargetOptions = options;
-          if (isRef(node)) {
-            _this.dropTargetRef = node;
-          } else {
-            _this.dropTargetNode = node;
-          }
-          _this.reconnect();
-        }
-      }));
-      _defineProperty12(this, "handlerId", null);
-      _defineProperty12(this, "dropTargetRef", null);
-      _defineProperty12(this, "dropTargetNode", undefined);
-      _defineProperty12(this, "dropTargetOptionsInternal", null);
-      _defineProperty12(this, "unsubscribeDropTarget", undefined);
-      _defineProperty12(this, "lastConnectedHandlerId", null);
-      _defineProperty12(this, "lastConnectedDropTarget", null);
-      _defineProperty12(this, "lastConnectedDropTargetOptions", null);
-      _defineProperty12(this, "backend", undefined);
-      this.backend = backend;
-    }
-    _createClass7(TargetConnector2, [{
-      key: "connectTarget",
-      get: function get() {
-        return this.dropTarget;
-      }
-    }, {
-      key: "reconnect",
-      value: function reconnect() {
-        var didChange = this.didHandlerIdChange() || this.didDropTargetChange() || this.didOptionsChange();
-        if (didChange) {
-          this.disconnectDropTarget();
-        }
-        var dropTarget = this.dropTarget;
-        if (!this.handlerId) {
-          return;
-        }
-        if (!dropTarget) {
-          this.lastConnectedDropTarget = dropTarget;
-          return;
-        }
-        if (didChange) {
-          this.lastConnectedHandlerId = this.handlerId;
-          this.lastConnectedDropTarget = dropTarget;
-          this.lastConnectedDropTargetOptions = this.dropTargetOptions;
-          this.unsubscribeDropTarget = this.backend.connectDropTarget(this.handlerId, dropTarget, this.dropTargetOptions);
-        }
-      }
-    }, {
-      key: "receiveHandlerId",
-      value: function receiveHandlerId(newHandlerId) {
-        if (newHandlerId === this.handlerId) {
-          return;
-        }
-        this.handlerId = newHandlerId;
-        this.reconnect();
-      }
-    }, {
-      key: "dropTargetOptions",
-      get: function get() {
-        return this.dropTargetOptionsInternal;
-      },
-      set: function set(options) {
-        this.dropTargetOptionsInternal = options;
-      }
-    }, {
-      key: "didHandlerIdChange",
-      value: function didHandlerIdChange() {
-        return this.lastConnectedHandlerId !== this.handlerId;
-      }
-    }, {
-      key: "didDropTargetChange",
-      value: function didDropTargetChange() {
-        return this.lastConnectedDropTarget !== this.dropTarget;
-      }
-    }, {
-      key: "didOptionsChange",
-      value: function didOptionsChange() {
-        return !shallowEqual(this.lastConnectedDropTargetOptions, this.dropTargetOptions);
-      }
-    }, {
-      key: "disconnectDropTarget",
-      value: function disconnectDropTarget() {
-        if (this.unsubscribeDropTarget) {
-          this.unsubscribeDropTarget();
-          this.unsubscribeDropTarget = undefined;
-        }
-      }
-    }, {
-      key: "dropTarget",
-      get: function get() {
-        return this.dropTargetNode || this.dropTargetRef && this.dropTargetRef.current;
-      }
-    }, {
-      key: "clearDropTarget",
-      value: function clearDropTarget() {
-        this.dropTargetRef = null;
-        this.dropTargetNode = null;
-      }
-    }]);
-    return TargetConnector2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/internals/registration.js
-  function registerTarget(type, target, manager) {
-    var registry = manager.getRegistry();
-    var targetId = registry.addTarget(type, target);
-    return [targetId, function() {
-      return registry.removeTarget(targetId);
-    }];
-  }
-  function registerSource(type, source, manager) {
-    var registry = manager.getRegistry();
-    var sourceId = registry.addSource(type, source);
-    return [sourceId, function() {
-      return registry.removeSource(sourceId);
-    }];
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useIsomorphicLayoutEffect.js
-  var import_react11 = __toESM(require_react());
-  var useIsomorphicLayoutEffect = typeof window !== "undefined" ? import_react11.useLayoutEffect : import_react11.useEffect;
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDragSource.js
-  var import_react12 = __toESM(require_react());
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/DragSourceImpl.js
-  function _typeof5(obj) {
-    "@babel/helpers - typeof";
-    if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
-      _typeof5 = function _typeof(obj2) {
-        return typeof obj2;
-      };
-    } else {
-      _typeof5 = function _typeof(obj2) {
-        return obj2 && typeof Symbol === "function" && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
-      };
-    }
-    return _typeof5(obj);
-  }
-  function _classCallCheck8(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties8(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass8(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties8(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties8(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty13(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var DragSourceImpl = /* @__PURE__ */ function() {
-    function DragSourceImpl2(spec, monitor, connector) {
-      _classCallCheck8(this, DragSourceImpl2);
-      _defineProperty13(this, "spec", undefined);
-      _defineProperty13(this, "monitor", undefined);
-      _defineProperty13(this, "connector", undefined);
-      this.spec = spec;
-      this.monitor = monitor;
-      this.connector = connector;
-    }
-    _createClass8(DragSourceImpl2, [{
-      key: "beginDrag",
-      value: function beginDrag() {
-        var _result;
-        var spec = this.spec;
-        var monitor = this.monitor;
-        var result = null;
-        if (_typeof5(spec.item) === "object") {
-          result = spec.item;
-        } else if (typeof spec.item === "function") {
-          result = spec.item(monitor);
-        } else {
-          result = {};
-        }
-        return (_result = result) !== null && _result !== undefined ? _result : null;
-      }
-    }, {
-      key: "canDrag",
-      value: function canDrag() {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        if (typeof spec.canDrag === "boolean") {
-          return spec.canDrag;
-        } else if (typeof spec.canDrag === "function") {
-          return spec.canDrag(monitor);
-        } else {
-          return true;
-        }
-      }
-    }, {
-      key: "isDragging",
-      value: function isDragging(globalMonitor, target) {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        var isDragging = spec.isDragging;
-        return isDragging ? isDragging(monitor) : target === globalMonitor.getSourceId();
-      }
-    }, {
-      key: "endDrag",
-      value: function endDrag() {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        var connector = this.connector;
-        var end = spec.end;
-        if (end) {
-          end(monitor.getItem(), monitor);
-        }
-        connector.reconnect();
-      }
-    }]);
-    return DragSourceImpl2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDragSource.js
-  function useDragSource(spec, monitor, connector) {
-    var handler = import_react12.useMemo(function() {
-      return new DragSourceImpl(spec, monitor, connector);
-    }, [monitor, connector]);
-    import_react12.useEffect(function() {
-      handler.spec = spec;
-    }, [spec]);
-    return handler;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDragDropManager.js
-  var import_react13 = __toESM(require_react());
-  function useDragDropManager() {
-    var _useContext = import_react13.useContext(DndContext2), dragDropManager = _useContext.dragDropManager;
-    invariant(dragDropManager != null, "Expected drag drop context");
-    return dragDropManager;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDragType.js
-  var import_react14 = __toESM(require_react());
-  function useDragType(spec) {
-    return import_react14.useMemo(function() {
-      var result = spec.type;
-      invariant(result != null, "spec.type must be defined");
-      return result;
-    }, [spec]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useRegisteredDragSource.js
-  function _slicedToArray3(arr, i) {
-    return _arrayWithHoles3(arr) || _iterableToArrayLimit3(arr, i) || _unsupportedIterableToArray3(arr, i) || _nonIterableRest3();
-  }
-  function _nonIterableRest3() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray3(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray3(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray3(o, minLen);
-  }
-  function _arrayLikeToArray3(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit3(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles3(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function useRegisteredDragSource(spec, monitor, connector) {
-    var manager = useDragDropManager();
-    var handler = useDragSource(spec, monitor, connector);
-    var itemType = useDragType(spec);
-    useIsomorphicLayoutEffect(function registerDragSource() {
-      if (itemType != null) {
-        var _registerSource = registerSource(itemType, handler, manager), _registerSource2 = _slicedToArray3(_registerSource, 2), handlerId = _registerSource2[0], unregister = _registerSource2[1];
-        monitor.receiveHandlerId(handlerId);
-        connector.receiveHandlerId(handlerId);
-        return unregister;
-      }
-    }, [manager, monitor, connector, handler, itemType]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useOptionalFactory.js
-  var import_react15 = __toESM(require_react());
-  function _toConsumableArray(arr) {
-    return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray4(arr) || _nonIterableSpread();
-  }
-  function _nonIterableSpread() {
-    throw new TypeError(`Invalid attempt to spread non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray4(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray4(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray4(o, minLen);
-  }
-  function _iterableToArray(iter) {
-    if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null)
-      return Array.from(iter);
-  }
-  function _arrayWithoutHoles(arr) {
-    if (Array.isArray(arr))
-      return _arrayLikeToArray4(arr);
-  }
-  function _arrayLikeToArray4(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function useOptionalFactory(arg, deps) {
-    var memoDeps = _toConsumableArray(deps || []);
-    if (deps == null && typeof arg !== "function") {
-      memoDeps.push(arg);
-    }
-    return import_react15.useMemo(function() {
-      return typeof arg === "function" ? arg() : arg;
-    }, memoDeps);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDragSourceMonitor.js
-  var import_react16 = __toESM(require_react());
-  function useDragSourceMonitor() {
-    var manager = useDragDropManager();
-    return import_react16.useMemo(function() {
-      return new DragSourceMonitorImpl(manager);
-    }, [manager]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDragSourceConnector.js
-  var import_react17 = __toESM(require_react());
-  function useDragSourceConnector(dragSourceOptions, dragPreviewOptions) {
-    var manager = useDragDropManager();
-    var connector = import_react17.useMemo(function() {
-      return new SourceConnector(manager.getBackend());
-    }, [manager]);
-    useIsomorphicLayoutEffect(function() {
-      connector.dragSourceOptions = dragSourceOptions || null;
-      connector.reconnect();
-      return function() {
-        return connector.disconnectDragSource();
-      };
-    }, [connector, dragSourceOptions]);
-    useIsomorphicLayoutEffect(function() {
-      connector.dragPreviewOptions = dragPreviewOptions || null;
-      connector.reconnect();
-      return function() {
-        return connector.disconnectDragPreview();
-      };
-    }, [connector, dragPreviewOptions]);
-    return connector;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useCollector.js
-  var import_fast_deep_equal = __toESM(require_fast_deep_equal());
-  var import_react18 = __toESM(require_react());
-  function _slicedToArray4(arr, i) {
-    return _arrayWithHoles4(arr) || _iterableToArrayLimit4(arr, i) || _unsupportedIterableToArray5(arr, i) || _nonIterableRest4();
-  }
-  function _nonIterableRest4() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray5(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray5(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray5(o, minLen);
-  }
-  function _arrayLikeToArray5(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit4(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles4(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function useCollector(monitor, collect, onUpdate) {
-    var _useState = import_react18.useState(function() {
-      return collect(monitor);
-    }), _useState2 = _slicedToArray4(_useState, 2), collected = _useState2[0], setCollected = _useState2[1];
-    var updateCollected = import_react18.useCallback(function() {
-      var nextValue = collect(monitor);
-      if (!import_fast_deep_equal.default(collected, nextValue)) {
-        setCollected(nextValue);
-        if (onUpdate) {
-          onUpdate();
-        }
-      }
-    }, [collected, monitor, onUpdate]);
-    useIsomorphicLayoutEffect(updateCollected);
-    return [collected, updateCollected];
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useMonitorOutput.js
-  function _slicedToArray5(arr, i) {
-    return _arrayWithHoles5(arr) || _iterableToArrayLimit5(arr, i) || _unsupportedIterableToArray6(arr, i) || _nonIterableRest5();
-  }
-  function _nonIterableRest5() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray6(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray6(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray6(o, minLen);
-  }
-  function _arrayLikeToArray6(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit5(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles5(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function useMonitorOutput(monitor, collect, onCollect) {
-    var _useCollector = useCollector(monitor, collect, onCollect), _useCollector2 = _slicedToArray5(_useCollector, 2), collected = _useCollector2[0], updateCollected = _useCollector2[1];
-    useIsomorphicLayoutEffect(function subscribeToMonitorStateChange() {
-      var handlerId = monitor.getHandlerId();
-      if (handlerId == null) {
-        return;
-      }
-      return monitor.subscribeToStateChange(updateCollected, {
-        handlerIds: [handlerId]
-      });
-    }, [monitor, updateCollected]);
-    return collected;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useCollectedProps.js
-  function useCollectedProps(collector, monitor, connector) {
-    return useMonitorOutput(monitor, collector || function() {
-      return {};
-    }, function() {
-      return connector.reconnect();
-    });
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/connectors.js
-  var import_react19 = __toESM(require_react());
-  function useConnectDragSource(connector) {
-    return import_react19.useMemo(function() {
-      return connector.hooks.dragSource();
-    }, [connector]);
-  }
-  function useConnectDragPreview(connector) {
-    return import_react19.useMemo(function() {
-      return connector.hooks.dragPreview();
-    }, [connector]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrag/useDrag.js
-  function useDrag(specArg, deps) {
-    var spec = useOptionalFactory(specArg, deps);
-    invariant(!spec.begin, "useDrag::spec.begin was deprecated in v14. Replace spec.begin() with spec.item(). (see more here - https://react-dnd.github.io/react-dnd/docs/api/use-drag)");
-    var monitor = useDragSourceMonitor();
-    var connector = useDragSourceConnector(spec.options, spec.previewOptions);
-    useRegisteredDragSource(spec, monitor, connector);
-    return [useCollectedProps(spec.collect, monitor, connector), useConnectDragSource(connector), useConnectDragPreview(connector)];
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useAccept.js
-  var import_react20 = __toESM(require_react());
-  function useAccept(spec) {
-    var accept = spec.accept;
-    return import_react20.useMemo(function() {
-      invariant(spec.accept != null, "accept must be defined");
-      return Array.isArray(accept) ? accept : [accept];
-    }, [accept]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useDropTarget.js
-  var import_react21 = __toESM(require_react());
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/DropTargetImpl.js
-  function _classCallCheck9(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties9(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass9(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties9(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties9(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty14(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var DropTargetImpl = /* @__PURE__ */ function() {
-    function DropTargetImpl2(spec, monitor) {
-      _classCallCheck9(this, DropTargetImpl2);
-      _defineProperty14(this, "spec", undefined);
-      _defineProperty14(this, "monitor", undefined);
-      this.spec = spec;
-      this.monitor = monitor;
-    }
-    _createClass9(DropTargetImpl2, [{
-      key: "canDrop",
-      value: function canDrop() {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        return spec.canDrop ? spec.canDrop(monitor.getItem(), monitor) : true;
-      }
-    }, {
-      key: "hover",
-      value: function hover() {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        if (spec.hover) {
-          spec.hover(monitor.getItem(), monitor);
-        }
-      }
-    }, {
-      key: "drop",
-      value: function drop() {
-        var spec = this.spec;
-        var monitor = this.monitor;
-        if (spec.drop) {
-          return spec.drop(monitor.getItem(), monitor);
-        }
-      }
-    }]);
-    return DropTargetImpl2;
-  }();
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useDropTarget.js
-  function useDropTarget(spec, monitor) {
-    var dropTarget = import_react21.useMemo(function() {
-      return new DropTargetImpl(spec, monitor);
-    }, [monitor]);
-    import_react21.useEffect(function() {
-      dropTarget.spec = spec;
-    }, [spec]);
-    return dropTarget;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useRegisteredDropTarget.js
-  function _slicedToArray6(arr, i) {
-    return _arrayWithHoles6(arr) || _iterableToArrayLimit6(arr, i) || _unsupportedIterableToArray7(arr, i) || _nonIterableRest6();
-  }
-  function _nonIterableRest6() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray7(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray7(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray7(o, minLen);
-  }
-  function _arrayLikeToArray7(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit6(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles6(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function useRegisteredDropTarget(spec, monitor, connector) {
-    var manager = useDragDropManager();
-    var dropTarget = useDropTarget(spec, monitor);
-    var accept = useAccept(spec);
-    useIsomorphicLayoutEffect(function registerDropTarget() {
-      var _registerTarget = registerTarget(accept, dropTarget, manager), _registerTarget2 = _slicedToArray6(_registerTarget, 2), handlerId = _registerTarget2[0], unregister = _registerTarget2[1];
-      monitor.receiveHandlerId(handlerId);
-      connector.receiveHandlerId(handlerId);
-      return unregister;
-    }, [manager, monitor, dropTarget, connector, accept.map(function(a) {
-      return a.toString();
-    }).join("|")]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useDropTargetMonitor.js
-  var import_react22 = __toESM(require_react());
-  function useDropTargetMonitor() {
-    var manager = useDragDropManager();
-    return import_react22.useMemo(function() {
-      return new DropTargetMonitorImpl(manager);
-    }, [manager]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useDropTargetConnector.js
-  var import_react23 = __toESM(require_react());
-  function useDropTargetConnector(options) {
-    var manager = useDragDropManager();
-    var connector = import_react23.useMemo(function() {
-      return new TargetConnector(manager.getBackend());
-    }, [manager]);
-    useIsomorphicLayoutEffect(function() {
-      connector.dropTargetOptions = options || null;
-      connector.reconnect();
-      return function() {
-        return connector.disconnectDropTarget();
-      };
-    }, [options]);
-    return connector;
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/connectors.js
-  var import_react24 = __toESM(require_react());
-  function useConnectDropTarget(connector) {
-    return import_react24.useMemo(function() {
-      return connector.hooks.dropTarget();
-    }, [connector]);
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDrop/useDrop.js
-  function useDrop(specArg, deps) {
-    var spec = useOptionalFactory(specArg, deps);
-    var monitor = useDropTargetMonitor();
-    var connector = useDropTargetConnector(spec.options);
-    useRegisteredDropTarget(spec, monitor, connector);
-    return [useCollectedProps(spec.collect, monitor, connector), useConnectDropTarget(connector)];
-  }
-
-  // node_modules/react-dnd/dist/esm/hooks/useDragLayer.js
-  var import_react25 = __toESM(require_react());
-  function _slicedToArray7(arr, i) {
-    return _arrayWithHoles7(arr) || _iterableToArrayLimit7(arr, i) || _unsupportedIterableToArray8(arr, i) || _nonIterableRest7();
-  }
-  function _nonIterableRest7() {
-    throw new TypeError(`Invalid attempt to destructure non-iterable instance.
-In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`);
-  }
-  function _unsupportedIterableToArray8(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray8(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray8(o, minLen);
-  }
-  function _arrayLikeToArray8(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len);i < len; i++) {
-      arr2[i] = arr[i];
-    }
-    return arr2;
-  }
-  function _iterableToArrayLimit7(arr, i) {
-    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
-    if (_i == null)
-      return;
-    var _arr = [];
-    var _n = true;
-    var _d = false;
-    var _s, _e;
-    try {
-      for (_i = _i.call(arr);!(_n = (_s = _i.next()).done); _n = true) {
-        _arr.push(_s.value);
-        if (i && _arr.length === i)
-          break;
-      }
-    } catch (err) {
-      _d = true;
-      _e = err;
-    } finally {
-      try {
-        if (!_n && _i["return"] != null)
-          _i["return"]();
-      } finally {
-        if (_d)
-          throw _e;
-      }
-    }
-    return _arr;
-  }
-  function _arrayWithHoles7(arr) {
-    if (Array.isArray(arr))
-      return arr;
-  }
-  function useDragLayer(collect) {
-    var dragDropManager = useDragDropManager();
-    var monitor = dragDropManager.getMonitor();
-    var _useCollector = useCollector(monitor, collect), _useCollector2 = _slicedToArray7(_useCollector, 2), collected = _useCollector2[0], updateCollected = _useCollector2[1];
-    import_react25.useEffect(function() {
-      return monitor.subscribeToOffsetChange(updateCollected);
-    });
-    import_react25.useEffect(function() {
-      return monitor.subscribeToStateChange(updateCollected);
-    });
-    return collected;
-  }
-
-  // node_modules/react-dnd-html5-backend/dist/esm/utils/js_utils.js
-  function memoize(fn) {
-    var result = null;
-    var memoized = function memoized() {
-      if (result == null) {
-        result = fn();
-      }
-      return result;
-    };
-    return memoized;
-  }
-  function without2(items, item) {
-    return items.filter(function(i) {
-      return i !== item;
-    });
-  }
-  function union(itemsA, itemsB) {
-    var set = new Set;
-    var insertItem = function insertItem(item) {
-      return set.add(item);
-    };
-    itemsA.forEach(insertItem);
-    itemsB.forEach(insertItem);
-    var result = [];
-    set.forEach(function(key) {
-      return result.push(key);
-    });
-    return result;
-  }
-
-  // node_modules/react-dnd-html5-backend/dist/esm/EnterLeaveCounter.js
-  function _classCallCheck10(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties10(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass10(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties10(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties10(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty15(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var EnterLeaveCounter = /* @__PURE__ */ function() {
-    function EnterLeaveCounter2(isNodeInDocument) {
-      _classCallCheck10(this, EnterLeaveCounter2);
-      _defineProperty15(this, "entered", []);
-      _defineProperty15(this, "isNodeInDocument", undefined);
-      this.isNodeInDocument = isNodeInDocument;
-    }
-    _createClass10(EnterLeaveCounter2, [{
-      key: "enter",
-      value: function enter(enteringNode) {
-        var _this = this;
-        var previousLength = this.entered.length;
-        var isNodeEntered = function isNodeEntered(node) {
-          return _this.isNodeInDocument(node) && (!node.contains || node.contains(enteringNode));
-        };
-        this.entered = union(this.entered.filter(isNodeEntered), [enteringNode]);
-        return previousLength === 0 && this.entered.length > 0;
-      }
-    }, {
-      key: "leave",
-      value: function leave(leavingNode) {
-        var previousLength = this.entered.length;
-        this.entered = without2(this.entered.filter(this.isNodeInDocument), leavingNode);
-        return previousLength > 0 && this.entered.length === 0;
-      }
-    }, {
-      key: "reset",
-      value: function reset() {
-        this.entered = [];
-      }
-    }]);
-    return EnterLeaveCounter2;
-  }();
-
-  // node_modules/react-dnd-html5-backend/dist/esm/BrowserDetector.js
-  var isFirefox = memoize(function() {
-    return /firefox/i.test(navigator.userAgent);
-  });
-  var isSafari = memoize(function() {
-    return Boolean(window.safari);
-  });
-
-  // node_modules/react-dnd-html5-backend/dist/esm/MonotonicInterpolant.js
-  function _classCallCheck11(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties11(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass11(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties11(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties11(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty16(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var MonotonicInterpolant = /* @__PURE__ */ function() {
-    function MonotonicInterpolant2(xs, ys) {
-      _classCallCheck11(this, MonotonicInterpolant2);
-      _defineProperty16(this, "xs", undefined);
-      _defineProperty16(this, "ys", undefined);
-      _defineProperty16(this, "c1s", undefined);
-      _defineProperty16(this, "c2s", undefined);
-      _defineProperty16(this, "c3s", undefined);
-      var length = xs.length;
-      var indexes = [];
-      for (var i = 0;i < length; i++) {
-        indexes.push(i);
-      }
-      indexes.sort(function(a, b) {
-        return xs[a] < xs[b] ? -1 : 1;
-      });
-      var dys = [];
-      var dxs = [];
-      var ms = [];
-      var dx;
-      var dy;
-      for (var _i = 0;_i < length - 1; _i++) {
-        dx = xs[_i + 1] - xs[_i];
-        dy = ys[_i + 1] - ys[_i];
-        dxs.push(dx);
-        dys.push(dy);
-        ms.push(dy / dx);
-      }
-      var c1s = [ms[0]];
-      for (var _i2 = 0;_i2 < dxs.length - 1; _i2++) {
-        var m2 = ms[_i2];
-        var mNext = ms[_i2 + 1];
-        if (m2 * mNext <= 0) {
-          c1s.push(0);
-        } else {
-          dx = dxs[_i2];
-          var dxNext = dxs[_i2 + 1];
-          var common = dx + dxNext;
-          c1s.push(3 * common / ((common + dxNext) / m2 + (common + dx) / mNext));
-        }
-      }
-      c1s.push(ms[ms.length - 1]);
-      var c2s = [];
-      var c3s = [];
-      var m;
-      for (var _i3 = 0;_i3 < c1s.length - 1; _i3++) {
-        m = ms[_i3];
-        var c1 = c1s[_i3];
-        var invDx = 1 / dxs[_i3];
-        var _common = c1 + c1s[_i3 + 1] - m - m;
-        c2s.push((m - c1 - _common) * invDx);
-        c3s.push(_common * invDx * invDx);
-      }
-      this.xs = xs;
-      this.ys = ys;
-      this.c1s = c1s;
-      this.c2s = c2s;
-      this.c3s = c3s;
-    }
-    _createClass11(MonotonicInterpolant2, [{
-      key: "interpolate",
-      value: function interpolate(x) {
-        var xs = this.xs, ys = this.ys, c1s = this.c1s, c2s = this.c2s, c3s = this.c3s;
-        var i = xs.length - 1;
-        if (x === xs[i]) {
-          return ys[i];
-        }
-        var low = 0;
-        var high = c3s.length - 1;
-        var mid;
-        while (low <= high) {
-          mid = Math.floor(0.5 * (low + high));
-          var xHere = xs[mid];
-          if (xHere < x) {
-            low = mid + 1;
-          } else if (xHere > x) {
-            high = mid - 1;
-          } else {
-            return ys[mid];
-          }
-        }
-        i = Math.max(0, high);
-        var diff = x - xs[i];
-        var diffSq = diff * diff;
-        return ys[i] + c1s[i] * diff + c2s[i] * diffSq + c3s[i] * diff * diffSq;
-      }
-    }]);
-    return MonotonicInterpolant2;
-  }();
-
-  // node_modules/react-dnd-html5-backend/dist/esm/OffsetUtils.js
-  var ELEMENT_NODE = 1;
-  function getNodeClientOffset(node) {
-    var el = node.nodeType === ELEMENT_NODE ? node : node.parentElement;
-    if (!el) {
-      return null;
-    }
-    var _el$getBoundingClient = el.getBoundingClientRect(), top = _el$getBoundingClient.top, left = _el$getBoundingClient.left;
-    return {
-      x: left,
-      y: top
-    };
-  }
-  function getEventClientOffset(e) {
-    return {
-      x: e.clientX,
-      y: e.clientY
-    };
-  }
-  function isImageNode(node) {
-    var _document$documentEle;
-    return node.nodeName === "IMG" && (isFirefox() || !((_document$documentEle = document.documentElement) !== null && _document$documentEle !== undefined && _document$documentEle.contains(node)));
-  }
-  function getDragPreviewSize(isImage, dragPreview, sourceWidth, sourceHeight) {
-    var dragPreviewWidth = isImage ? dragPreview.width : sourceWidth;
-    var dragPreviewHeight = isImage ? dragPreview.height : sourceHeight;
-    if (isSafari() && isImage) {
-      dragPreviewHeight /= window.devicePixelRatio;
-      dragPreviewWidth /= window.devicePixelRatio;
-    }
-    return {
-      dragPreviewWidth,
-      dragPreviewHeight
-    };
-  }
-  function getDragPreviewOffset(sourceNode, dragPreview, clientOffset, anchorPoint, offsetPoint) {
-    var isImage = isImageNode(dragPreview);
-    var dragPreviewNode = isImage ? sourceNode : dragPreview;
-    var dragPreviewNodeOffsetFromClient = getNodeClientOffset(dragPreviewNode);
-    var offsetFromDragPreview = {
-      x: clientOffset.x - dragPreviewNodeOffsetFromClient.x,
-      y: clientOffset.y - dragPreviewNodeOffsetFromClient.y
-    };
-    var { offsetWidth: sourceWidth, offsetHeight: sourceHeight } = sourceNode;
-    var { anchorX, anchorY } = anchorPoint;
-    var _getDragPreviewSize = getDragPreviewSize(isImage, dragPreview, sourceWidth, sourceHeight), dragPreviewWidth = _getDragPreviewSize.dragPreviewWidth, dragPreviewHeight = _getDragPreviewSize.dragPreviewHeight;
-    var calculateYOffset = function calculateYOffset() {
-      var interpolantY = new MonotonicInterpolant([0, 0.5, 1], [
-        offsetFromDragPreview.y,
-        offsetFromDragPreview.y / sourceHeight * dragPreviewHeight,
-        offsetFromDragPreview.y + dragPreviewHeight - sourceHeight
-      ]);
-      var y = interpolantY.interpolate(anchorY);
-      if (isSafari() && isImage) {
-        y += (window.devicePixelRatio - 1) * dragPreviewHeight;
-      }
-      return y;
-    };
-    var calculateXOffset = function calculateXOffset() {
-      var interpolantX = new MonotonicInterpolant([0, 0.5, 1], [
-        offsetFromDragPreview.x,
-        offsetFromDragPreview.x / sourceWidth * dragPreviewWidth,
-        offsetFromDragPreview.x + dragPreviewWidth - sourceWidth
-      ]);
-      return interpolantX.interpolate(anchorX);
-    };
-    var { offsetX, offsetY } = offsetPoint;
-    var isManualOffsetX = offsetX === 0 || offsetX;
-    var isManualOffsetY = offsetY === 0 || offsetY;
-    return {
-      x: isManualOffsetX ? offsetX : calculateXOffset(),
-      y: isManualOffsetY ? offsetY : calculateYOffset()
-    };
-  }
-
-  // node_modules/react-dnd-html5-backend/dist/esm/NativeTypes.js
-  var exports_NativeTypes = {};
-  __export(exports_NativeTypes, {
-    URL: () => URL,
-    TEXT: () => TEXT,
-    HTML: () => HTML,
-    FILE: () => FILE
-  });
-  var FILE = "__NATIVE_FILE__";
-  var URL = "__NATIVE_URL__";
-  var TEXT = "__NATIVE_TEXT__";
-  var HTML = "__NATIVE_HTML__";
-
-  // node_modules/react-dnd-html5-backend/dist/esm/NativeDragSources/getDataFromDataTransfer.js
-  function getDataFromDataTransfer(dataTransfer, typesToTry, defaultValue) {
-    var result = typesToTry.reduce(function(resultSoFar, typeToTry) {
-      return resultSoFar || dataTransfer.getData(typeToTry);
-    }, "");
-    return result != null ? result : defaultValue;
-  }
-
-  // node_modules/react-dnd-html5-backend/dist/esm/NativeDragSources/nativeTypesConfig.js
-  var _nativeTypesConfig;
-  function _defineProperty17(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var nativeTypesConfig = (_nativeTypesConfig = {}, _defineProperty17(_nativeTypesConfig, FILE, {
-    exposeProperties: {
-      files: function files(dataTransfer5) {
-        return Array.prototype.slice.call(dataTransfer5.files);
-      },
-      items: function items(dataTransfer5) {
-        return dataTransfer5.items;
-      },
-      dataTransfer: function dataTransfer(_dataTransfer) {
-        return _dataTransfer;
-      }
-    },
-    matchesTypes: ["Files"]
-  }), _defineProperty17(_nativeTypesConfig, HTML, {
-    exposeProperties: {
-      html: function html(dataTransfer5, matchesTypes) {
-        return getDataFromDataTransfer(dataTransfer5, matchesTypes, "");
-      },
-      dataTransfer: function dataTransfer2(_dataTransfer2) {
-        return _dataTransfer2;
-      }
-    },
-    matchesTypes: ["Html", "text/html"]
-  }), _defineProperty17(_nativeTypesConfig, URL, {
-    exposeProperties: {
-      urls: function urls(dataTransfer5, matchesTypes) {
-        return getDataFromDataTransfer(dataTransfer5, matchesTypes, "").split(`
-`);
-      },
-      dataTransfer: function dataTransfer3(_dataTransfer3) {
-        return _dataTransfer3;
-      }
-    },
-    matchesTypes: ["Url", "text/uri-list"]
-  }), _defineProperty17(_nativeTypesConfig, TEXT, {
-    exposeProperties: {
-      text: function text(dataTransfer5, matchesTypes) {
-        return getDataFromDataTransfer(dataTransfer5, matchesTypes, "");
-      },
-      dataTransfer: function dataTransfer4(_dataTransfer4) {
-        return _dataTransfer4;
-      }
-    },
-    matchesTypes: ["Text", "text/plain"]
-  }), _nativeTypesConfig);
-
-  // node_modules/react-dnd-html5-backend/dist/esm/NativeDragSources/NativeDragSource.js
-  function _classCallCheck12(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties12(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass12(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties12(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties12(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty18(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var NativeDragSource = /* @__PURE__ */ function() {
-    function NativeDragSource2(config) {
-      _classCallCheck12(this, NativeDragSource2);
-      _defineProperty18(this, "item", undefined);
-      _defineProperty18(this, "config", undefined);
-      this.config = config;
-      this.item = {};
-      this.initializeExposedProperties();
-    }
-    _createClass12(NativeDragSource2, [{
-      key: "initializeExposedProperties",
-      value: function initializeExposedProperties() {
-        var _this = this;
-        Object.keys(this.config.exposeProperties).forEach(function(property) {
-          Object.defineProperty(_this.item, property, {
-            configurable: true,
-            enumerable: true,
-            get: function get() {
-              console.warn(`Browser doesn't allow reading "`.concat(property, '" until the drop event.'));
-              return null;
-            }
-          });
-        });
-      }
-    }, {
-      key: "loadDataTransfer",
-      value: function loadDataTransfer(dataTransfer5) {
-        var _this2 = this;
-        if (dataTransfer5) {
-          var newProperties = {};
-          Object.keys(this.config.exposeProperties).forEach(function(property) {
-            newProperties[property] = {
-              value: _this2.config.exposeProperties[property](dataTransfer5, _this2.config.matchesTypes),
-              configurable: true,
-              enumerable: true
-            };
-          });
-          Object.defineProperties(this.item, newProperties);
-        }
-      }
-    }, {
-      key: "canDrag",
-      value: function canDrag() {
-        return true;
-      }
-    }, {
-      key: "beginDrag",
-      value: function beginDrag() {
-        return this.item;
-      }
-    }, {
-      key: "isDragging",
-      value: function isDragging(monitor, handle) {
-        return handle === monitor.getSourceId();
-      }
-    }, {
-      key: "endDrag",
-      value: function endDrag() {}
-    }]);
-    return NativeDragSource2;
-  }();
-
-  // node_modules/react-dnd-html5-backend/dist/esm/NativeDragSources/index.js
-  function createNativeDragSource(type, dataTransfer5) {
-    var result = new NativeDragSource(nativeTypesConfig[type]);
-    result.loadDataTransfer(dataTransfer5);
-    return result;
-  }
-  function matchNativeItemType(dataTransfer5) {
-    if (!dataTransfer5) {
-      return null;
-    }
-    var dataTransferTypes = Array.prototype.slice.call(dataTransfer5.types || []);
-    return Object.keys(nativeTypesConfig).filter(function(nativeItemType) {
-      var matchesTypes = nativeTypesConfig[nativeItemType].matchesTypes;
-      return matchesTypes.some(function(t) {
-        return dataTransferTypes.indexOf(t) > -1;
-      });
-    })[0] || null;
-  }
-
-  // node_modules/react-dnd-html5-backend/dist/esm/OptionsReader.js
-  function _classCallCheck13(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties13(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass13(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties13(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties13(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty19(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var OptionsReader = /* @__PURE__ */ function() {
-    function OptionsReader2(globalContext, options) {
-      _classCallCheck13(this, OptionsReader2);
-      _defineProperty19(this, "ownerDocument", null);
-      _defineProperty19(this, "globalContext", undefined);
-      _defineProperty19(this, "optionsArgs", undefined);
-      this.globalContext = globalContext;
-      this.optionsArgs = options;
-    }
-    _createClass13(OptionsReader2, [{
-      key: "window",
-      get: function get() {
-        if (this.globalContext) {
-          return this.globalContext;
-        } else if (typeof window !== "undefined") {
-          return window;
-        }
-        return;
-      }
-    }, {
-      key: "document",
-      get: function get() {
-        var _this$globalContext;
-        if ((_this$globalContext = this.globalContext) !== null && _this$globalContext !== undefined && _this$globalContext.document) {
-          return this.globalContext.document;
-        } else if (this.window) {
-          return this.window.document;
-        } else {
-          return;
-        }
-      }
-    }, {
-      key: "rootElement",
-      get: function get() {
-        var _this$optionsArgs;
-        return ((_this$optionsArgs = this.optionsArgs) === null || _this$optionsArgs === undefined ? undefined : _this$optionsArgs.rootElement) || this.window;
-      }
-    }]);
-    return OptionsReader2;
-  }();
-
-  // node_modules/react-dnd-html5-backend/dist/esm/HTML5BackendImpl.js
-  function ownKeys5(object, enumerableOnly) {
-    var keys = Object.keys(object);
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object);
-      if (enumerableOnly) {
-        symbols = symbols.filter(function(sym) {
-          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-        });
-      }
-      keys.push.apply(keys, symbols);
-    }
-    return keys;
-  }
-  function _objectSpread7(target) {
-    for (var i = 1;i < arguments.length; i++) {
-      var source = arguments[i] != null ? arguments[i] : {};
-      if (i % 2) {
-        ownKeys5(Object(source), true).forEach(function(key) {
-          _defineProperty20(target, key, source[key]);
-        });
-      } else if (Object.getOwnPropertyDescriptors) {
-        Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-      } else {
-        ownKeys5(Object(source)).forEach(function(key) {
-          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-        });
-      }
-    }
-    return target;
-  }
-  function _classCallCheck14(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-  function _defineProperties14(target, props) {
-    for (var i = 0;i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-  function _createClass14(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties14(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties14(Constructor, staticProps);
-    return Constructor;
-  }
-  function _defineProperty20(obj, key, value) {
-    if (key in obj) {
-      Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
-  }
-  var HTML5BackendImpl = /* @__PURE__ */ function() {
-    function HTML5BackendImpl2(manager, globalContext, options) {
-      var _this = this;
-      _classCallCheck14(this, HTML5BackendImpl2);
-      _defineProperty20(this, "options", undefined);
-      _defineProperty20(this, "actions", undefined);
-      _defineProperty20(this, "monitor", undefined);
-      _defineProperty20(this, "registry", undefined);
-      _defineProperty20(this, "enterLeaveCounter", undefined);
-      _defineProperty20(this, "sourcePreviewNodes", new Map);
-      _defineProperty20(this, "sourcePreviewNodeOptions", new Map);
-      _defineProperty20(this, "sourceNodes", new Map);
-      _defineProperty20(this, "sourceNodeOptions", new Map);
-      _defineProperty20(this, "dragStartSourceIds", null);
-      _defineProperty20(this, "dropTargetIds", []);
-      _defineProperty20(this, "dragEnterTargetIds", []);
-      _defineProperty20(this, "currentNativeSource", null);
-      _defineProperty20(this, "currentNativeHandle", null);
-      _defineProperty20(this, "currentDragSourceNode", null);
-      _defineProperty20(this, "altKeyPressed", false);
-      _defineProperty20(this, "mouseMoveTimeoutTimer", null);
-      _defineProperty20(this, "asyncEndDragFrameId", null);
-      _defineProperty20(this, "dragOverTargetIds", null);
-      _defineProperty20(this, "lastClientOffset", null);
-      _defineProperty20(this, "hoverRafId", null);
-      _defineProperty20(this, "getSourceClientOffset", function(sourceId) {
-        var source = _this.sourceNodes.get(sourceId);
-        return source && getNodeClientOffset(source) || null;
-      });
-      _defineProperty20(this, "endDragNativeItem", function() {
-        if (!_this.isDraggingNativeItem()) {
-          return;
-        }
-        _this.actions.endDrag();
-        if (_this.currentNativeHandle) {
-          _this.registry.removeSource(_this.currentNativeHandle);
-        }
-        _this.currentNativeHandle = null;
-        _this.currentNativeSource = null;
-      });
-      _defineProperty20(this, "isNodeInDocument", function(node) {
-        return Boolean(node && _this.document && _this.document.body && _this.document.body.contains(node));
-      });
-      _defineProperty20(this, "endDragIfSourceWasRemovedFromDOM", function() {
-        var node = _this.currentDragSourceNode;
-        if (node == null || _this.isNodeInDocument(node)) {
-          return;
-        }
-        if (_this.clearCurrentDragSourceNode() && _this.monitor.isDragging()) {
-          _this.actions.endDrag();
-        }
-      });
-      _defineProperty20(this, "handleTopDragStartCapture", function() {
-        _this.clearCurrentDragSourceNode();
-        _this.dragStartSourceIds = [];
-      });
-      _defineProperty20(this, "handleTopDragStart", function(e) {
-        if (e.defaultPrevented) {
-          return;
-        }
-        var dragStartSourceIds = _this.dragStartSourceIds;
-        _this.dragStartSourceIds = null;
-        var clientOffset = getEventClientOffset(e);
-        if (_this.monitor.isDragging()) {
-          _this.actions.endDrag();
-        }
-        _this.actions.beginDrag(dragStartSourceIds || [], {
-          publishSource: false,
-          getSourceClientOffset: _this.getSourceClientOffset,
-          clientOffset
-        });
-        var dataTransfer5 = e.dataTransfer;
-        var nativeType = matchNativeItemType(dataTransfer5);
-        if (_this.monitor.isDragging()) {
-          if (dataTransfer5 && typeof dataTransfer5.setDragImage === "function") {
-            var sourceId = _this.monitor.getSourceId();
-            var sourceNode = _this.sourceNodes.get(sourceId);
-            var dragPreview = _this.sourcePreviewNodes.get(sourceId) || sourceNode;
-            if (dragPreview) {
-              var _this$getCurrentSourc = _this.getCurrentSourcePreviewNodeOptions(), anchorX = _this$getCurrentSourc.anchorX, anchorY = _this$getCurrentSourc.anchorY, offsetX = _this$getCurrentSourc.offsetX, offsetY = _this$getCurrentSourc.offsetY;
-              var anchorPoint = {
-                anchorX,
-                anchorY
+          return _ro = new this.targetWindow.ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+              const run = () => {
+                this._measureElement(entry.target, entry);
               };
-              var offsetPoint = {
-                offsetX,
-                offsetY
-              };
-              var dragPreviewOffset = getDragPreviewOffset(sourceNode, dragPreview, clientOffset, anchorPoint, offsetPoint);
-              dataTransfer5.setDragImage(dragPreview, dragPreviewOffset.x, dragPreviewOffset.y);
-            }
-          }
-          try {
-            dataTransfer5 === null || dataTransfer5 === undefined || dataTransfer5.setData("application/json", {});
-          } catch (err) {}
-          _this.setCurrentDragSourceNode(e.target);
-          var _this$getCurrentSourc2 = _this.getCurrentSourcePreviewNodeOptions(), captureDraggingState = _this$getCurrentSourc2.captureDraggingState;
-          if (!captureDraggingState) {
-            setTimeout(function() {
-              return _this.actions.publishDragSource();
-            }, 0);
-          } else {
-            _this.actions.publishDragSource();
-          }
-        } else if (nativeType) {
-          _this.beginDragNativeItem(nativeType);
-        } else if (dataTransfer5 && !dataTransfer5.types && (e.target && !e.target.hasAttribute || !e.target.hasAttribute("draggable"))) {
-          return;
-        } else {
-          e.preventDefault();
-        }
-      });
-      _defineProperty20(this, "handleTopDragEndCapture", function() {
-        if (_this.clearCurrentDragSourceNode() && _this.monitor.isDragging()) {
-          _this.actions.endDrag();
-        }
-      });
-      _defineProperty20(this, "handleTopDragEnterCapture", function(e) {
-        _this.dragEnterTargetIds = [];
-        var isFirstEnter = _this.enterLeaveCounter.enter(e.target);
-        if (!isFirstEnter || _this.monitor.isDragging()) {
-          return;
-        }
-        var dataTransfer5 = e.dataTransfer;
-        var nativeType = matchNativeItemType(dataTransfer5);
-        if (nativeType) {
-          _this.beginDragNativeItem(nativeType, dataTransfer5);
-        }
-      });
-      _defineProperty20(this, "handleTopDragEnter", function(e) {
-        var dragEnterTargetIds = _this.dragEnterTargetIds;
-        _this.dragEnterTargetIds = [];
-        if (!_this.monitor.isDragging()) {
-          return;
-        }
-        _this.altKeyPressed = e.altKey;
-        if (dragEnterTargetIds.length > 0) {
-          _this.actions.hover(dragEnterTargetIds, {
-            clientOffset: getEventClientOffset(e)
-          });
-        }
-        var canDrop = dragEnterTargetIds.some(function(targetId) {
-          return _this.monitor.canDropOnTarget(targetId);
-        });
-        if (canDrop) {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = _this.getCurrentDropEffect();
-          }
-        }
-      });
-      _defineProperty20(this, "handleTopDragOverCapture", function() {
-        _this.dragOverTargetIds = [];
-      });
-      _defineProperty20(this, "handleTopDragOver", function(e) {
-        var dragOverTargetIds = _this.dragOverTargetIds;
-        _this.dragOverTargetIds = [];
-        if (!_this.monitor.isDragging()) {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = "none";
-          }
-          return;
-        }
-        _this.altKeyPressed = e.altKey;
-        _this.lastClientOffset = getEventClientOffset(e);
-        if (_this.hoverRafId === null && typeof requestAnimationFrame !== "undefined") {
-          _this.hoverRafId = requestAnimationFrame(function() {
-            if (_this.monitor.isDragging()) {
-              _this.actions.hover(dragOverTargetIds || [], {
-                clientOffset: _this.lastClientOffset
-              });
-            }
-            _this.hoverRafId = null;
-          });
-        }
-        var canDrop = (dragOverTargetIds || []).some(function(targetId) {
-          return _this.monitor.canDropOnTarget(targetId);
-        });
-        if (canDrop) {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = _this.getCurrentDropEffect();
-          }
-        } else if (_this.isDraggingNativeItem()) {
-          e.preventDefault();
-        } else {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = "none";
-          }
-        }
-      });
-      _defineProperty20(this, "handleTopDragLeaveCapture", function(e) {
-        if (_this.isDraggingNativeItem()) {
-          e.preventDefault();
-        }
-        var isLastLeave = _this.enterLeaveCounter.leave(e.target);
-        if (!isLastLeave) {
-          return;
-        }
-        if (_this.isDraggingNativeItem()) {
-          setTimeout(function() {
-            return _this.endDragNativeItem();
-          }, 0);
-        }
-      });
-      _defineProperty20(this, "handleTopDropCapture", function(e) {
-        _this.dropTargetIds = [];
-        if (_this.isDraggingNativeItem()) {
-          var _this$currentNativeSo;
-          e.preventDefault();
-          (_this$currentNativeSo = _this.currentNativeSource) === null || _this$currentNativeSo === undefined || _this$currentNativeSo.loadDataTransfer(e.dataTransfer);
-        } else if (matchNativeItemType(e.dataTransfer)) {
-          e.preventDefault();
-        }
-        _this.enterLeaveCounter.reset();
-      });
-      _defineProperty20(this, "handleTopDrop", function(e) {
-        var dropTargetIds = _this.dropTargetIds;
-        _this.dropTargetIds = [];
-        _this.actions.hover(dropTargetIds, {
-          clientOffset: getEventClientOffset(e)
-        });
-        _this.actions.drop({
-          dropEffect: _this.getCurrentDropEffect()
-        });
-        if (_this.isDraggingNativeItem()) {
-          _this.endDragNativeItem();
-        } else if (_this.monitor.isDragging()) {
-          _this.actions.endDrag();
-        }
-      });
-      _defineProperty20(this, "handleSelectStart", function(e) {
-        var target = e.target;
-        if (typeof target.dragDrop !== "function") {
-          return;
-        }
-        if (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-          return;
-        }
-        e.preventDefault();
-        target.dragDrop();
-      });
-      this.options = new OptionsReader(globalContext, options);
-      this.actions = manager.getActions();
-      this.monitor = manager.getMonitor();
-      this.registry = manager.getRegistry();
-      this.enterLeaveCounter = new EnterLeaveCounter(this.isNodeInDocument);
-    }
-    _createClass14(HTML5BackendImpl2, [{
-      key: "profile",
-      value: function profile() {
-        var _this$dragStartSource, _this$dragOverTargetI;
-        return {
-          sourcePreviewNodes: this.sourcePreviewNodes.size,
-          sourcePreviewNodeOptions: this.sourcePreviewNodeOptions.size,
-          sourceNodeOptions: this.sourceNodeOptions.size,
-          sourceNodes: this.sourceNodes.size,
-          dragStartSourceIds: ((_this$dragStartSource = this.dragStartSourceIds) === null || _this$dragStartSource === undefined ? undefined : _this$dragStartSource.length) || 0,
-          dropTargetIds: this.dropTargetIds.length,
-          dragEnterTargetIds: this.dragEnterTargetIds.length,
-          dragOverTargetIds: ((_this$dragOverTargetI = this.dragOverTargetIds) === null || _this$dragOverTargetI === undefined ? undefined : _this$dragOverTargetI.length) || 0
-        };
-      }
-    }, {
-      key: "window",
-      get: function get() {
-        return this.options.window;
-      }
-    }, {
-      key: "document",
-      get: function get() {
-        return this.options.document;
-      }
-    }, {
-      key: "rootElement",
-      get: function get() {
-        return this.options.rootElement;
-      }
-    }, {
-      key: "setup",
-      value: function setup() {
-        var root = this.rootElement;
-        if (root === undefined) {
-          return;
-        }
-        if (root.__isReactDndBackendSetUp) {
-          throw new Error("Cannot have two HTML5 backends at the same time.");
-        }
-        root.__isReactDndBackendSetUp = true;
-        this.addEventListeners(root);
-      }
-    }, {
-      key: "teardown",
-      value: function teardown() {
-        var root = this.rootElement;
-        if (root === undefined) {
-          return;
-        }
-        root.__isReactDndBackendSetUp = false;
-        this.removeEventListeners(this.rootElement);
-        this.clearCurrentDragSourceNode();
-        if (this.asyncEndDragFrameId) {
-          var _this$window;
-          (_this$window = this.window) === null || _this$window === undefined || _this$window.cancelAnimationFrame(this.asyncEndDragFrameId);
-        }
-      }
-    }, {
-      key: "connectDragPreview",
-      value: function connectDragPreview(sourceId, node, options) {
-        var _this2 = this;
-        this.sourcePreviewNodeOptions.set(sourceId, options);
-        this.sourcePreviewNodes.set(sourceId, node);
-        return function() {
-          _this2.sourcePreviewNodes.delete(sourceId);
-          _this2.sourcePreviewNodeOptions.delete(sourceId);
-        };
-      }
-    }, {
-      key: "connectDragSource",
-      value: function connectDragSource(sourceId, node, options) {
-        var _this3 = this;
-        this.sourceNodes.set(sourceId, node);
-        this.sourceNodeOptions.set(sourceId, options);
-        var handleDragStart = function handleDragStart(e) {
-          return _this3.handleDragStart(e, sourceId);
-        };
-        var handleSelectStart = function handleSelectStart(e) {
-          return _this3.handleSelectStart(e);
-        };
-        node.setAttribute("draggable", "true");
-        node.addEventListener("dragstart", handleDragStart);
-        node.addEventListener("selectstart", handleSelectStart);
-        return function() {
-          _this3.sourceNodes.delete(sourceId);
-          _this3.sourceNodeOptions.delete(sourceId);
-          node.removeEventListener("dragstart", handleDragStart);
-          node.removeEventListener("selectstart", handleSelectStart);
-          node.setAttribute("draggable", "false");
-        };
-      }
-    }, {
-      key: "connectDropTarget",
-      value: function connectDropTarget(targetId, node) {
-        var _this4 = this;
-        var handleDragEnter = function handleDragEnter(e) {
-          return _this4.handleDragEnter(e, targetId);
-        };
-        var handleDragOver = function handleDragOver(e) {
-          return _this4.handleDragOver(e, targetId);
-        };
-        var handleDrop = function handleDrop(e) {
-          return _this4.handleDrop(e, targetId);
-        };
-        node.addEventListener("dragenter", handleDragEnter);
-        node.addEventListener("dragover", handleDragOver);
-        node.addEventListener("drop", handleDrop);
-        return function() {
-          node.removeEventListener("dragenter", handleDragEnter);
-          node.removeEventListener("dragover", handleDragOver);
-          node.removeEventListener("drop", handleDrop);
-        };
-      }
-    }, {
-      key: "addEventListeners",
-      value: function addEventListeners(target) {
-        if (!target.addEventListener) {
-          return;
-        }
-        target.addEventListener("dragstart", this.handleTopDragStart);
-        target.addEventListener("dragstart", this.handleTopDragStartCapture, true);
-        target.addEventListener("dragend", this.handleTopDragEndCapture, true);
-        target.addEventListener("dragenter", this.handleTopDragEnter);
-        target.addEventListener("dragenter", this.handleTopDragEnterCapture, true);
-        target.addEventListener("dragleave", this.handleTopDragLeaveCapture, true);
-        target.addEventListener("dragover", this.handleTopDragOver);
-        target.addEventListener("dragover", this.handleTopDragOverCapture, true);
-        target.addEventListener("drop", this.handleTopDrop);
-        target.addEventListener("drop", this.handleTopDropCapture, true);
-      }
-    }, {
-      key: "removeEventListeners",
-      value: function removeEventListeners(target) {
-        if (!target.removeEventListener) {
-          return;
-        }
-        target.removeEventListener("dragstart", this.handleTopDragStart);
-        target.removeEventListener("dragstart", this.handleTopDragStartCapture, true);
-        target.removeEventListener("dragend", this.handleTopDragEndCapture, true);
-        target.removeEventListener("dragenter", this.handleTopDragEnter);
-        target.removeEventListener("dragenter", this.handleTopDragEnterCapture, true);
-        target.removeEventListener("dragleave", this.handleTopDragLeaveCapture, true);
-        target.removeEventListener("dragover", this.handleTopDragOver);
-        target.removeEventListener("dragover", this.handleTopDragOverCapture, true);
-        target.removeEventListener("drop", this.handleTopDrop);
-        target.removeEventListener("drop", this.handleTopDropCapture, true);
-      }
-    }, {
-      key: "getCurrentSourceNodeOptions",
-      value: function getCurrentSourceNodeOptions() {
-        var sourceId = this.monitor.getSourceId();
-        var sourceNodeOptions = this.sourceNodeOptions.get(sourceId);
-        return _objectSpread7({
-          dropEffect: this.altKeyPressed ? "copy" : "move"
-        }, sourceNodeOptions || {});
-      }
-    }, {
-      key: "getCurrentDropEffect",
-      value: function getCurrentDropEffect() {
-        if (this.isDraggingNativeItem()) {
-          return "copy";
-        }
-        return this.getCurrentSourceNodeOptions().dropEffect;
-      }
-    }, {
-      key: "getCurrentSourcePreviewNodeOptions",
-      value: function getCurrentSourcePreviewNodeOptions() {
-        var sourceId = this.monitor.getSourceId();
-        var sourcePreviewNodeOptions = this.sourcePreviewNodeOptions.get(sourceId);
-        return _objectSpread7({
-          anchorX: 0.5,
-          anchorY: 0.5,
-          captureDraggingState: false
-        }, sourcePreviewNodeOptions || {});
-      }
-    }, {
-      key: "isDraggingNativeItem",
-      value: function isDraggingNativeItem() {
-        var itemType = this.monitor.getItemType();
-        return Object.keys(exports_NativeTypes).some(function(key) {
-          return exports_NativeTypes[key] === itemType;
-        });
-      }
-    }, {
-      key: "beginDragNativeItem",
-      value: function beginDragNativeItem(type, dataTransfer5) {
-        this.clearCurrentDragSourceNode();
-        this.currentNativeSource = createNativeDragSource(type, dataTransfer5);
-        this.currentNativeHandle = this.registry.addSource(type, this.currentNativeSource);
-        this.actions.beginDrag([this.currentNativeHandle]);
-      }
-    }, {
-      key: "setCurrentDragSourceNode",
-      value: function setCurrentDragSourceNode(node) {
-        var _this5 = this;
-        this.clearCurrentDragSourceNode();
-        this.currentDragSourceNode = node;
-        var MOUSE_MOVE_TIMEOUT = 1000;
-        this.mouseMoveTimeoutTimer = setTimeout(function() {
-          var _this5$rootElement;
-          return (_this5$rootElement = _this5.rootElement) === null || _this5$rootElement === undefined ? undefined : _this5$rootElement.addEventListener("mousemove", _this5.endDragIfSourceWasRemovedFromDOM, true);
-        }, MOUSE_MOVE_TIMEOUT);
-      }
-    }, {
-      key: "clearCurrentDragSourceNode",
-      value: function clearCurrentDragSourceNode() {
-        if (this.currentDragSourceNode) {
-          this.currentDragSourceNode = null;
-          if (this.rootElement) {
-            var _this$window2;
-            (_this$window2 = this.window) === null || _this$window2 === undefined || _this$window2.clearTimeout(this.mouseMoveTimeoutTimer || undefined);
-            this.rootElement.removeEventListener("mousemove", this.endDragIfSourceWasRemovedFromDOM, true);
-          }
-          this.mouseMoveTimeoutTimer = null;
-          return true;
-        }
-        return false;
-      }
-    }, {
-      key: "handleDragStart",
-      value: function handleDragStart(e, sourceId) {
-        if (e.defaultPrevented) {
-          return;
-        }
-        if (!this.dragStartSourceIds) {
-          this.dragStartSourceIds = [];
-        }
-        this.dragStartSourceIds.unshift(sourceId);
-      }
-    }, {
-      key: "handleDragEnter",
-      value: function handleDragEnter(e, targetId) {
-        this.dragEnterTargetIds.unshift(targetId);
-      }
-    }, {
-      key: "handleDragOver",
-      value: function handleDragOver(e, targetId) {
-        if (this.dragOverTargetIds === null) {
-          this.dragOverTargetIds = [];
-        }
-        this.dragOverTargetIds.unshift(targetId);
-      }
-    }, {
-      key: "handleDrop",
-      value: function handleDrop(e, targetId) {
-        this.dropTargetIds.unshift(targetId);
-      }
-    }]);
-    return HTML5BackendImpl2;
-  }();
-
-  // node_modules/react-dnd-html5-backend/dist/esm/getEmptyImage.js
-  var emptyImage;
-  function getEmptyImage() {
-    if (!emptyImage) {
-      emptyImage = new Image;
-      emptyImage.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
-    }
-    return emptyImage;
-  }
-  // node_modules/react-dnd-html5-backend/dist/esm/index.js
-  var HTML5Backend = function createBackend(manager, context, options) {
-    return new HTML5BackendImpl(manager, context, options);
-  };
-
-  // node_modules/react-arborist/dist/module/dnd/drag-hook.js
-  function useDragHook(node) {
-    const tree = useTreeApi();
-    const ids = tree.selectedIds;
-    const [_, ref, preview] = useDrag(() => ({
-      canDrag: () => node.isDraggable,
-      type: "NODE",
-      item: () => {
-        const dragIds = tree.isSelected(node.id) ? Array.from(ids) : [node.id];
-        tree.dispatch(actions3.dragStart(node.id, dragIds));
-        return { id: node.id, dragIds };
-      },
-      end: () => {
-        tree.hideCursor();
-        tree.dispatch(actions3.dragEnd());
-      }
-    }), [ids, node]);
-    import_react26.useEffect(() => {
-      preview(getEmptyImage());
-    }, [preview]);
-    return ref;
-  }
-
-  // node_modules/react-arborist/dist/module/dnd/compute-drop.js
-  function measureHover(el, offset) {
-    const rect = el.getBoundingClientRect();
-    const x = offset.x - Math.round(rect.x);
-    const y = offset.y - Math.round(rect.y);
-    const height = rect.height;
-    const inTopHalf = y < height / 2;
-    const inBottomHalf = !inTopHalf;
-    const pad = height / 4;
-    const inMiddle = y > pad && y < height - pad;
-    const atTop = !inMiddle && inTopHalf;
-    const atBottom = !inMiddle && inBottomHalf;
-    return { x, inTopHalf, inBottomHalf, inMiddle, atTop, atBottom };
-  }
-  function getNodesAroundCursor(node, prev, next, hover) {
-    if (!node) {
-      return [prev, null];
-    }
-    if (node.isInternal) {
-      if (hover.atTop) {
-        return [prev, node];
-      } else if (hover.inMiddle) {
-        return [node, node];
-      } else {
-        return [node, next];
-      }
-    } else {
-      if (hover.inTopHalf) {
-        return [prev, node];
-      } else {
-        return [node, next];
-      }
-    }
-  }
-  function dropAt(parentId, index) {
-    return { parentId: parentId || null, index };
-  }
-  function lineCursor(index, level) {
-    return {
-      type: "line",
-      index,
-      level
-    };
-  }
-  function highlightCursor(id) {
-    return {
-      type: "highlight",
-      id
-    };
-  }
-  function walkUpFrom(node, level) {
-    var _a;
-    let drop = node;
-    while (drop.parent && drop.level > level) {
-      drop = drop.parent;
-    }
-    const parentId = ((_a = drop.parent) === null || _a === undefined ? undefined : _a.id) || null;
-    const index = indexOf(drop) + 1;
-    return { parentId, index };
-  }
-  function computeDrop(args) {
-    var _a;
-    const hover = measureHover(args.element, args.offset);
-    const indent = args.indent;
-    const hoverLevel = Math.round(Math.max(0, hover.x - indent) / indent);
-    const { node, nextNode, prevNode } = args;
-    const [above, below] = getNodesAroundCursor(node, prevNode, nextNode, hover);
-    if (node && node.isInternal && hover.inMiddle) {
-      return {
-        drop: dropAt(node.id, null),
-        cursor: highlightCursor(node.id)
-      };
-    }
-    if (!above) {
-      return {
-        drop: dropAt((_a = below === null || below === undefined ? undefined : below.parent) === null || _a === undefined ? undefined : _a.id, 0),
-        cursor: lineCursor(0, 0)
-      };
-    }
-    if (isItem(above)) {
-      const level = bound(hoverLevel, (below === null || below === undefined ? undefined : below.level) || 0, above.level);
-      return {
-        drop: walkUpFrom(above, level),
-        cursor: lineCursor(above.rowIndex + 1, level)
-      };
-    }
-    if (isClosed(above)) {
-      const level = bound(hoverLevel, (below === null || below === undefined ? undefined : below.level) || 0, above.level);
-      return {
-        drop: walkUpFrom(above, level),
-        cursor: lineCursor(above.rowIndex + 1, level)
-      };
-    }
-    if (isOpenWithEmptyChildren(above)) {
-      const level = bound(hoverLevel, 0, above.level + 1);
-      if (level > above.level) {
-        return {
-          drop: dropAt(above.id, 0),
-          cursor: lineCursor(above.rowIndex + 1, level)
-        };
-      } else {
-        return {
-          drop: walkUpFrom(above, level),
-          cursor: lineCursor(above.rowIndex + 1, level)
-        };
-      }
-    }
-    return {
-      drop: dropAt(above === null || above === undefined ? undefined : above.id, 0),
-      cursor: lineCursor(above.rowIndex + 1, above.level + 1)
-    };
-  }
-
-  // node_modules/react-arborist/dist/module/dnd/drop-hook.js
-  function useDropHook(el, node) {
-    const tree = useTreeApi();
-    const [_, dropRef] = useDrop(() => ({
-      accept: "NODE",
-      canDrop: () => tree.canDrop(),
-      hover: (_item, m) => {
-        const offset = m.getClientOffset();
-        if (!el.current || !offset)
-          return;
-        const { cursor, drop } = computeDrop({
-          element: el.current,
-          offset,
-          indent: tree.indent,
-          node,
-          prevNode: node.prev,
-          nextNode: node.next
-        });
-        if (drop)
-          tree.dispatch(actions3.hovering(drop.parentId, drop.index));
-        if (m.canDrop()) {
-          if (cursor)
-            tree.showCursor(cursor);
-        } else {
-          tree.hideCursor();
-        }
-      },
-      drop: (_2, m) => {
-        if (!m.canDrop())
-          return null;
-        let { parentId, index, dragIds } = tree.state.dnd;
-        safeRun(tree.props.onMove, {
-          dragIds,
-          parentId: parentId === ROOT_ID ? null : parentId,
-          index: index === null ? 0 : index,
-          dragNodes: tree.dragNodes,
-          parentNode: tree.get(parentId)
-        });
-        tree.open(parentId);
-      }
-    }), [node, el.current, tree.props]);
-    return dropRef;
-  }
-
-  // node_modules/react-arborist/dist/module/hooks/use-fresh-node.js
-  var import_react27 = __toESM(require_react());
-  function useFreshNode(index) {
-    const tree = useTreeApi();
-    const original = tree.at(index);
-    if (!original)
-      throw new Error(`Could not find node for index: ${index}`);
-    return import_react27.useMemo(() => {
-      const fresh = original.clone();
-      tree.visibleNodes[index] = fresh;
-      return fresh;
-    }, [...Object.values(original.state), original]);
-  }
-
-  // node_modules/react-arborist/dist/module/components/row-container.js
-  var RowContainer = import_react28.default.memo(function RowContainer2({ index, style }) {
-    useDataUpdates();
-    const _ = useNodesContext();
-    const tree = useTreeApi();
-    const node = useFreshNode(index);
-    const el = import_react28.useRef(null);
-    const dragRef = useDragHook(node);
-    const dropRef = useDropHook(el, node);
-    const innerRef = import_react28.useCallback((n) => {
-      el.current = n;
-      dropRef(n);
-    }, [dropRef]);
-    const indent = tree.indent * node.level;
-    const nodeStyle = import_react28.useMemo(() => ({ paddingLeft: indent }), [indent]);
-    const rowStyle = import_react28.useMemo(() => {
-      var _a, _b;
-      return Object.assign(Object.assign({}, style), { top: parseFloat(style.top) + ((_b = (_a = tree.props.padding) !== null && _a !== undefined ? _a : tree.props.paddingTop) !== null && _b !== undefined ? _b : 0) });
-    }, [style, tree.props.padding, tree.props.paddingTop]);
-    const rowAttrs = {
-      role: "treeitem",
-      "aria-level": node.level + 1,
-      "aria-selected": node.isSelected,
-      "aria-expanded": node.isOpen,
-      style: rowStyle,
-      tabIndex: -1,
-      className: tree.props.rowClassName
-    };
-    import_react28.useEffect(() => {
-      var _a;
-      if (!node.isEditing && node.isFocused) {
-        (_a = el.current) === null || _a === undefined || _a.focus({ preventScroll: true });
-      }
-    }, [node.isEditing, node.isFocused, el.current]);
-    const Node = tree.renderNode;
-    const Row = tree.renderRow;
-    return import_jsx_runtime9.jsx(Row, { node, innerRef, attrs: rowAttrs, children: import_jsx_runtime9.jsx(Node, { node, tree, style: nodeStyle, dragHandle: dragRef }) });
-  });
-
-  // node_modules/react-arborist/dist/module/components/default-container.js
-  var focusSearchTerm = "";
-  var timeoutId = null;
-  function DefaultContainer() {
-    useDataUpdates();
-    const tree = useTreeApi();
-    return import_jsx_runtime10.jsx("div", { role: "tree", style: {
-      height: tree.height,
-      width: tree.width,
-      minHeight: 0,
-      minWidth: 0
-    }, onContextMenu: tree.props.onContextMenu, onClick: tree.props.onClick, tabIndex: 0, onFocus: (e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) {
-        tree.onFocus();
-      }
-    }, onBlur: (e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) {
-        tree.onBlur();
-      }
-    }, onKeyDown: (e) => {
-      var _a;
-      if (tree.isEditing) {
-        return;
-      }
-      if (e.key === "Backspace") {
-        if (!tree.props.onDelete)
-          return;
-        const ids = Array.from(tree.selectedIds);
-        if (ids.length > 1) {
-          let nextFocus = tree.mostRecentNode;
-          while (nextFocus && nextFocus.isSelected) {
-            nextFocus = nextFocus.nextSibling;
-          }
-          if (!nextFocus)
-            nextFocus = tree.lastNode;
-          tree.focus(nextFocus, { scroll: false });
-          tree.delete(Array.from(ids));
-        } else {
-          const node2 = tree.focusedNode;
-          if (node2) {
-            const sib = node2.nextSibling;
-            const parent = node2.parent;
-            tree.focus(sib || parent, { scroll: false });
-            tree.delete(node2);
-          }
-        }
-        return;
-      }
-      if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
-        focusNextElement(e.currentTarget);
-        return;
-      }
-      if (e.key === "Tab" && e.shiftKey) {
-        e.preventDefault();
-        focusPrevElement(e.currentTarget);
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        const next = tree.nextNode;
-        if (e.metaKey) {
-          tree.select(tree.focusedNode);
-          tree.activate(tree.focusedNode);
-          return;
-        } else if (!e.shiftKey || tree.props.disableMultiSelection) {
-          tree.focus(next);
-          return;
-        } else {
-          if (!next)
-            return;
-          const current = tree.focusedNode;
-          if (!current) {
-            tree.focus(tree.firstNode);
-          } else if (current.isSelected) {
-            tree.selectContiguous(next);
-          } else {
-            tree.selectMulti(next);
-          }
-          return;
-        }
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        const prev = tree.prevNode;
-        if (!e.shiftKey || tree.props.disableMultiSelection) {
-          tree.focus(prev);
-          return;
-        } else {
-          if (!prev)
-            return;
-          const current = tree.focusedNode;
-          if (!current) {
-            tree.focus(tree.lastNode);
-          } else if (current.isSelected) {
-            tree.selectContiguous(prev);
-          } else {
-            tree.selectMulti(prev);
-          }
-          return;
-        }
-      }
-      if (e.key === "ArrowRight") {
-        const node2 = tree.focusedNode;
-        if (!node2)
-          return;
-        if (node2.isInternal && node2.isOpen) {
-          tree.focus(tree.nextNode);
-        } else if (node2.isInternal)
-          tree.open(node2.id);
-        return;
-      }
-      if (e.key === "ArrowLeft") {
-        const node2 = tree.focusedNode;
-        if (!node2 || node2.isRoot)
-          return;
-        if (node2.isInternal && node2.isOpen)
-          tree.close(node2.id);
-        else if (!((_a = node2.parent) === null || _a === undefined ? undefined : _a.isRoot)) {
-          tree.focus(node2.parent);
-        }
-        return;
-      }
-      if (e.key === "a" && e.metaKey && !tree.props.disableMultiSelection) {
-        e.preventDefault();
-        tree.selectAll();
-        return;
-      }
-      if (e.key === "a" && !e.metaKey && tree.props.onCreate) {
-        tree.createLeaf();
-        return;
-      }
-      if (e.key === "A" && !e.metaKey) {
-        if (!tree.props.onCreate)
-          return;
-        tree.createInternal();
-        return;
-      }
-      if (e.key === "Home") {
-        e.preventDefault();
-        tree.focus(tree.firstNode);
-        return;
-      }
-      if (e.key === "End") {
-        e.preventDefault();
-        tree.focus(tree.lastNode);
-        return;
-      }
-      if (e.key === "Enter") {
-        const node2 = tree.focusedNode;
-        if (!node2)
-          return;
-        if (!node2.isEditable || !tree.props.onRename)
-          return;
-        setTimeout(() => {
-          if (node2)
-            tree.edit(node2);
-        });
-        return;
-      }
-      if (e.key === " ") {
-        e.preventDefault();
-        const node2 = tree.focusedNode;
-        if (!node2)
-          return;
-        if (node2.isLeaf) {
-          node2.select();
-          node2.activate();
-        } else {
-          node2.toggle();
-        }
-        return;
-      }
-      if (e.key === "*") {
-        const node2 = tree.focusedNode;
-        if (!node2)
-          return;
-        tree.openSiblings(node2);
-        return;
-      }
-      if (e.key === "PageUp") {
-        e.preventDefault();
-        tree.pageUp();
-        return;
-      }
-      if (e.key === "PageDown") {
-        e.preventDefault();
-        tree.pageDown();
-      }
-      clearTimeout(timeoutId);
-      focusSearchTerm += e.key;
-      timeoutId = setTimeout(() => {
-        focusSearchTerm = "";
-      }, 600);
-      const node = tree.visibleNodes.find((n) => {
-        const name = n.data.name;
-        if (typeof name === "string") {
-          return name.toLowerCase().startsWith(focusSearchTerm);
-        } else
-          return false;
-      });
-      if (node)
-        tree.focus(node.id);
-    }, children: import_jsx_runtime10.jsx(FixedSizeList, { className: tree.props.className, outerRef: tree.listEl, itemCount: tree.visibleNodes.length, height: tree.height, width: tree.width, itemSize: tree.rowHeight, overscanCount: tree.overscanCount, itemKey: (index) => {
-      var _a;
-      return ((_a = tree.visibleNodes[index]) === null || _a === undefined ? undefined : _a.id) || index;
-    }, outerElementType: ListOuterElement, innerElementType: ListInnerElement, onScroll: tree.props.onScroll, onItemsRendered: tree.onItemsRendered.bind(tree), ref: tree.list, children: RowContainer }) });
-  }
-
-  // node_modules/react-arborist/dist/module/data/create-list.js
-  function createList(tree) {
-    if (tree.isFiltered) {
-      return flattenAndFilterTree(tree.root, tree.isMatch.bind(tree));
-    } else {
-      return flattenTree(tree.root);
-    }
-  }
-  function flattenTree(root) {
-    const list = [];
-    function collect(node) {
-      var _a;
-      if (node.level >= 0) {
-        list.push(node);
-      }
-      if (node.isOpen) {
-        (_a = node.children) === null || _a === undefined || _a.forEach(collect);
-      }
-    }
-    collect(root);
-    list.forEach(assignRowIndex);
-    return list;
-  }
-  function flattenAndFilterTree(root, isMatch) {
-    const matches = {};
-    const list = [];
-    function markMatch(node) {
-      const yes = !node.isRoot && isMatch(node);
-      if (yes) {
-        matches[node.id] = true;
-        let parent = node.parent;
-        while (parent) {
-          matches[parent.id] = true;
-          parent = parent.parent;
-        }
-      }
-      if (node.children) {
-        for (let child of node.children)
-          markMatch(child);
-      }
-    }
-    function collect(node) {
-      var _a;
-      if (node.level >= 0 && matches[node.id]) {
-        list.push(node);
-      }
-      if (node.isOpen) {
-        (_a = node.children) === null || _a === undefined || _a.forEach(collect);
-      }
-    }
-    markMatch(root);
-    collect(root);
-    list.forEach(assignRowIndex);
-    return list;
-  }
-  function assignRowIndex(node, index) {
-    node.rowIndex = index;
-  }
-
-  // node_modules/react-arborist/dist/module/data/create-index.js
-  var createIndex = (nodes) => {
-    return nodes.reduce((map, node, index) => {
-      map[node.id] = index;
-      return map;
-    }, {});
-  };
-
-  // node_modules/react-arborist/dist/module/interfaces/tree-api.js
-  var __awaiter = function(thisArg, _arguments, P, generator) {
-    function adopt(value) {
-      return value instanceof P ? value : new P(function(resolve) {
-        resolve(value);
-      });
-    }
-    return new (P || (P = Promise))(function(resolve, reject) {
-      function fulfilled(value) {
-        try {
-          step(generator.next(value));
-        } catch (e) {
-          reject(e);
-        }
-      }
-      function rejected(value) {
-        try {
-          step(generator["throw"](value));
-        } catch (e) {
-          reject(e);
-        }
-      }
-      function step(result) {
-        result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-      }
-      step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-  };
-  var { safeRun: safeRun2, identify: identify2, identifyNull: identifyNull2 } = exports_utils;
-
-  class TreeApi {
-    constructor(store, props, list, listEl) {
-      this.store = store;
-      this.props = props;
-      this.list = list;
-      this.listEl = listEl;
-      this.visibleStartIndex = 0;
-      this.visibleStopIndex = 0;
-      this.root = createRoot(this);
-      this.visibleNodes = createList(this);
-      this.idToIndex = createIndex(this.visibleNodes);
-    }
-    update(props) {
-      this.props = props;
-      this.root = createRoot(this);
-      this.visibleNodes = createList(this);
-      this.idToIndex = createIndex(this.visibleNodes);
-    }
-    dispatch(action) {
-      return this.store.dispatch(action);
-    }
-    get state() {
-      return this.store.getState();
-    }
-    get openState() {
-      return this.state.nodes.open.unfiltered;
-    }
-    get width() {
-      var _a;
-      return (_a = this.props.width) !== null && _a !== undefined ? _a : 300;
-    }
-    get height() {
-      var _a;
-      return (_a = this.props.height) !== null && _a !== undefined ? _a : 500;
-    }
-    get indent() {
-      var _a;
-      return (_a = this.props.indent) !== null && _a !== undefined ? _a : 24;
-    }
-    get rowHeight() {
-      var _a;
-      return (_a = this.props.rowHeight) !== null && _a !== undefined ? _a : 24;
-    }
-    get overscanCount() {
-      var _a;
-      return (_a = this.props.overscanCount) !== null && _a !== undefined ? _a : 1;
-    }
-    get searchTerm() {
-      return (this.props.searchTerm || "").trim();
-    }
-    get matchFn() {
-      var _a;
-      const match = (_a = this.props.searchMatch) !== null && _a !== undefined ? _a : (node, term) => {
-        const string = JSON.stringify(Object.values(node.data));
-        return string.toLocaleLowerCase().includes(term.toLocaleLowerCase());
-      };
-      return (node) => match(node, this.searchTerm);
-    }
-    accessChildren(data) {
-      var _a;
-      const get2 = this.props.childrenAccessor || "children";
-      return (_a = access(data, get2)) !== null && _a !== undefined ? _a : null;
-    }
-    accessId(data) {
-      const get2 = this.props.idAccessor || "id";
-      const id = access(data, get2);
-      if (!id)
-        throw new Error("Data must contain an 'id' property or props.idAccessor must return a string");
-      return id;
-    }
-    get firstNode() {
-      var _a;
-      return (_a = this.visibleNodes[0]) !== null && _a !== undefined ? _a : null;
-    }
-    get lastNode() {
-      var _a;
-      return (_a = this.visibleNodes[this.visibleNodes.length - 1]) !== null && _a !== undefined ? _a : null;
-    }
-    get focusedNode() {
-      var _a;
-      return (_a = this.get(this.state.nodes.focus.id)) !== null && _a !== undefined ? _a : null;
-    }
-    get mostRecentNode() {
-      var _a;
-      return (_a = this.get(this.state.nodes.selection.mostRecent)) !== null && _a !== undefined ? _a : null;
-    }
-    get nextNode() {
-      const index = this.indexOf(this.focusedNode);
-      if (index === null)
-        return null;
-      else
-        return this.at(index + 1);
-    }
-    get prevNode() {
-      const index = this.indexOf(this.focusedNode);
-      if (index === null)
-        return null;
-      else
-        return this.at(index - 1);
-    }
-    get(id) {
-      if (!id)
-        return null;
-      if (id in this.idToIndex)
-        return this.visibleNodes[this.idToIndex[id]] || null;
-      else
-        return null;
-    }
-    at(index) {
-      return this.visibleNodes[index] || null;
-    }
-    nodesBetween(startId, endId) {
-      var _a;
-      if (startId === null || endId === null)
-        return [];
-      const index1 = (_a = this.indexOf(startId)) !== null && _a !== undefined ? _a : 0;
-      const index2 = this.indexOf(endId);
-      if (index2 === null)
-        return [];
-      const start = Math.min(index1, index2);
-      const end = Math.max(index1, index2);
-      return this.visibleNodes.slice(start, end + 1);
-    }
-    indexOf(id) {
-      const key = identifyNull(id);
-      if (!key)
-        return null;
-      return this.idToIndex[key];
-    }
-    get editingId() {
-      return this.state.nodes.edit.id;
-    }
-    createInternal() {
-      return this.create({ type: "internal" });
-    }
-    createLeaf() {
-      return this.create({ type: "leaf" });
-    }
-    create() {
-      return __awaiter(this, arguments, undefined, function* (opts = {}) {
-        var _a, _b;
-        const parentId = opts.parentId === undefined ? getInsertParentId(this) : opts.parentId;
-        const index = (_a = opts.index) !== null && _a !== undefined ? _a : getInsertIndex(this);
-        const type = (_b = opts.type) !== null && _b !== undefined ? _b : "leaf";
-        const data = yield safeRun2(this.props.onCreate, {
-          type,
-          parentId,
-          index,
-          parentNode: this.get(parentId)
-        });
-        if (data) {
-          this.focus(data);
-          setTimeout(() => {
-            this.edit(data).then(() => {
-              this.select(data);
-              this.activate(data);
+              this.options.useAnimationFrameWithResizeObserver ? requestAnimationFrame(run) : run();
             });
           });
+        };
+        return {
+          disconnect: () => {
+            var _a;
+            (_a = get()) == null || _a.disconnect();
+            _ro = null;
+          },
+          observe: (target) => {
+            var _a;
+            return (_a = get()) == null ? undefined : _a.observe(target, { box: "border-box" });
+          },
+          unobserve: (target) => {
+            var _a;
+            return (_a = get()) == null ? undefined : _a.unobserve(target);
+          }
+        };
+      })();
+      this.range = null;
+      this.setOptions = (opts2) => {
+        Object.entries(opts2).forEach(([key, value]) => {
+          if (typeof value === "undefined")
+            delete opts2[key];
+        });
+        this.options = {
+          debug: false,
+          initialOffset: 0,
+          overscan: 1,
+          paddingStart: 0,
+          paddingEnd: 0,
+          scrollPaddingStart: 0,
+          scrollPaddingEnd: 0,
+          horizontal: false,
+          getItemKey: defaultKeyExtractor,
+          rangeExtractor: defaultRangeExtractor,
+          onChange: () => {},
+          measureElement,
+          initialRect: { width: 0, height: 0 },
+          scrollMargin: 0,
+          gap: 0,
+          indexAttribute: "data-index",
+          initialMeasurementsCache: [],
+          lanes: 1,
+          isScrollingResetDelay: 150,
+          enabled: true,
+          isRtl: false,
+          useScrollendEvent: false,
+          useAnimationFrameWithResizeObserver: false,
+          ...opts2
+        };
+      };
+      this.notify = (sync) => {
+        var _a, _b;
+        (_b = (_a = this.options).onChange) == null || _b.call(_a, this, sync);
+      };
+      this.maybeNotify = memo(() => {
+        this.calculateRange();
+        return [
+          this.isScrolling,
+          this.range ? this.range.startIndex : null,
+          this.range ? this.range.endIndex : null
+        ];
+      }, (isScrolling) => {
+        this.notify(isScrolling);
+      }, {
+        key: "maybeNotify",
+        debug: () => this.options.debug,
+        initialDeps: [
+          this.isScrolling,
+          this.range ? this.range.startIndex : null,
+          this.range ? this.range.endIndex : null
+        ]
+      });
+      this.cleanup = () => {
+        this.unsubs.filter(Boolean).forEach((d) => d());
+        this.unsubs = [];
+        this.observer.disconnect();
+        this.scrollElement = null;
+        this.targetWindow = null;
+      };
+      this._didMount = () => {
+        return () => {
+          this.cleanup();
+        };
+      };
+      this._willUpdate = () => {
+        var _a;
+        const scrollElement = this.options.enabled ? this.options.getScrollElement() : null;
+        if (this.scrollElement !== scrollElement) {
+          this.cleanup();
+          if (!scrollElement) {
+            this.maybeNotify();
+            return;
+          }
+          this.scrollElement = scrollElement;
+          if (this.scrollElement && "ownerDocument" in this.scrollElement) {
+            this.targetWindow = this.scrollElement.ownerDocument.defaultView;
+          } else {
+            this.targetWindow = ((_a = this.scrollElement) == null ? undefined : _a.window) ?? null;
+          }
+          this.elementsCache.forEach((cached) => {
+            this.observer.observe(cached);
+          });
+          this._scrollToOffset(this.getScrollOffset(), {
+            adjustments: undefined,
+            behavior: undefined
+          });
+          this.unsubs.push(this.options.observeElementRect(this, (rect) => {
+            this.scrollRect = rect;
+            this.maybeNotify();
+          }));
+          this.unsubs.push(this.options.observeElementOffset(this, (offset, isScrolling) => {
+            this.scrollAdjustments = 0;
+            this.scrollDirection = isScrolling ? this.getScrollOffset() < offset ? "forward" : "backward" : null;
+            this.scrollOffset = offset;
+            this.isScrolling = isScrolling;
+            this.maybeNotify();
+          }));
         }
-      });
-    }
-    delete(node) {
-      return __awaiter(this, undefined, undefined, function* () {
-        if (!node)
-          return;
-        const idents = Array.isArray(node) ? node : [node];
-        const ids = idents.map(identify2);
-        const nodes = ids.map((id) => this.get(id)).filter((n) => !!n);
-        yield safeRun2(this.props.onDelete, { nodes, ids });
-      });
-    }
-    edit(node) {
-      const id = identify2(node);
-      this.resolveEdit({ cancelled: true });
-      this.scrollTo(id);
-      this.dispatch(edit(id));
-      return new Promise((resolve) => {
-        TreeApi.editPromise = resolve;
-      });
-    }
-    submit(identity, value) {
-      return __awaiter(this, undefined, undefined, function* () {
-        if (!identity)
-          return;
-        const id = identify2(identity);
-        yield safeRun2(this.props.onRename, {
-          id,
-          name: value,
-          node: this.get(id)
-        });
-        this.dispatch(edit(null));
-        this.resolveEdit({ cancelled: false, value });
-        setTimeout(() => this.onFocus());
-      });
-    }
-    reset() {
-      this.dispatch(edit(null));
-      this.resolveEdit({ cancelled: true });
-      setTimeout(() => this.onFocus());
-    }
-    activate(id) {
-      const node = this.get(identifyNull2(id));
-      if (!node)
-        return;
-      safeRun2(this.props.onActivate, node);
-    }
-    resolveEdit(value) {
-      const resolve = TreeApi.editPromise;
-      if (resolve)
-        resolve(value);
-      TreeApi.editPromise = null;
-    }
-    get selectedIds() {
-      return this.state.nodes.selection.ids;
-    }
-    get selectedNodes() {
-      let nodes = [];
-      for (let id of Array.from(this.selectedIds)) {
-        const node = this.get(id);
-        if (node)
-          nodes.push(node);
-      }
-      return nodes;
-    }
-    focus(node, opts = {}) {
-      if (!node)
-        return;
-      if (this.props.selectionFollowsFocus) {
-        this.select(node);
-      } else {
-        this.dispatch(focus(identify2(node)));
-        if (opts.scroll !== false)
-          this.scrollTo(node);
-        if (this.focusedNode)
-          safeRun2(this.props.onFocus, this.focusedNode);
-      }
-    }
-    pageUp() {
-      var _a, _b;
-      const start = this.visibleStartIndex;
-      const stop = this.visibleStopIndex;
-      const page = stop - start;
-      let index = (_b = (_a = this.focusedNode) === null || _a === undefined ? undefined : _a.rowIndex) !== null && _b !== undefined ? _b : 0;
-      if (index > start) {
-        index = start;
-      } else {
-        index = Math.max(start - page, 0);
-      }
-      this.focus(this.at(index));
-    }
-    pageDown() {
-      var _a, _b;
-      const start = this.visibleStartIndex;
-      const stop = this.visibleStopIndex;
-      const page = stop - start;
-      let index = (_b = (_a = this.focusedNode) === null || _a === undefined ? undefined : _a.rowIndex) !== null && _b !== undefined ? _b : 0;
-      if (index < stop) {
-        index = stop;
-      } else {
-        index = Math.min(index + page, this.visibleNodes.length - 1);
-      }
-      this.focus(this.at(index));
-    }
-    select(node, opts = {}) {
-      if (!node)
-        return;
-      const changeFocus = opts.focus !== false;
-      const id = identify2(node);
-      if (changeFocus)
-        this.dispatch(focus(id));
-      this.dispatch(actions2.only(id));
-      this.dispatch(actions2.anchor(id));
-      this.dispatch(actions2.mostRecent(id));
-      this.scrollTo(id, opts.align);
-      if (this.focusedNode && changeFocus) {
-        safeRun2(this.props.onFocus, this.focusedNode);
-      }
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    deselect(node) {
-      if (!node)
-        return;
-      const id = identify2(node);
-      this.dispatch(actions2.remove(id));
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    selectMulti(identity) {
-      const node = this.get(identifyNull2(identity));
-      if (!node)
-        return;
-      this.dispatch(focus(node.id));
-      this.dispatch(actions2.add(node.id));
-      this.dispatch(actions2.anchor(node.id));
-      this.dispatch(actions2.mostRecent(node.id));
-      this.scrollTo(node);
-      if (this.focusedNode)
-        safeRun2(this.props.onFocus, this.focusedNode);
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    selectContiguous(identity) {
-      if (!identity)
-        return;
-      const id = identify2(identity);
-      const { anchor, mostRecent } = this.state.nodes.selection;
-      this.dispatch(focus(id));
-      this.dispatch(actions2.remove(this.nodesBetween(anchor, mostRecent)));
-      this.dispatch(actions2.add(this.nodesBetween(anchor, identifyNull2(id))));
-      this.dispatch(actions2.mostRecent(id));
-      this.scrollTo(id);
-      if (this.focusedNode)
-        safeRun2(this.props.onFocus, this.focusedNode);
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    deselectAll() {
-      this.setSelection({ ids: [], anchor: null, mostRecent: null });
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    selectAll() {
-      var _a;
-      this.setSelection({
-        ids: Object.keys(this.idToIndex),
-        anchor: this.firstNode,
-        mostRecent: this.lastNode
-      });
-      this.dispatch(focus((_a = this.lastNode) === null || _a === undefined ? undefined : _a.id));
-      if (this.focusedNode)
-        safeRun2(this.props.onFocus, this.focusedNode);
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    setSelection(args) {
-      var _a;
-      const ids = new Set((_a = args.ids) === null || _a === undefined ? undefined : _a.map(identify2));
-      const anchor = identifyNull2(args.anchor);
-      const mostRecent = identifyNull2(args.mostRecent);
-      this.dispatch(actions2.set({ ids, anchor, mostRecent }));
-      safeRun2(this.props.onSelect, this.selectedNodes);
-    }
-    get cursorParentId() {
-      const { cursor } = this.state.dnd;
-      switch (cursor.type) {
-        case "highlight":
-          return cursor.id;
-        default:
-          return null;
-      }
-    }
-    get cursorOverFolder() {
-      return this.state.dnd.cursor.type === "highlight";
-    }
-    get dragNodes() {
-      return this.state.dnd.dragIds.map((id) => this.get(id)).filter((n) => !!n);
-    }
-    get dragNode() {
-      return this.get(this.state.nodes.drag.id);
-    }
-    get dragDestinationParent() {
-      return this.get(this.state.nodes.drag.destinationParentId);
-    }
-    get dragDestinationIndex() {
-      return this.state.nodes.drag.destinationIndex;
-    }
-    canDrop() {
-      var _a;
-      if (this.isFiltered)
-        return false;
-      const parentNode = (_a = this.get(this.state.dnd.parentId)) !== null && _a !== undefined ? _a : this.root;
-      const dragNodes = this.dragNodes;
-      const isDisabled = this.props.disableDrop;
-      for (const drag of dragNodes) {
-        if (!drag)
-          return false;
-        if (!parentNode)
-          return false;
-        if (drag.isInternal && isDescendant(parentNode, drag))
-          return false;
-      }
-      if (typeof isDisabled == "function") {
-        return !isDisabled({
-          parentNode,
-          dragNodes: this.dragNodes,
-          index: this.state.dnd.index || 0
-        });
-      } else if (typeof isDisabled == "string") {
-        return !parentNode.data[isDisabled];
-      } else if (typeof isDisabled === "boolean") {
-        return !isDisabled;
-      } else {
-        return true;
-      }
-    }
-    hideCursor() {
-      this.dispatch(actions3.cursor({ type: "none" }));
-    }
-    showCursor(cursor) {
-      this.dispatch(actions3.cursor(cursor));
-    }
-    open(identity) {
-      const id = identifyNull2(identity);
-      if (!id)
-        return;
-      if (this.isOpen(id))
-        return;
-      this.dispatch(actions.open(id, this.isFiltered));
-      safeRun2(this.props.onToggle, id);
-    }
-    close(identity) {
-      const id = identifyNull2(identity);
-      if (!id)
-        return;
-      if (!this.isOpen(id))
-        return;
-      this.dispatch(actions.close(id, this.isFiltered));
-      safeRun2(this.props.onToggle, id);
-    }
-    toggle(identity) {
-      const id = identifyNull2(identity);
-      if (!id)
-        return;
-      return this.isOpen(id) ? this.close(id) : this.open(id);
-    }
-    openParents(identity) {
-      const id = identifyNull2(identity);
-      if (!id)
-        return;
-      const node = dfs(this.root, id);
-      let parent = node === null || node === undefined ? undefined : node.parent;
-      while (parent) {
-        this.open(parent.id);
-        parent = parent.parent;
-      }
-    }
-    openSiblings(node) {
-      const parent = node.parent;
-      if (!parent) {
-        this.toggle(node.id);
-      } else if (parent.children) {
-        const isOpen = node.isOpen;
-        for (let sibling of parent.children) {
-          if (sibling.isInternal) {
-            isOpen ? this.close(sibling.id) : this.open(sibling.id);
+      };
+      this.getSize = () => {
+        if (!this.options.enabled) {
+          this.scrollRect = null;
+          return 0;
+        }
+        this.scrollRect = this.scrollRect ?? this.options.initialRect;
+        return this.scrollRect[this.options.horizontal ? "width" : "height"];
+      };
+      this.getScrollOffset = () => {
+        if (!this.options.enabled) {
+          this.scrollOffset = null;
+          return 0;
+        }
+        this.scrollOffset = this.scrollOffset ?? (typeof this.options.initialOffset === "function" ? this.options.initialOffset() : this.options.initialOffset);
+        return this.scrollOffset;
+      };
+      this.getFurthestMeasurement = (measurements, index) => {
+        const furthestMeasurementsFound = /* @__PURE__ */ new Map;
+        const furthestMeasurements = /* @__PURE__ */ new Map;
+        for (let m = index - 1;m >= 0; m--) {
+          const measurement = measurements[m];
+          if (furthestMeasurementsFound.has(measurement.lane)) {
+            continue;
+          }
+          const previousFurthestMeasurement = furthestMeasurements.get(measurement.lane);
+          if (previousFurthestMeasurement == null || measurement.end > previousFurthestMeasurement.end) {
+            furthestMeasurements.set(measurement.lane, measurement);
+          } else if (measurement.end < previousFurthestMeasurement.end) {
+            furthestMeasurementsFound.set(measurement.lane, true);
+          }
+          if (furthestMeasurementsFound.size === this.options.lanes) {
+            break;
           }
         }
-        this.scrollTo(this.focusedNode);
-      }
-    }
-    openAll() {
-      walk(this.root, (node) => {
-        if (node.isInternal)
-          node.open();
+        return furthestMeasurements.size === this.options.lanes ? Array.from(furthestMeasurements.values()).sort((a, b) => {
+          if (a.end === b.end) {
+            return a.index - b.index;
+          }
+          return a.end - b.end;
+        })[0] : undefined;
+      };
+      this.getMeasurementOptions = memo(() => [
+        this.options.count,
+        this.options.paddingStart,
+        this.options.scrollMargin,
+        this.options.getItemKey,
+        this.options.enabled
+      ], (count, paddingStart, scrollMargin, getItemKey, enabled) => {
+        this.pendingMeasuredCacheIndexes = [];
+        return {
+          count,
+          paddingStart,
+          scrollMargin,
+          getItemKey,
+          enabled
+        };
+      }, {
+        key: false
       });
-    }
-    closeAll() {
-      walk(this.root, (node) => {
-        if (node.isInternal)
-          node.close();
+      this.getMeasurements = memo(() => [this.getMeasurementOptions(), this.itemSizeCache], ({ count, paddingStart, scrollMargin, getItemKey, enabled }, itemSizeCache) => {
+        if (!enabled) {
+          this.measurementsCache = [];
+          this.itemSizeCache.clear();
+          return [];
+        }
+        if (this.measurementsCache.length === 0) {
+          this.measurementsCache = this.options.initialMeasurementsCache;
+          this.measurementsCache.forEach((item) => {
+            this.itemSizeCache.set(item.key, item.size);
+          });
+        }
+        const min = this.pendingMeasuredCacheIndexes.length > 0 ? Math.min(...this.pendingMeasuredCacheIndexes) : 0;
+        this.pendingMeasuredCacheIndexes = [];
+        const measurements = this.measurementsCache.slice(0, min);
+        for (let i = min;i < count; i++) {
+          const key = getItemKey(i);
+          const furthestMeasurement = this.options.lanes === 1 ? measurements[i - 1] : this.getFurthestMeasurement(measurements, i);
+          const start = furthestMeasurement ? furthestMeasurement.end + this.options.gap : paddingStart + scrollMargin;
+          const measuredSize = itemSizeCache.get(key);
+          const size = typeof measuredSize === "number" ? measuredSize : this.options.estimateSize(i);
+          const end = start + size;
+          const lane = furthestMeasurement ? furthestMeasurement.lane : i % this.options.lanes;
+          measurements[i] = {
+            index: i,
+            start,
+            size,
+            end,
+            key,
+            lane
+          };
+        }
+        this.measurementsCache = measurements;
+        return measurements;
+      }, {
+        key: "getMeasurements",
+        debug: () => this.options.debug
       });
-    }
-    scrollTo(identity, align = "smart") {
-      if (!identity)
-        return;
-      const id = identify2(identity);
-      this.openParents(id);
-      return waitFor(() => (id in this.idToIndex)).then(() => {
-        var _a;
-        const index = this.idToIndex[id];
-        if (index === undefined)
-          return;
-        (_a = this.list.current) === null || _a === undefined || _a.scrollToItem(index, align);
-      }).catch(() => {});
-    }
-    get isEditing() {
-      return this.state.nodes.edit.id !== null;
-    }
-    get isFiltered() {
-      var _a;
-      return !!((_a = this.props.searchTerm) === null || _a === undefined ? undefined : _a.trim());
-    }
-    get hasFocus() {
-      return this.state.nodes.focus.treeFocused;
-    }
-    get hasNoSelection() {
-      return this.state.nodes.selection.ids.size === 0;
-    }
-    get hasOneSelection() {
-      return this.state.nodes.selection.ids.size === 1;
-    }
-    get hasMultipleSelections() {
-      return this.state.nodes.selection.ids.size > 1;
-    }
-    isSelected(id) {
-      if (!id)
-        return false;
-      return this.state.nodes.selection.ids.has(id);
-    }
-    isOpen(id) {
-      var _a, _b, _c;
-      if (!id)
-        return false;
-      if (id === ROOT_ID)
-        return true;
-      const def = (_a = this.props.openByDefault) !== null && _a !== undefined ? _a : true;
-      if (this.isFiltered) {
-        return (_b = this.state.nodes.open.filtered[id]) !== null && _b !== undefined ? _b : true;
-      } else {
-        return (_c = this.state.nodes.open.unfiltered[id]) !== null && _c !== undefined ? _c : def;
-      }
-    }
-    isEditable(data) {
-      const check = this.props.disableEdit || (() => false);
-      return !access(data, check);
-    }
-    isDraggable(data) {
-      const check = this.props.disableDrag || (() => false);
-      return !access(data, check);
-    }
-    isDragging(node) {
-      const id = identifyNull2(node);
-      if (!id)
-        return false;
-      return this.state.nodes.drag.id === id;
-    }
-    isFocused(id) {
-      return this.hasFocus && this.state.nodes.focus.id === id;
-    }
-    isMatch(node) {
-      return this.matchFn(node);
-    }
-    willReceiveDrop(node) {
-      const id = identifyNull2(node);
-      if (!id)
-        return false;
-      const { destinationParentId, destinationIndex } = this.state.nodes.drag;
-      return id === destinationParentId && destinationIndex === null;
-    }
-    onFocus() {
-      const node = this.focusedNode || this.firstNode;
-      if (node)
-        this.dispatch(focus(node.id));
-    }
-    onBlur() {
-      this.dispatch(treeBlur());
-    }
-    onItemsRendered(args) {
-      this.visibleStartIndex = args.visibleStartIndex;
-      this.visibleStopIndex = args.visibleStopIndex;
-    }
-    get renderContainer() {
-      return this.props.renderContainer || DefaultContainer;
-    }
-    get renderRow() {
-      return this.props.renderRow || DefaultRow;
-    }
-    get renderNode() {
-      return this.props.children || DefaultNode;
-    }
-    get renderDragPreview() {
-      return this.props.renderDragPreview || DefaultDragPreview;
-    }
-    get renderCursor() {
-      return this.props.renderCursor || DefaultCursor;
-    }
-  }
-
-  // node_modules/redux/dist/redux.mjs
-  var $$observable2 = /* @__PURE__ */ (() => typeof Symbol === "function" && Symbol.observable || "@@observable")();
-  var symbol_observable_default = $$observable2;
-  var randomString3 = () => Math.random().toString(36).substring(7).split("").join(".");
-  var ActionTypes2 = {
-    INIT: `@@redux/INIT${/* @__PURE__ */ randomString3()}`,
-    REPLACE: `@@redux/REPLACE${/* @__PURE__ */ randomString3()}`,
-    PROBE_UNKNOWN_ACTION: () => `@@redux/PROBE_UNKNOWN_ACTION${randomString3()}`
-  };
-  var actionTypes_default = ActionTypes2;
-  function isPlainObject2(obj) {
-    if (typeof obj !== "object" || obj === null)
-      return false;
-    let proto = obj;
-    while (Object.getPrototypeOf(proto) !== null) {
-      proto = Object.getPrototypeOf(proto);
-    }
-    return Object.getPrototypeOf(obj) === proto || Object.getPrototypeOf(obj) === null;
-  }
-  function miniKindOf2(val) {
-    if (val === undefined)
-      return "undefined";
-    if (val === null)
-      return "null";
-    const type = typeof val;
-    switch (type) {
-      case "boolean":
-      case "string":
-      case "number":
-      case "symbol":
-      case "function": {
-        return type;
-      }
-    }
-    if (Array.isArray(val))
-      return "array";
-    if (isDate2(val))
-      return "date";
-    if (isError2(val))
-      return "error";
-    const constructorName = ctorName2(val);
-    switch (constructorName) {
-      case "Symbol":
-      case "Promise":
-      case "WeakMap":
-      case "WeakSet":
-      case "Map":
-      case "Set":
-        return constructorName;
-    }
-    return Object.prototype.toString.call(val).slice(8, -1).toLowerCase().replace(/\s/g, "");
-  }
-  function ctorName2(val) {
-    return typeof val.constructor === "function" ? val.constructor.name : null;
-  }
-  function isError2(val) {
-    return val instanceof Error || typeof val.message === "string" && val.constructor && typeof val.constructor.stackTraceLimit === "number";
-  }
-  function isDate2(val) {
-    if (val instanceof Date)
-      return true;
-    return typeof val.toDateString === "function" && typeof val.getDate === "function" && typeof val.setDate === "function";
-  }
-  function kindOf2(val) {
-    let typeOfVal = typeof val;
-    if (true) {
-      typeOfVal = miniKindOf2(val);
-    }
-    return typeOfVal;
-  }
-  function createStore2(reducer6, preloadedState, enhancer) {
-    if (typeof reducer6 !== "function") {
-      throw new Error(`Expected the root reducer to be a function. Instead, received: '${kindOf2(reducer6)}'`);
-    }
-    if (typeof preloadedState === "function" && typeof enhancer === "function" || typeof enhancer === "function" && typeof arguments[3] === "function") {
-      throw new Error("It looks like you are passing several store enhancers to createStore(). This is not supported. Instead, compose them together to a single function. See https://redux.js.org/tutorials/fundamentals/part-4-store#creating-a-store-with-enhancers for an example.");
-    }
-    if (typeof preloadedState === "function" && typeof enhancer === "undefined") {
-      enhancer = preloadedState;
-      preloadedState = undefined;
-    }
-    if (typeof enhancer !== "undefined") {
-      if (typeof enhancer !== "function") {
-        throw new Error(`Expected the enhancer to be a function. Instead, received: '${kindOf2(enhancer)}'`);
-      }
-      return enhancer(createStore2)(reducer6, preloadedState);
-    }
-    let currentReducer = reducer6;
-    let currentState = preloadedState;
-    let currentListeners = /* @__PURE__ */ new Map;
-    let nextListeners = currentListeners;
-    let listenerIdCounter = 0;
-    let isDispatching = false;
-    function ensureCanMutateNextListeners() {
-      if (nextListeners === currentListeners) {
-        nextListeners = /* @__PURE__ */ new Map;
-        currentListeners.forEach((listener, key) => {
-          nextListeners.set(key, listener);
+      this.calculateRange = memo(() => [
+        this.getMeasurements(),
+        this.getSize(),
+        this.getScrollOffset(),
+        this.options.lanes
+      ], (measurements, outerSize, scrollOffset, lanes) => {
+        return this.range = measurements.length > 0 && outerSize > 0 ? calculateRange({
+          measurements,
+          outerSize,
+          scrollOffset,
+          lanes
+        }) : null;
+      }, {
+        key: "calculateRange",
+        debug: () => this.options.debug
+      });
+      this.getVirtualIndexes = memo(() => {
+        let startIndex = null;
+        let endIndex = null;
+        const range = this.calculateRange();
+        if (range) {
+          startIndex = range.startIndex;
+          endIndex = range.endIndex;
+        }
+        this.maybeNotify.updateDeps([this.isScrolling, startIndex, endIndex]);
+        return [
+          this.options.rangeExtractor,
+          this.options.overscan,
+          this.options.count,
+          startIndex,
+          endIndex
+        ];
+      }, (rangeExtractor, overscan, count, startIndex, endIndex) => {
+        return startIndex === null || endIndex === null ? [] : rangeExtractor({
+          startIndex,
+          endIndex,
+          overscan,
+          count
         });
-      }
-    }
-    function getState() {
-      if (isDispatching) {
-        throw new Error("You may not call store.getState() while the reducer is executing. The reducer has already received the state as an argument. Pass it down from the top reducer instead of reading it from the store.");
-      }
-      return currentState;
-    }
-    function subscribe(listener) {
-      if (typeof listener !== "function") {
-        throw new Error(`Expected the listener to be a function. Instead, received: '${kindOf2(listener)}'`);
-      }
-      if (isDispatching) {
-        throw new Error("You may not call store.subscribe() while the reducer is executing. If you would like to be notified after the store has been updated, subscribe from a component and invoke store.getState() in the callback to access the latest state. See https://redux.js.org/api/store#subscribelistener for more details.");
-      }
-      let isSubscribed = true;
-      ensureCanMutateNextListeners();
-      const listenerId = listenerIdCounter++;
-      nextListeners.set(listenerId, listener);
-      return function unsubscribe() {
-        if (!isSubscribed) {
+      }, {
+        key: "getVirtualIndexes",
+        debug: () => this.options.debug
+      });
+      this.indexFromElement = (node) => {
+        const attributeName = this.options.indexAttribute;
+        const indexStr = node.getAttribute(attributeName);
+        if (!indexStr) {
+          console.warn(`Missing attribute name '${attributeName}={index}' on measured element.`);
+          return -1;
+        }
+        return parseInt(indexStr, 10);
+      };
+      this._measureElement = (node, entry) => {
+        const index = this.indexFromElement(node);
+        const item = this.measurementsCache[index];
+        if (!item) {
           return;
         }
-        if (isDispatching) {
-          throw new Error("You may not unsubscribe from a store listener while the reducer is executing. See https://redux.js.org/api/store#subscribelistener for more details.");
+        const key = item.key;
+        const prevNode = this.elementsCache.get(key);
+        if (prevNode !== node) {
+          if (prevNode) {
+            this.observer.unobserve(prevNode);
+          }
+          this.observer.observe(node);
+          this.elementsCache.set(key, node);
         }
-        isSubscribed = false;
-        ensureCanMutateNextListeners();
-        nextListeners.delete(listenerId);
-        currentListeners = null;
+        if (node.isConnected) {
+          this.resizeItem(index, this.options.measureElement(node, entry, this));
+        }
+      };
+      this.resizeItem = (index, size) => {
+        const item = this.measurementsCache[index];
+        if (!item) {
+          return;
+        }
+        const itemSize = this.itemSizeCache.get(item.key) ?? item.size;
+        const delta = size - itemSize;
+        if (delta !== 0) {
+          if (this.shouldAdjustScrollPositionOnItemSizeChange !== undefined ? this.shouldAdjustScrollPositionOnItemSizeChange(item, delta, this) : item.start < this.getScrollOffset() + this.scrollAdjustments) {
+            if (this.options.debug) {
+              console.info("correction", delta);
+            }
+            this._scrollToOffset(this.getScrollOffset(), {
+              adjustments: this.scrollAdjustments += delta,
+              behavior: undefined
+            });
+          }
+          this.pendingMeasuredCacheIndexes.push(item.index);
+          this.itemSizeCache = new Map(this.itemSizeCache.set(item.key, size));
+          this.notify(false);
+        }
+      };
+      this.measureElement = (node) => {
+        if (!node) {
+          this.elementsCache.forEach((cached, key) => {
+            if (!cached.isConnected) {
+              this.observer.unobserve(cached);
+              this.elementsCache.delete(key);
+            }
+          });
+          return;
+        }
+        this._measureElement(node, undefined);
+      };
+      this.getVirtualItems = memo(() => [this.getVirtualIndexes(), this.getMeasurements()], (indexes, measurements) => {
+        const virtualItems = [];
+        for (let k = 0, len = indexes.length;k < len; k++) {
+          const i = indexes[k];
+          const measurement = measurements[i];
+          virtualItems.push(measurement);
+        }
+        return virtualItems;
+      }, {
+        key: "getVirtualItems",
+        debug: () => this.options.debug
+      });
+      this.getVirtualItemForOffset = (offset) => {
+        const measurements = this.getMeasurements();
+        if (measurements.length === 0) {
+          return;
+        }
+        return notUndefined(measurements[findNearestBinarySearch(0, measurements.length - 1, (index) => notUndefined(measurements[index]).start, offset)]);
+      };
+      this.getOffsetForAlignment = (toOffset, align, itemSize = 0) => {
+        const size = this.getSize();
+        const scrollOffset = this.getScrollOffset();
+        if (align === "auto") {
+          align = toOffset >= scrollOffset + size ? "end" : "start";
+        }
+        if (align === "center") {
+          toOffset += (itemSize - size) / 2;
+        } else if (align === "end") {
+          toOffset -= size;
+        }
+        const maxOffset = this.getTotalSize() + this.options.scrollMargin - size;
+        return Math.max(Math.min(maxOffset, toOffset), 0);
+      };
+      this.getOffsetForIndex = (index, align = "auto") => {
+        index = Math.max(0, Math.min(index, this.options.count - 1));
+        const item = this.measurementsCache[index];
+        if (!item) {
+          return;
+        }
+        const size = this.getSize();
+        const scrollOffset = this.getScrollOffset();
+        if (align === "auto") {
+          if (item.end >= scrollOffset + size - this.options.scrollPaddingEnd) {
+            align = "end";
+          } else if (item.start <= scrollOffset + this.options.scrollPaddingStart) {
+            align = "start";
+          } else {
+            return [scrollOffset, align];
+          }
+        }
+        const toOffset = align === "end" ? item.end + this.options.scrollPaddingEnd : item.start - this.options.scrollPaddingStart;
+        return [
+          this.getOffsetForAlignment(toOffset, align, item.size),
+          align
+        ];
+      };
+      this.isDynamicMode = () => this.elementsCache.size > 0;
+      this.scrollToOffset = (toOffset, { align = "start", behavior } = {}) => {
+        if (behavior === "smooth" && this.isDynamicMode()) {
+          console.warn("The `smooth` scroll behavior is not fully supported with dynamic size.");
+        }
+        this._scrollToOffset(this.getOffsetForAlignment(toOffset, align), {
+          adjustments: undefined,
+          behavior
+        });
+      };
+      this.scrollToIndex = (index, { align: initialAlign = "auto", behavior } = {}) => {
+        if (behavior === "smooth" && this.isDynamicMode()) {
+          console.warn("The `smooth` scroll behavior is not fully supported with dynamic size.");
+        }
+        index = Math.max(0, Math.min(index, this.options.count - 1));
+        let attempts = 0;
+        const maxAttempts = 10;
+        const tryScroll = (currentAlign) => {
+          if (!this.targetWindow)
+            return;
+          const offsetInfo = this.getOffsetForIndex(index, currentAlign);
+          if (!offsetInfo) {
+            console.warn("Failed to get offset for index:", index);
+            return;
+          }
+          const [offset, align] = offsetInfo;
+          this._scrollToOffset(offset, { adjustments: undefined, behavior });
+          this.targetWindow.requestAnimationFrame(() => {
+            const currentOffset = this.getScrollOffset();
+            const afterInfo = this.getOffsetForIndex(index, align);
+            if (!afterInfo) {
+              console.warn("Failed to get offset for index:", index);
+              return;
+            }
+            if (!approxEqual(afterInfo[0], currentOffset)) {
+              scheduleRetry(align);
+            }
+          });
+        };
+        const scheduleRetry = (align) => {
+          if (!this.targetWindow)
+            return;
+          attempts++;
+          if (attempts < maxAttempts) {
+            if (this.options.debug) {
+              console.info("Schedule retry", attempts, maxAttempts);
+            }
+            this.targetWindow.requestAnimationFrame(() => tryScroll(align));
+          } else {
+            console.warn(`Failed to scroll to index ${index} after ${maxAttempts} attempts.`);
+          }
+        };
+        tryScroll(initialAlign);
+      };
+      this.scrollBy = (delta, { behavior } = {}) => {
+        if (behavior === "smooth" && this.isDynamicMode()) {
+          console.warn("The `smooth` scroll behavior is not fully supported with dynamic size.");
+        }
+        this._scrollToOffset(this.getScrollOffset() + delta, {
+          adjustments: undefined,
+          behavior
+        });
+      };
+      this.getTotalSize = () => {
+        var _a;
+        const measurements = this.getMeasurements();
+        let end;
+        if (measurements.length === 0) {
+          end = this.options.paddingStart;
+        } else if (this.options.lanes === 1) {
+          end = ((_a = measurements[measurements.length - 1]) == null ? undefined : _a.end) ?? 0;
+        } else {
+          const endByLane = Array(this.options.lanes).fill(null);
+          let endIndex = measurements.length - 1;
+          while (endIndex >= 0 && endByLane.some((val) => val === null)) {
+            const item = measurements[endIndex];
+            if (endByLane[item.lane] === null) {
+              endByLane[item.lane] = item.end;
+            }
+            endIndex--;
+          }
+          end = Math.max(...endByLane.filter((val) => val !== null));
+        }
+        return Math.max(end - this.options.scrollMargin + this.options.paddingEnd, 0);
+      };
+      this._scrollToOffset = (offset, {
+        adjustments,
+        behavior
+      }) => {
+        this.options.scrollToFn(offset, { behavior, adjustments }, this);
+      };
+      this.measure = () => {
+        this.itemSizeCache = /* @__PURE__ */ new Map;
+        this.notify(false);
+      };
+      this.setOptions(opts);
+    }
+  }
+  var findNearestBinarySearch = (low, high, getCurrentValue, value) => {
+    while (low <= high) {
+      const middle = (low + high) / 2 | 0;
+      const currentValue = getCurrentValue(middle);
+      if (currentValue < value) {
+        low = middle + 1;
+      } else if (currentValue > value) {
+        high = middle - 1;
+      } else {
+        return middle;
+      }
+    }
+    if (low > 0) {
+      return low - 1;
+    } else {
+      return 0;
+    }
+  };
+  function calculateRange({
+    measurements,
+    outerSize,
+    scrollOffset,
+    lanes
+  }) {
+    const lastIndex = measurements.length - 1;
+    const getOffset = (index) => measurements[index].start;
+    if (measurements.length <= lanes) {
+      return {
+        startIndex: 0,
+        endIndex: lastIndex
       };
     }
-    function dispatch(action) {
-      if (!isPlainObject2(action)) {
-        throw new Error(`Actions must be plain objects. Instead, the actual type was: '${kindOf2(action)}'. You may need to add middleware to your store setup to handle dispatching other values, such as 'redux-thunk' to handle dispatching functions. See https://redux.js.org/tutorials/fundamentals/part-4-store#middleware and https://redux.js.org/tutorials/fundamentals/part-6-async-logic#using-the-redux-thunk-middleware for examples.`);
+    let startIndex = findNearestBinarySearch(0, lastIndex, getOffset, scrollOffset);
+    let endIndex = startIndex;
+    if (lanes === 1) {
+      while (endIndex < lastIndex && measurements[endIndex].end < scrollOffset + outerSize) {
+        endIndex++;
       }
-      if (typeof action.type === "undefined") {
-        throw new Error('Actions may not have an undefined "type" property. You may have misspelled an action type string constant.');
+    } else if (lanes > 1) {
+      const endPerLane = Array(lanes).fill(0);
+      while (endIndex < lastIndex && endPerLane.some((pos) => pos < scrollOffset + outerSize)) {
+        const item = measurements[endIndex];
+        endPerLane[item.lane] = item.end;
+        endIndex++;
       }
-      if (typeof action.type !== "string") {
-        throw new Error(`Action "type" property must be a string. Instead, the actual type was: '${kindOf2(action.type)}'. Value was: '${action.type}' (stringified)`);
+      const startPerLane = Array(lanes).fill(scrollOffset + outerSize);
+      while (startIndex >= 0 && startPerLane.some((pos) => pos >= scrollOffset)) {
+        const item = measurements[startIndex];
+        startPerLane[item.lane] = item.start;
+        startIndex--;
       }
-      if (isDispatching) {
-        throw new Error("Reducers may not dispatch actions.");
+      startIndex = Math.max(0, startIndex - startIndex % lanes);
+      endIndex = Math.min(lastIndex, endIndex + (lanes - 1 - endIndex % lanes));
+    }
+    return { startIndex, endIndex };
+  }
+
+  // node_modules/@tanstack/react-virtual/dist/esm/index.js
+  var useIsomorphicLayoutEffect = typeof document !== "undefined" ? React.useLayoutEffect : React.useEffect;
+  function useVirtualizerBase(options) {
+    const rerender = React.useReducer(() => ({}), {})[1];
+    const resolvedOptions = {
+      ...options,
+      onChange: (instance2, sync) => {
+        var _a;
+        if (sync) {
+          import_react_dom.flushSync(rerender);
+        } else {
+          rerender();
+        }
+        (_a = options.onChange) == null || _a.call(options, instance2, sync);
       }
+    };
+    const [instance] = React.useState(() => new Virtualizer(resolvedOptions));
+    instance.setOptions(resolvedOptions);
+    useIsomorphicLayoutEffect(() => {
+      return instance._didMount();
+    }, []);
+    useIsomorphicLayoutEffect(() => {
+      return instance._willUpdate();
+    });
+    return instance;
+  }
+  function useVirtualizer(options) {
+    return useVirtualizerBase({
+      observeElementRect,
+      observeElementOffset,
+      scrollToFn: elementScroll,
+      ...options
+    });
+  }
+
+  // src/tree-component/TreeNode.jsx
+  var import_react5 = __toESM(require_react());
+
+  // src/components/Tooltip.jsx
+  var import_react3 = __toESM(require_react());
+
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  var React4 = __toESM(require_react());
+
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+  function hasWindow() {
+    return typeof window !== "undefined";
+  }
+  function getNodeName(node) {
+    if (isNode(node)) {
+      return (node.nodeName || "").toLowerCase();
+    }
+    return "#document";
+  }
+  function getWindow(node) {
+    var _node$ownerDocument;
+    return (node == null || (_node$ownerDocument = node.ownerDocument) == null ? undefined : _node$ownerDocument.defaultView) || window;
+  }
+  function getDocumentElement(node) {
+    var _ref;
+    return (_ref = (isNode(node) ? node.ownerDocument : node.document) || window.document) == null ? undefined : _ref.documentElement;
+  }
+  function isNode(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof Node || value instanceof getWindow(value).Node;
+  }
+  function isElement(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof Element || value instanceof getWindow(value).Element;
+  }
+  function isHTMLElement(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof HTMLElement || value instanceof getWindow(value).HTMLElement;
+  }
+  function isShadowRoot(value) {
+    if (!hasWindow() || typeof ShadowRoot === "undefined") {
+      return false;
+    }
+    return value instanceof ShadowRoot || value instanceof getWindow(value).ShadowRoot;
+  }
+  var invalidOverflowDisplayValues = /* @__PURE__ */ new Set(["inline", "contents"]);
+  function isOverflowElement(element) {
+    const {
+      overflow,
+      overflowX,
+      overflowY,
+      display
+    } = getComputedStyle2(element);
+    return /auto|scroll|overlay|hidden|clip/.test(overflow + overflowY + overflowX) && !invalidOverflowDisplayValues.has(display);
+  }
+  var tableElements = /* @__PURE__ */ new Set(["table", "td", "th"]);
+  function isTableElement(element) {
+    return tableElements.has(getNodeName(element));
+  }
+  var topLayerSelectors = [":popover-open", ":modal"];
+  function isTopLayer(element) {
+    return topLayerSelectors.some((selector) => {
       try {
-        isDispatching = true;
-        currentState = currentReducer(currentState, action);
-      } finally {
-        isDispatching = false;
+        return element.matches(selector);
+      } catch (_e) {
+        return false;
       }
-      const listeners = currentListeners = nextListeners;
-      listeners.forEach((listener) => {
-        listener();
-      });
-      return action;
-    }
-    function replaceReducer(nextReducer) {
-      if (typeof nextReducer !== "function") {
-        throw new Error(`Expected the nextReducer to be a function. Instead, received: '${kindOf2(nextReducer)}`);
+    });
+  }
+  var transformProperties = ["transform", "translate", "scale", "rotate", "perspective"];
+  var willChangeValues = ["transform", "translate", "scale", "rotate", "perspective", "filter"];
+  var containValues = ["paint", "layout", "strict", "content"];
+  function isContainingBlock(elementOrCss) {
+    const webkit = isWebKit();
+    const css = isElement(elementOrCss) ? getComputedStyle2(elementOrCss) : elementOrCss;
+    return transformProperties.some((value) => css[value] ? css[value] !== "none" : false) || (css.containerType ? css.containerType !== "normal" : false) || !webkit && (css.backdropFilter ? css.backdropFilter !== "none" : false) || !webkit && (css.filter ? css.filter !== "none" : false) || willChangeValues.some((value) => (css.willChange || "").includes(value)) || containValues.some((value) => (css.contain || "").includes(value));
+  }
+  function getContainingBlock(element) {
+    let currentNode = getParentNode(element);
+    while (isHTMLElement(currentNode) && !isLastTraversableNode(currentNode)) {
+      if (isContainingBlock(currentNode)) {
+        return currentNode;
+      } else if (isTopLayer(currentNode)) {
+        return null;
       }
-      currentReducer = nextReducer;
-      dispatch({
-        type: actionTypes_default.REPLACE
-      });
+      currentNode = getParentNode(currentNode);
     }
-    function observable() {
-      const outerSubscribe = subscribe;
+    return null;
+  }
+  function isWebKit() {
+    if (typeof CSS === "undefined" || !CSS.supports)
+      return false;
+    return CSS.supports("-webkit-backdrop-filter", "none");
+  }
+  var lastTraversableNodeNames = /* @__PURE__ */ new Set(["html", "body", "#document"]);
+  function isLastTraversableNode(node) {
+    return lastTraversableNodeNames.has(getNodeName(node));
+  }
+  function getComputedStyle2(element) {
+    return getWindow(element).getComputedStyle(element);
+  }
+  function getNodeScroll(element) {
+    if (isElement(element)) {
       return {
-        subscribe(observer) {
-          if (typeof observer !== "object" || observer === null) {
-            throw new Error(`Expected the observer to be an object. Instead, received: '${kindOf2(observer)}'`);
+        scrollLeft: element.scrollLeft,
+        scrollTop: element.scrollTop
+      };
+    }
+    return {
+      scrollLeft: element.scrollX,
+      scrollTop: element.scrollY
+    };
+  }
+  function getParentNode(node) {
+    if (getNodeName(node) === "html") {
+      return node;
+    }
+    const result = node.assignedSlot || node.parentNode || isShadowRoot(node) && node.host || getDocumentElement(node);
+    return isShadowRoot(result) ? result.host : result;
+  }
+  function getNearestOverflowAncestor(node) {
+    const parentNode = getParentNode(node);
+    if (isLastTraversableNode(parentNode)) {
+      return node.ownerDocument ? node.ownerDocument.body : node.body;
+    }
+    if (isHTMLElement(parentNode) && isOverflowElement(parentNode)) {
+      return parentNode;
+    }
+    return getNearestOverflowAncestor(parentNode);
+  }
+  function getOverflowAncestors(node, list, traverseIframes) {
+    var _node$ownerDocument2;
+    if (list === undefined) {
+      list = [];
+    }
+    if (traverseIframes === undefined) {
+      traverseIframes = true;
+    }
+    const scrollableAncestor = getNearestOverflowAncestor(node);
+    const isBody = scrollableAncestor === ((_node$ownerDocument2 = node.ownerDocument) == null ? undefined : _node$ownerDocument2.body);
+    const win = getWindow(scrollableAncestor);
+    if (isBody) {
+      const frameElement = getFrameElement(win);
+      return list.concat(win, win.visualViewport || [], isOverflowElement(scrollableAncestor) ? scrollableAncestor : [], frameElement && traverseIframes ? getOverflowAncestors(frameElement) : []);
+    }
+    return list.concat(scrollableAncestor, getOverflowAncestors(scrollableAncestor, [], traverseIframes));
+  }
+  function getFrameElement(win) {
+    return win.parent && Object.getPrototypeOf(win.parent) ? win.frameElement : null;
+  }
+
+  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  var React2 = __toESM(require_react());
+  var import_react = __toESM(require_react());
+
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+  var min = Math.min;
+  var max = Math.max;
+  var round = Math.round;
+  var floor = Math.floor;
+  var createCoords = (v) => ({
+    x: v,
+    y: v
+  });
+  var oppositeSideMap = {
+    left: "right",
+    right: "left",
+    bottom: "top",
+    top: "bottom"
+  };
+  var oppositeAlignmentMap = {
+    start: "end",
+    end: "start"
+  };
+  function clamp(start, value, end) {
+    return max(start, min(value, end));
+  }
+  function evaluate(value, param) {
+    return typeof value === "function" ? value(param) : value;
+  }
+  function getSide(placement) {
+    return placement.split("-")[0];
+  }
+  function getAlignment(placement) {
+    return placement.split("-")[1];
+  }
+  function getOppositeAxis(axis) {
+    return axis === "x" ? "y" : "x";
+  }
+  function getAxisLength(axis) {
+    return axis === "y" ? "height" : "width";
+  }
+  var yAxisSides = /* @__PURE__ */ new Set(["top", "bottom"]);
+  function getSideAxis(placement) {
+    return yAxisSides.has(getSide(placement)) ? "y" : "x";
+  }
+  function getAlignmentAxis(placement) {
+    return getOppositeAxis(getSideAxis(placement));
+  }
+  function getAlignmentSides(placement, rects, rtl) {
+    if (rtl === undefined) {
+      rtl = false;
+    }
+    const alignment = getAlignment(placement);
+    const alignmentAxis = getAlignmentAxis(placement);
+    const length = getAxisLength(alignmentAxis);
+    let mainAlignmentSide = alignmentAxis === "x" ? alignment === (rtl ? "end" : "start") ? "right" : "left" : alignment === "start" ? "bottom" : "top";
+    if (rects.reference[length] > rects.floating[length]) {
+      mainAlignmentSide = getOppositePlacement(mainAlignmentSide);
+    }
+    return [mainAlignmentSide, getOppositePlacement(mainAlignmentSide)];
+  }
+  function getExpandedPlacements(placement) {
+    const oppositePlacement = getOppositePlacement(placement);
+    return [getOppositeAlignmentPlacement(placement), oppositePlacement, getOppositeAlignmentPlacement(oppositePlacement)];
+  }
+  function getOppositeAlignmentPlacement(placement) {
+    return placement.replace(/start|end/g, (alignment) => oppositeAlignmentMap[alignment]);
+  }
+  var lrPlacement = ["left", "right"];
+  var rlPlacement = ["right", "left"];
+  var tbPlacement = ["top", "bottom"];
+  var btPlacement = ["bottom", "top"];
+  function getSideList(side, isStart, rtl) {
+    switch (side) {
+      case "top":
+      case "bottom":
+        if (rtl)
+          return isStart ? rlPlacement : lrPlacement;
+        return isStart ? lrPlacement : rlPlacement;
+      case "left":
+      case "right":
+        return isStart ? tbPlacement : btPlacement;
+      default:
+        return [];
+    }
+  }
+  function getOppositeAxisPlacements(placement, flipAlignment, direction, rtl) {
+    const alignment = getAlignment(placement);
+    let list = getSideList(getSide(placement), direction === "start", rtl);
+    if (alignment) {
+      list = list.map((side) => side + "-" + alignment);
+      if (flipAlignment) {
+        list = list.concat(list.map(getOppositeAlignmentPlacement));
+      }
+    }
+    return list;
+  }
+  function getOppositePlacement(placement) {
+    return placement.replace(/left|right|bottom|top/g, (side) => oppositeSideMap[side]);
+  }
+  function expandPaddingObject(padding) {
+    return {
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      ...padding
+    };
+  }
+  function getPaddingObject(padding) {
+    return typeof padding !== "number" ? expandPaddingObject(padding) : {
+      top: padding,
+      right: padding,
+      bottom: padding,
+      left: padding
+    };
+  }
+  function rectToClientRect(rect) {
+    const {
+      x,
+      y,
+      width,
+      height
+    } = rect;
+    return {
+      width,
+      height,
+      top: y,
+      left: x,
+      right: x + width,
+      bottom: y + height,
+      x,
+      y
+    };
+  }
+
+  // node_modules/tabbable/dist/index.esm.js
+  /*!
+  * tabbable 6.2.0
+  * @license MIT, https://github.com/focus-trap/tabbable/blob/master/LICENSE
+  */
+  var candidateSelectors = ["input:not([inert])", "select:not([inert])", "textarea:not([inert])", "a[href]:not([inert])", "button:not([inert])", "[tabindex]:not(slot):not([inert])", "audio[controls]:not([inert])", "video[controls]:not([inert])", '[contenteditable]:not([contenteditable="false"]):not([inert])', "details>summary:first-of-type:not([inert])", "details:not([inert])"];
+  var candidateSelector = /* @__PURE__ */ candidateSelectors.join(",");
+  var NoElement = typeof Element === "undefined";
+  var matches = NoElement ? function() {} : Element.prototype.matches || Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+  var getRootNode = !NoElement && Element.prototype.getRootNode ? function(element) {
+    var _element$getRootNode;
+    return element === null || element === undefined ? undefined : (_element$getRootNode = element.getRootNode) === null || _element$getRootNode === undefined ? undefined : _element$getRootNode.call(element);
+  } : function(element) {
+    return element === null || element === undefined ? undefined : element.ownerDocument;
+  };
+  var isInert = function isInert2(node, lookUp) {
+    var _node$getAttribute;
+    if (lookUp === undefined) {
+      lookUp = true;
+    }
+    var inertAtt = node === null || node === undefined ? undefined : (_node$getAttribute = node.getAttribute) === null || _node$getAttribute === undefined ? undefined : _node$getAttribute.call(node, "inert");
+    var inert = inertAtt === "" || inertAtt === "true";
+    var result = inert || lookUp && node && isInert2(node.parentNode);
+    return result;
+  };
+  var isContentEditable = function isContentEditable2(node) {
+    var _node$getAttribute2;
+    var attValue = node === null || node === undefined ? undefined : (_node$getAttribute2 = node.getAttribute) === null || _node$getAttribute2 === undefined ? undefined : _node$getAttribute2.call(node, "contenteditable");
+    return attValue === "" || attValue === "true";
+  };
+  var getCandidates = function getCandidates2(el, includeContainer, filter) {
+    if (isInert(el)) {
+      return [];
+    }
+    var candidates = Array.prototype.slice.apply(el.querySelectorAll(candidateSelector));
+    if (includeContainer && matches.call(el, candidateSelector)) {
+      candidates.unshift(el);
+    }
+    candidates = candidates.filter(filter);
+    return candidates;
+  };
+  var getCandidatesIteratively = function getCandidatesIteratively2(elements, includeContainer, options) {
+    var candidates = [];
+    var elementsToCheck = Array.from(elements);
+    while (elementsToCheck.length) {
+      var element = elementsToCheck.shift();
+      if (isInert(element, false)) {
+        continue;
+      }
+      if (element.tagName === "SLOT") {
+        var assigned = element.assignedElements();
+        var content = assigned.length ? assigned : element.children;
+        var nestedCandidates = getCandidatesIteratively2(content, true, options);
+        if (options.flatten) {
+          candidates.push.apply(candidates, nestedCandidates);
+        } else {
+          candidates.push({
+            scopeParent: element,
+            candidates: nestedCandidates
+          });
+        }
+      } else {
+        var validCandidate = matches.call(element, candidateSelector);
+        if (validCandidate && options.filter(element) && (includeContainer || !elements.includes(element))) {
+          candidates.push(element);
+        }
+        var shadowRoot = element.shadowRoot || typeof options.getShadowRoot === "function" && options.getShadowRoot(element);
+        var validShadowRoot = !isInert(shadowRoot, false) && (!options.shadowRootFilter || options.shadowRootFilter(element));
+        if (shadowRoot && validShadowRoot) {
+          var _nestedCandidates = getCandidatesIteratively2(shadowRoot === true ? element.children : shadowRoot.children, true, options);
+          if (options.flatten) {
+            candidates.push.apply(candidates, _nestedCandidates);
+          } else {
+            candidates.push({
+              scopeParent: element,
+              candidates: _nestedCandidates
+            });
           }
-          function observeState() {
-            const observerAsObserver = observer;
-            if (observerAsObserver.next) {
-              observerAsObserver.next(getState());
+        } else {
+          elementsToCheck.unshift.apply(elementsToCheck, element.children);
+        }
+      }
+    }
+    return candidates;
+  };
+  var hasTabIndex = function hasTabIndex2(node) {
+    return !isNaN(parseInt(node.getAttribute("tabindex"), 10));
+  };
+  var getTabIndex = function getTabIndex2(node) {
+    if (!node) {
+      throw new Error("No node provided");
+    }
+    if (node.tabIndex < 0) {
+      if ((/^(AUDIO|VIDEO|DETAILS)$/.test(node.tagName) || isContentEditable(node)) && !hasTabIndex(node)) {
+        return 0;
+      }
+    }
+    return node.tabIndex;
+  };
+  var getSortOrderTabIndex = function getSortOrderTabIndex2(node, isScope) {
+    var tabIndex = getTabIndex(node);
+    if (tabIndex < 0 && isScope && !hasTabIndex(node)) {
+      return 0;
+    }
+    return tabIndex;
+  };
+  var sortOrderedTabbables = function sortOrderedTabbables2(a, b) {
+    return a.tabIndex === b.tabIndex ? a.documentOrder - b.documentOrder : a.tabIndex - b.tabIndex;
+  };
+  var isInput = function isInput2(node) {
+    return node.tagName === "INPUT";
+  };
+  var isHiddenInput = function isHiddenInput2(node) {
+    return isInput(node) && node.type === "hidden";
+  };
+  var isDetailsWithSummary = function isDetailsWithSummary2(node) {
+    var r = node.tagName === "DETAILS" && Array.prototype.slice.apply(node.children).some(function(child) {
+      return child.tagName === "SUMMARY";
+    });
+    return r;
+  };
+  var getCheckedRadio = function getCheckedRadio2(nodes, form) {
+    for (var i = 0;i < nodes.length; i++) {
+      if (nodes[i].checked && nodes[i].form === form) {
+        return nodes[i];
+      }
+    }
+  };
+  var isTabbableRadio = function isTabbableRadio2(node) {
+    if (!node.name) {
+      return true;
+    }
+    var radioScope = node.form || getRootNode(node);
+    var queryRadios = function queryRadios(name) {
+      return radioScope.querySelectorAll('input[type="radio"][name="' + name + '"]');
+    };
+    var radioSet;
+    if (typeof window !== "undefined" && typeof window.CSS !== "undefined" && typeof window.CSS.escape === "function") {
+      radioSet = queryRadios(window.CSS.escape(node.name));
+    } else {
+      try {
+        radioSet = queryRadios(node.name);
+      } catch (err) {
+        console.error("Looks like you have a radio button with a name attribute containing invalid CSS selector characters and need the CSS.escape polyfill: %s", err.message);
+        return false;
+      }
+    }
+    var checked = getCheckedRadio(radioSet, node.form);
+    return !checked || checked === node;
+  };
+  var isRadio = function isRadio2(node) {
+    return isInput(node) && node.type === "radio";
+  };
+  var isNonTabbableRadio = function isNonTabbableRadio2(node) {
+    return isRadio(node) && !isTabbableRadio(node);
+  };
+  var isNodeAttached = function isNodeAttached2(node) {
+    var _nodeRoot;
+    var nodeRoot = node && getRootNode(node);
+    var nodeRootHost = (_nodeRoot = nodeRoot) === null || _nodeRoot === undefined ? undefined : _nodeRoot.host;
+    var attached = false;
+    if (nodeRoot && nodeRoot !== node) {
+      var _nodeRootHost, _nodeRootHost$ownerDo, _node$ownerDocument;
+      attached = !!((_nodeRootHost = nodeRootHost) !== null && _nodeRootHost !== undefined && (_nodeRootHost$ownerDo = _nodeRootHost.ownerDocument) !== null && _nodeRootHost$ownerDo !== undefined && _nodeRootHost$ownerDo.contains(nodeRootHost) || node !== null && node !== undefined && (_node$ownerDocument = node.ownerDocument) !== null && _node$ownerDocument !== undefined && _node$ownerDocument.contains(node));
+      while (!attached && nodeRootHost) {
+        var _nodeRoot2, _nodeRootHost2, _nodeRootHost2$ownerD;
+        nodeRoot = getRootNode(nodeRootHost);
+        nodeRootHost = (_nodeRoot2 = nodeRoot) === null || _nodeRoot2 === undefined ? undefined : _nodeRoot2.host;
+        attached = !!((_nodeRootHost2 = nodeRootHost) !== null && _nodeRootHost2 !== undefined && (_nodeRootHost2$ownerD = _nodeRootHost2.ownerDocument) !== null && _nodeRootHost2$ownerD !== undefined && _nodeRootHost2$ownerD.contains(nodeRootHost));
+      }
+    }
+    return attached;
+  };
+  var isZeroArea = function isZeroArea2(node) {
+    var _node$getBoundingClie = node.getBoundingClientRect(), width = _node$getBoundingClie.width, height = _node$getBoundingClie.height;
+    return width === 0 && height === 0;
+  };
+  var isHidden = function isHidden2(node, _ref) {
+    var { displayCheck, getShadowRoot } = _ref;
+    if (getComputedStyle(node).visibility === "hidden") {
+      return true;
+    }
+    var isDirectSummary = matches.call(node, "details>summary:first-of-type");
+    var nodeUnderDetails = isDirectSummary ? node.parentElement : node;
+    if (matches.call(nodeUnderDetails, "details:not([open]) *")) {
+      return true;
+    }
+    if (!displayCheck || displayCheck === "full" || displayCheck === "legacy-full") {
+      if (typeof getShadowRoot === "function") {
+        var originalNode = node;
+        while (node) {
+          var parentElement = node.parentElement;
+          var rootNode = getRootNode(node);
+          if (parentElement && !parentElement.shadowRoot && getShadowRoot(parentElement) === true) {
+            return isZeroArea(node);
+          } else if (node.assignedSlot) {
+            node = node.assignedSlot;
+          } else if (!parentElement && rootNode !== node.ownerDocument) {
+            node = rootNode.host;
+          } else {
+            node = parentElement;
+          }
+        }
+        node = originalNode;
+      }
+      if (isNodeAttached(node)) {
+        return !node.getClientRects().length;
+      }
+      if (displayCheck !== "legacy-full") {
+        return true;
+      }
+    } else if (displayCheck === "non-zero-area") {
+      return isZeroArea(node);
+    }
+    return false;
+  };
+  var isDisabledFromFieldset = function isDisabledFromFieldset2(node) {
+    if (/^(INPUT|BUTTON|SELECT|TEXTAREA)$/.test(node.tagName)) {
+      var parentNode = node.parentElement;
+      while (parentNode) {
+        if (parentNode.tagName === "FIELDSET" && parentNode.disabled) {
+          for (var i = 0;i < parentNode.children.length; i++) {
+            var child = parentNode.children.item(i);
+            if (child.tagName === "LEGEND") {
+              return matches.call(parentNode, "fieldset[disabled] *") ? true : !child.contains(node);
             }
           }
-          observeState();
-          const unsubscribe = outerSubscribe(observeState);
-          return {
-            unsubscribe
-          };
-        },
-        [symbol_observable_default]() {
-          return this;
+          return true;
         }
-      };
-    }
-    dispatch({
-      type: actionTypes_default.INIT
-    });
-    const store = {
-      dispatch,
-      subscribe,
-      getState,
-      replaceReducer,
-      [symbol_observable_default]: observable
-    };
-    return store;
-  }
-  function warning(message) {
-    if (typeof console !== "undefined" && typeof console.error === "function") {
-      console.error(message);
-    }
-    try {
-      throw new Error(message);
-    } catch (e) {}
-  }
-  function getUnexpectedStateShapeWarningMessage(inputState, reducers, action, unexpectedKeyCache) {
-    const reducerKeys = Object.keys(reducers);
-    const argumentName = action && action.type === actionTypes_default.INIT ? "preloadedState argument passed to createStore" : "previous state received by the reducer";
-    if (reducerKeys.length === 0) {
-      return "Store does not have a valid reducer. Make sure the argument passed to combineReducers is an object whose values are reducers.";
-    }
-    if (!isPlainObject2(inputState)) {
-      return `The ${argumentName} has unexpected type of "${kindOf2(inputState)}". Expected argument to be an object with the following keys: "${reducerKeys.join('", "')}"`;
-    }
-    const unexpectedKeys = Object.keys(inputState).filter((key) => !reducers.hasOwnProperty(key) && !unexpectedKeyCache[key]);
-    unexpectedKeys.forEach((key) => {
-      unexpectedKeyCache[key] = true;
-    });
-    if (action && action.type === actionTypes_default.REPLACE)
-      return;
-    if (unexpectedKeys.length > 0) {
-      return `Unexpected ${unexpectedKeys.length > 1 ? "keys" : "key"} "${unexpectedKeys.join('", "')}" found in ${argumentName}. Expected to find one of the known reducer keys instead: "${reducerKeys.join('", "')}". Unexpected keys will be ignored.`;
-    }
-  }
-  function assertReducerShape(reducers) {
-    Object.keys(reducers).forEach((key) => {
-      const reducer6 = reducers[key];
-      const initialState4 = reducer6(undefined, {
-        type: actionTypes_default.INIT
-      });
-      if (typeof initialState4 === "undefined") {
-        throw new Error(`The slice reducer for key "${key}" returned undefined during initialization. If the state passed to the reducer is undefined, you must explicitly return the initial state. The initial state may not be undefined. If you don't want to set a value for this reducer, you can use null instead of undefined.`);
-      }
-      if (typeof reducer6(undefined, {
-        type: actionTypes_default.PROBE_UNKNOWN_ACTION()
-      }) === "undefined") {
-        throw new Error(`The slice reducer for key "${key}" returned undefined when probed with a random type. Don't try to handle '${actionTypes_default.INIT}' or other actions in "redux/*" namespace. They are considered private. Instead, you must return the current state for any unknown actions, unless it is undefined, in which case you must return the initial state, regardless of the action type. The initial state may not be undefined, but can be null.`);
-      }
-    });
-  }
-  function combineReducers(reducers) {
-    const reducerKeys = Object.keys(reducers);
-    const finalReducers = {};
-    for (let i = 0;i < reducerKeys.length; i++) {
-      const key = reducerKeys[i];
-      if (true) {
-        if (typeof reducers[key] === "undefined") {
-          warning(`No reducer provided for key "${key}"`);
-        }
-      }
-      if (typeof reducers[key] === "function") {
-        finalReducers[key] = reducers[key];
+        parentNode = parentNode.parentElement;
       }
     }
-    const finalReducerKeys = Object.keys(finalReducers);
-    let unexpectedKeyCache;
-    if (true) {
-      unexpectedKeyCache = {};
+    return false;
+  };
+  var isNodeMatchingSelectorFocusable = function isNodeMatchingSelectorFocusable2(options, node) {
+    if (node.disabled || isInert(node) || isHiddenInput(node) || isHidden(node, options) || isDetailsWithSummary(node) || isDisabledFromFieldset(node)) {
+      return false;
     }
-    let shapeAssertionError;
-    try {
-      assertReducerShape(finalReducers);
-    } catch (e) {
-      shapeAssertionError = e;
+    return true;
+  };
+  var isNodeMatchingSelectorTabbable = function isNodeMatchingSelectorTabbable2(options, node) {
+    if (isNonTabbableRadio(node) || getTabIndex(node) < 0 || !isNodeMatchingSelectorFocusable(options, node)) {
+      return false;
     }
-    return function combination(state = {}, action) {
-      if (shapeAssertionError) {
-        throw shapeAssertionError;
-      }
-      if (true) {
-        const warningMessage = getUnexpectedStateShapeWarningMessage(state, finalReducers, action, unexpectedKeyCache);
-        if (warningMessage) {
-          warning(warningMessage);
-        }
-      }
-      let hasChanged = false;
-      const nextState = {};
-      for (let i = 0;i < finalReducerKeys.length; i++) {
-        const key = finalReducerKeys[i];
-        const reducer6 = finalReducers[key];
-        const previousStateForKey = state[key];
-        const nextStateForKey = reducer6(previousStateForKey, action);
-        if (typeof nextStateForKey === "undefined") {
-          const actionType = action && action.type;
-          throw new Error(`When called with an action of type ${actionType ? `"${String(actionType)}"` : "(unknown type)"}, the slice reducer for key "${key}" returned undefined. To ignore an action, you must explicitly return the previous state. If you want this reducer to hold no value, you can return null instead of undefined.`);
-        }
-        nextState[key] = nextStateForKey;
-        hasChanged = hasChanged || nextStateForKey !== previousStateForKey;
-      }
-      hasChanged = hasChanged || finalReducerKeys.length !== Object.keys(state).length;
-      return hasChanged ? nextState : state;
-    };
-  }
-
-  // node_modules/react-arborist/dist/module/state/drag-slice.js
-  function reducer6(state = initialState().nodes.drag, action) {
-    switch (action.type) {
-      case "DND_DRAG_START":
-        return Object.assign(Object.assign({}, state), { id: action.id, selectedIds: action.dragIds });
-      case "DND_DRAG_END":
-        return Object.assign(Object.assign({}, state), { id: null, destinationParentId: null, destinationIndex: null, selectedIds: [] });
-      case "DND_HOVERING":
-        if (action.parentId !== state.destinationParentId || action.index != state.destinationIndex) {
-          return Object.assign(Object.assign({}, state), { destinationParentId: action.parentId, destinationIndex: action.index });
-        } else {
-          return state;
-        }
-      default:
-        return state;
+    return true;
+  };
+  var isValidShadowRootTabbable = function isValidShadowRootTabbable2(shadowHostNode) {
+    var tabIndex = parseInt(shadowHostNode.getAttribute("tabindex"), 10);
+    if (isNaN(tabIndex) || tabIndex >= 0) {
+      return true;
     }
-  }
-
-  // node_modules/react-arborist/dist/module/state/root-reducer.js
-  var rootReducer = combineReducers({
-    nodes: combineReducers({
-      focus: reducer2,
-      edit: reducer,
-      open: reducer3,
-      selection: reducer4,
-      drag: reducer6
-    }),
-    dnd: reducer5
-  });
-
-  // node_modules/react-arborist/dist/module/components/provider.js
-  var SERVER_STATE = initialState();
-  function TreeProvider({ treeProps, imperativeHandle, children }) {
-    const list = import_react29.useRef(null);
-    const listEl = import_react29.useRef(null);
-    const store = import_react29.useRef(createStore2(rootReducer, initialState(treeProps)));
-    const state = import_shim.useSyncExternalStore(store.current.subscribe, store.current.getState, () => SERVER_STATE);
-    const api = import_react29.useMemo(() => {
-      return new TreeApi(store.current, treeProps, list, listEl);
-    }, []);
-    const updateCount = import_react29.useRef(0);
-    import_react29.useMemo(() => {
-      updateCount.current += 1;
-      api.update(treeProps);
-    }, [...Object.values(treeProps), state.nodes.open]);
-    import_react29.useImperativeHandle(imperativeHandle, () => api);
-    import_react29.useEffect(() => {
-      if (api.props.selection) {
-        api.select(api.props.selection, { focus: false });
+    return false;
+  };
+  var sortByOrder = function sortByOrder2(candidates) {
+    var regularTabbables = [];
+    var orderedTabbables = [];
+    candidates.forEach(function(item, i) {
+      var isScope = !!item.scopeParent;
+      var element = isScope ? item.scopeParent : item;
+      var candidateTabindex = getSortOrderTabIndex(element, isScope);
+      var elements = isScope ? sortByOrder2(item.candidates) : element;
+      if (candidateTabindex === 0) {
+        isScope ? regularTabbables.push.apply(regularTabbables, elements) : regularTabbables.push(element);
       } else {
-        api.deselectAll();
-      }
-    }, [api.props.selection]);
-    import_react29.useEffect(() => {
-      if (!api.props.searchTerm) {
-        store.current.dispatch(actions.clear(true));
-      }
-    }, [api.props.searchTerm]);
-    return import_jsx_runtime11.jsx(TreeApiContext.Provider, { value: api, children: import_jsx_runtime11.jsx(DataUpdatesContext.Provider, { value: updateCount.current, children: import_jsx_runtime11.jsx(NodesContext.Provider, { value: state.nodes, children: import_jsx_runtime11.jsx(DndContext.Provider, { value: state.dnd, children: import_jsx_runtime11.jsx(DndProvider, Object.assign({ backend: HTML5Backend, options: { rootElement: api.props.dndRootElement || undefined } }, treeProps.dndManager && { manager: treeProps.dndManager }, { children })) }) }) }) });
-  }
-
-  // node_modules/react-arborist/dist/module/dnd/outer-drop-hook.js
-  function useOuterDrop() {
-    const tree = useTreeApi();
-    const [, drop] = useDrop(() => ({
-      accept: "NODE",
-      canDrop: (_item, m) => {
-        if (!m.isOver({ shallow: true }))
-          return false;
-        return tree.canDrop();
-      },
-      hover: (_item, m) => {
-        if (!m.isOver({ shallow: true }))
-          return;
-        const offset = m.getClientOffset();
-        if (!tree.listEl.current || !offset)
-          return;
-        const { cursor, drop: drop2 } = computeDrop({
-          element: tree.listEl.current,
-          offset,
-          indent: tree.indent,
-          node: null,
-          prevNode: tree.visibleNodes[tree.visibleNodes.length - 1],
-          nextNode: null
+        orderedTabbables.push({
+          documentOrder: i,
+          tabIndex: candidateTabindex,
+          item,
+          isScope,
+          content: elements
         });
-        if (drop2)
-          tree.dispatch(actions3.hovering(drop2.parentId, drop2.index));
-        if (m.canDrop()) {
-          if (cursor)
-            tree.showCursor(cursor);
-        } else {
-          tree.hideCursor();
-        }
       }
-    }), [tree]);
-    drop(tree.listEl);
-  }
-
-  // node_modules/react-arborist/dist/module/components/outer-drop.js
-  function OuterDrop(props) {
-    useOuterDrop();
-    return props.children;
-  }
-
-  // node_modules/react-arborist/dist/module/components/tree-container.js
-  var import_jsx_runtime12 = __toESM(require_jsx_runtime());
-  function TreeContainer() {
-    const tree = useTreeApi();
-    const Container = tree.props.renderContainer || DefaultContainer;
-    return import_jsx_runtime12.jsx(import_jsx_runtime12.Fragment, { children: import_jsx_runtime12.jsx(Container, {}) });
-  }
-
-  // node_modules/react-arborist/dist/module/components/drag-preview-container.js
-  var import_jsx_runtime13 = __toESM(require_jsx_runtime());
-  function DragPreviewContainer() {
-    const tree = useTreeApi();
-    const { offset, mouse, item, isDragging } = useDragLayer((m) => {
-      return {
-        offset: m.getSourceClientOffset(),
-        mouse: m.getClientOffset(),
-        item: m.getItem(),
-        isDragging: m.isDragging()
-      };
     });
-    const DragPreview = tree.props.renderDragPreview || DefaultDragPreview;
-    return import_jsx_runtime13.jsx(DragPreview, { offset, mouse, id: (item === null || item === undefined ? undefined : item.id) || null, dragIds: (item === null || item === undefined ? undefined : item.dragIds) || [], isDragging });
+    return orderedTabbables.sort(sortOrderedTabbables).reduce(function(acc, sortable) {
+      sortable.isScope ? acc.push.apply(acc, sortable.content) : acc.push(sortable.content);
+      return acc;
+    }, []).concat(regularTabbables);
+  };
+  var tabbable = function tabbable2(container, options) {
+    options = options || {};
+    var candidates;
+    if (options.getShadowRoot) {
+      candidates = getCandidatesIteratively([container], options.includeContainer, {
+        filter: isNodeMatchingSelectorTabbable.bind(null, options),
+        flatten: false,
+        getShadowRoot: options.getShadowRoot,
+        shadowRootFilter: isValidShadowRootTabbable
+      });
+    } else {
+      candidates = getCandidates(container, options.includeContainer, isNodeMatchingSelectorTabbable.bind(null, options));
+    }
+    return sortByOrder(candidates);
+  };
+
+  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  function getPlatform() {
+    const uaData = navigator.userAgentData;
+    if (uaData != null && uaData.platform) {
+      return uaData.platform;
+    }
+    return navigator.platform;
   }
-
-  // node_modules/react-arborist/dist/module/hooks/use-simple-tree.js
-  var import_react30 = __toESM(require_react());
-
-  // node_modules/react-arborist/dist/module/data/simple-tree.js
-  class SimpleTree {
-    constructor(data) {
-      this.root = createRoot2(data);
+  function getUserAgent() {
+    const uaData = navigator.userAgentData;
+    if (uaData && Array.isArray(uaData.brands)) {
+      return uaData.brands.map((_ref) => {
+        let {
+          brand,
+          version
+        } = _ref;
+        return brand + "/" + version;
+      }).join(" ");
     }
-    get data() {
-      var _a, _b;
-      return (_b = (_a = this.root.children) === null || _a === undefined ? undefined : _a.map((node) => node.data)) !== null && _b !== undefined ? _b : [];
+    return navigator.userAgent;
+  }
+  function isSafari() {
+    return /apple/i.test(navigator.vendor);
+  }
+  function isMac() {
+    return getPlatform().toLowerCase().startsWith("mac") && !navigator.maxTouchPoints;
+  }
+  function isJSDOM() {
+    return getUserAgent().includes("jsdom/");
+  }
+  var FOCUSABLE_ATTRIBUTE = "data-floating-ui-focusable";
+  var TYPEABLE_SELECTOR = "input:not([type='hidden']):not([disabled])," + "[contenteditable]:not([contenteditable='false']),textarea:not([disabled])";
+  function activeElement(doc) {
+    let activeElement2 = doc.activeElement;
+    while (((_activeElement = activeElement2) == null || (_activeElement = _activeElement.shadowRoot) == null ? undefined : _activeElement.activeElement) != null) {
+      var _activeElement;
+      activeElement2 = activeElement2.shadowRoot.activeElement;
     }
-    create(args) {
-      const parent = args.parentId ? this.find(args.parentId) : this.root;
-      if (!parent)
-        return null;
-      parent.addChild(args.data, args.index);
+    return activeElement2;
+  }
+  function contains(parent, child) {
+    if (!parent || !child) {
+      return false;
     }
-    move(args) {
-      const src = this.find(args.id);
-      const parent = args.parentId ? this.find(args.parentId) : this.root;
-      if (!src || !parent)
-        return;
-      parent.addChild(src.data, args.index);
-      src.drop();
+    const rootNode = child.getRootNode == null ? undefined : child.getRootNode();
+    if (parent.contains(child)) {
+      return true;
     }
-    update(args) {
-      const node = this.find(args.id);
-      if (node)
-        node.update(args.changes);
-    }
-    drop(args) {
-      const node = this.find(args.id);
-      if (node)
-        node.drop();
-    }
-    find(id, node = this.root) {
-      if (!node)
-        return null;
-      if (node.id === id)
-        return node;
-      if (node.children) {
-        for (let child of node.children) {
-          const found = this.find(id, child);
-          if (found)
-            return found;
+    if (rootNode && isShadowRoot(rootNode)) {
+      let next = child;
+      while (next) {
+        if (parent === next) {
+          return true;
         }
-        return null;
+        next = next.parentNode || next.host;
       }
+    }
+    return false;
+  }
+  function getTarget(event) {
+    if ("composedPath" in event) {
+      return event.composedPath()[0];
+    }
+    return event.target;
+  }
+  function isEventTargetWithin(event, node) {
+    if (node == null) {
+      return false;
+    }
+    if ("composedPath" in event) {
+      return event.composedPath().includes(node);
+    }
+    const e = event;
+    return e.target != null && node.contains(e.target);
+  }
+  function isRootElement(element) {
+    return element.matches("html,body");
+  }
+  function getDocument(node) {
+    return (node == null ? undefined : node.ownerDocument) || document;
+  }
+  function isTypeableElement(element) {
+    return isHTMLElement(element) && element.matches(TYPEABLE_SELECTOR);
+  }
+  function matchesFocusVisible(element) {
+    if (!element || isJSDOM())
+      return true;
+    try {
+      return element.matches(":focus-visible");
+    } catch (_e) {
+      return true;
+    }
+  }
+  function getFloatingFocusElement(floatingElement) {
+    if (!floatingElement) {
       return null;
     }
+    return floatingElement.hasAttribute(FOCUSABLE_ATTRIBUTE) ? floatingElement : floatingElement.querySelector("[" + FOCUSABLE_ATTRIBUTE + "]") || floatingElement;
   }
-  function createRoot2(data) {
-    const root = new SimpleNode({ id: "ROOT" }, null);
-    root.children = data.map((d) => createNode(d, root));
-    return root;
+  function getNodeChildren(nodes, id, onlyOpenChildren) {
+    if (onlyOpenChildren === undefined) {
+      onlyOpenChildren = true;
+    }
+    const directChildren = nodes.filter((node) => {
+      var _node$context;
+      return node.parentId === id && (!onlyOpenChildren || ((_node$context = node.context) == null ? undefined : _node$context.open));
+    });
+    return directChildren.flatMap((child) => [child, ...getNodeChildren(nodes, child.id, onlyOpenChildren)]);
   }
-  function createNode(data, parent) {
-    const node = new SimpleNode(data, parent);
-    if (data.children)
-      node.children = data.children.map((d) => createNode(d, node));
-    return node;
+  function isReactEvent(event) {
+    return "nativeEvent" in event;
+  }
+  function isMouseLikePointerType(pointerType, strict) {
+    const values = ["mouse", "pen"];
+    if (!strict) {
+      values.push("", undefined);
+    }
+    return values.includes(pointerType);
+  }
+  var isClient = typeof document !== "undefined";
+  var noop = function noop2() {};
+  var index = isClient ? import_react.useLayoutEffect : noop;
+  var SafeReact = {
+    ...React2
+  };
+  function useLatestRef(value) {
+    const ref = React2.useRef(value);
+    index(() => {
+      ref.current = value;
+    });
+    return ref;
+  }
+  var useInsertionEffect = SafeReact.useInsertionEffect;
+  var useSafeInsertionEffect = useInsertionEffect || ((fn) => fn());
+  function useEffectEvent(callback) {
+    const ref = React2.useRef(() => {
+      if (true) {
+        throw new Error("Cannot call an event handler while rendering.");
+      }
+    });
+    useSafeInsertionEffect(() => {
+      ref.current = callback;
+    });
+    return React2.useCallback(function() {
+      for (var _len = arguments.length, args = new Array(_len), _key = 0;_key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+      return ref.current == null ? undefined : ref.current(...args);
+    }, []);
+  }
+  var getTabbableOptions = () => ({
+    getShadowRoot: true,
+    displayCheck: typeof ResizeObserver === "function" && ResizeObserver.toString().includes("[native code]") ? "full" : "none"
+  });
+  function getTabbableIn(container, dir) {
+    const list = tabbable(container, getTabbableOptions());
+    const len = list.length;
+    if (len === 0)
+      return;
+    const active = activeElement(getDocument(container));
+    const index2 = list.indexOf(active);
+    const nextIndex = index2 === -1 ? dir === 1 ? 0 : len - 1 : index2 + dir;
+    return list[nextIndex];
+  }
+  function getNextTabbable(referenceElement) {
+    return getTabbableIn(getDocument(referenceElement).body, 1) || referenceElement;
+  }
+  function getPreviousTabbable(referenceElement) {
+    return getTabbableIn(getDocument(referenceElement).body, -1) || referenceElement;
+  }
+  function isOutsideEvent(event, container) {
+    const containerElement = container || event.currentTarget;
+    const relatedTarget = event.relatedTarget;
+    return !relatedTarget || !contains(containerElement, relatedTarget);
+  }
+  function disableFocusInside(container) {
+    const tabbableElements = tabbable(container, getTabbableOptions());
+    tabbableElements.forEach((element) => {
+      element.dataset.tabindex = element.getAttribute("tabindex") || "";
+      element.setAttribute("tabindex", "-1");
+    });
+  }
+  function enableFocusInside(container) {
+    const elements = container.querySelectorAll("[data-tabindex]");
+    elements.forEach((element) => {
+      const tabindex = element.dataset.tabindex;
+      delete element.dataset.tabindex;
+      if (tabindex) {
+        element.setAttribute("tabindex", tabindex);
+      } else {
+        element.removeAttribute("tabindex");
+      }
+    });
   }
 
-  class SimpleNode {
-    constructor(data, parent) {
-      this.data = data;
-      this.parent = parent;
-      this.id = data.id;
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  var import_jsx_runtime = __toESM(require_jsx_runtime());
+  var ReactDOM2 = __toESM(require_react_dom());
+
+  // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+  function computeCoordsFromPlacement(_ref, placement, rtl) {
+    let {
+      reference,
+      floating
+    } = _ref;
+    const sideAxis = getSideAxis(placement);
+    const alignmentAxis = getAlignmentAxis(placement);
+    const alignLength = getAxisLength(alignmentAxis);
+    const side = getSide(placement);
+    const isVertical = sideAxis === "y";
+    const commonX = reference.x + reference.width / 2 - floating.width / 2;
+    const commonY = reference.y + reference.height / 2 - floating.height / 2;
+    const commonAlign = reference[alignLength] / 2 - floating[alignLength] / 2;
+    let coords;
+    switch (side) {
+      case "top":
+        coords = {
+          x: commonX,
+          y: reference.y - floating.height
+        };
+        break;
+      case "bottom":
+        coords = {
+          x: commonX,
+          y: reference.y + reference.height
+        };
+        break;
+      case "right":
+        coords = {
+          x: reference.x + reference.width,
+          y: commonY
+        };
+        break;
+      case "left":
+        coords = {
+          x: reference.x - floating.width,
+          y: commonY
+        };
+        break;
+      default:
+        coords = {
+          x: reference.x,
+          y: reference.y
+        };
     }
-    hasParent() {
-      return !!this.parent;
+    switch (getAlignment(placement)) {
+      case "start":
+        coords[alignmentAxis] -= commonAlign * (rtl && isVertical ? -1 : 1);
+        break;
+      case "end":
+        coords[alignmentAxis] += commonAlign * (rtl && isVertical ? -1 : 1);
+        break;
     }
-    get childIndex() {
-      return this.hasParent() ? this.parent.children.indexOf(this) : -1;
-    }
-    addChild(data, index) {
-      var _a, _b;
-      const node = createNode(data, this);
-      this.children = (_a = this.children) !== null && _a !== undefined ? _a : [];
-      this.children.splice(index, 0, node);
-      this.data.children = (_b = this.data.children) !== null && _b !== undefined ? _b : [];
-      this.data.children.splice(index, 0, data);
-    }
-    removeChild(index) {
-      var _a, _b;
-      (_a = this.children) === null || _a === undefined || _a.splice(index, 1);
-      (_b = this.data.children) === null || _b === undefined || _b.splice(index, 1);
-    }
-    update(changes) {
-      if (this.hasParent()) {
-        const i = this.childIndex;
-        this.parent.addChild(Object.assign(Object.assign({}, this.data), changes), i);
-        this.drop();
+    return coords;
+  }
+  var computePosition = async (reference, floating, config) => {
+    const {
+      placement = "bottom",
+      strategy = "absolute",
+      middleware = [],
+      platform
+    } = config;
+    const validMiddleware = middleware.filter(Boolean);
+    const rtl = await (platform.isRTL == null ? undefined : platform.isRTL(floating));
+    let rects = await platform.getElementRects({
+      reference,
+      floating,
+      strategy
+    });
+    let {
+      x,
+      y
+    } = computeCoordsFromPlacement(rects, placement, rtl);
+    let statefulPlacement = placement;
+    let middlewareData = {};
+    let resetCount = 0;
+    for (let i = 0;i < validMiddleware.length; i++) {
+      const {
+        name,
+        fn
+      } = validMiddleware[i];
+      const {
+        x: nextX,
+        y: nextY,
+        data,
+        reset
+      } = await fn({
+        x,
+        y,
+        initialPlacement: placement,
+        placement: statefulPlacement,
+        strategy,
+        middlewareData,
+        rects,
+        platform,
+        elements: {
+          reference,
+          floating
+        }
+      });
+      x = nextX != null ? nextX : x;
+      y = nextY != null ? nextY : y;
+      middlewareData = {
+        ...middlewareData,
+        [name]: {
+          ...middlewareData[name],
+          ...data
+        }
+      };
+      if (reset && resetCount <= 50) {
+        resetCount++;
+        if (typeof reset === "object") {
+          if (reset.placement) {
+            statefulPlacement = reset.placement;
+          }
+          if (reset.rects) {
+            rects = reset.rects === true ? await platform.getElementRects({
+              reference,
+              floating,
+              strategy
+            }) : reset.rects;
+          }
+          ({
+            x,
+            y
+          } = computeCoordsFromPlacement(rects, statefulPlacement, rtl));
+        }
+        i = -1;
       }
     }
-    drop() {
-      if (this.hasParent())
-        this.parent.removeChild(this.childIndex);
+    return {
+      x,
+      y,
+      placement: statefulPlacement,
+      strategy,
+      middlewareData
+    };
+  };
+  async function detectOverflow(state, options) {
+    var _await$platform$isEle;
+    if (options === undefined) {
+      options = {};
     }
+    const {
+      x,
+      y,
+      platform,
+      rects,
+      elements,
+      strategy
+    } = state;
+    const {
+      boundary = "clippingAncestors",
+      rootBoundary = "viewport",
+      elementContext = "floating",
+      altBoundary = false,
+      padding = 0
+    } = evaluate(options, state);
+    const paddingObject = getPaddingObject(padding);
+    const altContext = elementContext === "floating" ? "reference" : "floating";
+    const element = elements[altBoundary ? altContext : elementContext];
+    const clippingClientRect = rectToClientRect(await platform.getClippingRect({
+      element: ((_await$platform$isEle = await (platform.isElement == null ? undefined : platform.isElement(element))) != null ? _await$platform$isEle : true) ? element : element.contextElement || await (platform.getDocumentElement == null ? undefined : platform.getDocumentElement(elements.floating)),
+      boundary,
+      rootBoundary,
+      strategy
+    }));
+    const rect = elementContext === "floating" ? {
+      x,
+      y,
+      width: rects.floating.width,
+      height: rects.floating.height
+    } : rects.reference;
+    const offsetParent = await (platform.getOffsetParent == null ? undefined : platform.getOffsetParent(elements.floating));
+    const offsetScale = await (platform.isElement == null ? undefined : platform.isElement(offsetParent)) ? await (platform.getScale == null ? undefined : platform.getScale(offsetParent)) || {
+      x: 1,
+      y: 1
+    } : {
+      x: 1,
+      y: 1
+    };
+    const elementClientRect = rectToClientRect(platform.convertOffsetParentRelativeRectToViewportRelativeRect ? await platform.convertOffsetParentRelativeRectToViewportRelativeRect({
+      elements,
+      rect,
+      offsetParent,
+      strategy
+    }) : rect);
+    return {
+      top: (clippingClientRect.top - elementClientRect.top + paddingObject.top) / offsetScale.y,
+      bottom: (elementClientRect.bottom - clippingClientRect.bottom + paddingObject.bottom) / offsetScale.y,
+      left: (clippingClientRect.left - elementClientRect.left + paddingObject.left) / offsetScale.x,
+      right: (elementClientRect.right - clippingClientRect.right + paddingObject.right) / offsetScale.x
+    };
   }
-
-  // node_modules/react-arborist/dist/module/hooks/use-simple-tree.js
-  var nextId = 0;
-  function useSimpleTree(initialData) {
-    const [data, setData] = import_react30.useState(initialData);
-    const tree = import_react30.useMemo(() => new SimpleTree(data), [data]);
-    const onMove = (args) => {
-      for (const id of args.dragIds) {
-        tree.move({ id, parentId: args.parentId, index: args.index });
+  var arrow = (options) => ({
+    name: "arrow",
+    options,
+    async fn(state) {
+      const {
+        x,
+        y,
+        placement,
+        rects,
+        platform,
+        elements,
+        middlewareData
+      } = state;
+      const {
+        element,
+        padding = 0
+      } = evaluate(options, state) || {};
+      if (element == null) {
+        return {};
       }
-      setData(tree.data);
+      const paddingObject = getPaddingObject(padding);
+      const coords = {
+        x,
+        y
+      };
+      const axis = getAlignmentAxis(placement);
+      const length = getAxisLength(axis);
+      const arrowDimensions = await platform.getDimensions(element);
+      const isYAxis = axis === "y";
+      const minProp = isYAxis ? "top" : "left";
+      const maxProp = isYAxis ? "bottom" : "right";
+      const clientProp = isYAxis ? "clientHeight" : "clientWidth";
+      const endDiff = rects.reference[length] + rects.reference[axis] - coords[axis] - rects.floating[length];
+      const startDiff = coords[axis] - rects.reference[axis];
+      const arrowOffsetParent = await (platform.getOffsetParent == null ? undefined : platform.getOffsetParent(element));
+      let clientSize = arrowOffsetParent ? arrowOffsetParent[clientProp] : 0;
+      if (!clientSize || !await (platform.isElement == null ? undefined : platform.isElement(arrowOffsetParent))) {
+        clientSize = elements.floating[clientProp] || rects.floating[length];
+      }
+      const centerToReference = endDiff / 2 - startDiff / 2;
+      const largestPossiblePadding = clientSize / 2 - arrowDimensions[length] / 2 - 1;
+      const minPadding = min(paddingObject[minProp], largestPossiblePadding);
+      const maxPadding = min(paddingObject[maxProp], largestPossiblePadding);
+      const min$1 = minPadding;
+      const max2 = clientSize - arrowDimensions[length] - maxPadding;
+      const center = clientSize / 2 - arrowDimensions[length] / 2 + centerToReference;
+      const offset = clamp(min$1, center, max2);
+      const shouldAddOffset = !middlewareData.arrow && getAlignment(placement) != null && center !== offset && rects.reference[length] / 2 - (center < min$1 ? minPadding : maxPadding) - arrowDimensions[length] / 2 < 0;
+      const alignmentOffset = shouldAddOffset ? center < min$1 ? center - min$1 : center - max2 : 0;
+      return {
+        [axis]: coords[axis] + alignmentOffset,
+        data: {
+          [axis]: offset,
+          centerOffset: center - offset - alignmentOffset,
+          ...shouldAddOffset && {
+            alignmentOffset
+          }
+        },
+        reset: shouldAddOffset
+      };
+    }
+  });
+  var flip = function(options) {
+    if (options === undefined) {
+      options = {};
+    }
+    return {
+      name: "flip",
+      options,
+      async fn(state) {
+        var _middlewareData$arrow, _middlewareData$flip;
+        const {
+          placement,
+          middlewareData,
+          rects,
+          initialPlacement,
+          platform,
+          elements
+        } = state;
+        const {
+          mainAxis: checkMainAxis = true,
+          crossAxis: checkCrossAxis = true,
+          fallbackPlacements: specifiedFallbackPlacements,
+          fallbackStrategy = "bestFit",
+          fallbackAxisSideDirection = "none",
+          flipAlignment = true,
+          ...detectOverflowOptions
+        } = evaluate(options, state);
+        if ((_middlewareData$arrow = middlewareData.arrow) != null && _middlewareData$arrow.alignmentOffset) {
+          return {};
+        }
+        const side = getSide(placement);
+        const initialSideAxis = getSideAxis(initialPlacement);
+        const isBasePlacement = getSide(initialPlacement) === initialPlacement;
+        const rtl = await (platform.isRTL == null ? undefined : platform.isRTL(elements.floating));
+        const fallbackPlacements = specifiedFallbackPlacements || (isBasePlacement || !flipAlignment ? [getOppositePlacement(initialPlacement)] : getExpandedPlacements(initialPlacement));
+        const hasFallbackAxisSideDirection = fallbackAxisSideDirection !== "none";
+        if (!specifiedFallbackPlacements && hasFallbackAxisSideDirection) {
+          fallbackPlacements.push(...getOppositeAxisPlacements(initialPlacement, flipAlignment, fallbackAxisSideDirection, rtl));
+        }
+        const placements2 = [initialPlacement, ...fallbackPlacements];
+        const overflow = await detectOverflow(state, detectOverflowOptions);
+        const overflows = [];
+        let overflowsData = ((_middlewareData$flip = middlewareData.flip) == null ? undefined : _middlewareData$flip.overflows) || [];
+        if (checkMainAxis) {
+          overflows.push(overflow[side]);
+        }
+        if (checkCrossAxis) {
+          const sides2 = getAlignmentSides(placement, rects, rtl);
+          overflows.push(overflow[sides2[0]], overflow[sides2[1]]);
+        }
+        overflowsData = [...overflowsData, {
+          placement,
+          overflows
+        }];
+        if (!overflows.every((side2) => side2 <= 0)) {
+          var _middlewareData$flip2, _overflowsData$filter;
+          const nextIndex = (((_middlewareData$flip2 = middlewareData.flip) == null ? undefined : _middlewareData$flip2.index) || 0) + 1;
+          const nextPlacement = placements2[nextIndex];
+          if (nextPlacement) {
+            const ignoreCrossAxisOverflow = checkCrossAxis === "alignment" ? initialSideAxis !== getSideAxis(nextPlacement) : false;
+            if (!ignoreCrossAxisOverflow || overflowsData.every((d) => getSideAxis(d.placement) === initialSideAxis ? d.overflows[0] > 0 : true)) {
+              return {
+                data: {
+                  index: nextIndex,
+                  overflows: overflowsData
+                },
+                reset: {
+                  placement: nextPlacement
+                }
+              };
+            }
+          }
+          let resetPlacement = (_overflowsData$filter = overflowsData.filter((d) => d.overflows[0] <= 0).sort((a, b) => a.overflows[1] - b.overflows[1])[0]) == null ? undefined : _overflowsData$filter.placement;
+          if (!resetPlacement) {
+            switch (fallbackStrategy) {
+              case "bestFit": {
+                var _overflowsData$filter2;
+                const placement2 = (_overflowsData$filter2 = overflowsData.filter((d) => {
+                  if (hasFallbackAxisSideDirection) {
+                    const currentSideAxis = getSideAxis(d.placement);
+                    return currentSideAxis === initialSideAxis || currentSideAxis === "y";
+                  }
+                  return true;
+                }).map((d) => [d.placement, d.overflows.filter((overflow2) => overflow2 > 0).reduce((acc, overflow2) => acc + overflow2, 0)]).sort((a, b) => a[1] - b[1])[0]) == null ? undefined : _overflowsData$filter2[0];
+                if (placement2) {
+                  resetPlacement = placement2;
+                }
+                break;
+              }
+              case "initialPlacement":
+                resetPlacement = initialPlacement;
+                break;
+            }
+          }
+          if (placement !== resetPlacement) {
+            return {
+              reset: {
+                placement: resetPlacement
+              }
+            };
+          }
+        }
+        return {};
+      }
     };
-    const onRename = ({ name, id }) => {
-      tree.update({ id, changes: { name } });
-      setData(tree.data);
+  };
+  var originSides = /* @__PURE__ */ new Set(["left", "top"]);
+  async function convertValueToCoords(state, options) {
+    const {
+      placement,
+      platform,
+      elements
+    } = state;
+    const rtl = await (platform.isRTL == null ? undefined : platform.isRTL(elements.floating));
+    const side = getSide(placement);
+    const alignment = getAlignment(placement);
+    const isVertical = getSideAxis(placement) === "y";
+    const mainAxisMulti = originSides.has(side) ? -1 : 1;
+    const crossAxisMulti = rtl && isVertical ? -1 : 1;
+    const rawValue = evaluate(options, state);
+    let {
+      mainAxis,
+      crossAxis,
+      alignmentAxis
+    } = typeof rawValue === "number" ? {
+      mainAxis: rawValue,
+      crossAxis: 0,
+      alignmentAxis: null
+    } : {
+      mainAxis: rawValue.mainAxis || 0,
+      crossAxis: rawValue.crossAxis || 0,
+      alignmentAxis: rawValue.alignmentAxis
     };
-    const onCreate = ({ parentId, index, type }) => {
-      const data2 = { id: `simple-tree-id-${nextId++}`, name: "" };
-      if (type === "internal")
-        data2.children = [];
-      tree.create({ parentId, index, data: data2 });
-      setData(tree.data);
-      return data2;
+    if (alignment && typeof alignmentAxis === "number") {
+      crossAxis = alignment === "end" ? alignmentAxis * -1 : alignmentAxis;
+    }
+    return isVertical ? {
+      x: crossAxis * crossAxisMulti,
+      y: mainAxis * mainAxisMulti
+    } : {
+      x: mainAxis * mainAxisMulti,
+      y: crossAxis * crossAxisMulti
     };
-    const onDelete = (args) => {
-      args.ids.forEach((id) => tree.drop({ id }));
-      setData(tree.data);
-    };
-    const controller = { onMove, onRename, onCreate, onDelete };
-    return [data, controller];
   }
+  var offset = function(options) {
+    if (options === undefined) {
+      options = 0;
+    }
+    return {
+      name: "offset",
+      options,
+      async fn(state) {
+        var _middlewareData$offse, _middlewareData$arrow;
+        const {
+          x,
+          y,
+          placement,
+          middlewareData
+        } = state;
+        const diffCoords = await convertValueToCoords(state, options);
+        if (placement === ((_middlewareData$offse = middlewareData.offset) == null ? undefined : _middlewareData$offse.placement) && (_middlewareData$arrow = middlewareData.arrow) != null && _middlewareData$arrow.alignmentOffset) {
+          return {};
+        }
+        return {
+          x: x + diffCoords.x,
+          y: y + diffCoords.y,
+          data: {
+            ...diffCoords,
+            placement
+          }
+        };
+      }
+    };
+  };
+  var shift = function(options) {
+    if (options === undefined) {
+      options = {};
+    }
+    return {
+      name: "shift",
+      options,
+      async fn(state) {
+        const {
+          x,
+          y,
+          placement
+        } = state;
+        const {
+          mainAxis: checkMainAxis = true,
+          crossAxis: checkCrossAxis = false,
+          limiter = {
+            fn: (_ref) => {
+              let {
+                x: x2,
+                y: y2
+              } = _ref;
+              return {
+                x: x2,
+                y: y2
+              };
+            }
+          },
+          ...detectOverflowOptions
+        } = evaluate(options, state);
+        const coords = {
+          x,
+          y
+        };
+        const overflow = await detectOverflow(state, detectOverflowOptions);
+        const crossAxis = getSideAxis(getSide(placement));
+        const mainAxis = getOppositeAxis(crossAxis);
+        let mainAxisCoord = coords[mainAxis];
+        let crossAxisCoord = coords[crossAxis];
+        if (checkMainAxis) {
+          const minSide = mainAxis === "y" ? "top" : "left";
+          const maxSide = mainAxis === "y" ? "bottom" : "right";
+          const min2 = mainAxisCoord + overflow[minSide];
+          const max2 = mainAxisCoord - overflow[maxSide];
+          mainAxisCoord = clamp(min2, mainAxisCoord, max2);
+        }
+        if (checkCrossAxis) {
+          const minSide = crossAxis === "y" ? "top" : "left";
+          const maxSide = crossAxis === "y" ? "bottom" : "right";
+          const min2 = crossAxisCoord + overflow[minSide];
+          const max2 = crossAxisCoord - overflow[maxSide];
+          crossAxisCoord = clamp(min2, crossAxisCoord, max2);
+        }
+        const limitedCoords = limiter.fn({
+          ...state,
+          [mainAxis]: mainAxisCoord,
+          [crossAxis]: crossAxisCoord
+        });
+        return {
+          ...limitedCoords,
+          data: {
+            x: limitedCoords.x - x,
+            y: limitedCoords.y - y,
+            enabled: {
+              [mainAxis]: checkMainAxis,
+              [crossAxis]: checkCrossAxis
+            }
+          }
+        };
+      }
+    };
+  };
 
-  // node_modules/react-arborist/dist/module/hooks/use-validated-props.js
-  function useValidatedProps(props) {
-    if (props.initialData && props.data) {
-      throw new Error(`React Arborist Tree => Provide either a data or initialData prop, but not both.`);
+  // node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+  function getCssDimensions(element) {
+    const css = getComputedStyle2(element);
+    let width = parseFloat(css.width) || 0;
+    let height = parseFloat(css.height) || 0;
+    const hasOffset = isHTMLElement(element);
+    const offsetWidth = hasOffset ? element.offsetWidth : width;
+    const offsetHeight = hasOffset ? element.offsetHeight : height;
+    const shouldFallback = round(width) !== offsetWidth || round(height) !== offsetHeight;
+    if (shouldFallback) {
+      width = offsetWidth;
+      height = offsetHeight;
     }
-    if (props.initialData && (props.onCreate || props.onDelete || props.onMove || props.onRename)) {
-      throw new Error(`React Arborist Tree => You passed the initialData prop along with a data handler.
-Use the data prop if you want to provide your own handlers.`);
+    return {
+      width,
+      height,
+      $: shouldFallback
+    };
+  }
+  function unwrapElement(element) {
+    return !isElement(element) ? element.contextElement : element;
+  }
+  function getScale(element) {
+    const domElement = unwrapElement(element);
+    if (!isHTMLElement(domElement)) {
+      return createCoords(1);
     }
-    if (props.initialData) {
-      const [data, controller] = useSimpleTree(props.initialData);
-      return Object.assign(Object.assign(Object.assign({}, props), controller), { data });
+    const rect = domElement.getBoundingClientRect();
+    const {
+      width,
+      height,
+      $
+    } = getCssDimensions(domElement);
+    let x = ($ ? round(rect.width) : rect.width) / width;
+    let y = ($ ? round(rect.height) : rect.height) / height;
+    if (!x || !Number.isFinite(x)) {
+      x = 1;
+    }
+    if (!y || !Number.isFinite(y)) {
+      y = 1;
+    }
+    return {
+      x,
+      y
+    };
+  }
+  var noOffsets = /* @__PURE__ */ createCoords(0);
+  function getVisualOffsets(element) {
+    const win = getWindow(element);
+    if (!isWebKit() || !win.visualViewport) {
+      return noOffsets;
+    }
+    return {
+      x: win.visualViewport.offsetLeft,
+      y: win.visualViewport.offsetTop
+    };
+  }
+  function shouldAddVisualOffsets(element, isFixed, floatingOffsetParent) {
+    if (isFixed === undefined) {
+      isFixed = false;
+    }
+    if (!floatingOffsetParent || isFixed && floatingOffsetParent !== getWindow(element)) {
+      return false;
+    }
+    return isFixed;
+  }
+  function getBoundingClientRect(element, includeScale, isFixedStrategy, offsetParent) {
+    if (includeScale === undefined) {
+      includeScale = false;
+    }
+    if (isFixedStrategy === undefined) {
+      isFixedStrategy = false;
+    }
+    const clientRect = element.getBoundingClientRect();
+    const domElement = unwrapElement(element);
+    let scale = createCoords(1);
+    if (includeScale) {
+      if (offsetParent) {
+        if (isElement(offsetParent)) {
+          scale = getScale(offsetParent);
+        }
+      } else {
+        scale = getScale(element);
+      }
+    }
+    const visualOffsets = shouldAddVisualOffsets(domElement, isFixedStrategy, offsetParent) ? getVisualOffsets(domElement) : createCoords(0);
+    let x = (clientRect.left + visualOffsets.x) / scale.x;
+    let y = (clientRect.top + visualOffsets.y) / scale.y;
+    let width = clientRect.width / scale.x;
+    let height = clientRect.height / scale.y;
+    if (domElement) {
+      const win = getWindow(domElement);
+      const offsetWin = offsetParent && isElement(offsetParent) ? getWindow(offsetParent) : offsetParent;
+      let currentWin = win;
+      let currentIFrame = getFrameElement(currentWin);
+      while (currentIFrame && offsetParent && offsetWin !== currentWin) {
+        const iframeScale = getScale(currentIFrame);
+        const iframeRect = currentIFrame.getBoundingClientRect();
+        const css = getComputedStyle2(currentIFrame);
+        const left = iframeRect.left + (currentIFrame.clientLeft + parseFloat(css.paddingLeft)) * iframeScale.x;
+        const top = iframeRect.top + (currentIFrame.clientTop + parseFloat(css.paddingTop)) * iframeScale.y;
+        x *= iframeScale.x;
+        y *= iframeScale.y;
+        width *= iframeScale.x;
+        height *= iframeScale.y;
+        x += left;
+        y += top;
+        currentWin = getWindow(currentIFrame);
+        currentIFrame = getFrameElement(currentWin);
+      }
+    }
+    return rectToClientRect({
+      width,
+      height,
+      x,
+      y
+    });
+  }
+  function getWindowScrollBarX(element, rect) {
+    const leftScroll = getNodeScroll(element).scrollLeft;
+    if (!rect) {
+      return getBoundingClientRect(getDocumentElement(element)).left + leftScroll;
+    }
+    return rect.left + leftScroll;
+  }
+  function getHTMLOffset(documentElement, scroll) {
+    const htmlRect = documentElement.getBoundingClientRect();
+    const x = htmlRect.left + scroll.scrollLeft - getWindowScrollBarX(documentElement, htmlRect);
+    const y = htmlRect.top + scroll.scrollTop;
+    return {
+      x,
+      y
+    };
+  }
+  function convertOffsetParentRelativeRectToViewportRelativeRect(_ref) {
+    let {
+      elements,
+      rect,
+      offsetParent,
+      strategy
+    } = _ref;
+    const isFixed = strategy === "fixed";
+    const documentElement = getDocumentElement(offsetParent);
+    const topLayer = elements ? isTopLayer(elements.floating) : false;
+    if (offsetParent === documentElement || topLayer && isFixed) {
+      return rect;
+    }
+    let scroll = {
+      scrollLeft: 0,
+      scrollTop: 0
+    };
+    let scale = createCoords(1);
+    const offsets = createCoords(0);
+    const isOffsetParentAnElement = isHTMLElement(offsetParent);
+    if (isOffsetParentAnElement || !isOffsetParentAnElement && !isFixed) {
+      if (getNodeName(offsetParent) !== "body" || isOverflowElement(documentElement)) {
+        scroll = getNodeScroll(offsetParent);
+      }
+      if (isHTMLElement(offsetParent)) {
+        const offsetRect = getBoundingClientRect(offsetParent);
+        scale = getScale(offsetParent);
+        offsets.x = offsetRect.x + offsetParent.clientLeft;
+        offsets.y = offsetRect.y + offsetParent.clientTop;
+      }
+    }
+    const htmlOffset = documentElement && !isOffsetParentAnElement && !isFixed ? getHTMLOffset(documentElement, scroll) : createCoords(0);
+    return {
+      width: rect.width * scale.x,
+      height: rect.height * scale.y,
+      x: rect.x * scale.x - scroll.scrollLeft * scale.x + offsets.x + htmlOffset.x,
+      y: rect.y * scale.y - scroll.scrollTop * scale.y + offsets.y + htmlOffset.y
+    };
+  }
+  function getClientRects(element) {
+    return Array.from(element.getClientRects());
+  }
+  function getDocumentRect(element) {
+    const html = getDocumentElement(element);
+    const scroll = getNodeScroll(element);
+    const body = element.ownerDocument.body;
+    const width = max(html.scrollWidth, html.clientWidth, body.scrollWidth, body.clientWidth);
+    const height = max(html.scrollHeight, html.clientHeight, body.scrollHeight, body.clientHeight);
+    let x = -scroll.scrollLeft + getWindowScrollBarX(element);
+    const y = -scroll.scrollTop;
+    if (getComputedStyle2(body).direction === "rtl") {
+      x += max(html.clientWidth, body.clientWidth) - width;
+    }
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  var SCROLLBAR_MAX = 25;
+  function getViewportRect(element, strategy) {
+    const win = getWindow(element);
+    const html = getDocumentElement(element);
+    const visualViewport = win.visualViewport;
+    let width = html.clientWidth;
+    let height = html.clientHeight;
+    let x = 0;
+    let y = 0;
+    if (visualViewport) {
+      width = visualViewport.width;
+      height = visualViewport.height;
+      const visualViewportBased = isWebKit();
+      if (!visualViewportBased || visualViewportBased && strategy === "fixed") {
+        x = visualViewport.offsetLeft;
+        y = visualViewport.offsetTop;
+      }
+    }
+    const windowScrollbarX = getWindowScrollBarX(html);
+    if (windowScrollbarX <= 0) {
+      const doc = html.ownerDocument;
+      const body = doc.body;
+      const bodyStyles = getComputedStyle(body);
+      const bodyMarginInline = doc.compatMode === "CSS1Compat" ? parseFloat(bodyStyles.marginLeft) + parseFloat(bodyStyles.marginRight) || 0 : 0;
+      const clippingStableScrollbarWidth = Math.abs(html.clientWidth - body.clientWidth - bodyMarginInline);
+      if (clippingStableScrollbarWidth <= SCROLLBAR_MAX) {
+        width -= clippingStableScrollbarWidth;
+      }
+    } else if (windowScrollbarX <= SCROLLBAR_MAX) {
+      width += windowScrollbarX;
+    }
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  var absoluteOrFixed = /* @__PURE__ */ new Set(["absolute", "fixed"]);
+  function getInnerBoundingClientRect(element, strategy) {
+    const clientRect = getBoundingClientRect(element, true, strategy === "fixed");
+    const top = clientRect.top + element.clientTop;
+    const left = clientRect.left + element.clientLeft;
+    const scale = isHTMLElement(element) ? getScale(element) : createCoords(1);
+    const width = element.clientWidth * scale.x;
+    const height = element.clientHeight * scale.y;
+    const x = left * scale.x;
+    const y = top * scale.y;
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  function getClientRectFromClippingAncestor(element, clippingAncestor, strategy) {
+    let rect;
+    if (clippingAncestor === "viewport") {
+      rect = getViewportRect(element, strategy);
+    } else if (clippingAncestor === "document") {
+      rect = getDocumentRect(getDocumentElement(element));
+    } else if (isElement(clippingAncestor)) {
+      rect = getInnerBoundingClientRect(clippingAncestor, strategy);
     } else {
-      return props;
+      const visualOffsets = getVisualOffsets(element);
+      rect = {
+        x: clippingAncestor.x - visualOffsets.x,
+        y: clippingAncestor.y - visualOffsets.y,
+        width: clippingAncestor.width,
+        height: clippingAncestor.height
+      };
+    }
+    return rectToClientRect(rect);
+  }
+  function hasFixedPositionAncestor(element, stopNode) {
+    const parentNode = getParentNode(element);
+    if (parentNode === stopNode || !isElement(parentNode) || isLastTraversableNode(parentNode)) {
+      return false;
+    }
+    return getComputedStyle2(parentNode).position === "fixed" || hasFixedPositionAncestor(parentNode, stopNode);
+  }
+  function getClippingElementAncestors(element, cache) {
+    const cachedResult = cache.get(element);
+    if (cachedResult) {
+      return cachedResult;
+    }
+    let result = getOverflowAncestors(element, [], false).filter((el) => isElement(el) && getNodeName(el) !== "body");
+    let currentContainingBlockComputedStyle = null;
+    const elementIsFixed = getComputedStyle2(element).position === "fixed";
+    let currentNode = elementIsFixed ? getParentNode(element) : element;
+    while (isElement(currentNode) && !isLastTraversableNode(currentNode)) {
+      const computedStyle = getComputedStyle2(currentNode);
+      const currentNodeIsContaining = isContainingBlock(currentNode);
+      if (!currentNodeIsContaining && computedStyle.position === "fixed") {
+        currentContainingBlockComputedStyle = null;
+      }
+      const shouldDropCurrentNode = elementIsFixed ? !currentNodeIsContaining && !currentContainingBlockComputedStyle : !currentNodeIsContaining && computedStyle.position === "static" && !!currentContainingBlockComputedStyle && absoluteOrFixed.has(currentContainingBlockComputedStyle.position) || isOverflowElement(currentNode) && !currentNodeIsContaining && hasFixedPositionAncestor(element, currentNode);
+      if (shouldDropCurrentNode) {
+        result = result.filter((ancestor) => ancestor !== currentNode);
+      } else {
+        currentContainingBlockComputedStyle = computedStyle;
+      }
+      currentNode = getParentNode(currentNode);
+    }
+    cache.set(element, result);
+    return result;
+  }
+  function getClippingRect(_ref) {
+    let {
+      element,
+      boundary,
+      rootBoundary,
+      strategy
+    } = _ref;
+    const elementClippingAncestors = boundary === "clippingAncestors" ? isTopLayer(element) ? [] : getClippingElementAncestors(element, this._c) : [].concat(boundary);
+    const clippingAncestors = [...elementClippingAncestors, rootBoundary];
+    const firstClippingAncestor = clippingAncestors[0];
+    const clippingRect = clippingAncestors.reduce((accRect, clippingAncestor) => {
+      const rect = getClientRectFromClippingAncestor(element, clippingAncestor, strategy);
+      accRect.top = max(rect.top, accRect.top);
+      accRect.right = min(rect.right, accRect.right);
+      accRect.bottom = min(rect.bottom, accRect.bottom);
+      accRect.left = max(rect.left, accRect.left);
+      return accRect;
+    }, getClientRectFromClippingAncestor(element, firstClippingAncestor, strategy));
+    return {
+      width: clippingRect.right - clippingRect.left,
+      height: clippingRect.bottom - clippingRect.top,
+      x: clippingRect.left,
+      y: clippingRect.top
+    };
+  }
+  function getDimensions(element) {
+    const {
+      width,
+      height
+    } = getCssDimensions(element);
+    return {
+      width,
+      height
+    };
+  }
+  function getRectRelativeToOffsetParent(element, offsetParent, strategy) {
+    const isOffsetParentAnElement = isHTMLElement(offsetParent);
+    const documentElement = getDocumentElement(offsetParent);
+    const isFixed = strategy === "fixed";
+    const rect = getBoundingClientRect(element, true, isFixed, offsetParent);
+    let scroll = {
+      scrollLeft: 0,
+      scrollTop: 0
+    };
+    const offsets = createCoords(0);
+    function setLeftRTLScrollbarOffset() {
+      offsets.x = getWindowScrollBarX(documentElement);
+    }
+    if (isOffsetParentAnElement || !isOffsetParentAnElement && !isFixed) {
+      if (getNodeName(offsetParent) !== "body" || isOverflowElement(documentElement)) {
+        scroll = getNodeScroll(offsetParent);
+      }
+      if (isOffsetParentAnElement) {
+        const offsetRect = getBoundingClientRect(offsetParent, true, isFixed, offsetParent);
+        offsets.x = offsetRect.x + offsetParent.clientLeft;
+        offsets.y = offsetRect.y + offsetParent.clientTop;
+      } else if (documentElement) {
+        setLeftRTLScrollbarOffset();
+      }
+    }
+    if (isFixed && !isOffsetParentAnElement && documentElement) {
+      setLeftRTLScrollbarOffset();
+    }
+    const htmlOffset = documentElement && !isOffsetParentAnElement && !isFixed ? getHTMLOffset(documentElement, scroll) : createCoords(0);
+    const x = rect.left + scroll.scrollLeft - offsets.x - htmlOffset.x;
+    const y = rect.top + scroll.scrollTop - offsets.y - htmlOffset.y;
+    return {
+      x,
+      y,
+      width: rect.width,
+      height: rect.height
+    };
+  }
+  function isStaticPositioned(element) {
+    return getComputedStyle2(element).position === "static";
+  }
+  function getTrueOffsetParent(element, polyfill) {
+    if (!isHTMLElement(element) || getComputedStyle2(element).position === "fixed") {
+      return null;
+    }
+    if (polyfill) {
+      return polyfill(element);
+    }
+    let rawOffsetParent = element.offsetParent;
+    if (getDocumentElement(element) === rawOffsetParent) {
+      rawOffsetParent = rawOffsetParent.ownerDocument.body;
+    }
+    return rawOffsetParent;
+  }
+  function getOffsetParent(element, polyfill) {
+    const win = getWindow(element);
+    if (isTopLayer(element)) {
+      return win;
+    }
+    if (!isHTMLElement(element)) {
+      let svgOffsetParent = getParentNode(element);
+      while (svgOffsetParent && !isLastTraversableNode(svgOffsetParent)) {
+        if (isElement(svgOffsetParent) && !isStaticPositioned(svgOffsetParent)) {
+          return svgOffsetParent;
+        }
+        svgOffsetParent = getParentNode(svgOffsetParent);
+      }
+      return win;
+    }
+    let offsetParent = getTrueOffsetParent(element, polyfill);
+    while (offsetParent && isTableElement(offsetParent) && isStaticPositioned(offsetParent)) {
+      offsetParent = getTrueOffsetParent(offsetParent, polyfill);
+    }
+    if (offsetParent && isLastTraversableNode(offsetParent) && isStaticPositioned(offsetParent) && !isContainingBlock(offsetParent)) {
+      return win;
+    }
+    return offsetParent || getContainingBlock(element) || win;
+  }
+  var getElementRects = async function(data) {
+    const getOffsetParentFn = this.getOffsetParent || getOffsetParent;
+    const getDimensionsFn = this.getDimensions;
+    const floatingDimensions = await getDimensionsFn(data.floating);
+    return {
+      reference: getRectRelativeToOffsetParent(data.reference, await getOffsetParentFn(data.floating), data.strategy),
+      floating: {
+        x: 0,
+        y: 0,
+        width: floatingDimensions.width,
+        height: floatingDimensions.height
+      }
+    };
+  };
+  function isRTL(element) {
+    return getComputedStyle2(element).direction === "rtl";
+  }
+  var platform = {
+    convertOffsetParentRelativeRectToViewportRelativeRect,
+    getDocumentElement,
+    getClippingRect,
+    getOffsetParent,
+    getElementRects,
+    getClientRects,
+    getDimensions,
+    getScale,
+    isElement,
+    isRTL
+  };
+  function rectsAreEqual(a, b) {
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  }
+  function observeMove(element, onMove) {
+    let io = null;
+    let timeoutId;
+    const root = getDocumentElement(element);
+    function cleanup() {
+      var _io;
+      clearTimeout(timeoutId);
+      (_io = io) == null || _io.disconnect();
+      io = null;
+    }
+    function refresh(skip, threshold) {
+      if (skip === undefined) {
+        skip = false;
+      }
+      if (threshold === undefined) {
+        threshold = 1;
+      }
+      cleanup();
+      const elementRectForRootMargin = element.getBoundingClientRect();
+      const {
+        left,
+        top,
+        width,
+        height
+      } = elementRectForRootMargin;
+      if (!skip) {
+        onMove();
+      }
+      if (!width || !height) {
+        return;
+      }
+      const insetTop = floor(top);
+      const insetRight = floor(root.clientWidth - (left + width));
+      const insetBottom = floor(root.clientHeight - (top + height));
+      const insetLeft = floor(left);
+      const rootMargin = -insetTop + "px " + -insetRight + "px " + -insetBottom + "px " + -insetLeft + "px";
+      const options = {
+        rootMargin,
+        threshold: max(0, min(1, threshold)) || 1
+      };
+      let isFirstUpdate = true;
+      function handleObserve(entries) {
+        const ratio = entries[0].intersectionRatio;
+        if (ratio !== threshold) {
+          if (!isFirstUpdate) {
+            return refresh();
+          }
+          if (!ratio) {
+            timeoutId = setTimeout(() => {
+              refresh(false, 0.0000001);
+            }, 1000);
+          } else {
+            refresh(false, ratio);
+          }
+        }
+        if (ratio === 1 && !rectsAreEqual(elementRectForRootMargin, element.getBoundingClientRect())) {
+          refresh();
+        }
+        isFirstUpdate = false;
+      }
+      try {
+        io = new IntersectionObserver(handleObserve, {
+          ...options,
+          root: root.ownerDocument
+        });
+      } catch (_e) {
+        io = new IntersectionObserver(handleObserve, options);
+      }
+      io.observe(element);
+    }
+    refresh(true);
+    return cleanup;
+  }
+  function autoUpdate(reference, floating, update, options) {
+    if (options === undefined) {
+      options = {};
+    }
+    const {
+      ancestorScroll = true,
+      ancestorResize = true,
+      elementResize = typeof ResizeObserver === "function",
+      layoutShift = typeof IntersectionObserver === "function",
+      animationFrame = false
+    } = options;
+    const referenceEl = unwrapElement(reference);
+    const ancestors = ancestorScroll || ancestorResize ? [...referenceEl ? getOverflowAncestors(referenceEl) : [], ...getOverflowAncestors(floating)] : [];
+    ancestors.forEach((ancestor) => {
+      ancestorScroll && ancestor.addEventListener("scroll", update, {
+        passive: true
+      });
+      ancestorResize && ancestor.addEventListener("resize", update);
+    });
+    const cleanupIo = referenceEl && layoutShift ? observeMove(referenceEl, update) : null;
+    let reobserveFrame = -1;
+    let resizeObserver = null;
+    if (elementResize) {
+      resizeObserver = new ResizeObserver((_ref) => {
+        let [firstEntry] = _ref;
+        if (firstEntry && firstEntry.target === referenceEl && resizeObserver) {
+          resizeObserver.unobserve(floating);
+          cancelAnimationFrame(reobserveFrame);
+          reobserveFrame = requestAnimationFrame(() => {
+            var _resizeObserver;
+            (_resizeObserver = resizeObserver) == null || _resizeObserver.observe(floating);
+          });
+        }
+        update();
+      });
+      if (referenceEl && !animationFrame) {
+        resizeObserver.observe(referenceEl);
+      }
+      resizeObserver.observe(floating);
+    }
+    let frameId;
+    let prevRefRect = animationFrame ? getBoundingClientRect(reference) : null;
+    if (animationFrame) {
+      frameLoop();
+    }
+    function frameLoop() {
+      const nextRefRect = getBoundingClientRect(reference);
+      if (prevRefRect && !rectsAreEqual(prevRefRect, nextRefRect)) {
+        update();
+      }
+      prevRefRect = nextRefRect;
+      frameId = requestAnimationFrame(frameLoop);
+    }
+    update();
+    return () => {
+      var _resizeObserver2;
+      ancestors.forEach((ancestor) => {
+        ancestorScroll && ancestor.removeEventListener("scroll", update);
+        ancestorResize && ancestor.removeEventListener("resize", update);
+      });
+      cleanupIo == null || cleanupIo();
+      (_resizeObserver2 = resizeObserver) == null || _resizeObserver2.disconnect();
+      resizeObserver = null;
+      if (animationFrame) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }
+  var offset2 = offset;
+  var shift2 = shift;
+  var flip2 = flip;
+  var arrow2 = arrow;
+  var computePosition2 = (reference, floating, options) => {
+    const cache = new Map;
+    const mergedOptions = {
+      platform,
+      ...options
+    };
+    const platformWithCache = {
+      ...mergedOptions.platform,
+      _c: cache
+    };
+    return computePosition(reference, floating, {
+      ...mergedOptions,
+      platform: platformWithCache
+    });
+  };
+
+  // node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
+  var React3 = __toESM(require_react());
+  var import_react2 = __toESM(require_react());
+  var ReactDOM = __toESM(require_react_dom());
+  var isClient2 = typeof document !== "undefined";
+  var noop3 = function noop4() {};
+  var index2 = isClient2 ? import_react2.useLayoutEffect : noop3;
+  function deepEqual(a, b) {
+    if (a === b) {
+      return true;
+    }
+    if (typeof a !== typeof b) {
+      return false;
+    }
+    if (typeof a === "function" && a.toString() === b.toString()) {
+      return true;
+    }
+    let length;
+    let i;
+    let keys;
+    if (a && b && typeof a === "object") {
+      if (Array.isArray(a)) {
+        length = a.length;
+        if (length !== b.length)
+          return false;
+        for (i = length;i-- !== 0; ) {
+          if (!deepEqual(a[i], b[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      keys = Object.keys(a);
+      length = keys.length;
+      if (length !== Object.keys(b).length) {
+        return false;
+      }
+      for (i = length;i-- !== 0; ) {
+        if (!{}.hasOwnProperty.call(b, keys[i])) {
+          return false;
+        }
+      }
+      for (i = length;i-- !== 0; ) {
+        const key = keys[i];
+        if (key === "_owner" && a.$$typeof) {
+          continue;
+        }
+        if (!deepEqual(a[key], b[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return a !== a && b !== b;
+  }
+  function getDPR(element) {
+    if (typeof window === "undefined") {
+      return 1;
+    }
+    const win = element.ownerDocument.defaultView || window;
+    return win.devicePixelRatio || 1;
+  }
+  function roundByDPR(element, value) {
+    const dpr = getDPR(element);
+    return Math.round(value * dpr) / dpr;
+  }
+  function useLatestRef2(value) {
+    const ref = React3.useRef(value);
+    index2(() => {
+      ref.current = value;
+    });
+    return ref;
+  }
+  function useFloating(options) {
+    if (options === undefined) {
+      options = {};
+    }
+    const {
+      placement = "bottom",
+      strategy = "absolute",
+      middleware = [],
+      platform: platform2,
+      elements: {
+        reference: externalReference,
+        floating: externalFloating
+      } = {},
+      transform = true,
+      whileElementsMounted,
+      open
+    } = options;
+    const [data, setData] = React3.useState({
+      x: 0,
+      y: 0,
+      strategy,
+      placement,
+      middlewareData: {},
+      isPositioned: false
+    });
+    const [latestMiddleware, setLatestMiddleware] = React3.useState(middleware);
+    if (!deepEqual(latestMiddleware, middleware)) {
+      setLatestMiddleware(middleware);
+    }
+    const [_reference, _setReference] = React3.useState(null);
+    const [_floating, _setFloating] = React3.useState(null);
+    const setReference = React3.useCallback((node) => {
+      if (node !== referenceRef.current) {
+        referenceRef.current = node;
+        _setReference(node);
+      }
+    }, []);
+    const setFloating = React3.useCallback((node) => {
+      if (node !== floatingRef.current) {
+        floatingRef.current = node;
+        _setFloating(node);
+      }
+    }, []);
+    const referenceEl = externalReference || _reference;
+    const floatingEl = externalFloating || _floating;
+    const referenceRef = React3.useRef(null);
+    const floatingRef = React3.useRef(null);
+    const dataRef = React3.useRef(data);
+    const hasWhileElementsMounted = whileElementsMounted != null;
+    const whileElementsMountedRef = useLatestRef2(whileElementsMounted);
+    const platformRef = useLatestRef2(platform2);
+    const openRef = useLatestRef2(open);
+    const update = React3.useCallback(() => {
+      if (!referenceRef.current || !floatingRef.current) {
+        return;
+      }
+      const config = {
+        placement,
+        strategy,
+        middleware: latestMiddleware
+      };
+      if (platformRef.current) {
+        config.platform = platformRef.current;
+      }
+      computePosition2(referenceRef.current, floatingRef.current, config).then((data2) => {
+        const fullData = {
+          ...data2,
+          isPositioned: openRef.current !== false
+        };
+        if (isMountedRef.current && !deepEqual(dataRef.current, fullData)) {
+          dataRef.current = fullData;
+          ReactDOM.flushSync(() => {
+            setData(fullData);
+          });
+        }
+      });
+    }, [latestMiddleware, placement, strategy, platformRef, openRef]);
+    index2(() => {
+      if (open === false && dataRef.current.isPositioned) {
+        dataRef.current.isPositioned = false;
+        setData((data2) => ({
+          ...data2,
+          isPositioned: false
+        }));
+      }
+    }, [open]);
+    const isMountedRef = React3.useRef(false);
+    index2(() => {
+      isMountedRef.current = true;
+      return () => {
+        isMountedRef.current = false;
+      };
+    }, []);
+    index2(() => {
+      if (referenceEl)
+        referenceRef.current = referenceEl;
+      if (floatingEl)
+        floatingRef.current = floatingEl;
+      if (referenceEl && floatingEl) {
+        if (whileElementsMountedRef.current) {
+          return whileElementsMountedRef.current(referenceEl, floatingEl, update);
+        }
+        update();
+      }
+    }, [referenceEl, floatingEl, update, whileElementsMountedRef, hasWhileElementsMounted]);
+    const refs = React3.useMemo(() => ({
+      reference: referenceRef,
+      floating: floatingRef,
+      setReference,
+      setFloating
+    }), [setReference, setFloating]);
+    const elements = React3.useMemo(() => ({
+      reference: referenceEl,
+      floating: floatingEl
+    }), [referenceEl, floatingEl]);
+    const floatingStyles = React3.useMemo(() => {
+      const initialStyles = {
+        position: strategy,
+        left: 0,
+        top: 0
+      };
+      if (!elements.floating) {
+        return initialStyles;
+      }
+      const x = roundByDPR(elements.floating, data.x);
+      const y = roundByDPR(elements.floating, data.y);
+      if (transform) {
+        return {
+          ...initialStyles,
+          transform: "translate(" + x + "px, " + y + "px)",
+          ...getDPR(elements.floating) >= 1.5 && {
+            willChange: "transform"
+          }
+        };
+      }
+      return {
+        position: strategy,
+        left: x,
+        top: y
+      };
+    }, [strategy, transform, elements.floating, data.x, data.y]);
+    return React3.useMemo(() => ({
+      ...data,
+      update,
+      refs,
+      elements,
+      floatingStyles
+    }), [data, update, refs, elements, floatingStyles]);
+  }
+  var arrow$1 = (options) => {
+    function isRef(value) {
+      return {}.hasOwnProperty.call(value, "current");
+    }
+    return {
+      name: "arrow",
+      options,
+      fn(state) {
+        const {
+          element,
+          padding
+        } = typeof options === "function" ? options(state) : options;
+        if (element && isRef(element)) {
+          if (element.current != null) {
+            return arrow2({
+              element: element.current,
+              padding
+            }).fn(state);
+          }
+          return {};
+        }
+        if (element) {
+          return arrow2({
+            element,
+            padding
+          }).fn(state);
+        }
+        return {};
+      }
+    };
+  };
+  var offset3 = (options, deps) => ({
+    ...offset2(options),
+    options: [options, deps]
+  });
+  var shift3 = (options, deps) => ({
+    ...shift2(options),
+    options: [options, deps]
+  });
+  var flip3 = (options, deps) => ({
+    ...flip2(options),
+    options: [options, deps]
+  });
+  var arrow3 = (options, deps) => ({
+    ...arrow$1(options),
+    options: [options, deps]
+  });
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  var FOCUSABLE_ATTRIBUTE2 = "data-floating-ui-focusable";
+  var ACTIVE_KEY = "active";
+  var SELECTED_KEY = "selected";
+  var ARROW_LEFT = "ArrowLeft";
+  var ARROW_RIGHT = "ArrowRight";
+  var ARROW_UP = "ArrowUp";
+  var ARROW_DOWN = "ArrowDown";
+  var horizontalKeys = [ARROW_LEFT, ARROW_RIGHT];
+  var verticalKeys = [ARROW_UP, ARROW_DOWN];
+  var allKeys = [...horizontalKeys, ...verticalKeys];
+  var SafeReact2 = {
+    ...React4
+  };
+  var serverHandoffComplete = false;
+  var count = 0;
+  var genId = () => "floating-ui-" + Math.random().toString(36).slice(2, 6) + count++;
+  function useFloatingId() {
+    const [id, setId] = React4.useState(() => serverHandoffComplete ? genId() : undefined);
+    index(() => {
+      if (id == null) {
+        setId(genId());
+      }
+    }, []);
+    React4.useEffect(() => {
+      serverHandoffComplete = true;
+    }, []);
+    return id;
+  }
+  var useReactId = SafeReact2.useId;
+  var useId = useReactId || useFloatingId;
+  var devMessageSet;
+  if (true) {
+    devMessageSet = /* @__PURE__ */ new Set;
+  }
+  function error() {
+    var _devMessageSet3;
+    for (var _len2 = arguments.length, messages = new Array(_len2), _key2 = 0;_key2 < _len2; _key2++) {
+      messages[_key2] = arguments[_key2];
+    }
+    const message = "Floating UI: " + messages.join(" ");
+    if (!((_devMessageSet3 = devMessageSet) != null && _devMessageSet3.has(message))) {
+      var _devMessageSet4;
+      (_devMessageSet4 = devMessageSet) == null || _devMessageSet4.add(message);
+      console.error(message);
     }
   }
-
-  // node_modules/react-arborist/dist/module/components/tree.js
-  function TreeComponent(props, ref) {
-    const treeProps = useValidatedProps(props);
-    return import_jsx_runtime14.jsxs(TreeProvider, { treeProps, imperativeHandle: ref, children: [import_jsx_runtime14.jsx(OuterDrop, { children: import_jsx_runtime14.jsx(TreeContainer, {}) }), import_jsx_runtime14.jsx(DragPreviewContainer, {})] });
+  function createEventEmitter() {
+    const map = new Map;
+    return {
+      emit(event, data) {
+        var _map$get;
+        (_map$get = map.get(event)) == null || _map$get.forEach((listener) => listener(data));
+      },
+      on(event, listener) {
+        if (!map.has(event)) {
+          map.set(event, new Set);
+        }
+        map.get(event).add(listener);
+      },
+      off(event, listener) {
+        var _map$get2;
+        (_map$get2 = map.get(event)) == null || _map$get2.delete(listener);
+      }
+    };
   }
-  var Tree = import_react31.forwardRef(TreeComponent);
+  var FloatingNodeContext = /* @__PURE__ */ React4.createContext(null);
+  var FloatingTreeContext = /* @__PURE__ */ React4.createContext(null);
+  var useFloatingParentNodeId = () => {
+    var _React$useContext;
+    return ((_React$useContext = React4.useContext(FloatingNodeContext)) == null ? undefined : _React$useContext.id) || null;
+  };
+  var useFloatingTree = () => React4.useContext(FloatingTreeContext);
+  function createAttribute(name) {
+    return "data-floating-ui-" + name;
+  }
+  function clearTimeoutIfSet(timeoutRef) {
+    if (timeoutRef.current !== -1) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = -1;
+    }
+  }
+  var safePolygonIdentifier = /* @__PURE__ */ createAttribute("safe-polygon");
+  function getDelay(value, prop, pointerType) {
+    if (pointerType && !isMouseLikePointerType(pointerType)) {
+      return 0;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "function") {
+      const result = value();
+      if (typeof result === "number") {
+        return result;
+      }
+      return result == null ? undefined : result[prop];
+    }
+    return value == null ? undefined : value[prop];
+  }
+  function getRestMs(value) {
+    if (typeof value === "function") {
+      return value();
+    }
+    return value;
+  }
+  function useHover(context, props) {
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      open,
+      onOpenChange,
+      dataRef,
+      events,
+      elements
+    } = context;
+    const {
+      enabled = true,
+      delay = 0,
+      handleClose = null,
+      mouseOnly = false,
+      restMs = 0,
+      move = true
+    } = props;
+    const tree = useFloatingTree();
+    const parentId = useFloatingParentNodeId();
+    const handleCloseRef = useLatestRef(handleClose);
+    const delayRef = useLatestRef(delay);
+    const openRef = useLatestRef(open);
+    const restMsRef = useLatestRef(restMs);
+    const pointerTypeRef = React4.useRef();
+    const timeoutRef = React4.useRef(-1);
+    const handlerRef = React4.useRef();
+    const restTimeoutRef = React4.useRef(-1);
+    const blockMouseMoveRef = React4.useRef(true);
+    const performedPointerEventsMutationRef = React4.useRef(false);
+    const unbindMouseMoveRef = React4.useRef(() => {});
+    const restTimeoutPendingRef = React4.useRef(false);
+    const isHoverOpen = useEffectEvent(() => {
+      var _dataRef$current$open;
+      const type = (_dataRef$current$open = dataRef.current.openEvent) == null ? undefined : _dataRef$current$open.type;
+      return (type == null ? undefined : type.includes("mouse")) && type !== "mousedown";
+    });
+    React4.useEffect(() => {
+      if (!enabled)
+        return;
+      function onOpenChange2(_ref) {
+        let {
+          open: open2
+        } = _ref;
+        if (!open2) {
+          clearTimeoutIfSet(timeoutRef);
+          clearTimeoutIfSet(restTimeoutRef);
+          blockMouseMoveRef.current = true;
+          restTimeoutPendingRef.current = false;
+        }
+      }
+      events.on("openchange", onOpenChange2);
+      return () => {
+        events.off("openchange", onOpenChange2);
+      };
+    }, [enabled, events]);
+    React4.useEffect(() => {
+      if (!enabled)
+        return;
+      if (!handleCloseRef.current)
+        return;
+      if (!open)
+        return;
+      function onLeave(event) {
+        if (isHoverOpen()) {
+          onOpenChange(false, event, "hover");
+        }
+      }
+      const html = getDocument(elements.floating).documentElement;
+      html.addEventListener("mouseleave", onLeave);
+      return () => {
+        html.removeEventListener("mouseleave", onLeave);
+      };
+    }, [elements.floating, open, onOpenChange, enabled, handleCloseRef, isHoverOpen]);
+    const closeWithDelay = React4.useCallback(function(event, runElseBranch, reason) {
+      if (runElseBranch === undefined) {
+        runElseBranch = true;
+      }
+      if (reason === undefined) {
+        reason = "hover";
+      }
+      const closeDelay = getDelay(delayRef.current, "close", pointerTypeRef.current);
+      if (closeDelay && !handlerRef.current) {
+        clearTimeoutIfSet(timeoutRef);
+        timeoutRef.current = window.setTimeout(() => onOpenChange(false, event, reason), closeDelay);
+      } else if (runElseBranch) {
+        clearTimeoutIfSet(timeoutRef);
+        onOpenChange(false, event, reason);
+      }
+    }, [delayRef, onOpenChange]);
+    const cleanupMouseMoveHandler = useEffectEvent(() => {
+      unbindMouseMoveRef.current();
+      handlerRef.current = undefined;
+    });
+    const clearPointerEvents = useEffectEvent(() => {
+      if (performedPointerEventsMutationRef.current) {
+        const body = getDocument(elements.floating).body;
+        body.style.pointerEvents = "";
+        body.removeAttribute(safePolygonIdentifier);
+        performedPointerEventsMutationRef.current = false;
+      }
+    });
+    const isClickLikeOpenEvent = useEffectEvent(() => {
+      return dataRef.current.openEvent ? ["click", "mousedown"].includes(dataRef.current.openEvent.type) : false;
+    });
+    React4.useEffect(() => {
+      if (!enabled)
+        return;
+      function onReferenceMouseEnter(event) {
+        clearTimeoutIfSet(timeoutRef);
+        blockMouseMoveRef.current = false;
+        if (mouseOnly && !isMouseLikePointerType(pointerTypeRef.current) || getRestMs(restMsRef.current) > 0 && !getDelay(delayRef.current, "open")) {
+          return;
+        }
+        const openDelay = getDelay(delayRef.current, "open", pointerTypeRef.current);
+        if (openDelay) {
+          timeoutRef.current = window.setTimeout(() => {
+            if (!openRef.current) {
+              onOpenChange(true, event, "hover");
+            }
+          }, openDelay);
+        } else if (!open) {
+          onOpenChange(true, event, "hover");
+        }
+      }
+      function onReferenceMouseLeave(event) {
+        if (isClickLikeOpenEvent()) {
+          clearPointerEvents();
+          return;
+        }
+        unbindMouseMoveRef.current();
+        const doc = getDocument(elements.floating);
+        clearTimeoutIfSet(restTimeoutRef);
+        restTimeoutPendingRef.current = false;
+        if (handleCloseRef.current && dataRef.current.floatingContext) {
+          if (!open) {
+            clearTimeoutIfSet(timeoutRef);
+          }
+          handlerRef.current = handleCloseRef.current({
+            ...dataRef.current.floatingContext,
+            tree,
+            x: event.clientX,
+            y: event.clientY,
+            onClose() {
+              clearPointerEvents();
+              cleanupMouseMoveHandler();
+              if (!isClickLikeOpenEvent()) {
+                closeWithDelay(event, true, "safe-polygon");
+              }
+            }
+          });
+          const handler = handlerRef.current;
+          doc.addEventListener("mousemove", handler);
+          unbindMouseMoveRef.current = () => {
+            doc.removeEventListener("mousemove", handler);
+          };
+          return;
+        }
+        const shouldClose = pointerTypeRef.current === "touch" ? !contains(elements.floating, event.relatedTarget) : true;
+        if (shouldClose) {
+          closeWithDelay(event);
+        }
+      }
+      function onScrollMouseLeave(event) {
+        if (isClickLikeOpenEvent())
+          return;
+        if (!dataRef.current.floatingContext)
+          return;
+        handleCloseRef.current == null || handleCloseRef.current({
+          ...dataRef.current.floatingContext,
+          tree,
+          x: event.clientX,
+          y: event.clientY,
+          onClose() {
+            clearPointerEvents();
+            cleanupMouseMoveHandler();
+            if (!isClickLikeOpenEvent()) {
+              closeWithDelay(event);
+            }
+          }
+        })(event);
+      }
+      function onFloatingMouseEnter() {
+        clearTimeoutIfSet(timeoutRef);
+      }
+      function onFloatingMouseLeave(event) {
+        if (!isClickLikeOpenEvent()) {
+          closeWithDelay(event, false);
+        }
+      }
+      if (isElement(elements.domReference)) {
+        const reference2 = elements.domReference;
+        const floating = elements.floating;
+        if (open) {
+          reference2.addEventListener("mouseleave", onScrollMouseLeave);
+        }
+        if (move) {
+          reference2.addEventListener("mousemove", onReferenceMouseEnter, {
+            once: true
+          });
+        }
+        reference2.addEventListener("mouseenter", onReferenceMouseEnter);
+        reference2.addEventListener("mouseleave", onReferenceMouseLeave);
+        if (floating) {
+          floating.addEventListener("mouseleave", onScrollMouseLeave);
+          floating.addEventListener("mouseenter", onFloatingMouseEnter);
+          floating.addEventListener("mouseleave", onFloatingMouseLeave);
+        }
+        return () => {
+          if (open) {
+            reference2.removeEventListener("mouseleave", onScrollMouseLeave);
+          }
+          if (move) {
+            reference2.removeEventListener("mousemove", onReferenceMouseEnter);
+          }
+          reference2.removeEventListener("mouseenter", onReferenceMouseEnter);
+          reference2.removeEventListener("mouseleave", onReferenceMouseLeave);
+          if (floating) {
+            floating.removeEventListener("mouseleave", onScrollMouseLeave);
+            floating.removeEventListener("mouseenter", onFloatingMouseEnter);
+            floating.removeEventListener("mouseleave", onFloatingMouseLeave);
+          }
+        };
+      }
+    }, [elements, enabled, context, mouseOnly, move, closeWithDelay, cleanupMouseMoveHandler, clearPointerEvents, onOpenChange, open, openRef, tree, delayRef, handleCloseRef, dataRef, isClickLikeOpenEvent, restMsRef]);
+    index(() => {
+      var _handleCloseRef$curre;
+      if (!enabled)
+        return;
+      if (open && (_handleCloseRef$curre = handleCloseRef.current) != null && (_handleCloseRef$curre = _handleCloseRef$curre.__options) != null && _handleCloseRef$curre.blockPointerEvents && isHoverOpen()) {
+        performedPointerEventsMutationRef.current = true;
+        const floatingEl = elements.floating;
+        if (isElement(elements.domReference) && floatingEl) {
+          var _tree$nodesRef$curren;
+          const body = getDocument(elements.floating).body;
+          body.setAttribute(safePolygonIdentifier, "");
+          const ref = elements.domReference;
+          const parentFloating = tree == null || (_tree$nodesRef$curren = tree.nodesRef.current.find((node) => node.id === parentId)) == null || (_tree$nodesRef$curren = _tree$nodesRef$curren.context) == null ? undefined : _tree$nodesRef$curren.elements.floating;
+          if (parentFloating) {
+            parentFloating.style.pointerEvents = "";
+          }
+          body.style.pointerEvents = "none";
+          ref.style.pointerEvents = "auto";
+          floatingEl.style.pointerEvents = "auto";
+          return () => {
+            body.style.pointerEvents = "";
+            ref.style.pointerEvents = "";
+            floatingEl.style.pointerEvents = "";
+          };
+        }
+      }
+    }, [enabled, open, parentId, elements, tree, handleCloseRef, isHoverOpen]);
+    index(() => {
+      if (!open) {
+        pointerTypeRef.current = undefined;
+        restTimeoutPendingRef.current = false;
+        cleanupMouseMoveHandler();
+        clearPointerEvents();
+      }
+    }, [open, cleanupMouseMoveHandler, clearPointerEvents]);
+    React4.useEffect(() => {
+      return () => {
+        cleanupMouseMoveHandler();
+        clearTimeoutIfSet(timeoutRef);
+        clearTimeoutIfSet(restTimeoutRef);
+        clearPointerEvents();
+      };
+    }, [enabled, elements.domReference, cleanupMouseMoveHandler, clearPointerEvents]);
+    const reference = React4.useMemo(() => {
+      function setPointerRef(event) {
+        pointerTypeRef.current = event.pointerType;
+      }
+      return {
+        onPointerDown: setPointerRef,
+        onPointerEnter: setPointerRef,
+        onMouseMove(event) {
+          const {
+            nativeEvent
+          } = event;
+          function handleMouseMove() {
+            if (!blockMouseMoveRef.current && !openRef.current) {
+              onOpenChange(true, nativeEvent, "hover");
+            }
+          }
+          if (mouseOnly && !isMouseLikePointerType(pointerTypeRef.current)) {
+            return;
+          }
+          if (open || getRestMs(restMsRef.current) === 0) {
+            return;
+          }
+          if (restTimeoutPendingRef.current && event.movementX ** 2 + event.movementY ** 2 < 2) {
+            return;
+          }
+          clearTimeoutIfSet(restTimeoutRef);
+          if (pointerTypeRef.current === "touch") {
+            handleMouseMove();
+          } else {
+            restTimeoutPendingRef.current = true;
+            restTimeoutRef.current = window.setTimeout(handleMouseMove, getRestMs(restMsRef.current));
+          }
+        }
+      };
+    }, [mouseOnly, onOpenChange, open, openRef, restMsRef]);
+    return React4.useMemo(() => enabled ? {
+      reference
+    } : {}, [enabled, reference]);
+  }
+  var HIDDEN_STYLES = {
+    border: 0,
+    clip: "rect(0 0 0 0)",
+    height: "1px",
+    margin: "-1px",
+    overflow: "hidden",
+    padding: 0,
+    position: "fixed",
+    whiteSpace: "nowrap",
+    width: "1px",
+    top: 0,
+    left: 0
+  };
+  var FocusGuard = /* @__PURE__ */ React4.forwardRef(function FocusGuard2(props, ref) {
+    const [role, setRole] = React4.useState();
+    index(() => {
+      if (isSafari()) {
+        setRole("button");
+      }
+    }, []);
+    const restProps = {
+      ref,
+      tabIndex: 0,
+      role,
+      "aria-hidden": role ? undefined : true,
+      [createAttribute("focus-guard")]: "",
+      style: HIDDEN_STYLES
+    };
+    return /* @__PURE__ */ import_jsx_runtime.jsx("span", {
+      ...props,
+      ...restProps
+    });
+  });
+  var PortalContext = /* @__PURE__ */ React4.createContext(null);
+  var attr = /* @__PURE__ */ createAttribute("portal");
+  function useFloatingPortalNode(props) {
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      id,
+      root
+    } = props;
+    const uniqueId = useId();
+    const portalContext = usePortalContext();
+    const [portalNode, setPortalNode] = React4.useState(null);
+    const portalNodeRef = React4.useRef(null);
+    index(() => {
+      return () => {
+        portalNode == null || portalNode.remove();
+        queueMicrotask(() => {
+          portalNodeRef.current = null;
+        });
+      };
+    }, [portalNode]);
+    index(() => {
+      if (!uniqueId)
+        return;
+      if (portalNodeRef.current)
+        return;
+      const existingIdRoot = id ? document.getElementById(id) : null;
+      if (!existingIdRoot)
+        return;
+      const subRoot = document.createElement("div");
+      subRoot.id = uniqueId;
+      subRoot.setAttribute(attr, "");
+      existingIdRoot.appendChild(subRoot);
+      portalNodeRef.current = subRoot;
+      setPortalNode(subRoot);
+    }, [id, uniqueId]);
+    index(() => {
+      if (root === null)
+        return;
+      if (!uniqueId)
+        return;
+      if (portalNodeRef.current)
+        return;
+      let container = root || (portalContext == null ? undefined : portalContext.portalNode);
+      if (container && !isNode(container))
+        container = container.current;
+      container = container || document.body;
+      let idWrapper = null;
+      if (id) {
+        idWrapper = document.createElement("div");
+        idWrapper.id = id;
+        container.appendChild(idWrapper);
+      }
+      const subRoot = document.createElement("div");
+      subRoot.id = uniqueId;
+      subRoot.setAttribute(attr, "");
+      container = idWrapper || container;
+      container.appendChild(subRoot);
+      portalNodeRef.current = subRoot;
+      setPortalNode(subRoot);
+    }, [id, root, uniqueId, portalContext]);
+    return portalNode;
+  }
+  function FloatingPortal(props) {
+    const {
+      children,
+      id,
+      root,
+      preserveTabOrder = true
+    } = props;
+    const portalNode = useFloatingPortalNode({
+      id,
+      root
+    });
+    const [focusManagerState, setFocusManagerState] = React4.useState(null);
+    const beforeOutsideRef = React4.useRef(null);
+    const afterOutsideRef = React4.useRef(null);
+    const beforeInsideRef = React4.useRef(null);
+    const afterInsideRef = React4.useRef(null);
+    const modal = focusManagerState == null ? undefined : focusManagerState.modal;
+    const open = focusManagerState == null ? undefined : focusManagerState.open;
+    const shouldRenderGuards = !!focusManagerState && !focusManagerState.modal && focusManagerState.open && preserveTabOrder && !!(root || portalNode);
+    React4.useEffect(() => {
+      if (!portalNode || !preserveTabOrder || modal) {
+        return;
+      }
+      function onFocus(event) {
+        if (portalNode && isOutsideEvent(event)) {
+          const focusing = event.type === "focusin";
+          const manageFocus = focusing ? enableFocusInside : disableFocusInside;
+          manageFocus(portalNode);
+        }
+      }
+      portalNode.addEventListener("focusin", onFocus, true);
+      portalNode.addEventListener("focusout", onFocus, true);
+      return () => {
+        portalNode.removeEventListener("focusin", onFocus, true);
+        portalNode.removeEventListener("focusout", onFocus, true);
+      };
+    }, [portalNode, preserveTabOrder, modal]);
+    React4.useEffect(() => {
+      if (!portalNode)
+        return;
+      if (open)
+        return;
+      enableFocusInside(portalNode);
+    }, [open, portalNode]);
+    return /* @__PURE__ */ import_jsx_runtime.jsxs(PortalContext.Provider, {
+      value: React4.useMemo(() => ({
+        preserveTabOrder,
+        beforeOutsideRef,
+        afterOutsideRef,
+        beforeInsideRef,
+        afterInsideRef,
+        portalNode,
+        setFocusManagerState
+      }), [preserveTabOrder, portalNode]),
+      children: [shouldRenderGuards && portalNode && /* @__PURE__ */ import_jsx_runtime.jsx(FocusGuard, {
+        "data-type": "outside",
+        ref: beforeOutsideRef,
+        onFocus: (event) => {
+          if (isOutsideEvent(event, portalNode)) {
+            var _beforeInsideRef$curr;
+            (_beforeInsideRef$curr = beforeInsideRef.current) == null || _beforeInsideRef$curr.focus();
+          } else {
+            const domReference = focusManagerState ? focusManagerState.domReference : null;
+            const prevTabbable = getPreviousTabbable(domReference);
+            prevTabbable == null || prevTabbable.focus();
+          }
+        }
+      }), shouldRenderGuards && portalNode && /* @__PURE__ */ import_jsx_runtime.jsx("span", {
+        "aria-owns": portalNode.id,
+        style: HIDDEN_STYLES
+      }), portalNode && /* @__PURE__ */ ReactDOM2.createPortal(children, portalNode), shouldRenderGuards && portalNode && /* @__PURE__ */ import_jsx_runtime.jsx(FocusGuard, {
+        "data-type": "outside",
+        ref: afterOutsideRef,
+        onFocus: (event) => {
+          if (isOutsideEvent(event, portalNode)) {
+            var _afterInsideRef$curre;
+            (_afterInsideRef$curre = afterInsideRef.current) == null || _afterInsideRef$curre.focus();
+          } else {
+            const domReference = focusManagerState ? focusManagerState.domReference : null;
+            const nextTabbable = getNextTabbable(domReference);
+            nextTabbable == null || nextTabbable.focus();
+            (focusManagerState == null ? undefined : focusManagerState.closeOnFocusOut) && (focusManagerState == null || focusManagerState.onOpenChange(false, event.nativeEvent, "focus-out"));
+          }
+        }
+      })]
+    });
+  }
+  var usePortalContext = () => React4.useContext(PortalContext);
+  function createVirtualElement(domElement, data) {
+    let offsetX = null;
+    let offsetY = null;
+    let isAutoUpdateEvent = false;
+    return {
+      contextElement: domElement || undefined,
+      getBoundingClientRect() {
+        var _data$dataRef$current;
+        const domRect = (domElement == null ? undefined : domElement.getBoundingClientRect()) || {
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0
+        };
+        const isXAxis = data.axis === "x" || data.axis === "both";
+        const isYAxis = data.axis === "y" || data.axis === "both";
+        const canTrackCursorOnAutoUpdate = ["mouseenter", "mousemove"].includes(((_data$dataRef$current = data.dataRef.current.openEvent) == null ? undefined : _data$dataRef$current.type) || "") && data.pointerType !== "touch";
+        let width = domRect.width;
+        let height = domRect.height;
+        let x = domRect.x;
+        let y = domRect.y;
+        if (offsetX == null && data.x && isXAxis) {
+          offsetX = domRect.x - data.x;
+        }
+        if (offsetY == null && data.y && isYAxis) {
+          offsetY = domRect.y - data.y;
+        }
+        x -= offsetX || 0;
+        y -= offsetY || 0;
+        width = 0;
+        height = 0;
+        if (!isAutoUpdateEvent || canTrackCursorOnAutoUpdate) {
+          width = data.axis === "y" ? domRect.width : 0;
+          height = data.axis === "x" ? domRect.height : 0;
+          x = isXAxis && data.x != null ? data.x : x;
+          y = isYAxis && data.y != null ? data.y : y;
+        } else if (isAutoUpdateEvent && !canTrackCursorOnAutoUpdate) {
+          height = data.axis === "x" ? domRect.height : height;
+          width = data.axis === "y" ? domRect.width : width;
+        }
+        isAutoUpdateEvent = true;
+        return {
+          width,
+          height,
+          x,
+          y,
+          top: y,
+          right: x + width,
+          bottom: y + height,
+          left: x
+        };
+      }
+    };
+  }
+  function isMouseBasedEvent(event) {
+    return event != null && event.clientX != null;
+  }
+  function useClientPoint(context, props) {
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      open,
+      dataRef,
+      elements: {
+        floating,
+        domReference
+      },
+      refs
+    } = context;
+    const {
+      enabled = true,
+      axis = "both",
+      x = null,
+      y = null
+    } = props;
+    const initialRef = React4.useRef(false);
+    const cleanupListenerRef = React4.useRef(null);
+    const [pointerType, setPointerType] = React4.useState();
+    const [reactive, setReactive] = React4.useState([]);
+    const setReference = useEffectEvent((x2, y2) => {
+      if (initialRef.current)
+        return;
+      if (dataRef.current.openEvent && !isMouseBasedEvent(dataRef.current.openEvent)) {
+        return;
+      }
+      refs.setPositionReference(createVirtualElement(domReference, {
+        x: x2,
+        y: y2,
+        axis,
+        dataRef,
+        pointerType
+      }));
+    });
+    const handleReferenceEnterOrMove = useEffectEvent((event) => {
+      if (x != null || y != null)
+        return;
+      if (!open) {
+        setReference(event.clientX, event.clientY);
+      } else if (!cleanupListenerRef.current) {
+        setReactive([]);
+      }
+    });
+    const openCheck = isMouseLikePointerType(pointerType) ? floating : open;
+    const addListener = React4.useCallback(() => {
+      if (!openCheck || !enabled || x != null || y != null)
+        return;
+      const win = getWindow(floating);
+      function handleMouseMove(event) {
+        const target = getTarget(event);
+        if (!contains(floating, target)) {
+          setReference(event.clientX, event.clientY);
+        } else {
+          win.removeEventListener("mousemove", handleMouseMove);
+          cleanupListenerRef.current = null;
+        }
+      }
+      if (!dataRef.current.openEvent || isMouseBasedEvent(dataRef.current.openEvent)) {
+        win.addEventListener("mousemove", handleMouseMove);
+        const cleanup = () => {
+          win.removeEventListener("mousemove", handleMouseMove);
+          cleanupListenerRef.current = null;
+        };
+        cleanupListenerRef.current = cleanup;
+        return cleanup;
+      }
+      refs.setPositionReference(domReference);
+    }, [openCheck, enabled, x, y, floating, dataRef, refs, domReference, setReference]);
+    React4.useEffect(() => {
+      return addListener();
+    }, [addListener, reactive]);
+    React4.useEffect(() => {
+      if (enabled && !floating) {
+        initialRef.current = false;
+      }
+    }, [enabled, floating]);
+    React4.useEffect(() => {
+      if (!enabled && open) {
+        initialRef.current = true;
+      }
+    }, [enabled, open]);
+    index(() => {
+      if (enabled && (x != null || y != null)) {
+        initialRef.current = false;
+        setReference(x, y);
+      }
+    }, [enabled, x, y, setReference]);
+    const reference = React4.useMemo(() => {
+      function setPointerTypeRef(_ref) {
+        let {
+          pointerType: pointerType2
+        } = _ref;
+        setPointerType(pointerType2);
+      }
+      return {
+        onPointerDown: setPointerTypeRef,
+        onPointerEnter: setPointerTypeRef,
+        onMouseMove: handleReferenceEnterOrMove,
+        onMouseEnter: handleReferenceEnterOrMove
+      };
+    }, [handleReferenceEnterOrMove]);
+    return React4.useMemo(() => enabled ? {
+      reference
+    } : {}, [enabled, reference]);
+  }
+  var bubbleHandlerKeys = {
+    pointerdown: "onPointerDown",
+    mousedown: "onMouseDown",
+    click: "onClick"
+  };
+  var captureHandlerKeys = {
+    pointerdown: "onPointerDownCapture",
+    mousedown: "onMouseDownCapture",
+    click: "onClickCapture"
+  };
+  var normalizeProp = (normalizable) => {
+    var _normalizable$escapeK, _normalizable$outside;
+    return {
+      escapeKey: typeof normalizable === "boolean" ? normalizable : (_normalizable$escapeK = normalizable == null ? undefined : normalizable.escapeKey) != null ? _normalizable$escapeK : false,
+      outsidePress: typeof normalizable === "boolean" ? normalizable : (_normalizable$outside = normalizable == null ? undefined : normalizable.outsidePress) != null ? _normalizable$outside : true
+    };
+  };
+  function useDismiss(context, props) {
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      open,
+      onOpenChange,
+      elements,
+      dataRef
+    } = context;
+    const {
+      enabled = true,
+      escapeKey = true,
+      outsidePress: unstable_outsidePress = true,
+      outsidePressEvent = "pointerdown",
+      referencePress = false,
+      referencePressEvent = "pointerdown",
+      ancestorScroll = false,
+      bubbles,
+      capture
+    } = props;
+    const tree = useFloatingTree();
+    const outsidePressFn = useEffectEvent(typeof unstable_outsidePress === "function" ? unstable_outsidePress : () => false);
+    const outsidePress = typeof unstable_outsidePress === "function" ? outsidePressFn : unstable_outsidePress;
+    const endedOrStartedInsideRef = React4.useRef(false);
+    const {
+      escapeKey: escapeKeyBubbles,
+      outsidePress: outsidePressBubbles
+    } = normalizeProp(bubbles);
+    const {
+      escapeKey: escapeKeyCapture,
+      outsidePress: outsidePressCapture
+    } = normalizeProp(capture);
+    const isComposingRef = React4.useRef(false);
+    const closeOnEscapeKeyDown = useEffectEvent((event) => {
+      var _dataRef$current$floa;
+      if (!open || !enabled || !escapeKey || event.key !== "Escape") {
+        return;
+      }
+      if (isComposingRef.current) {
+        return;
+      }
+      const nodeId = (_dataRef$current$floa = dataRef.current.floatingContext) == null ? undefined : _dataRef$current$floa.nodeId;
+      const children = tree ? getNodeChildren(tree.nodesRef.current, nodeId) : [];
+      if (!escapeKeyBubbles) {
+        event.stopPropagation();
+        if (children.length > 0) {
+          let shouldDismiss = true;
+          children.forEach((child) => {
+            var _child$context;
+            if ((_child$context = child.context) != null && _child$context.open && !child.context.dataRef.current.__escapeKeyBubbles) {
+              shouldDismiss = false;
+              return;
+            }
+          });
+          if (!shouldDismiss) {
+            return;
+          }
+        }
+      }
+      onOpenChange(false, isReactEvent(event) ? event.nativeEvent : event, "escape-key");
+    });
+    const closeOnEscapeKeyDownCapture = useEffectEvent((event) => {
+      var _getTarget2;
+      const callback = () => {
+        var _getTarget;
+        closeOnEscapeKeyDown(event);
+        (_getTarget = getTarget(event)) == null || _getTarget.removeEventListener("keydown", callback);
+      };
+      (_getTarget2 = getTarget(event)) == null || _getTarget2.addEventListener("keydown", callback);
+    });
+    const closeOnPressOutside = useEffectEvent((event) => {
+      var _dataRef$current$floa2;
+      const insideReactTree = dataRef.current.insideReactTree;
+      dataRef.current.insideReactTree = false;
+      const endedOrStartedInside = endedOrStartedInsideRef.current;
+      endedOrStartedInsideRef.current = false;
+      if (outsidePressEvent === "click" && endedOrStartedInside) {
+        return;
+      }
+      if (insideReactTree) {
+        return;
+      }
+      if (typeof outsidePress === "function" && !outsidePress(event)) {
+        return;
+      }
+      const target = getTarget(event);
+      const inertSelector = "[" + createAttribute("inert") + "]";
+      const markers = getDocument(elements.floating).querySelectorAll(inertSelector);
+      let targetRootAncestor = isElement(target) ? target : null;
+      while (targetRootAncestor && !isLastTraversableNode(targetRootAncestor)) {
+        const nextParent = getParentNode(targetRootAncestor);
+        if (isLastTraversableNode(nextParent) || !isElement(nextParent)) {
+          break;
+        }
+        targetRootAncestor = nextParent;
+      }
+      if (markers.length && isElement(target) && !isRootElement(target) && !contains(target, elements.floating) && Array.from(markers).every((marker) => !contains(targetRootAncestor, marker))) {
+        return;
+      }
+      if (isHTMLElement(target) && floating) {
+        const lastTraversableNode = isLastTraversableNode(target);
+        const style = getComputedStyle2(target);
+        const scrollRe = /auto|scroll/;
+        const isScrollableX = lastTraversableNode || scrollRe.test(style.overflowX);
+        const isScrollableY = lastTraversableNode || scrollRe.test(style.overflowY);
+        const canScrollX = isScrollableX && target.clientWidth > 0 && target.scrollWidth > target.clientWidth;
+        const canScrollY = isScrollableY && target.clientHeight > 0 && target.scrollHeight > target.clientHeight;
+        const isRTL2 = style.direction === "rtl";
+        const pressedVerticalScrollbar = canScrollY && (isRTL2 ? event.offsetX <= target.offsetWidth - target.clientWidth : event.offsetX > target.clientWidth);
+        const pressedHorizontalScrollbar = canScrollX && event.offsetY > target.clientHeight;
+        if (pressedVerticalScrollbar || pressedHorizontalScrollbar) {
+          return;
+        }
+      }
+      const nodeId = (_dataRef$current$floa2 = dataRef.current.floatingContext) == null ? undefined : _dataRef$current$floa2.nodeId;
+      const targetIsInsideChildren = tree && getNodeChildren(tree.nodesRef.current, nodeId).some((node) => {
+        var _node$context;
+        return isEventTargetWithin(event, (_node$context = node.context) == null ? undefined : _node$context.elements.floating);
+      });
+      if (isEventTargetWithin(event, elements.floating) || isEventTargetWithin(event, elements.domReference) || targetIsInsideChildren) {
+        return;
+      }
+      const children = tree ? getNodeChildren(tree.nodesRef.current, nodeId) : [];
+      if (children.length > 0) {
+        let shouldDismiss = true;
+        children.forEach((child) => {
+          var _child$context2;
+          if ((_child$context2 = child.context) != null && _child$context2.open && !child.context.dataRef.current.__outsidePressBubbles) {
+            shouldDismiss = false;
+            return;
+          }
+        });
+        if (!shouldDismiss) {
+          return;
+        }
+      }
+      onOpenChange(false, event, "outside-press");
+    });
+    const closeOnPressOutsideCapture = useEffectEvent((event) => {
+      var _getTarget4;
+      const callback = () => {
+        var _getTarget3;
+        closeOnPressOutside(event);
+        (_getTarget3 = getTarget(event)) == null || _getTarget3.removeEventListener(outsidePressEvent, callback);
+      };
+      (_getTarget4 = getTarget(event)) == null || _getTarget4.addEventListener(outsidePressEvent, callback);
+    });
+    React4.useEffect(() => {
+      if (!open || !enabled) {
+        return;
+      }
+      dataRef.current.__escapeKeyBubbles = escapeKeyBubbles;
+      dataRef.current.__outsidePressBubbles = outsidePressBubbles;
+      let compositionTimeout = -1;
+      function onScroll(event) {
+        onOpenChange(false, event, "ancestor-scroll");
+      }
+      function handleCompositionStart() {
+        window.clearTimeout(compositionTimeout);
+        isComposingRef.current = true;
+      }
+      function handleCompositionEnd() {
+        compositionTimeout = window.setTimeout(() => {
+          isComposingRef.current = false;
+        }, isWebKit() ? 5 : 0);
+      }
+      const doc = getDocument(elements.floating);
+      if (escapeKey) {
+        doc.addEventListener("keydown", escapeKeyCapture ? closeOnEscapeKeyDownCapture : closeOnEscapeKeyDown, escapeKeyCapture);
+        doc.addEventListener("compositionstart", handleCompositionStart);
+        doc.addEventListener("compositionend", handleCompositionEnd);
+      }
+      outsidePress && doc.addEventListener(outsidePressEvent, outsidePressCapture ? closeOnPressOutsideCapture : closeOnPressOutside, outsidePressCapture);
+      let ancestors = [];
+      if (ancestorScroll) {
+        if (isElement(elements.domReference)) {
+          ancestors = getOverflowAncestors(elements.domReference);
+        }
+        if (isElement(elements.floating)) {
+          ancestors = ancestors.concat(getOverflowAncestors(elements.floating));
+        }
+        if (!isElement(elements.reference) && elements.reference && elements.reference.contextElement) {
+          ancestors = ancestors.concat(getOverflowAncestors(elements.reference.contextElement));
+        }
+      }
+      ancestors = ancestors.filter((ancestor) => {
+        var _doc$defaultView;
+        return ancestor !== ((_doc$defaultView = doc.defaultView) == null ? undefined : _doc$defaultView.visualViewport);
+      });
+      ancestors.forEach((ancestor) => {
+        ancestor.addEventListener("scroll", onScroll, {
+          passive: true
+        });
+      });
+      return () => {
+        if (escapeKey) {
+          doc.removeEventListener("keydown", escapeKeyCapture ? closeOnEscapeKeyDownCapture : closeOnEscapeKeyDown, escapeKeyCapture);
+          doc.removeEventListener("compositionstart", handleCompositionStart);
+          doc.removeEventListener("compositionend", handleCompositionEnd);
+        }
+        outsidePress && doc.removeEventListener(outsidePressEvent, outsidePressCapture ? closeOnPressOutsideCapture : closeOnPressOutside, outsidePressCapture);
+        ancestors.forEach((ancestor) => {
+          ancestor.removeEventListener("scroll", onScroll);
+        });
+        window.clearTimeout(compositionTimeout);
+      };
+    }, [dataRef, elements, escapeKey, outsidePress, outsidePressEvent, open, onOpenChange, ancestorScroll, enabled, escapeKeyBubbles, outsidePressBubbles, closeOnEscapeKeyDown, escapeKeyCapture, closeOnEscapeKeyDownCapture, closeOnPressOutside, outsidePressCapture, closeOnPressOutsideCapture]);
+    React4.useEffect(() => {
+      dataRef.current.insideReactTree = false;
+    }, [dataRef, outsidePress, outsidePressEvent]);
+    const reference = React4.useMemo(() => ({
+      onKeyDown: closeOnEscapeKeyDown,
+      ...referencePress && {
+        [bubbleHandlerKeys[referencePressEvent]]: (event) => {
+          onOpenChange(false, event.nativeEvent, "reference-press");
+        },
+        ...referencePressEvent !== "click" && {
+          onClick(event) {
+            onOpenChange(false, event.nativeEvent, "reference-press");
+          }
+        }
+      }
+    }), [closeOnEscapeKeyDown, onOpenChange, referencePress, referencePressEvent]);
+    const floating = React4.useMemo(() => ({
+      onKeyDown: closeOnEscapeKeyDown,
+      onMouseDown() {
+        endedOrStartedInsideRef.current = true;
+      },
+      onMouseUp() {
+        endedOrStartedInsideRef.current = true;
+      },
+      [captureHandlerKeys[outsidePressEvent]]: () => {
+        dataRef.current.insideReactTree = true;
+      }
+    }), [closeOnEscapeKeyDown, outsidePressEvent, dataRef]);
+    return React4.useMemo(() => enabled ? {
+      reference,
+      floating
+    } : {}, [enabled, reference, floating]);
+  }
+  function useFloatingRootContext(options) {
+    const {
+      open = false,
+      onOpenChange: onOpenChangeProp,
+      elements: elementsProp
+    } = options;
+    const floatingId = useId();
+    const dataRef = React4.useRef({});
+    const [events] = React4.useState(() => createEventEmitter());
+    const nested = useFloatingParentNodeId() != null;
+    if (true) {
+      const optionDomReference = elementsProp.reference;
+      if (optionDomReference && !isElement(optionDomReference)) {
+        error("Cannot pass a virtual element to the `elements.reference` option,", "as it must be a real DOM element. Use `refs.setPositionReference()`", "instead.");
+      }
+    }
+    const [positionReference, setPositionReference] = React4.useState(elementsProp.reference);
+    const onOpenChange = useEffectEvent((open2, event, reason) => {
+      dataRef.current.openEvent = open2 ? event : undefined;
+      events.emit("openchange", {
+        open: open2,
+        event,
+        reason,
+        nested
+      });
+      onOpenChangeProp == null || onOpenChangeProp(open2, event, reason);
+    });
+    const refs = React4.useMemo(() => ({
+      setPositionReference
+    }), []);
+    const elements = React4.useMemo(() => ({
+      reference: positionReference || elementsProp.reference || null,
+      floating: elementsProp.floating || null,
+      domReference: elementsProp.reference
+    }), [positionReference, elementsProp.reference, elementsProp.floating]);
+    return React4.useMemo(() => ({
+      dataRef,
+      open,
+      onOpenChange,
+      elements,
+      events,
+      floatingId,
+      refs
+    }), [open, onOpenChange, elements, events, floatingId, refs]);
+  }
+  function useFloating2(options) {
+    if (options === undefined) {
+      options = {};
+    }
+    const {
+      nodeId
+    } = options;
+    const internalRootContext = useFloatingRootContext({
+      ...options,
+      elements: {
+        reference: null,
+        floating: null,
+        ...options.elements
+      }
+    });
+    const rootContext = options.rootContext || internalRootContext;
+    const computedElements = rootContext.elements;
+    const [_domReference, setDomReference] = React4.useState(null);
+    const [positionReference, _setPositionReference] = React4.useState(null);
+    const optionDomReference = computedElements == null ? undefined : computedElements.domReference;
+    const domReference = optionDomReference || _domReference;
+    const domReferenceRef = React4.useRef(null);
+    const tree = useFloatingTree();
+    index(() => {
+      if (domReference) {
+        domReferenceRef.current = domReference;
+      }
+    }, [domReference]);
+    const position = useFloating({
+      ...options,
+      elements: {
+        ...computedElements,
+        ...positionReference && {
+          reference: positionReference
+        }
+      }
+    });
+    const setPositionReference = React4.useCallback((node) => {
+      const computedPositionReference = isElement(node) ? {
+        getBoundingClientRect: () => node.getBoundingClientRect(),
+        getClientRects: () => node.getClientRects(),
+        contextElement: node
+      } : node;
+      _setPositionReference(computedPositionReference);
+      position.refs.setReference(computedPositionReference);
+    }, [position.refs]);
+    const setReference = React4.useCallback((node) => {
+      if (isElement(node) || node === null) {
+        domReferenceRef.current = node;
+        setDomReference(node);
+      }
+      if (isElement(position.refs.reference.current) || position.refs.reference.current === null || node !== null && !isElement(node)) {
+        position.refs.setReference(node);
+      }
+    }, [position.refs]);
+    const refs = React4.useMemo(() => ({
+      ...position.refs,
+      setReference,
+      setPositionReference,
+      domReference: domReferenceRef
+    }), [position.refs, setReference, setPositionReference]);
+    const elements = React4.useMemo(() => ({
+      ...position.elements,
+      domReference
+    }), [position.elements, domReference]);
+    const context = React4.useMemo(() => ({
+      ...position,
+      ...rootContext,
+      refs,
+      elements,
+      nodeId
+    }), [position, refs, elements, nodeId, rootContext]);
+    index(() => {
+      rootContext.dataRef.current.floatingContext = context;
+      const node = tree == null ? undefined : tree.nodesRef.current.find((node2) => node2.id === nodeId);
+      if (node) {
+        node.context = context;
+      }
+    });
+    return React4.useMemo(() => ({
+      ...position,
+      context,
+      refs,
+      elements
+    }), [position, refs, elements, context]);
+  }
+  function isMacSafari() {
+    return isMac() && isSafari();
+  }
+  function useFocus(context, props) {
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      open,
+      onOpenChange,
+      events,
+      dataRef,
+      elements
+    } = context;
+    const {
+      enabled = true,
+      visibleOnly = true
+    } = props;
+    const blockFocusRef = React4.useRef(false);
+    const timeoutRef = React4.useRef(-1);
+    const keyboardModalityRef = React4.useRef(true);
+    React4.useEffect(() => {
+      if (!enabled)
+        return;
+      const win = getWindow(elements.domReference);
+      function onBlur() {
+        if (!open && isHTMLElement(elements.domReference) && elements.domReference === activeElement(getDocument(elements.domReference))) {
+          blockFocusRef.current = true;
+        }
+      }
+      function onKeyDown() {
+        keyboardModalityRef.current = true;
+      }
+      function onPointerDown() {
+        keyboardModalityRef.current = false;
+      }
+      win.addEventListener("blur", onBlur);
+      if (isMacSafari()) {
+        win.addEventListener("keydown", onKeyDown, true);
+        win.addEventListener("pointerdown", onPointerDown, true);
+      }
+      return () => {
+        win.removeEventListener("blur", onBlur);
+        if (isMacSafari()) {
+          win.removeEventListener("keydown", onKeyDown, true);
+          win.removeEventListener("pointerdown", onPointerDown, true);
+        }
+      };
+    }, [elements.domReference, open, enabled]);
+    React4.useEffect(() => {
+      if (!enabled)
+        return;
+      function onOpenChange2(_ref) {
+        let {
+          reason
+        } = _ref;
+        if (reason === "reference-press" || reason === "escape-key") {
+          blockFocusRef.current = true;
+        }
+      }
+      events.on("openchange", onOpenChange2);
+      return () => {
+        events.off("openchange", onOpenChange2);
+      };
+    }, [events, enabled]);
+    React4.useEffect(() => {
+      return () => {
+        clearTimeoutIfSet(timeoutRef);
+      };
+    }, []);
+    const reference = React4.useMemo(() => ({
+      onMouseLeave() {
+        blockFocusRef.current = false;
+      },
+      onFocus(event) {
+        if (blockFocusRef.current)
+          return;
+        const target = getTarget(event.nativeEvent);
+        if (visibleOnly && isElement(target)) {
+          if (isMacSafari() && !event.relatedTarget) {
+            if (!keyboardModalityRef.current && !isTypeableElement(target)) {
+              return;
+            }
+          } else if (!matchesFocusVisible(target)) {
+            return;
+          }
+        }
+        onOpenChange(true, event.nativeEvent, "focus");
+      },
+      onBlur(event) {
+        blockFocusRef.current = false;
+        const relatedTarget = event.relatedTarget;
+        const nativeEvent = event.nativeEvent;
+        const movedToFocusGuard = isElement(relatedTarget) && relatedTarget.hasAttribute(createAttribute("focus-guard")) && relatedTarget.getAttribute("data-type") === "outside";
+        timeoutRef.current = window.setTimeout(() => {
+          var _dataRef$current$floa;
+          const activeEl = activeElement(elements.domReference ? elements.domReference.ownerDocument : document);
+          if (!relatedTarget && activeEl === elements.domReference)
+            return;
+          if (contains((_dataRef$current$floa = dataRef.current.floatingContext) == null ? undefined : _dataRef$current$floa.refs.floating.current, activeEl) || contains(elements.domReference, activeEl) || movedToFocusGuard) {
+            return;
+          }
+          onOpenChange(false, nativeEvent, "focus");
+        });
+      }
+    }), [dataRef, elements.domReference, onOpenChange, visibleOnly]);
+    return React4.useMemo(() => enabled ? {
+      reference
+    } : {}, [enabled, reference]);
+  }
+  function mergeProps(userProps, propsList, elementKey) {
+    const map = new Map;
+    const isItem = elementKey === "item";
+    let domUserProps = userProps;
+    if (isItem && userProps) {
+      const {
+        [ACTIVE_KEY]: _,
+        [SELECTED_KEY]: __,
+        ...validProps
+      } = userProps;
+      domUserProps = validProps;
+    }
+    return {
+      ...elementKey === "floating" && {
+        tabIndex: -1,
+        [FOCUSABLE_ATTRIBUTE2]: ""
+      },
+      ...domUserProps,
+      ...propsList.map((value) => {
+        const propsOrGetProps = value ? value[elementKey] : null;
+        if (typeof propsOrGetProps === "function") {
+          return userProps ? propsOrGetProps(userProps) : null;
+        }
+        return propsOrGetProps;
+      }).concat(userProps).reduce((acc, props) => {
+        if (!props) {
+          return acc;
+        }
+        Object.entries(props).forEach((_ref) => {
+          let [key, value] = _ref;
+          if (isItem && [ACTIVE_KEY, SELECTED_KEY].includes(key)) {
+            return;
+          }
+          if (key.indexOf("on") === 0) {
+            if (!map.has(key)) {
+              map.set(key, []);
+            }
+            if (typeof value === "function") {
+              var _map$get;
+              (_map$get = map.get(key)) == null || _map$get.push(value);
+              acc[key] = function() {
+                var _map$get2;
+                for (var _len = arguments.length, args = new Array(_len), _key = 0;_key < _len; _key++) {
+                  args[_key] = arguments[_key];
+                }
+                return (_map$get2 = map.get(key)) == null ? undefined : _map$get2.map((fn) => fn(...args)).find((val) => val !== undefined);
+              };
+            }
+          } else {
+            acc[key] = value;
+          }
+        });
+        return acc;
+      }, {})
+    };
+  }
+  function useInteractions(propsList) {
+    if (propsList === undefined) {
+      propsList = [];
+    }
+    const referenceDeps = propsList.map((key) => key == null ? undefined : key.reference);
+    const floatingDeps = propsList.map((key) => key == null ? undefined : key.floating);
+    const itemDeps = propsList.map((key) => key == null ? undefined : key.item);
+    const getReferenceProps = React4.useCallback((userProps) => mergeProps(userProps, propsList, "reference"), referenceDeps);
+    const getFloatingProps = React4.useCallback((userProps) => mergeProps(userProps, propsList, "floating"), floatingDeps);
+    const getItemProps = React4.useCallback((userProps) => mergeProps(userProps, propsList, "item"), itemDeps);
+    return React4.useMemo(() => ({
+      getReferenceProps,
+      getFloatingProps,
+      getItemProps
+    }), [getReferenceProps, getFloatingProps, getItemProps]);
+  }
+  var componentRoleToAriaRoleMap = /* @__PURE__ */ new Map([["select", "listbox"], ["combobox", "listbox"], ["label", false]]);
+  function useRole(context, props) {
+    var _elements$domReferenc, _componentRoleToAriaR;
+    if (props === undefined) {
+      props = {};
+    }
+    const {
+      open,
+      elements,
+      floatingId: defaultFloatingId
+    } = context;
+    const {
+      enabled = true,
+      role = "dialog"
+    } = props;
+    const defaultReferenceId = useId();
+    const referenceId = ((_elements$domReferenc = elements.domReference) == null ? undefined : _elements$domReferenc.id) || defaultReferenceId;
+    const floatingId = React4.useMemo(() => {
+      var _getFloatingFocusElem;
+      return ((_getFloatingFocusElem = getFloatingFocusElement(elements.floating)) == null ? undefined : _getFloatingFocusElem.id) || defaultFloatingId;
+    }, [elements.floating, defaultFloatingId]);
+    const ariaRole = (_componentRoleToAriaR = componentRoleToAriaRoleMap.get(role)) != null ? _componentRoleToAriaR : role;
+    const parentId = useFloatingParentNodeId();
+    const isNested = parentId != null;
+    const reference = React4.useMemo(() => {
+      if (ariaRole === "tooltip" || role === "label") {
+        return {
+          ["aria-" + (role === "label" ? "labelledby" : "describedby")]: open ? floatingId : undefined
+        };
+      }
+      return {
+        "aria-expanded": open ? "true" : "false",
+        "aria-haspopup": ariaRole === "alertdialog" ? "dialog" : ariaRole,
+        "aria-controls": open ? floatingId : undefined,
+        ...ariaRole === "listbox" && {
+          role: "combobox"
+        },
+        ...ariaRole === "menu" && {
+          id: referenceId
+        },
+        ...ariaRole === "menu" && isNested && {
+          role: "menuitem"
+        },
+        ...role === "select" && {
+          "aria-autocomplete": "none"
+        },
+        ...role === "combobox" && {
+          "aria-autocomplete": "list"
+        }
+      };
+    }, [ariaRole, floatingId, isNested, open, referenceId, role]);
+    const floating = React4.useMemo(() => {
+      const floatingProps = {
+        id: floatingId,
+        ...ariaRole && {
+          role: ariaRole
+        }
+      };
+      if (ariaRole === "tooltip" || role === "label") {
+        return floatingProps;
+      }
+      return {
+        ...floatingProps,
+        ...ariaRole === "menu" && {
+          "aria-labelledby": referenceId
+        }
+      };
+    }, [ariaRole, floatingId, referenceId, role]);
+    const item = React4.useCallback((_ref) => {
+      let {
+        active,
+        selected
+      } = _ref;
+      const commonProps = {
+        role: "option",
+        ...active && {
+          id: floatingId + "-fui-option"
+        }
+      };
+      switch (role) {
+        case "select":
+        case "combobox":
+          return {
+            ...commonProps,
+            "aria-selected": selected
+          };
+      }
+      return {};
+    }, [floatingId, role]);
+    return React4.useMemo(() => enabled ? {
+      reference,
+      floating,
+      item
+    } : {}, [enabled, reference, floating, item]);
+  }
+
+  // src/components/Tooltip.jsx
+  var jsx_dev_runtime = __toESM(require_jsx_dev_runtime());
+  var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 80 }) => {
+    const arrowRef = import_react3.useRef(null);
+    const [open, setOpen] = import_react3.useState(false);
+    const middleware = import_react3.useMemo(() => [
+      offset3({ mainAxis: 10, crossAxis: 0 }),
+      flip3({ fallbackAxisSideDirection: "end" }),
+      shift3({ padding: 6 }),
+      arrow3({ element: arrowRef })
+    ], []);
+    const { refs, floatingStyles, context, middlewareData, placement } = useFloating2({
+      placement: initialPlacement,
+      open,
+      onOpenChange: setOpen,
+      middleware,
+      whileElementsMounted: autoUpdate
+    });
+    const hover = useHover(context, { move: true, delay: { open: delay, close: 40 } });
+    const focus = useFocus(context);
+    const dismiss = useDismiss(context, { escapeKey: true });
+    const role = useRole(context, { role: "tooltip" });
+    const clientPoint = useClientPoint(context, { axis: "both" });
+    const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, role, clientPoint]);
+    const reference = import_react3.cloneElement(children, {
+      ...getReferenceProps(children.props),
+      ref: refs.setReference
+    });
+    return /* @__PURE__ */ jsx_dev_runtime.jsxDEV(jsx_dev_runtime.Fragment, {
+      children: [
+        reference,
+        open && /* @__PURE__ */ jsx_dev_runtime.jsxDEV(FloatingPortal, {
+          children: /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
+            className: "valknut-tooltip",
+            ref: refs.setFloating,
+            style: floatingStyles,
+            "data-placement": placement,
+            ...getFloatingProps(),
+            children: [
+              typeof content === "function" ? content() : content,
+              /* @__PURE__ */ jsx_dev_runtime.jsxDEV("span", {
+                ref: arrowRef,
+                className: "valknut-tooltip-arrow",
+                style: {
+                  left: middlewareData.arrow?.x != null ? `${middlewareData.arrow.x}px` : "",
+                  top: middlewareData.arrow?.y != null ? `${middlewareData.arrow.y}px` : ""
+                }
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        }, undefined, false, undefined, this)
+      ]
+    }, undefined, true, undefined, this);
+  };
+  var Tooltip_default = Tooltip;
+
   // src/tree-component/TreeNode.jsx
-  var import_react32 = __toESM(require_react());
+  var renderChevronIcon = () => {
+    const pathD = "M9 6l6 6-6 6";
+    return import_react5.default.createElement("svg", {
+      key: "chevron-svg",
+      xmlns: "http://www.w3.org/2000/svg",
+      width: 16,
+      height: 16,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      className: "chevron-icon"
+    }, import_react5.default.createElement("path", { d: pathD }));
+  };
+  var formatDecimal = (value, decimals = 1) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+    return numeric.toFixed(decimals);
+  };
+  var getNumericValue = (source, keys, fallback = null) => {
+    if (!source || typeof source !== "object") {
+      return fallback;
+    }
+    for (const key of keys) {
+      const raw = source[key];
+      if (raw === null || raw === undefined || raw === "")
+        continue;
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+    return fallback;
+  };
+  var combineSeverityCounts = (base = {}, extra = {}) => ({
+    critical: (base.critical || 0) + (extra.critical || 0),
+    high: (base.high || 0) + (extra.high || 0),
+    medium: (base.medium || 0) + (extra.medium || 0),
+    low: (base.low || 0) + (extra.low || 0)
+  });
+  var computeAggregates = (node) => {
+    if (!node || typeof node !== "object") {
+      return {
+        totalIssues: 0,
+        severityCounts: { critical: 0, high: 0, medium: 0, low: 0 },
+        entityCount: 0,
+        fileCount: 0,
+        avgScore: null,
+        scoreWeight: 0
+      };
+    }
+    if (node.__aggregateCache) {
+      return node.__aggregateCache;
+    }
+    const children = Array.isArray(node.children) ? node.children : [];
+    const isEntity = node.type === "entity";
+    const isFile = node.type === "file";
+    const isFolder = node.type === "folder";
+    const severityCounts = combineSeverityCounts(node.severityCounts || node.severity_counts, {});
+    let totalIssues = 0;
+    if (!children.length) {
+      totalIssues += getNumericValue(node, [
+        "totalIssues",
+        "total_issues",
+        "refactoringNeeded",
+        "refactoring_needed",
+        "issueCount",
+        "issue_count"
+      ], 0) || 0;
+    }
+    let entityCount = 0;
+    if (isEntity) {
+      entityCount = 1;
+    }
+    let fileCount = 0;
+    if (isFile) {
+      fileCount = 1;
+    }
+    let scoreSum = 0;
+    let scoreWeight = 0;
+    const nodeScore = getNumericValue(node, ["avgScore", "avg_score", "score"], null);
+    if (nodeScore != null) {
+      if (isEntity) {
+        scoreSum += nodeScore;
+        scoreWeight += 1;
+      } else if (isFile) {
+        const entityWeight = getNumericValue(node, ["entityCount", "entity_count"], 0) || children.length || 1;
+        scoreSum += nodeScore * entityWeight;
+        scoreWeight += entityWeight;
+      } else if (!children.length) {
+        scoreSum += nodeScore;
+        scoreWeight += 1;
+      }
+    }
+    children.forEach((child) => {
+      const childAggregates = computeAggregates(child);
+      totalIssues += childAggregates.totalIssues;
+      entityCount += childAggregates.entityCount;
+      fileCount += childAggregates.fileCount;
+      scoreSum += childAggregates._scoreSum;
+      scoreWeight += childAggregates.scoreWeight;
+      Object.assign(severityCounts, combineSeverityCounts(severityCounts, childAggregates.severityCounts));
+    });
+    if (isFolder && !children.length) {
+      fileCount = getNumericValue(node, ["fileCount", "file_count"], fileCount);
+      entityCount = getNumericValue(node, ["entityCount", "entity_count"], entityCount);
+    }
+    if (isFolder && scoreWeight === 0 && nodeScore != null) {
+      scoreSum += nodeScore;
+      scoreWeight += 1;
+    }
+    const avgScore = scoreWeight > 0 ? scoreSum / scoreWeight : nodeScore;
+    const aggregates = {
+      totalIssues,
+      severityCounts,
+      entityCount,
+      fileCount,
+      avgScore,
+      scoreWeight,
+      _scoreSum: scoreSum
+    };
+    node.__aggregateCache = aggregates;
+    return aggregates;
+  };
   var TreeNode = ({ node, style, innerRef, tree }) => {
+    if (!node || !node.data) {
+      throw new Error("TreeNode props missing data");
+    }
     const data = node.data;
-    const iconRefs = import_react32.useRef([]);
+    const iconRefs = import_react5.useRef([]);
     iconRefs.current = [];
+    if (typeof window !== "undefined") {
+      console.log("[TreeNode] render", {
+        id: node.id,
+        level: node.level,
+        isOpen: node.isOpen,
+        type: data.type,
+        childCount: node.childCount
+      });
+    }
+    const toggleNode = (id) => {
+      if (tree && typeof tree.toggle === "function") {
+        tree.toggle(id);
+      }
+    };
     const registerIcon = (element, fallback) => {
       if (element) {
         iconRefs.current.push({ element, fallback });
@@ -31439,11 +29168,12 @@ Use the data prop if you want to provide your own handlers.`);
     };
     const isFolder = data.type === "folder";
     const isFile = data.type === "file";
-    const isEntity = data.type === "entity";
+    const isEntity = data.type === "entity" || !!data.entity_id;
+    const isCategory = data.type === "category";
     const isInfoRow = data.type === "info-row";
     const isIssueRow = data.type === "issue-row";
     const isSuggestionRow = data.type === "suggestion-row";
-    import_react32.useEffect(() => {
+    import_react5.useEffect(() => {
       const pendingIcons = [...iconRefs.current];
       const applyFallbacks = () => {
         pendingIcons.forEach(({ element, fallback }) => {
@@ -31463,37 +29193,32 @@ Use the data prop if you want to provide your own handlers.`);
         applyFallbacks();
       }
     }, [node.id, node.isOpen, data.type, data.name, data.priority]);
-    if (isInfoRow || isIssueRow || isSuggestionRow) {
-      const manualIndent2 = node.level * 24 + 16;
+    if (isIssueRow || isSuggestionRow) {
       let iconName2 = "info";
-      let iconColor = "var(--text-secondary)";
+      let iconColor = "var(--tree-muted, var(--color-text-muted))";
       let backgroundColor = "transparent";
-      let iconFallbackSymbol2 = "ℹ️";
+      let iconFallbackSymbol2 = "i";
       if (isIssueRow) {
         iconName2 = "alert-triangle";
         iconColor = "var(--danger, #dc3545)";
-        backgroundColor = "rgba(220, 53, 69, 0.05)";
-        iconFallbackSymbol2 = "⚠️";
+        backgroundColor = "rgba(220, 53, 69, 0.12)";
+        iconFallbackSymbol2 = "!";
       } else if (isSuggestionRow) {
         iconName2 = "lightbulb";
         iconColor = "var(--info, #007acc)";
-        backgroundColor = "rgba(0, 123, 255, 0.05)";
-        iconFallbackSymbol2 = "\uD83D\uDCA1";
-      } else if (isInfoRow) {
-        iconName2 = "info";
-        iconColor = "var(--success, #28a745)";
-        backgroundColor = "rgba(40, 167, 69, 0.05)";
-        iconFallbackSymbol2 = "ℹ️";
+        backgroundColor = "rgba(0, 123, 255, 0.12)";
+        iconFallbackSymbol2 = "?";
       }
-      let displayText = data.name;
+      const rawName = String(data.name || "");
       let scoreElement = null;
-      displayText = displayText.replace(/^(⚠️|💡|ℹ️)\s*/, "").replace(/^(complexity|structure):\s*/i, "").trim();
+      const fallbackText = rawName.replace(/^[!\?\*\-]\s*/, "").replace(/^(complexity|structure):\s*/i, "").trim();
       if (isIssueRow) {
-        const isComplexityIssue = data.name.toLowerCase().includes("complexity");
-        const isStructureIssue = data.name.toLowerCase().includes("structure");
+        const nameStr = rawName;
+        const isComplexityIssue = nameStr.toLowerCase().includes("complexity");
+        const isStructureIssue = nameStr.toLowerCase().includes("structure");
         if (isComplexityIssue || isStructureIssue) {
           let score = null;
-          const scoreMatch = data.name.match(/score:\s*(\d+(?:\.\d+)?)/);
+          const scoreMatch = rawName.match(/score:\s*(\d+(?:\.\d+)?)/);
           if (scoreMatch) {
             score = parseFloat(scoreMatch[1]);
           } else if (data.issueSeverity !== undefined && (isComplexityIssue || isStructureIssue)) {
@@ -31502,27 +29227,104 @@ Use the data prop if you want to provide your own handlers.`);
             score = data.entityScore;
           }
           if (score !== null) {
-            scoreElement = import_react32.default.createElement("div", {
-              key: "score-badge",
-              style: {
-                marginLeft: "auto",
-                padding: "2px 8px",
-                borderRadius: "4px",
-                fontSize: "11px",
-                fontWeight: "500",
-                backgroundColor,
-                color: iconColor,
-                border: `1px solid ${iconColor}`
-              }
-            }, score.toString());
+            const formattedScore = formatDecimal(score);
+            if (formattedScore !== null) {
+              scoreElement = import_react5.default.createElement("div", {
+                key: "score-badge",
+                style: {
+                  marginLeft: "auto",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  fontWeight: "500",
+                  backgroundColor,
+                  color: iconColor,
+                  border: `1px solid ${iconColor}`
+                }
+              }, formattedScore);
+            }
           }
         }
       }
+      const detailIndent = ((node.level ?? 0) + 1) * 24;
+      const codeLabel = data.code ? String(data.code) : null;
+      const titleLabel = data.title ? String(data.title) : null;
+      const summaryText = data.summary ? String(data.summary) : "";
+      const badgeValues = Array.isArray(data.badges) ? data.badges.filter(Boolean).map(String) : [];
+      const badgeElements = badgeValues.map((badge, idx) => import_react5.default.createElement("span", {
+        key: `badge-${idx}`,
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "1px 6px",
+          borderRadius: "999px",
+          fontSize: "0.7rem",
+          fontWeight: 600,
+          backgroundColor: "rgba(255, 255, 255, 0.18)",
+          color: iconColor,
+          border: `1px solid ${iconColor}`
+        }
+      }, badge));
+      const primaryLabel = titleLabel || fallbackText || rawName;
+      const primaryLineChildren = [];
+      if (codeLabel) {
+        primaryLineChildren.push(import_react5.default.createElement("span", {
+          key: "code-label",
+          style: {
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            color: iconColor
+          }
+        }, codeLabel));
+      }
+      primaryLineChildren.push(import_react5.default.createElement("span", {
+        key: "primary-text",
+        style: { fontWeight: 500 }
+      }, primaryLabel));
+      if (badgeElements.length > 0) {
+        primaryLineChildren.push(...badgeElements);
+      }
+      const structuredContent = import_react5.default.createElement("div", {
+        key: "label-block",
+        style: {
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.2rem",
+          minWidth: 0
+        }
+      }, [
+        import_react5.default.createElement("div", {
+          key: "primary-line",
+          style: {
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "0.5rem",
+            minWidth: 0
+          }
+        }, primaryLineChildren.filter(Boolean)),
+        summaryText ? import_react5.default.createElement("div", {
+          key: "secondary-line",
+          style: {
+            fontSize: "0.75rem",
+            color: "var(--tree-muted, var(--color-text-muted))",
+            lineHeight: 1.4,
+            marginTop: "0.1rem"
+          }
+        }, summaryText) : null
+      ].filter(Boolean));
+      const labelNode = codeLabel || titleLabel || summaryText || badgeValues.length > 0 ? structuredContent : import_react5.default.createElement("span", {
+        key: "fallback-text",
+        style: { flex: 1 }
+      }, fallbackText);
       const children2 = [
-        import_react32.default.createElement("i", {
+        import_react5.default.createElement("i", {
           "data-lucide": iconName2,
           key: "icon",
           ref: (el) => registerIcon(el, iconFallbackSymbol2),
+          "data-node-id": node.id,
           style: {
             width: "14px",
             height: "14px",
@@ -31531,32 +29333,36 @@ Use the data prop if you want to provide your own handlers.`);
             flexShrink: 0
           }
         }),
-        import_react32.default.createElement("span", {
-          key: "text",
-          style: { flex: 1 }
-        }, displayText),
+        labelNode,
         scoreElement
       ].filter(Boolean);
-      return import_react32.default.createElement("div", {
-        ref: innerRef,
+      return import_react5.default.createElement("div", {
+        ref: innerRef ?? undefined,
+        className: `tree-detail-row ${isIssueRow ? "tree-detail-row--issue" : "tree-detail-row--suggestion"}`,
+        role: "treeitem",
+        "aria-level": (node.level ?? 0) + 1,
+        "aria-expanded": false,
         style: {
           ...style,
           display: "flex",
           alignItems: "center",
           padding: "0.4rem 0.5rem",
-          marginLeft: `${manualIndent2}px`,
           backgroundColor,
           borderLeft: `3px solid ${iconColor}`,
           fontSize: "0.85rem",
-          color: "var(--text)",
-          width: `calc(100% - ${manualIndent2}px)`,
-          boxSizing: "border-box"
+          color: "var(--tree-foreground, var(--color-text))",
+          boxSizing: "border-box",
+          marginLeft: `${detailIndent}px`,
+          paddingLeft: "1.5rem",
+          width: `calc(100% - ${detailIndent}px)`
         }
       }, ...children2);
     }
-    const hasChildren = node.isInternal || node.children && node.children.length > 0 || data.children && data.children.length > 0 || node.hasChildren;
+    const hasChildren = !node.isLeaf && (node.childCount ?? 0) > 0 || Array.isArray(data.children) && data.children.length > 0;
+    const shouldShowChevron = hasChildren && !isIssueRow && !isSuggestionRow && !isInfoRow;
     const getPriorityStyle = (priority) => {
-      switch (priority?.toLowerCase()) {
+      const priorityStr = String(priority || "").toLowerCase();
+      switch (priorityStr) {
         case "critical":
           return {
             backgroundColor: "#dc354520",
@@ -31597,11 +29403,45 @@ Use the data prop if you want to provide your own handlers.`);
       return "var(--danger)";
     };
     const children = [];
-    if (hasChildren) {
-      const chevronIcon = node.isOpen ? "chevron-down" : "chevron-right";
-      const fallbackSymbol = node.isOpen ? "▼" : "▶";
-      children.push(import_react32.default.createElement("i", {
-        "data-lucide": chevronIcon,
+    const aggregates = computeAggregates(data);
+    if (typeof window !== "undefined") {
+      window.__VALKNUT_TREE_NODE_DEBUG = window.__VALKNUT_TREE_NODE_DEBUG || [];
+      if (window.__VALKNUT_TREE_NODE_DEBUG.length < 50) {
+        window.__VALKNUT_TREE_NODE_DEBUG.push({
+          id: node.id,
+          type: data.type,
+          name: data.name,
+          aggregates,
+          original: {
+            totalIssues: data.totalIssues ?? data.total_issues,
+            avgScore: data.avgScore ?? data.avg_score,
+            severityCounts: data.severityCounts ?? data.severity_counts,
+            entityCount: data.entityCount ?? data.entity_count,
+            fileCount: data.fileCount ?? data.file_count
+          }
+        });
+      }
+      if (isFolder) {
+        window.__VALKNUT_TREE_DIR_LOG = window.__VALKNUT_TREE_DIR_LOG || {};
+        if (!window.__VALKNUT_TREE_DIR_LOG[node.id]) {
+          window.__VALKNUT_TREE_DIR_LOG[node.id] = {
+            id: node.id,
+            name: data.name,
+            aggregates,
+            original: {
+              totalIssues: data.totalIssues ?? data.total_issues,
+              avgScore: data.avgScore ?? data.avg_score,
+              severityCounts: data.severityCounts ?? data.severity_counts,
+              entityCount: data.entityCount ?? data.entity_count,
+              fileCount: data.fileCount ?? data.file_count
+            }
+          };
+          console.log("[TreeNode] folder aggregates", window.__VALKNUT_TREE_DIR_LOG[node.id]);
+        }
+      }
+    }
+    if (shouldShowChevron && hasChildren) {
+      children.push(import_react5.default.createElement("span", {
         key: "chevron",
         className: "tree-chevron",
         "data-expanded": node.isOpen ? "true" : "false",
@@ -31610,47 +29450,51 @@ Use the data prop if you want to provide your own handlers.`);
           height: "16px",
           marginRight: "0.25rem",
           cursor: "pointer",
-          transition: "transform 0.2s ease",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "var(--text-secondary, #666)",
+          color: "var(--tree-muted, rgba(148,163,184,0.8))",
           fontSize: "12px",
           userSelect: "none"
         },
         onClick: (e) => {
           e.stopPropagation();
-          tree.toggle(node.id);
+          toggleNode(node.id);
         },
-        ref: (el) => registerIcon(el, fallbackSymbol)
-      }));
+        role: "presentation"
+      }, renderChevronIcon()));
     } else {
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "spacer",
-        style: { width: "16px", marginRight: "0.25rem" }
+        style: { width: "1rem", marginRight: "0.25rem" }
       }));
     }
     let iconName = "function-square";
-    let iconFallbackSymbol = "\uD83D\uDD27";
+    let iconFallbackSymbol = "*";
     if (isFolder) {
       iconName = "folder";
-      iconFallbackSymbol = "\uD83D\uDCC1";
+      iconFallbackSymbol = "[F]";
     } else if (isFile) {
       iconName = "file-code";
-      iconFallbackSymbol = "\uD83D\uDCC4";
+      iconFallbackSymbol = "<>";
+    } else if (isCategory) {
+      iconName = "layers";
+      iconFallbackSymbol = "[C]";
     }
-    children.push(import_react32.default.createElement("i", {
+    children.push(import_react5.default.createElement("i", {
       "data-lucide": iconName,
       key: "icon",
       ref: (el) => registerIcon(el, iconFallbackSymbol),
-      style: { width: "16px", height: "16px", marginRight: "0.5rem" }
+      className: "tree-icon",
+      style: { marginRight: "0.5rem" }
     }));
-    children.push(import_react32.default.createElement("span", {
+    const labelText = isFolder ? `${data.name} (issues: ${aggregates.totalIssues ?? "n/a"}, avg: ${aggregates.avgScore != null ? formatDecimal(aggregates.avgScore) : "n/a"})` : data.name;
+    children.push(import_react5.default.createElement("span", {
       key: "label",
-      style: { flex: 1, fontWeight: isFolder ? "500" : "normal" }
-    }, data.name));
+      style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit" }
+    }, labelText));
     if (isFolder && data.healthScore) {
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "health",
         className: "tree-badge",
         style: {
@@ -31662,22 +29506,29 @@ Use the data prop if you want to provide your own handlers.`);
       }, "Health: " + (data.healthScore * 100).toFixed(0) + "%"));
     }
     if (isFolder && data.fileCount) {
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "files",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
       }, `${data.fileCount} files`));
     }
     if (isFolder && data.entityCount) {
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "entities",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
       }, `${data.entityCount} entities`));
     }
+    if (isFolder && aggregates.totalIssues > 0) {
+      children.push(import_react5.default.createElement("div", {
+        key: "issues",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" }
+      }, `${aggregates.totalIssues} issues`));
+    }
     if (data.priority || data.highestPriority) {
       const priority = data.priority || data.highestPriority;
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "priority",
         className: "tree-badge",
         style: {
@@ -31686,10 +29537,10 @@ Use the data prop if you want to provide your own handlers.`);
         }
       }, priority));
     }
-    if ((isFolder || isFile) && data.severityCounts) {
-      const counts = data.severityCounts;
+    if ((isFolder || isFile) && aggregates.severityCounts) {
+      const counts = aggregates.severityCounts;
       if (counts.critical > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "critical-count",
           className: "tree-badge",
           style: {
@@ -31699,7 +29550,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.critical} critical`));
       }
       if (counts.high > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "high-count",
           className: "tree-badge",
           style: {
@@ -31709,7 +29560,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.high} high`));
       }
       if (counts.medium > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "medium-count",
           className: "tree-badge",
           style: {
@@ -31719,7 +29570,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.medium} medium`));
       }
       if (counts.low > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "low-count",
           className: "tree-badge",
           style: {
@@ -31729,22 +29580,31 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.low} low`));
       }
     }
-    if (isFile && data.avgScore) {
-      children.push(import_react32.default.createElement("div", {
+    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
+    if (isFile && formattedNodeAvgScore !== null) {
+      children.push(import_react5.default.createElement("div", {
         key: "score",
         className: "tree-badge tree-badge-low complexity-score",
         style: { marginLeft: "0.5rem" }
-      }, `Complexity: ${data.avgScore.toFixed(1)}`));
+      }, `Complexity: ${formattedNodeAvgScore}`));
     }
-    if (isEntity && data.score) {
-      children.push(import_react32.default.createElement("div", {
+    if (isFolder && formattedNodeAvgScore !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "avg-score",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" }
+      }, `Avg Score: ${formattedNodeAvgScore}`));
+    }
+    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
+    if (isEntity && formattedEntityScore !== null) {
+      children.push(import_react5.default.createElement("div", {
         key: "complexity",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
-      }, `Complexity: ${data.score}`));
+      }, `Complexity: ${formattedEntityScore}`));
     }
     if (isEntity && data.lineRange) {
-      children.push(import_react32.default.createElement("div", {
+      children.push(import_react5.default.createElement("div", {
         key: "lines",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
@@ -31753,7 +29613,7 @@ Use the data prop if you want to provide your own handlers.`);
     if (isEntity && data.severityCounts) {
       const counts = data.severityCounts;
       if (counts.critical > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "critical-count",
           className: "tree-badge",
           style: {
@@ -31763,7 +29623,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.critical} critical`));
       }
       if (counts.high > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "high-count",
           className: "tree-badge",
           style: {
@@ -31773,7 +29633,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.high} high`));
       }
       if (counts.medium > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "medium-count",
           className: "tree-badge",
           style: {
@@ -31783,7 +29643,7 @@ Use the data prop if you want to provide your own handlers.`);
         }, `${counts.medium} medium`));
       }
       if (counts.low > 0) {
-        children.push(import_react32.default.createElement("div", {
+        children.push(import_react5.default.createElement("div", {
           key: "low-count",
           className: "tree-badge",
           style: {
@@ -31794,35 +29654,153 @@ Use the data prop if you want to provide your own handlers.`);
       }
     }
     const manualIndent = node.level * 24;
-    return import_react32.default.createElement("div", {
-      ref: innerRef,
-      className: "tree-header-row",
+    const headerRow = import_react5.default.createElement("div", {
+      ref: innerRef ?? undefined,
+      className: `tree-header-row${node.isSelected ? " tree-header-row--selected" : ""}`,
+      role: "treeitem",
+      "aria-level": (node.level ?? 0) + 1,
+      "aria-expanded": shouldShowChevron ? !!node.isOpen : undefined,
       style: {
         ...style,
         display: "flex",
         alignItems: "center",
-        cursor: hasChildren ? "pointer" : "default",
+        cursor: shouldShowChevron ? "pointer" : "default",
         padding: "0.5rem 0.5rem 0.5rem 0px",
         marginLeft: `${manualIndent}px`,
         borderRadius: "4px",
-        border: "1px solid transparent",
-        backgroundColor: node.isSelected ? "rgba(0, 123, 255, 0.1)" : "transparent",
+        border: "none",
+        backgroundColor: node.isSelected ? "rgba(99, 102, 241, 0.18)" : "transparent",
         width: "calc(100% - " + manualIndent + "px)",
         minHeight: "32px",
         gap: "0.5rem"
       },
-      onClick: hasChildren ? () => tree.toggle(node.id) : undefined
+      onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
     }, ...children.filter(Boolean));
+    const shouldShowTooltip = isEntity || isFile || isFolder;
+    if (!shouldShowTooltip) {
+      return headerRow;
+    }
+    const formatIssue = (issue = {}) => {
+      const title = issue.title || issue.category || issue.code || "Issue";
+      const severity = typeof issue.severity === "number" ? issue.severity.toFixed(1) : "—";
+      const summary = issue.summary || "";
+      return {
+        title,
+        severity,
+        summary
+      };
+    };
+    const formatSuggestion = (suggestion = {}) => ({
+      title: suggestion.summary || suggestion.title || suggestion.refactoring_type || suggestion.code || "Suggestion",
+      code: suggestion.code || suggestion.refactoring_type || ""
+    });
+    const tooltipContent = () => {
+      const renderValue = (value) => {
+        if (value === null || value === undefined || value === "") {
+          return "—";
+        }
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+          const rounded = numeric.toFixed(1);
+          return rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded;
+        }
+        return value;
+      };
+      const renderMetrics = (metrics2) => import_react5.default.createElement("ul", { className: "tooltip-metrics" }, metrics2.map(({ label, value }) => import_react5.default.createElement("li", { key: label }, import_react5.default.createElement("span", { className: "metric-label" }, label), import_react5.default.createElement("span", { className: "metric-value" }, renderValue(value)))));
+      const capitalize = (value) => {
+        if (!value || typeof value !== "string") {
+          return value;
+        }
+        return value.charAt(0).toUpperCase() + value.slice(1);
+      };
+      if (isFolder) {
+        const totalFolderIssues = aggregates.totalIssues ?? data.totalIssues ?? data.refactoringNeeded ?? 0;
+        const metrics2 = [
+          {
+            label: "Health",
+            value: typeof data.healthScore === "number" ? `${Math.round(data.healthScore * 100)}%` : "—"
+          },
+          { label: "Files", value: aggregates.fileCount ?? data.fileCount ?? 0 },
+          { label: "Entities", value: aggregates.entityCount ?? data.entityCount ?? 0 },
+          { label: "Issues", value: totalFolderIssues },
+          { label: "Critical Issues", value: aggregates.severityCounts?.critical ?? data.criticalIssues ?? 0 },
+          { label: "High Priority", value: (aggregates.severityCounts?.high || 0) + (aggregates.severityCounts?.critical || 0) }
+        ];
+        if (aggregates.avgScore != null) {
+          metrics2.push({ label: "Avg Score", value: aggregates.avgScore });
+        }
+        const categories = Array.isArray(data.issueCategories) ? data.issueCategories.slice(0, 5) : [];
+        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Directory"), renderMetrics(metrics2), categories.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Categories"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, categories.map((category, idx) => import_react5.default.createElement("li", { key: `${category.category}-${idx}` }, import_react5.default.createElement("div", { className: "issue-heading" }, `${capitalize(category.category)} · ${renderValue(category.affectedEntities)} entities`), import_react5.default.createElement("div", { className: "issue-summary" }, `Avg severity ${renderValue(category.avgSeverity)}, impact ${renderValue(category.healthImpact)}`))))));
+      }
+      if (isFile) {
+        const severityCounts = aggregates.severityCounts || {};
+        const totalIssues = aggregates.totalIssues ?? data.totalIssues ?? Object.values(severityCounts).reduce((acc, value) => acc + (value || 0), 0);
+        const metrics2 = [
+          { label: "Priority", value: data.highestPriority || data.priority || "—" },
+          {
+            label: "Entities",
+            value: aggregates.entityCount ?? data.entityCount ?? (data.children ? data.children.filter((child) => child.type === "entity").length : 0)
+          },
+          { label: "Issues", value: totalIssues },
+          { label: "Avg Score", value: aggregates.avgScore ?? data.avgScore ?? data.score ?? null }
+        ];
+        const severityList = [
+          { key: "critical", label: "Critical", value: severityCounts.critical || 0 },
+          { key: "high", label: "High", value: severityCounts.high || 0 },
+          { key: "medium", label: "Medium", value: severityCounts.medium || 0 },
+          { key: "low", label: "Low", value: severityCounts.low || 0 }
+        ].filter((item) => item.value > 0);
+        const topEntities = (data.children || []).filter((child) => child.type === "entity").slice(0, 3);
+        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), renderMetrics(metrics2), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, `${item.label}: ${renderValue(item.value)}`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, entity.name, entity.severityCounts && import_react5.default.createElement("div", { className: "issue-summary" }, `${renderValue(entity.severityCounts.critical || 0)} critical · ${renderValue(entity.severityCounts.high || 0)} high`))))));
+      }
+      const issues = Array.isArray(data.issues) ? data.issues : [];
+      const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      const topIssuesRaw = issues.slice().sort((a, b) => (b?.severity ?? 0) - (a?.severity ?? 0)).slice(0, 3);
+      const topIssues = topIssuesRaw.map(formatIssue);
+      const formattedSuggestions = suggestions.slice(0, 2).map(formatSuggestion);
+      const featureMap = new Map;
+      topIssuesRaw.forEach((issue) => {
+        const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
+        features.forEach((feature) => {
+          const name = (feature?.feature_name || "").trim();
+          if (!name)
+            return;
+          const normalizedName = name.replace(/_/g, " ");
+          const value = feature?.value;
+          if (!featureMap.has(normalizedName)) {
+            featureMap.set(normalizedName, new Set);
+          }
+          if (value != null) {
+            featureMap.get(normalizedName).add(value);
+          }
+        });
+      });
+      const featureSummary = Array.from(featureMap.entries()).map(([name, values]) => ({
+        name,
+        values: Array.from(values).slice(0, 3)
+      }));
+      const highestSeverity = topIssuesRaw.length > 0 ? topIssuesRaw[0].severity ?? null : null;
+      const metrics = [
+        { label: "Priority", value: data.priority || data.highestPriority || "—" },
+        { label: "Score", value: data.score ?? formattedEntityScore },
+        { label: "Confidence", value: data.confidence != null ? `${Math.round(data.confidence * 100)}%` : "—" },
+        { label: "Issues", value: issues.length ?? 0 },
+        { label: "Suggestions", value: suggestions.length ?? 0 },
+        { label: "Peak Severity", value: highestSeverity }
+      ];
+      return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Function"), renderMetrics(metrics), featureSummary.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Signals"), import_react5.default.createElement("table", { className: "feature-table" }, import_react5.default.createElement("tbody", null, featureSummary.map(({ name, values }) => import_react5.default.createElement("tr", { key: name }, import_react5.default.createElement("th", null, name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())), import_react5.default.createElement("td", null, values.length ? values.map((val) => renderValue(val)).join(", ") : "—")))))), topIssues.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Issues"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topIssues.map((issue, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-heading" }, `${issue.title} (Severity ${issue.severity})`), issue.summary && import_react5.default.createElement("div", { className: "issue-summary" }, issue.summary))))), formattedSuggestions.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Suggestions"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, formattedSuggestions.map((suggestion, idx) => import_react5.default.createElement("li", { key: idx, className: "suggestion-item" }, suggestion.title && import_react5.default.createElement("div", { className: "suggestion-summary" }, suggestion.title))))));
+    };
+    return import_react5.default.createElement(Tooltip_default, { content: tooltipContent, placement: "bottom" }, headerRow);
   };
 
   // src/tree-component/treeUtils.js
-  var transformTreeData = (data, parentId = "") => {
+  var transformTreeData = (data, parentId = "", codeDictionary = { issues: {}, suggestions: {} }) => {
     if (!Array.isArray(data)) {
       return [];
     }
-    return data.map((node, index) => {
+    return data.map((node, index3) => {
       if (!node || typeof node !== "object") {
-        console.warn("⚠️ Invalid node detected, skipping:", node);
+        console.warn("[treeUtils] Invalid node detected, skipping:", node);
         return null;
       }
       let nodeId = node.id;
@@ -31833,14 +29811,65 @@ Use the data prop if you want to provide your own handlers.`);
           const safeName = String(node.name).replace(/[^a-zA-Z0-9_-]/g, "_");
           nodeId = parentId ? `${parentId}_${safeName}` : safeName;
         } else {
-          nodeId = parentId ? `${parentId}_node_${index}` : `node_${index}`;
+          nodeId = parentId ? `${parentId}_node_${index3}` : `node_${index3}`;
         }
       }
-      const transformedChildren = node.children ? transformTreeData(node.children, nodeId) : [];
+      let processedChildren = [];
+      if (node.entity_id) {
+        if (node.issues && Array.isArray(node.issues)) {
+          node.issues.forEach((issue, idx) => {
+            const issueMeta = issue.code && codeDictionary.issues ? codeDictionary.issues[issue.code] : undefined;
+            const categoryLabel = String(issue.category || "issue");
+            const issueCode = issue.code || issueMeta?.code || categoryLabel.toUpperCase();
+            const issueTitle = issueMeta?.title || categoryLabel;
+            const issueSummary = issueMeta?.summary || issue.description || "";
+            const issueChild = {
+              ...issue,
+              type: "issue-row",
+              id: `${nodeId}_issue_${idx}`,
+              name: `${issueCode}: ${issueTitle}`.trim(),
+              code: issueCode,
+              title: issueTitle,
+              summary: issueSummary,
+              badges: [],
+              children: []
+            };
+            processedChildren.push(issueChild);
+          });
+        }
+        if (node.suggestions && Array.isArray(node.suggestions)) {
+          node.suggestions.forEach((suggestion, idx) => {
+            const suggestionMeta = suggestion.code && codeDictionary.suggestions ? codeDictionary.suggestions[suggestion.code] : undefined;
+            const suggestionLabel = String(suggestion.refactoring_type || suggestion.type || suggestion.category || "suggestion");
+            const formattedLabel = suggestionLabel.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+            const suggestionCode = suggestion.code || suggestionMeta?.code || formattedLabel.replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "SUGGEST";
+            const suggestionTitle = suggestionMeta?.title || formattedLabel;
+            const suggestionSummary = suggestionMeta?.summary || suggestion.description || "";
+            const suggestionChild = {
+              ...suggestion,
+              type: "suggestion-row",
+              id: `${nodeId}_suggestion_${idx}`,
+              name: `${suggestionCode}: ${suggestionTitle}`.trim(),
+              code: suggestionCode,
+              title: suggestionTitle,
+              summary: suggestionSummary,
+              badges: [],
+              children: []
+            };
+            processedChildren.push(suggestionChild);
+          });
+        }
+        if (node.children && Array.isArray(node.children)) {
+          const transformedChildren = transformTreeData(node.children, nodeId, codeDictionary);
+          processedChildren = [...processedChildren, ...transformedChildren];
+        }
+      } else if (node.children && Array.isArray(node.children)) {
+        processedChildren = transformTreeData(node.children, nodeId, codeDictionary);
+      }
       return {
         ...node,
         id: nodeId,
-        children: transformedChildren.filter(Boolean)
+        children: processedChildren.filter(Boolean)
       };
     }).filter(Boolean);
   };
@@ -31855,16 +29884,16 @@ Use the data prop if you want to provide your own handlers.`);
         errors.push(`Missing 'id' property at ${path}`);
       }
       if (node.children && Array.isArray(node.children)) {
-        node.children.forEach((child, index) => {
-          validateNode(child, `${path}.children[${index}]`);
+        node.children.forEach((child, index3) => {
+          validateNode(child, `${path}.children[${index3}]`);
         });
       }
     };
     if (!Array.isArray(data)) {
       errors.push("Tree data must be an array");
     } else {
-      data.forEach((node, index) => {
-        validateNode(node, `data[${index}]`);
+      data.forEach((node, index3) => {
+        validateNode(node, `data[${index3}]`);
       });
     }
     return {
@@ -31895,18 +29924,18 @@ Use the data prop if you want to provide your own handlers.`);
     }
     return "low";
   };
-  var countSeverityLevels = (items2) => {
+  var countSeverityLevels = (items) => {
     const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-    if (!Array.isArray(items2)) {
+    if (!Array.isArray(items)) {
       return counts;
     }
-    items2.forEach((item) => {
+    items.forEach((item) => {
       const severity = getSeverityLevel(item.priority, item.severity || item.impact);
       counts[severity]++;
     });
     return counts;
   };
-  var generateNodeId = (node, parentId = "", index = 0) => {
+  var generateNodeId = (node, parentId = "", index3 = 0) => {
     if (node.id) {
       return node.id;
     }
@@ -31917,7 +29946,7 @@ Use the data prop if you want to provide your own handlers.`);
       const safeName = String(node.name).replace(/[^a-zA-Z0-9_-]/g, "_");
       return parentId ? `${parentId}_${safeName}` : safeName;
     }
-    return parentId ? `${parentId}_node_${index}` : `node_${index}`;
+    return parentId ? `${parentId}_node_${index3}` : `node_${index3}`;
   };
   var filterBySeverity = (data, severityLevels = []) => {
     if (!Array.isArray(data) || !Array.isArray(severityLevels) || severityLevels.length === 0) {
@@ -31928,7 +29957,8 @@ Use the data prop if you want to provide your own handlers.`);
         return null;
       }
       const hasSeverity = severityLevels.some((level) => {
-        if (node.priority && node.priority.toLowerCase().includes(level.toLowerCase())) {
+        const priorityStr = String(node.priority || "").toLowerCase();
+        if (node.priority && priorityStr.includes(level.toLowerCase())) {
           return true;
         }
         if (node.severityCounts && node.severityCounts[level.toLowerCase()] > 0) {
@@ -31950,41 +29980,240 @@ Use the data prop if you want to provide your own handlers.`);
 
   // src/tree-component/CodeAnalysisTree.jsx
   var CodeAnalysisTree = ({ data }) => {
-    const [treeData, setTreeData] = import_react33.useState([]);
-    const [filterText, setFilterText] = import_react33.useState("");
-    const filterTree = import_react33.useCallback((nodes, query) => {
-      if (!query) {
-        return nodes;
+    const [treeData, setTreeData] = import_react6.useState([]);
+    const [expandedIds, setExpandedIds] = import_react6.useState(new Set);
+    const codeDictionary = import_react6.useMemo(() => {
+      const source = data && typeof data === "object" ? data.code_dictionary || data.codeDictionary || {} : {};
+      return {
+        issues: source.issues || {},
+        suggestions: source.suggestions || {}
+      };
+    }, [data]);
+    const priorityOrder = import_react6.useMemo(() => ({
+      critical: 0,
+      high: 1,
+      medium: 2,
+      low: 3
+    }), []);
+    const getPriorityRank = import_react6.useCallback((node) => {
+      const raw = node?.priority ?? node?.highestPriority ?? "";
+      const normalized = String(raw || "").trim().toLowerCase();
+      return priorityOrder[normalized] ?? 999;
+    }, [priorityOrder]);
+    const sortNodesByPriority = import_react6.useCallback((nodes) => {
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        return [];
       }
-      const needle = query.toLowerCase();
-      const filterNode = (node) => {
-        if (!node) {
+      const sorted = [...nodes].sort((a, b) => {
+        const aType = a?.type;
+        const bType = b?.type;
+        if (aType === "folder" && bType !== "folder")
+          return -1;
+        if (bType === "folder" && aType !== "folder")
+          return 1;
+        if (aType === "folder" && bType === "folder") {
+          const aHealth = typeof a?.healthScore === "number" ? a.healthScore : 1;
+          const bHealth = typeof b?.healthScore === "number" ? b.healthScore : 1;
+          if (aHealth !== bHealth)
+            return aHealth - bHealth;
+        }
+        const aRank = getPriorityRank(a);
+        const bRank = getPriorityRank(b);
+        if (aRank !== bRank)
+          return aRank - bRank;
+        const aScore = typeof a?.score === "number" ? a.score : -Infinity;
+        const bScore = typeof b?.score === "number" ? b.score : -Infinity;
+        if (aScore !== bScore)
+          return bScore - aScore;
+        const aName = String(a?.name || "").toLowerCase();
+        const bName = String(b?.name || "").toLowerCase();
+        return aName.localeCompare(bName);
+      });
+      return sorted.map((node) => ({
+        ...node,
+        children: sortNodesByPriority(node?.children || [])
+      }));
+    }, [getPriorityRank]);
+    const aggregateTreeMetrics = import_react6.useCallback((nodes) => {
+      if (!Array.isArray(nodes)) {
+        return [];
+      }
+      const cloneNodes = JSON.parse(JSON.stringify(nodes));
+      const toNumber = (value) => {
+        if (value === null || value === undefined || value === "") {
           return null;
         }
-        const children = Array.isArray(node.children) ? node.children : [];
-        const name = String(node.name || "").toLowerCase();
-        const matches = name.includes(needle);
-        if (matches) {
-          return {
-            ...node,
-            children: children.map((child) => filterNode(child) || child)
-          };
-        }
-        const filteredChildren = children.map(filterNode).filter(Boolean);
-        if (filteredChildren.length > 0) {
-          return {
-            ...node,
-            children: filteredChildren
-          };
-        }
-        return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
       };
-      return nodes.map(filterNode).filter(Boolean);
+      const getNumber = (obj, keys, fallback = 0) => {
+        if (!obj)
+          return fallback;
+        for (const key of keys) {
+          const numeric = toNumber(obj[key]);
+          if (numeric != null) {
+            return numeric;
+          }
+        }
+        return fallback;
+      };
+      const getSeverityCounts = (node) => {
+        const counts = node?.severityCounts || node?.severity_counts || {};
+        return {
+          critical: getNumber(counts, ["critical"], 0),
+          high: getNumber(counts, ["high"], 0),
+          medium: getNumber(counts, ["medium"], 0),
+          low: getNumber(counts, ["low"], 0)
+        };
+      };
+      const bubble = (items) => {
+        return items.map((node) => {
+          if (!node || typeof node !== "object") {
+            return node;
+          }
+          const processedChildren = bubble(node.children || []);
+          const baseIssues = getNumber(node, [
+            "totalIssues",
+            "total_issues",
+            "refactoringNeeded",
+            "refactoring_needed",
+            "issueCount",
+            "issue_count"
+          ], 0);
+          const childIssueSum = processedChildren.reduce((sum, child) => sum + getNumber(child, ["totalIssues", "total_issues"], 0), 0);
+          const totalIssues = processedChildren.length > 0 ? Math.max(baseIssues, childIssueSum) : baseIssues;
+          const severityAggregate = { critical: 0, high: 0, medium: 0, low: 0 };
+          const addSeverity = (counts) => {
+            if (!counts)
+              return;
+            severityAggregate.critical += counts.critical || 0;
+            severityAggregate.high += counts.high || 0;
+            severityAggregate.medium += counts.medium || 0;
+            severityAggregate.low += counts.low || 0;
+          };
+          if (processedChildren.length === 0 || node.type === "entity") {
+            addSeverity(getSeverityCounts(node));
+          }
+          processedChildren.forEach((child) => addSeverity(getSeverityCounts(child)));
+          const childEntityCount = processedChildren.reduce((sum, child) => sum + getNumber(child, ["entityCount", "entity_count"], 0), 0);
+          let entityCount = node.type === "entity" ? 1 : getNumber(node, ["entityCount", "entity_count"], 0);
+          if (node.type === "folder") {
+            entityCount = childEntityCount > 0 ? childEntityCount : entityCount;
+          } else if (node.type === "file" && entityCount === 0) {
+            entityCount = childEntityCount;
+          }
+          const childFileCount = processedChildren.reduce((sum, child) => {
+            if (child.type === "file") {
+              return sum + 1;
+            }
+            return sum + getNumber(child, ["fileCount", "file_count"], 0);
+          }, 0);
+          let fileCount = getNumber(node, ["fileCount", "file_count"], 0);
+          if (node.type === "folder") {
+            fileCount = childFileCount > 0 ? childFileCount : fileCount;
+          } else if (node.type === "file") {
+            fileCount = 1;
+          }
+          const collectScore = (scores = []) => scores.find((entry) => toNumber(entry) != null);
+          const nodeScore = collectScore([
+            node.score,
+            node.avgScore,
+            node.avg_score,
+            node.avgRefactoringScore,
+            node.avg_refactoring_score
+          ]);
+          let scoreSum = 0;
+          let scoreWeight = 0;
+          const addScore = (score, weight = 1) => {
+            const normalized = toNumber(score);
+            if (normalized != null && weight > 0) {
+              scoreSum += normalized * weight;
+              scoreWeight += weight;
+            }
+          };
+          if (nodeScore != null) {
+            const weight = node.type === "entity" ? 1 : node.type === "file" ? entityCount > 0 ? entityCount : 1 : node.type === "folder" ? childEntityCount > 0 ? childEntityCount : 1 : 1;
+            addScore(nodeScore, weight);
+          }
+          processedChildren.forEach((child) => {
+            const childSum = toNumber(child._scoreSum);
+            const childWeight = toNumber(child._scoreCount);
+            if (childSum != null && childWeight != null) {
+              scoreSum += childSum;
+              scoreWeight += childWeight;
+            }
+          });
+          const avgScore = scoreWeight > 0 ? scoreSum / scoreWeight : toNumber(nodeScore);
+          const updatedNode = {
+            ...node,
+            children: processedChildren,
+            totalIssues,
+            severityCounts: severityAggregate,
+            entityCount: node.type === "entity" ? 1 : entityCount,
+            fileCount,
+            _scoreSum: scoreSum,
+            _scoreCount: scoreWeight
+          };
+          updatedNode.total_issues = totalIssues;
+          updatedNode.severity_counts = severityAggregate;
+          updatedNode.entity_count = entityCount;
+          updatedNode.file_count = fileCount;
+          updatedNode.refactoringNeeded = updatedNode.refactoringNeeded ?? getNumber(node, ["refactoringNeeded", "refactoring_needed"], 0);
+          updatedNode.refactoring_needed = updatedNode.refactoringNeeded;
+          if (node.type === "folder") {
+            updatedNode.avgScore = avgScore != null ? avgScore : updatedNode.avgScore;
+            updatedNode.avgRefactoringScore = avgScore != null ? avgScore : updatedNode.avgRefactoringScore;
+            updatedNode.refactoringNeeded = totalIssues;
+            updatedNode.criticalIssues = severityAggregate.critical;
+            updatedNode.highPriorityIssues = severityAggregate.high + severityAggregate.critical;
+            updatedNode.critical_issues = updatedNode.criticalIssues;
+            updatedNode.high_priority_issues = updatedNode.highPriorityIssues;
+            updatedNode.avg_refactoring_score = updatedNode.avgRefactoringScore;
+          } else if (node.type === "file") {
+            updatedNode.avgScore = updatedNode.avgScore != null ? updatedNode.avgScore : avgScore;
+            updatedNode.refactoringNeeded = updatedNode.refactoringNeeded ?? totalIssues;
+            updatedNode.avg_refactoring_score = updatedNode.avg_refactoring_score ?? updatedNode.avgScore;
+          } else if (node.type === "entity") {
+            updatedNode.avgScore = updatedNode.score != null ? updatedNode.score : avgScore;
+            updatedNode.score = updatedNode.score != null ? updatedNode.score : avgScore;
+          }
+          updatedNode.totalIssues = updatedNode.refactoringNeeded ?? totalIssues;
+          updatedNode.total_issues = updatedNode.totalIssues;
+          return updatedNode;
+        });
+      };
+      const cleanup = (items) => {
+        return items.map((node) => {
+          if (!node || typeof node !== "object") {
+            return node;
+          }
+          const { _scoreSum, _scoreCount, severity_counts, ...rest } = node;
+          rest.severityCounts = node.severityCounts || getSeverityCounts(node);
+          if (Array.isArray(rest.children) && rest.children.length > 0) {
+            rest.children = cleanup(rest.children);
+          }
+          return rest;
+        });
+      };
+      const aggregated = bubble(cloneNodes);
+      return cleanup(aggregated);
     }, []);
-    const filteredData = import_react33.useMemo(() => filterTree(treeData, filterText.trim()), [treeData, filterText, filterTree]);
-    const buildTreeData = import_react33.useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
+    const buildTreeData = import_react6.useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
       const folderMap = new Map;
       const result = [];
+      const directoryLookup = directoryHealth && directoryHealth.directories || {};
+      const formatIssueCategories = (categories) => {
+        if (!categories || typeof categories !== "object") {
+          return [];
+        }
+        return Object.values(categories).map((category) => ({
+          category: String(category?.category || "uncategorized"),
+          affectedEntities: category?.affected_entities ?? 0,
+          avgSeverity: category?.avg_severity ?? 0,
+          maxSeverity: category?.max_severity ?? 0,
+          healthImpact: category?.health_impact ?? 0
+        })).sort((a, b) => (b.healthImpact ?? 0) - (a.healthImpact ?? 0));
+      };
       const coverageMap = new Map;
       if (coveragePacks && Array.isArray(coveragePacks)) {
         coveragePacks.forEach((pack) => {
@@ -31994,11 +30223,11 @@ Use the data prop if you want to provide your own handlers.`);
         });
       }
       if (directoryHealth && directoryHealth.directories) {
-        Object.entries(directoryHealth.directories).forEach(([path, health]) => {
-          const pathParts = path.split("/").filter(Boolean);
+        Object.entries(directoryHealth.directories).forEach(([rawPath, health]) => {
+          const pathParts = rawPath.split(/[\\\/]/).filter(Boolean);
           let currentPath = "";
           let parentFolder = result;
-          pathParts.forEach((part, index) => {
+          pathParts.forEach((part, index3) => {
             currentPath += "/" + part;
             let folder = folderMap.get(currentPath);
             if (!folder) {
@@ -32008,16 +30237,52 @@ Use the data prop if you want to provide your own handlers.`);
                 name: String(part),
                 type: "folder",
                 children: folderChildren,
-                healthScore: typeof health?.health_score === "number" ? health.health_score : 0,
+                healthScore: typeof health?.health_score === "number" ? health.health_score : undefined,
                 fileCount: typeof health?.file_count === "number" ? health.file_count : 0,
                 entityCount: typeof health?.entity_count === "number" ? health.entity_count : 0,
-                refactoringNeeded: Boolean(health?.refactoring_needed),
+                refactoringNeeded: typeof health?.refactoring_needed === "number" ? health.refactoring_needed : 0,
                 criticalIssues: typeof health?.critical_issues === "number" ? health.critical_issues : 0,
                 highPriorityIssues: typeof health?.high_priority_issues === "number" ? health.high_priority_issues : 0,
-                avgRefactoringScore: typeof health?.avg_refactoring_score === "number" ? health.avg_refactoring_score : 0
+                avgRefactoringScore: typeof health?.avg_refactoring_score === "number" ? health.avg_refactoring_score : 0,
+                issueCategories: formatIssueCategories(health?.issue_categories),
+                primaryIssueCategory: health?.primary_issue_category || null
               };
               folderMap.set(currentPath, folder);
               parentFolder.push(folder);
+            } else {
+              folder.issueCategories = Array.isArray(folder.issueCategories) ? folder.issueCategories : [];
+              folder.primaryIssueCategory = folder.primaryIssueCategory || null;
+            }
+            const lookupKey = currentPath;
+            const lookupEntry = directoryLookup[lookupKey] || directoryLookup[rawPath];
+            const healthSource = lookupEntry || (index3 === pathParts.length - 1 ? health : null);
+            if (healthSource) {
+              const categories = formatIssueCategories(healthSource.issue_categories);
+              if (typeof healthSource.health_score === "number") {
+                folder.healthScore = healthSource.health_score;
+              }
+              if (typeof healthSource.file_count === "number") {
+                folder.fileCount = healthSource.file_count;
+              }
+              if (typeof healthSource.entity_count === "number") {
+                folder.entityCount = healthSource.entity_count;
+              }
+              if (typeof healthSource.refactoring_needed === "number") {
+                folder.refactoringNeeded = healthSource.refactoring_needed;
+              }
+              if (typeof healthSource.critical_issues === "number") {
+                folder.criticalIssues = healthSource.critical_issues;
+              }
+              if (typeof healthSource.high_priority_issues === "number") {
+                folder.highPriorityIssues = healthSource.high_priority_issues;
+              }
+              if (typeof healthSource.avg_refactoring_score === "number") {
+                folder.avgRefactoringScore = healthSource.avg_refactoring_score;
+              }
+              if (Array.isArray(categories) && categories.length > 0) {
+                folder.issueCategories = categories;
+                folder.primaryIssueCategory = healthSource.primary_issue_category || categories[0]?.category || folder.primaryIssueCategory;
+              }
             }
             parentFolder = folder.children;
           });
@@ -32026,7 +30291,7 @@ Use the data prop if you want to provide your own handlers.`);
       if (refactoringFiles && refactoringFiles.length > 0) {
         refactoringFiles.forEach((fileGroup, fileIndex) => {
           if (!fileGroup || !fileGroup.filePath) {
-            console.warn("⚠️ Skipping invalid file group:", fileGroup);
+            console.warn("[CodeAnalysisTree] Skipping invalid file group:", fileGroup);
             return;
           }
           const pathParts = fileGroup.filePath.split("/").filter(Boolean);
@@ -32071,41 +30336,102 @@ Use the data prop if you want to provide your own handlers.`);
                 severityCounts[severity]++;
               });
             }
-            const hasEntityMetadata = entity.score || entity.lineRange || entity.priority || Array.isArray(entity.issues) && entity.issues.length > 0 || Array.isArray(entity.suggestions) && entity.suggestions.length > 0 || entity.issueCategories || entity.suggestionTypes;
-            if (hasEntityMetadata) {
+            {
               const coveragePack = coverageMap.get(fileGroup.filePath);
               if (entity.issues && Array.isArray(entity.issues)) {
                 entity.issues.forEach((issue, idx) => {
-                  let issueText = `${issue.category}: ${issue.description}`;
-                  if (issue.category?.toLowerCase().includes("complexity") && entity.score) {
-                    issueText = `${issue.category}: ${issue.description.replace("score: 0.0", `score: ${entity.score}`)}`;
+                  const category = String(issue.category || "issue");
+                  const categoryCapitalized = category.charAt(0).toUpperCase() + category.slice(1);
+                  let metrics = [];
+                  if (issue.contributing_features && Array.isArray(issue.contributing_features)) {
+                    issue.contributing_features.forEach((feat) => {
+                      if (feat.feature_name === "lines_of_code" && feat.value) {
+                        metrics.push(`${feat.value} LOC`);
+                      } else if (feat.feature_name === "cognitive_complexity" && feat.value) {
+                        metrics.push(`Cognitive: ${feat.value}`);
+                      } else if (feat.feature_name === "cyclomatic_complexity" && feat.value) {
+                        metrics.push(`Cyclomatic: ${feat.value}`);
+                      } else if (feat.feature_name === "maintainability_index" && feat.value) {
+                        metrics.push(`Maintainability: ${feat.value.toFixed(1)}`);
+                      }
+                    });
                   }
+                  const issueMeta = issue.code && codeDictionary.issues ? codeDictionary.issues[issue.code] : undefined;
+                  const issueCode = issue.code || issueMeta?.code || categoryCapitalized.toUpperCase();
+                  const issueTitle = issueMeta?.title || categoryCapitalized;
+                  const issueSummary = issueMeta?.summary || `Signals flagged in the ${categoryCapitalized.toLowerCase()} dimension.`;
+                  const severityBadge = typeof issue.severity === "number" ? `Severity ${issue.severity.toFixed(1)}` : null;
+                  const badges = [
+                    ...severityBadge ? [severityBadge] : [],
+                    ...metrics
+                  ];
                   const issueChild = {
                     id: `issue:${entityNodeId}:${idx}`,
-                    name: issueText,
+                    name: `${issueCode} · ${issueTitle}`,
                     type: "issue-row",
                     entityScore: entity.score,
                     issueSeverity: issue.severity,
                     issueCategory: issue.category,
-                    children: []
+                    code: issueCode,
+                    title: issueTitle,
+                    summary: issueSummary,
+                    badges
                   };
                   entityChildren.push(issueChild);
                 });
               }
               if (entity.suggestions && Array.isArray(entity.suggestions)) {
                 entity.suggestions.forEach((suggestion, idx) => {
-                  let suggestionText = `${suggestion.type}: ${suggestion.description}`;
-                  if (suggestion.description?.includes("score: 0.0") && entity.score) {
-                    suggestionText = `${suggestion.type}: ${suggestion.description.replace("score: 0.0", `score: ${entity.score}`)}`;
+                  const refType = suggestion.refactoring_type || suggestion.type || "suggestion";
+                  let suggestionText = "";
+                  if (refType.includes("extract_class")) {
+                    suggestionText = "Extract Class: Split large module into smaller, focused classes";
+                  } else if (refType.includes("extract_method")) {
+                    suggestionText = "Extract Method: Break down complex logic into smaller functions";
+                  } else if (refType.includes("reduce_cognitive_complexity")) {
+                    const match = refType.match(/\d+/);
+                    const complexity = match ? match[0] : "high";
+                    suggestionText = `Reduce Cognitive Complexity (${complexity}): Simplify nested conditions and logic flow`;
+                  } else if (refType.includes("reduce_cyclomatic_complexity")) {
+                    const match = refType.match(/\d+/);
+                    const complexity = match ? match[0] : "high";
+                    suggestionText = `Reduce Cyclomatic Complexity (${complexity}): Reduce branches and decision points`;
+                  } else {
+                    const formatted = refType.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+                    suggestionText = formatted;
                   }
-                  if (suggestion.type?.toLowerCase().includes("extract_method") || suggestion.type?.toLowerCase().includes("extract method")) {
-                    suggestionText = `Extract Method for ${cleanName}: ${suggestion.description}`;
+                  const [fallbackTitleRaw, ...fallbackSummaryParts] = suggestionText.split(":");
+                  const fallbackTitle = fallbackTitleRaw ? fallbackTitleRaw.trim() : suggestionText.trim();
+                  const fallbackSummary = fallbackSummaryParts.join(":").trim();
+                  let metadata = [];
+                  if (suggestion.effort) {
+                    const effortPercent = (suggestion.effort * 100).toFixed(0);
+                    metadata.push(`Effort ${effortPercent}%`);
                   }
+                  if (suggestion.impact) {
+                    const impactPercent = (suggestion.impact * 100).toFixed(0);
+                    metadata.push(`Impact ${impactPercent}%`);
+                  }
+                  if (suggestion.priority) {
+                    const priorityVal = typeof suggestion.priority === "number" ? suggestion.priority.toFixed(2) : suggestion.priority;
+                    metadata.push(`Priority ${priorityVal}`);
+                  }
+                  const suggestionMeta = suggestion.code && codeDictionary.suggestions ? codeDictionary.suggestions[suggestion.code] : undefined;
+                  const suggestionCode = suggestion.code || suggestionMeta?.code || fallbackTitle.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "SUGGEST";
+                  const suggestionTitle = suggestionMeta?.title || fallbackTitle || suggestionCode;
+                  const suggestionSummary = suggestionMeta?.summary || fallbackSummary || fallbackTitle;
                   entityChildren.push({
                     id: `suggestion:${entityNodeId}:${idx}`,
-                    name: suggestionText,
+                    name: `${suggestionCode} · ${suggestionTitle}`,
                     type: "suggestion-row",
-                    children: []
+                    code: suggestionCode,
+                    title: suggestionTitle,
+                    summary: suggestionSummary,
+                    badges: metadata,
+                    priority: suggestion.priority,
+                    impact: suggestion.impact,
+                    effort: suggestion.effort,
+                    refactoringType: refType
                   });
                 });
               }
@@ -32114,30 +30440,28 @@ Use the data prop if you want to provide your own handlers.`);
                   entityChildren.push({
                     id: `info:${entityNodeId}:coverage-before`,
                     name: `Coverage Before: ${(coveragePack.file_info.coverage_before * 100).toFixed(1)}%`,
-                    type: "info-row",
-                    children: []
+                    type: "info-row"
                   });
                 }
                 if (coveragePack.file_info.coverage_after_if_filled !== undefined) {
                   entityChildren.push({
                     id: `info:${entityNodeId}:coverage-after`,
                     name: `Coverage After: ${(coveragePack.file_info.coverage_after_if_filled * 100).toFixed(1)}%`,
-                    type: "info-row",
-                    children: []
+                    type: "info-row"
                   });
                 }
                 if (coveragePack.file_info.loc) {
                   entityChildren.push({
                     id: `info:${entityNodeId}:loc`,
                     name: `Lines of Code: ${coveragePack.file_info.loc}`,
-                    type: "info-row",
-                    children: []
+                    type: "info-row"
                   });
                 }
               }
             }
             return {
               id: entityNodeId,
+              entity_id: entityNodeId,
               name: cleanName,
               type: "entity",
               priority: String(entity.priority || "Low"),
@@ -32145,6 +30469,7 @@ Use the data prop if you want to provide your own handlers.`);
               lineRange: entity.lineRange,
               issueCount: Array.isArray(entity.issues) ? entity.issues.length : 0,
               suggestionCount: Array.isArray(entity.suggestions) ? entity.suggestions.length : 0,
+              totalIssues: Array.isArray(entity.issues) ? entity.issues.length : 0,
               severityCounts,
               children: entityChildren
             };
@@ -32172,156 +30497,450 @@ Use the data prop if you want to provide your own handlers.`);
             highestPriority: String(fileGroup.highestPriority || "Low"),
             entityCount: typeof fileGroup.entityCount === "number" ? fileGroup.entityCount : 0,
             avgScore: typeof fileGroup.avgScore === "number" ? fileGroup.avgScore : 0,
-            totalIssues: typeof fileGroup.totalIssues === "number" ? fileGroup.totalIssues : 0,
+            totalIssues: typeof fileGroup.totalIssues === "number" ? fileGroup.totalIssues : Object.values(fileSeverityCounts).reduce((acc, value) => acc + (value || 0), 0),
             severityCounts: fileSeverityCounts,
             children: fileChildren
           };
           parentFolder.push(fileNode);
         });
       }
-      const bubbleUpSeverityCounts = (nodes) => {
+      const bubbleUpMetrics = (nodes) => {
         return nodes.map((node) => {
-          const processedChildren = bubbleUpSeverityCounts(node.children || []);
+          const processedChildren = bubbleUpMetrics(node.children || []);
+          const baseIssues = typeof node.totalIssues === "number" ? node.totalIssues : typeof node.issueCount === "number" ? node.issueCount : 0;
+          const childIssueSum = processedChildren.reduce((sum, child) => sum + (child.totalIssues || 0), 0);
+          let totalIssues = processedChildren.length > 0 ? Math.max(baseIssues, childIssueSum) : baseIssues;
+          const aggregatedSeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+          const addSeverity = (counts = {}) => {
+            aggregatedSeverity.critical += counts.critical || 0;
+            aggregatedSeverity.high += counts.high || 0;
+            aggregatedSeverity.medium += counts.medium || 0;
+            aggregatedSeverity.low += counts.low || 0;
+          };
+          if (node.severityCounts && (node.type === "entity" || processedChildren.length === 0)) {
+            addSeverity(node.severityCounts);
+          }
+          processedChildren.forEach((child) => addSeverity(child.severityCounts));
+          const childEntityCount = processedChildren.reduce((sum, child) => sum + (child.entityCount || 0), 0);
+          let entityCount = node.type === "entity" ? 1 : node.entityCount || 0;
           if (node.type === "folder") {
-            const folderSeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
-            const aggregateFromChild = (child) => {
-              if (child.severityCounts) {
-                folderSeverityCounts.critical += child.severityCounts.critical || 0;
-                folderSeverityCounts.high += child.severityCounts.high || 0;
-                folderSeverityCounts.medium += child.severityCounts.medium || 0;
-                folderSeverityCounts.low += child.severityCounts.low || 0;
-              }
-              (child.children || []).forEach(aggregateFromChild);
+            entityCount = childEntityCount > 0 ? childEntityCount : node.entityCount || 0;
+          } else if (node.type === "file" && entityCount === 0) {
+            entityCount = childEntityCount;
+          } else if (node.type === "entity") {
+            entityCount = 1;
+          }
+          const childFileCount = processedChildren.reduce((sum, child) => {
+            if (child.type === "file") {
+              return sum + 1;
+            }
+            return sum + (child.fileCount || 0);
+          }, 0);
+          let fileCount = node.type === "folder" ? childFileCount > 0 ? childFileCount : node.fileCount || 0 : node.fileCount || 0;
+          if (node.type === "file") {
+            fileCount = 1;
+          }
+          let scoreSum = 0;
+          let scoreCount = 0;
+          const addScore = (score, weight = 1) => {
+            if (typeof score === "number" && Number.isFinite(score) && weight > 0) {
+              scoreSum += score * weight;
+              scoreCount += weight;
+            }
+          };
+          const nodeScore = typeof node.score === "number" ? node.score : typeof node.avgScore === "number" ? node.avgScore : typeof node.avgRefactoringScore === "number" ? node.avgRefactoringScore : null;
+          if (nodeScore != null) {
+            const weight = node.type === "entity" ? 1 : node.type === "file" ? node.entityCount && node.entityCount > 0 ? node.entityCount : 1 : node.type === "folder" ? childEntityCount > 0 ? childEntityCount : 1 : 1;
+            addScore(nodeScore, weight);
+          }
+          processedChildren.forEach((child) => {
+            if (typeof child._scoreSum === "number" && typeof child._scoreCount === "number") {
+              scoreSum += child._scoreSum;
+              scoreCount += child._scoreCount;
+            }
+          });
+          const avgScore = scoreCount > 0 ? scoreSum / scoreCount : null;
+          let updatedNode = {
+            ...node,
+            children: processedChildren,
+            totalIssues,
+            severityCounts: aggregatedSeverity,
+            entityCount: node.type === "entity" ? 1 : entityCount,
+            fileCount: node.type === "folder" ? fileCount : node.fileCount || (node.type === "file" ? 1 : fileCount),
+            _scoreSum: scoreSum,
+            _scoreCount: scoreCount
+          };
+          if (node.type === "folder") {
+            updatedNode = {
+              ...updatedNode,
+              avgScore: avgScore != null ? avgScore : node.avgScore,
+              avgRefactoringScore: avgScore != null ? avgScore : node.avgRefactoringScore,
+              refactoringNeeded: totalIssues,
+              criticalIssues: aggregatedSeverity.critical,
+              highPriorityIssues: aggregatedSeverity.high + aggregatedSeverity.critical
             };
-            processedChildren.forEach(aggregateFromChild);
-            return {
-              ...node,
-              severityCounts: folderSeverityCounts,
-              children: processedChildren
+          } else if (node.type === "file") {
+            updatedNode = {
+              ...updatedNode,
+              avgScore: node.avgScore != null ? node.avgScore : avgScore,
+              refactoringNeeded: node.refactoringNeeded ?? totalIssues
+            };
+          } else if (node.type === "entity") {
+            updatedNode = {
+              ...updatedNode,
+              avgScore: node.score != null ? node.score : avgScore,
+              score: node.score != null ? node.score : avgScore
             };
           }
-          return {
-            ...node,
-            children: processedChildren
-          };
+          return updatedNode;
         });
       };
-      const sortNodes = (nodes) => {
-        return nodes.sort((a, b) => {
-          if (a.type === "folder" && b.type !== "folder")
-            return -1;
-          if (b.type === "folder" && a.type !== "folder")
-            return 1;
-          if (a.type === "folder" && b.type === "folder") {
-            const aHealth = a.healthScore || 1;
-            const bHealth = b.healthScore || 1;
-            if (aHealth !== bHealth)
-              return aHealth - bHealth;
+      const cleanupAggregates = (nodes) => {
+        return nodes.map((node) => {
+          const { _scoreSum, _scoreCount, ...rest } = node;
+          if (rest.children) {
+            rest.children = cleanupAggregates(rest.children);
           }
-          const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-          const aPri = priorityOrder[a.priority || a.highestPriority] || 999;
-          const bPri = priorityOrder[b.priority || b.highestPriority] || 999;
-          if (aPri !== bPri)
-            return aPri - bPri;
-          return a.name.localeCompare(b.name);
-        }).map((node) => ({
-          ...node,
-          children: sortNodes(node.children || [])
-        }));
+          return rest;
+        });
       };
-      const bubblerResult = bubbleUpSeverityCounts(result);
-      const sortedResult = sortNodes(bubblerResult);
+      const aggregatedResult = aggregateTreeMetrics(result);
+      const sortedResult = sortNodesByPriority(aggregatedResult);
       return sortedResult;
+    }, [aggregateTreeMetrics, codeDictionary, sortNodesByPriority]);
+    const normalizeTreeData = import_react6.useCallback((nodes) => {
+      const CATEGORY_ORDER = ["complexity", "cognitive", "structure", "maintainability", "debt"];
+      const inferCategory = (node) => {
+        const name = String(node.name || "").toLowerCase();
+        const category = String(node.category || node.issueCategory || "").toLowerCase();
+        if (category.includes("complexity"))
+          return "complexity";
+        if (category.includes("cognitive"))
+          return "cognitive";
+        if (category.includes("structure"))
+          return "structure";
+        if (name.includes("cyclomatic"))
+          return "complexity";
+        if (name.includes("cognitive"))
+          return "cognitive";
+        if (name.includes("extract_class") || name.includes("structure"))
+          return "structure";
+        if (name.includes("reduce_complexity"))
+          return "complexity";
+        return "maintainability";
+      };
+      const ensureCategoryParent = (entity, cat) => {
+        const categoryId = `${entity.id}:category:${cat}`;
+        let existing = (entity.children || []).find((c) => c.id === categoryId);
+        if (!existing) {
+          existing = {
+            id: categoryId,
+            name: cat.charAt(0).toUpperCase() + cat.slice(1),
+            type: "category",
+            children: []
+          };
+          entity.children = entity.children || [];
+          entity.children.push(existing);
+        }
+        return existing;
+      };
+      const visit = (node) => {
+        if (node.type === "entity" && node.children) {
+          const byCat = {};
+          CATEGORY_ORDER.forEach((cat) => {
+            byCat[cat] = ensureCategoryParent(node, cat);
+          });
+          const newChildren = [];
+          const categorizableTypes = ["issue-row", "suggestion-row"];
+          node.children.forEach((child) => {
+            if (categorizableTypes.includes(child.type)) {
+              const cat = inferCategory(child);
+              byCat[cat].children.push(child);
+            } else if (child.type !== "category") {
+              newChildren.push(child);
+            }
+          });
+          const categoriesWithChildren = CATEGORY_ORDER.map((cat) => byCat[cat]).filter((catNode) => catNode.children && catNode.children.length > 0);
+          node.children = [...newChildren, ...categoriesWithChildren];
+        }
+        if (node.children) {
+          node.children.forEach(visit);
+        }
+      };
+      const clonedNodes = JSON.parse(JSON.stringify(nodes));
+      clonedNodes.forEach(visit);
+      return clonedNodes;
     }, []);
-    import_react33.useEffect(() => {
+    const annotateNodesWithDictionary = import_react6.useCallback((nodes) => {
+      if (!Array.isArray(nodes)) {
+        return [];
+      }
+      const annotate = (node) => {
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        const clone = { ...node };
+        if (Array.isArray(clone.children)) {
+          clone.children = clone.children.map(annotate).filter(Boolean);
+        }
+        if (clone.type === "issue-row") {
+          const meta = clone.code && codeDictionary.issues ? codeDictionary.issues[clone.code] : undefined;
+          const category = clone.issueCategory || clone.category || "";
+          const fallbackTitle = meta?.title || (category ? category.charAt(0).toUpperCase() + category.slice(1) : "Issue");
+          const summary = meta?.summary || clone.summary || "";
+          const severityValue = typeof clone.issueSeverity === "number" ? clone.issueSeverity : typeof clone.severity === "number" ? clone.severity : undefined;
+          const badges = Array.isArray(clone.badges) ? clone.badges.filter(Boolean).map(String) : [];
+          if (severityValue !== undefined) {
+            const severityBadge = `Severity ${severityValue.toFixed(1)}`;
+            if (!badges.includes(severityBadge)) {
+              badges.unshift(severityBadge);
+            }
+          }
+          clone.code = clone.code || meta?.code || fallbackTitle.toUpperCase();
+          clone.title = fallbackTitle;
+          clone.summary = summary;
+          clone.badges = Array.from(new Set(badges));
+          if (clone.code && clone.title) {
+            clone.name = `${clone.code} · ${clone.title}`;
+          }
+        } else if (clone.type === "suggestion-row") {
+          const meta = clone.code && codeDictionary.suggestions ? codeDictionary.suggestions[clone.code] : undefined;
+          const refType = clone.refactoring_type || clone.refactoringType || clone.title || "suggestion";
+          const formatted = String(refType).replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+          const fallbackTitle = meta?.title || clone.title || formatted;
+          const summary = meta?.summary || clone.summary || "";
+          const badges = Array.isArray(clone.badges) ? clone.badges.filter(Boolean).map(String) : [];
+          const addBadge = (badge) => {
+            if (badge && !badges.includes(badge)) {
+              badges.push(badge);
+            }
+          };
+          if (typeof clone.priority === "number") {
+            addBadge(`Priority ${clone.priority.toFixed(2)}`);
+          } else if (clone.priority) {
+            addBadge(`Priority ${clone.priority}`);
+          }
+          if (typeof clone.impact === "number") {
+            addBadge(`Impact ${(clone.impact * 100).toFixed(0)}%`);
+          }
+          if (typeof clone.effort === "number") {
+            addBadge(`Effort ${(clone.effort * 100).toFixed(0)}%`);
+          }
+          clone.code = clone.code || meta?.code || fallbackTitle.toUpperCase().replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "SUGGEST";
+          clone.title = fallbackTitle;
+          clone.summary = summary;
+          clone.badges = badges;
+          if (clone.code && clone.title) {
+            clone.name = `${clone.code} · ${clone.title}`;
+          }
+        }
+        return clone;
+      };
+      return nodes.map(annotate).filter(Boolean);
+    }, [codeDictionary]);
+    import_react6.useEffect(() => {
       try {
         if (data && typeof data === "object") {
           const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
           if (data.unifiedHierarchy) {
-            setTreeData(hierarchyData);
+            const fileGroups = Array.isArray(data.refactoringCandidatesByFile) ? data.refactoringCandidatesByFile : Array.isArray(data.refactoring_candidates_by_file) ? data.refactoring_candidates_by_file : [];
+            const treeStructure = buildTreeData(fileGroups, data.directoryHealthTree, data.coveragePacks || []);
+            const baseNodes = treeStructure.length > 0 ? treeStructure : hierarchyData;
+            const aggregatedHierarchy = aggregateTreeMetrics(baseNodes);
+            const sortedHierarchy = sortNodesByPriority(aggregatedHierarchy);
+            const annotated = annotateNodesWithDictionary(sortedHierarchy);
+            const normalized = normalizeTreeData(annotated);
+            const aggregatedNormalized = aggregateTreeMetrics(normalized);
+            if (typeof window !== "undefined") {
+              window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
+              window.__VALKNUT_TREE_AGG_DEBUG.push({
+                source: "unifiedHierarchy",
+                sample: aggregatedNormalized.slice(0, 3)
+              });
+            }
+            setTreeData(aggregatedNormalized);
           } else {
             const treeStructure = buildTreeData(hierarchyData, data.directoryHealthTree, data.coveragePacks || []);
-            setTreeData(treeStructure);
+            const annotated = annotateNodesWithDictionary(treeStructure);
+            const normalized = normalizeTreeData(annotated);
+            const aggregatedNormalized = aggregateTreeMetrics(normalized);
+            if (typeof window !== "undefined") {
+              window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
+              window.__VALKNUT_TREE_AGG_DEBUG.push({
+                source: "legacy",
+                sample: aggregatedNormalized.slice(0, 3)
+              });
+            }
+            setTreeData(aggregatedNormalized);
           }
         } else {
           setTreeData([]);
         }
-      } catch (error) {
-        console.error("❌ Failed to load tree data:", error);
+      } catch (error2) {
+        console.error("❌ Failed to load tree data:", error2);
         setTreeData([]);
       }
-    }, [data, buildTreeData]);
-    const handleFilterChange = import_react33.useCallback((event) => {
-      setFilterText(event.target.value);
+    }, [data, buildTreeData, normalizeTreeData, annotateNodesWithDictionary, sortNodesByPriority, aggregateTreeMetrics]);
+    import_react6.useEffect(() => {
+      if (treeData.length === 0) {
+        setExpandedIds(new Set);
+        return;
+      }
+      const allIds = new Set;
+      const defaultExpanded = new Set;
+      const collect = (nodes, depth) => {
+        nodes.forEach((node) => {
+          allIds.add(node.id);
+          const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+          if (hasChildren && depth < 4) {
+            defaultExpanded.add(node.id);
+          }
+          if (Array.isArray(node.children) && node.children.length > 0) {
+            collect(node.children, depth + 1);
+          }
+        });
+      };
+      collect(treeData, 0);
+      setExpandedIds((prev) => {
+        const next = new Set;
+        prev.forEach((id) => {
+          if (allIds.has(id)) {
+            next.add(id);
+          }
+        });
+        defaultExpanded.forEach((id) => next.add(id));
+        return next;
+      });
+    }, [treeData]);
+    const toggleNode = import_react6.useCallback((id) => {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
     }, []);
+    const flatNodes = import_react6.useMemo(() => {
+      const items = [];
+      const traverse = (nodes, depth) => {
+        nodes.forEach((node) => {
+          const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+          const isExpanded = expandedIds.has(node.id);
+          const wrapper = {
+            id: node.id,
+            data: node,
+            isOpen: hasChildren && isExpanded,
+            isLeaf: !hasChildren,
+            childCount: hasChildren ? node.children.length : 0,
+            level: depth,
+            isSelected: false
+          };
+          items.push({ wrapper, hasChildren });
+          if (hasChildren && isExpanded) {
+            traverse(node.children, depth + 1);
+          }
+        });
+      };
+      traverse(treeData, 0);
+      return items;
+    }, [treeData, expandedIds]);
+    const parentRef = import_react6.useRef(null);
+    const shouldVirtualize = typeof window !== "undefined" && flatNodes.length > 200;
+    const rowVirtualizer = useVirtualizer({
+      count: shouldVirtualize ? flatNodes.length : 0,
+      getScrollElement: () => parentRef.current,
+      estimateSize: () => 44,
+      overscan: 10
+    });
+    const treeApi = import_react6.useMemo(() => ({
+      toggle: (id) => toggleNode(id)
+    }), [toggleNode]);
     if (treeData.length === 0) {
-      return import_react33.default.createElement("div", {
+      return import_react6.default.createElement("div", {
         style: {
           textAlign: "center",
           padding: "2rem",
           color: "var(--muted)"
         }
-      }, import_react33.default.createElement("h3", { key: "title" }, "No Refactoring Candidates Found"), import_react33.default.createElement("p", { key: "desc" }, "Your code is in excellent shape!"));
+      }, import_react6.default.createElement("h3", { key: "title" }, "No Refactoring Candidates Found"), import_react6.default.createElement("p", { key: "desc" }, "Your code is in excellent shape!"));
     }
-    const hasMatchingResults = filteredData.length > 0;
-    return import_react33.default.createElement("div", {
+    const renderRow = (wrapper) => import_react6.default.createElement(TreeNode, {
+      key: wrapper.id,
+      node: wrapper,
+      style: {
+        width: "100%",
+        height: "100%"
+      },
+      innerRef: undefined,
+      tree: treeApi
+    });
+    if (typeof window !== "undefined") {
+      window.__VALKNUT_TREE_DATA_SNAPSHOT = treeData;
+    }
+    const treeContainerProps = {
+      className: "tree-scroll-container",
+      role: "tree",
+      "aria-label": "Code analysis tree",
+      style: {
+        height: 600,
+        width: "100%",
+        overflow: "auto",
+        position: "relative",
+        borderRadius: "8px",
+        backgroundColor: "var(--tree-background, var(--background))",
+        color: "var(--tree-foreground, var(--color-text))"
+      }
+    };
+    if (!shouldVirtualize) {
+      return import_react6.default.createElement("div", {
+        className: "valknut-analysis-tree",
+        style: { display: "flex", flexDirection: "column", gap: "0.75rem" }
+      }, import_react6.default.createElement("div", treeContainerProps, import_react6.default.createElement("div", { className: "tree-virtualizer-inner" }, flatNodes.map((item) => import_react6.default.createElement("div", {
+        key: item.wrapper.id,
+        className: "tree-virtual-row",
+        role: "presentation"
+      }, renderRow(item.wrapper))))));
+    }
+    const virtualItems = rowVirtualizer.getVirtualItems();
+    return import_react6.default.createElement("div", {
       className: "valknut-analysis-tree",
       style: { display: "flex", flexDirection: "column", gap: "0.75rem" }
-    }, import_react33.default.createElement("div", {
-      key: "controls",
-      className: "valknut-analysis-tree__controls",
+    }, import_react6.default.createElement("div", {
+      ref: parentRef,
+      ...treeContainerProps
+    }, import_react6.default.createElement("div", {
+      className: "tree-virtualizer-inner",
       style: {
-        display: "flex",
-        gap: "0.5rem",
-        alignItems: "center"
+        height: `${rowVirtualizer.getTotalSize()}px`,
+        width: "100%",
+        position: "relative"
       }
-    }, import_react33.default.createElement("input", {
-      key: "search",
-      type: "search",
-      value: filterText,
-      onChange: handleFilterChange,
-      placeholder: "Filter by file, folder, or entity name…",
-      style: {
-        flex: 1,
-        padding: "0.5rem 0.75rem",
-        borderRadius: "6px",
-        border: "1px solid var(--border, #e0e0e0)",
-        fontSize: "0.95rem"
-      }
-    }), filterText ? import_react33.default.createElement("span", {
-      key: "results",
-      style: {
-        color: "var(--text-secondary)",
-        fontSize: "0.85rem"
-      }
-    }, `${hasMatchingResults ? filteredData.length : 0} matches`) : null), hasMatchingResults ? import_react33.default.createElement(Tree, {
-      key: "tree",
-      data: filteredData,
-      openByDefault: (node) => {
-        return node.data.type === "folder" || node.data.type === "file";
-      },
-      width: "100%",
-      height: 600,
-      indent: 24,
-      rowHeight: 40,
-      overscanCount: 10,
-      disableEdit: true,
-      disableDrop: true,
-      children: TreeNode
-    }) : import_react33.default.createElement("div", {
-      key: "no-results",
-      style: {
-        textAlign: "center",
-        padding: "2rem",
-        color: "var(--muted)"
-      }
-    }, import_react33.default.createElement("h3", { key: "title" }, "No matches for that filter"), import_react33.default.createElement("p", { key: "desc" }, "Try a different keyword or clear the filter input")));
+    }, virtualItems.map((virtualRow) => {
+      const item = flatNodes[virtualRow.index];
+      const wrapper = item.wrapper;
+      return import_react6.default.createElement("div", {
+        key: wrapper.id,
+        className: "tree-virtual-row",
+        role: "presentation",
+        style: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          transform: `translateY(${virtualRow.start}px)`,
+          height: `${virtualRow.size}px`
+        }
+      }, renderRow(wrapper));
+    }))));
   };
 
   // src/tree-component/index.js
   var tree_component_default = CodeAnalysisTree;
   if (typeof window !== "undefined") {
-    window.React = import_react34.default;
+    window.React = import_react7.default;
     window.ReactDOM = import_client.default;
     window.CodeAnalysisTree = CodeAnalysisTree;
     window.ReactTreeBundle = CodeAnalysisTree;
@@ -32334,5 +30953,5 @@ Use the data prop if you want to provide your own handlers.`);
   }
 })();
 
-//# debugId=66A1D193428A035C64756E2164756E21
-//# sourceMappingURL=react-tree-bundle.debug.js.map
+//# debugId=4C9C15A29E433E4864756E2164756E21
+//# sourceMappingURL=test-bundle.js.map

@@ -59,6 +59,11 @@
             <p>Interactive Code Analysis Tree (Hot Reload Enabled)</p>
         </div>
         <div class="content">
+            <p style="margin-bottom: 1rem;">
+                <a href="/report-dev.html" target="_blank" style="color: #6366f1; font-weight: 600;">
+                    Open rendered Handlebars report (refreshes on template/data changes)
+                </a>
+            </p>
             <div id="react-tree-root" class="loading">
                 <p>Loading analysis data and tree...</p>
             </div>
@@ -68,14 +73,16 @@
 
     <script type="module">
         // Dynamically import the bundle (webpack serves it)
-        import('http://localhost:8080/bundle.js').then(async ({ default: ReactTreeBundle }) => {
+        const bundleUrl = new URL('/bundle.js', window.location.origin).toString();
+
+        import(bundleUrl).then(async ({ default: ReactTreeBundle }) => {
             const { React, ReactDOM, CodeAnalysisTree } = ReactTreeBundle;
             
             const container = document.getElementById('react-tree-root');
             const errorEl = document.getElementById('error-message');
             
             try {
-                const response = await fetch('/sample-data.json');
+                const response = await fetch('/data.json');
                 if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to load data`);
                 
                 const data = await response.json();

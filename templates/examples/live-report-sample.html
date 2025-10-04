@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Valknut – Repository Analysis</title>
+  <link rel="stylesheet" href="../../themes/sibylline.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: var(--color-background);
+      color: var(--color-text);
+      padding-bottom: var(--space-2xl);
+    }
+
+    .demo-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-md);
+      margin: var(--space-xl) 0;
+    }
+
+    .demo-metric-card {
+      padding: var(--space-md);
+      border-radius: 12px;
+      background: rgba(23, 31, 56, 0.82);
+      border: 1px solid var(--tree-border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .demo-metric-card h3 {
+      margin: 0 0 var(--space-sm) 0;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--tree-muted);
+    }
+
+    .demo-metric-card strong {
+      font-size: var(--text-2xl);
+    }
+
+    .demo-section-header {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+      margin-bottom: var(--space-md);
+    }
+
+    .demo-section-header p {
+      margin: 0;
+      color: var(--tree-muted);
+      font-size: var(--text-sm);
+    }
+
+    #react-tree-root {
+      min-height: 640px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero-container no-animation">
+    <div class="hero-content">
+      <div class="hero-logo-container">
+        <img src="../webpage_files/valknut-large.webp" alt="Valknut Logo" class="hero-logo">
+      </div>
+      <div class="hero-title-container">
+        <h1 class="hero-title">Valknut Analysis Report</h1>
+      </div>
+      <p class="hero-subtitle">Snapshot of refactoring priorities and structural hotspots</p>
+    </div>
+  </div>
+  <hr class="hero-divider">
+
+  <div class="container">
+    <div class="meta" style="text-align: center; margin-bottom: var(--space-lg); color: var(--tree-muted); font-size: var(--text-sm);">
+      Generated: 2024-09-25 • Valknut v1.11.0-dev
+    </div>
+
+    <section class="demo-metrics">
+      <div class="demo-metric-card">
+        <h3>Files Selected</h3>
+        <strong>42</strong>
+        <p class="meta" style="margin-top: var(--space-xs);">Scoped to `src/` and `templates/` directories</p>
+      </div>
+      <div class="demo-metric-card">
+        <h3>Critical Refactors</h3>
+        <strong>7</strong>
+        <p class="meta" style="margin-top: var(--space-xs);">Across 3 subsystems with failing quality gates</p>
+      </div>
+      <div class="demo-metric-card">
+        <h3>Average File Score</h3>
+        <strong>78</strong>
+        <p class="meta" style="margin-top: var(--space-xs);">Weighted maintainability index over 28 entities</p>
+      </div>
+    </section>
+
+    <section id="file-tree-container" class="results-section">
+      <div class="demo-section-header">
+        <h2>Code Analysis Tree</h2>
+        <p>Explore directory health, entity complexity, and guided refactor paths.</p>
+      </div>
+      <p class="analysis-subheader" style="color: var(--tree-muted); margin-bottom: var(--space-md);">
+        Score: 87 · Priority: High · Coverage Delta: +12%
+      </p>
+      <div id="react-tree-root" class="analysis-tree" style="min-height: 560px;"></div>
+    </section>
+  </div>
+
+  <script src="../assets/react.min.js"></script>
+  <script src="../assets/react-dom.min.js"></script>
+  <script src="../assets/react-tree-bundle.debug.js?v=chevron"></script>
+  <script>
+    (function () {
+      window.__VALKNUT_TREE_DEBUG__ = true;
+      const sampleData = {
+        unifiedHierarchy: [
+          {
+            id: 'folder-src',
+            name: 'src',
+            type: 'folder',
+            healthScore: 0.72,
+            fileCount: 5,
+            entityCount: 18,
+            severityCounts: { critical: 3, high: 4, medium: 6, low: 2 },
+            children: [
+              {
+                id: 'file-pipeline',
+                name: 'pipeline_executor.rs',
+                type: 'file',
+                filePath: 'src/core/pipeline/pipeline_executor.rs',
+                highestPriority: 'critical',
+                avgScore: 14.2,
+                severityCounts: { critical: 1, high: 2, medium: 0, low: 0 },
+                children: [
+                  {
+                    id: 'entity-evaluate-quality-gates',
+                    name: 'evaluate_quality_gates',
+                    type: 'entity',
+                    priority: 'critical',
+                    score: 15.7,
+                    lineRange: [42, 118],
+                    severityCounts: { critical: 1, high: 1, medium: 0, low: 0 },
+                    children: [
+                      {
+                        id: 'issue:entity-1:0',
+                        name: 'Complexity (severity: 12.5) [320 LOC, Cognitive: 64]',
+                        type: 'issue-row',
+                        issueSeverity: 12.5,
+                        entityScore: 15.7,
+                        issueCategory: 'complexity'
+                      },
+                      {
+                        id: 'suggestion:entity-1:0',
+                        name: 'extract_method: Refactor validation chain [Effort: 40%, Impact: 80%]',
+                        type: 'suggestion-row'
+                      }
+                    ]
+                  },
+                  {
+                    id: 'entity-summarize-results',
+                    name: 'summarize_results',
+                    type: 'entity',
+                    priority: 'high',
+                    score: 11.3,
+                    lineRange: [140, 212],
+                    severityCounts: { critical: 0, high: 1, medium: 1, low: 0 },
+                    children: [
+                      {
+                        id: 'issue:entity-2:0',
+                        name: 'Maintainability (severity: 7.2)',
+                        type: 'issue-row',
+                        issueSeverity: 7.2,
+                        entityScore: 11.3,
+                        issueCategory: 'maintainability'
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                id: 'file-graph',
+                name: 'graph_analysis.rs',
+                type: 'file',
+                filePath: 'src/detectors/graph/graph_analysis.rs',
+                highestPriority: 'high',
+                avgScore: 9.6,
+                severityCounts: { critical: 0, high: 1, medium: 2, low: 1 },
+                children: []
+              }
+            ]
+          }
+        ],
+        directoryHealthTree: {
+          directories: {
+            'src': {
+              health_score: 0.72,
+              file_count: 5,
+              entity_count: 18,
+              refactoring_needed: true,
+              critical_issues: 3,
+              high_priority_issues: 4,
+              avg_refactoring_score: 0.68
+            }
+          }
+        }
+      };
+
+      const container = document.getElementById('react-tree-root');
+      const TreeComponent = window.CodeAnalysisTree || window.ReactTreeBundle;
+
+      if (!container || !TreeComponent || !window.React || !window.ReactDOM) {
+        console.error('Sample report failed to initialize React tree component');
+        return;
+      }
+
+      const root = window.ReactDOM.createRoot(container);
+      root.render(window.React.createElement(TreeComponent, { data: sampleData }));
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    })();
+  </script>
+</body>
+</html>

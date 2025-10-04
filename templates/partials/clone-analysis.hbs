@@ -1,0 +1,60 @@
+<!-- Clone & Similarity Analysis -->
+<section class="clone-section">
+    <header class="clone-section__header">
+        <h2>Clone & Similarity Analysis</h2>
+        <p>Measures of structural duplication across the codebase.</p>
+    </header>
+
+    {{#if clone_analysis.hasData}}
+    <div class="clone-metric-grid">
+        <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Average Similarity</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.avgSimilarity}}
+                    {{format clone_analysis.avgSimilarity "0.2"}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Maximum Similarity</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.maxSimilarity}}
+                    {{format clone_analysis.maxSimilarity "0.2"}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Candidates After Denoising</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.candidatesAfter}}
+                    {{clone_analysis.candidatesAfter}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Denoising Enabled</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.denoisingEnabled}}Yes{{else}}No{{/if}}
+            </span>
+        </div>
+    </div>
+
+    {{#if clone_analysis.notes.length}}
+    <ul class="clone-notes">
+        {{#each clone_analysis.notes}}
+        <li>{{this}}</li>
+        {{/each}}
+    </ul>
+    {{/if}}
+    {{else}}
+    <div class="clone-empty">
+        Clone detection was not enabled for this report run.
+    </div>
+    {{/if}}
+</section>

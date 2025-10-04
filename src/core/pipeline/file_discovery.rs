@@ -30,11 +30,13 @@ pub fn discover_files(
 
     let canonical_roots = canonicalize_roots(roots);
 
-    let (include_patterns, mut exclude_patterns) = gather_patterns(pipeline_config);
+    let (include_patterns, mut exclude_patterns, mut ignore_patterns) =
+        gather_patterns(pipeline_config, valknut_config);
     exclude_patterns.push("**/.git/**".to_string());
 
     let include_glob = compile_globset(&include_patterns)?;
     let exclude_glob = compile_globset(&exclude_patterns)?;
+    let ignore_glob = compile_globset(&ignore_patterns)?;
 
     let allowed_extensions = allowed_extensions_from(pipeline_config, valknut_config);
 
@@ -44,8 +46,13 @@ pub fn discover_files(
     let mut collected = Vec::new();
 
     if let Some(tracked) = tracked_files {
-        info!("Found git repository at '{}'. Using git index for file discovery.", 
-              repo_root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown".to_string()));
+        info!(
+            "Found git repository at '{}'. Using git index for file discovery.",
+            repo_root
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        );
         info!("Discovered {} tracked files from git index", tracked.len());
         for file in tracked {
             if !is_within_requested_roots(&canonical_roots, &file) {
@@ -59,6 +66,7 @@ pub fn discover_files(
                     .unwrap_or_else(|| default_base_for(&file)),
                 include_glob.as_ref(),
                 exclude_glob.as_ref(),
+                ignore_glob.as_ref(),
                 &allowed_extensions,
             ) {
                 if unique.insert(file.clone()) {
@@ -78,6 +86,7 @@ pub fn discover_files(
                     default_base_for(root),
                     include_glob.as_ref(),
                     exclude_glob.as_ref(),
+                    ignore_glob.as_ref(),
                     &allowed_extensions,
                 ) {
                     if unique.insert(root.clone()) {
@@ -112,6 +121,7 @@ pub fn discover_files(
                             root,
                             include_glob.as_ref(),
                             exclude_glob.as_ref(),
+                            ignore_glob.as_ref(),
                             &allowed_extensions,
                         ) {
                             let path = path.to_path_buf();
@@ -127,7 +137,10 @@ pub fn discover_files(
     }
 
     collected.sort();
-    info!("File discovery completed: {} files selected for analysis", collected.len());
+    info!(
+        "File discovery completed: {} files selected for analysis",
+        collected.len()
+    );
     if collected.len() > 100 {
         info!("Large file set detected ({} files). Consider using more specific include/exclude patterns for better performance", collected.len());
     }
@@ -141,15 +154,27 @@ fn canonicalize_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
-fn gather_patterns(pipeline_config: &PipelineAnalysisConfig) -> (Vec<String>, Vec<String>) {
-    let include_patterns = vec!["**/*".to_string()]; // Always use default for now
-    
+fn gather_patterns(
+    _pipeline_config: &PipelineAnalysisConfig,
+    valknut_config: Option<&ValknutConfig>,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut include_patterns = vec!["**/*".to_string()]; // Default baseline include
     let mut exclude_patterns = default_exclude_patterns();
+    let mut ignore_patterns = Vec::new();
+
+    if let Some(cfg) = valknut_config {
+        include_patterns.extend(cfg.analysis.include_patterns.clone());
+        exclude_patterns.extend(cfg.analysis.exclude_patterns.clone());
+        ignore_patterns.extend(cfg.analysis.ignore_patterns.clone());
+    }
 
     exclude_patterns.sort();
     exclude_patterns.dedup();
 
-    (include_patterns, exclude_patterns)
+    ignore_patterns.sort();
+    ignore_patterns.dedup();
+
+    (include_patterns, exclude_patterns, ignore_patterns)
 }
 
 fn default_exclude_patterns() -> Vec<String> {
@@ -258,6 +283,7 @@ fn should_keep(
     base: &Path,
     include_glob: Option<&GlobSet>,
     exclude_glob: Option<&GlobSet>,
+    ignore_glob: Option<&GlobSet>,
     allowed_extensions: &HashSet<String>,
 ) -> bool {
     let extension = match path.extension().and_then(|ext| ext.to_str()) {
@@ -273,6 +299,12 @@ fn should_keep(
 
     if let Some(exclude) = exclude_glob {
         if exclude.is_match(relative) {
+            return false;
+        }
+    }
+
+    if let Some(ignore) = ignore_glob {
+        if ignore.is_match(relative) {
             return false;
         }
     }

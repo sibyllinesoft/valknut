@@ -40,13 +40,13 @@
 //! ```rust,no_run
 //! use valknut_rs::core::unified_visitor::{UnifiedVisitor, AstVisitable};
 //! use valknut_rs::core::featureset::{CodeEntity, ExtractionContext};
-//! 
+//!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut visitor = UnifiedVisitor::new();
 //! // visitor.add_detector(Box::new(complexity_detector));
 //! // visitor.add_detector(Box::new(security_detector));
 //! // visitor.add_detector(Box::new(quality_detector));
-//! 
+//!
 //! // Single traversal processes all detectors
 //! // let combined_features = visitor.visit_entity(&entity, &context).await?;
 //! # Ok(())
@@ -65,15 +65,15 @@
 //! use tree_sitter::Node;
 //! use std::collections::HashMap;
 //! use valknut_rs::core::errors::Result;
-//! 
+//!
 //! struct MyDetector;
-//! 
+//!
 //! #[async_trait]
 //! impl AstVisitable for MyDetector {
 //!     fn detector_name(&self) -> &str { "my_detector" }
 //!     
-//!     async fn visit_node(&mut self, node: Node<'_>, _context: &AstContext<'_>, 
-//!                        _entity: &CodeEntity, _extraction_context: &ExtractionContext) 
+//!     async fn visit_node(&mut self, node: Node<'_>, _context: &AstContext<'_>,
+//!                        _entity: &CodeEntity, _extraction_context: &ExtractionContext)
 //!                        -> Result<HashMap<String, f64>> {
 //!         // Analyze node and return features
 //!         let mut features = HashMap::new();
@@ -87,7 +87,7 @@
 //! }
 //! ```
 
-use crate::core::ast_service::{AstService, AstContext};
+use crate::core::ast_service::{AstContext, AstService};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, ExtractionContext};
 use crate::core::interning::{intern, resolve, InternedString};
@@ -104,7 +104,11 @@ pub trait AstVisitable: Send + Sync {
     fn detector_name(&self) -> &str;
 
     /// Called once at the start of entity analysis
-    async fn begin_entity(&mut self, entity: &CodeEntity, context: &ExtractionContext) -> Result<()> {
+    async fn begin_entity(
+        &mut self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+    ) -> Result<()> {
         // Default implementation - no setup needed
         Ok(())
     }
@@ -121,7 +125,11 @@ pub trait AstVisitable: Send + Sync {
 
     /// Called once at the end of entity analysis
     /// Returns final computed features for this detector
-    async fn end_entity(&mut self, entity: &CodeEntity, context: &ExtractionContext) -> Result<HashMap<String, f64>> {
+    async fn end_entity(
+        &mut self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+    ) -> Result<HashMap<String, f64>> {
         // Default implementation - return empty map
         Ok(HashMap::new())
     }
@@ -153,22 +161,37 @@ impl NodeMetadata {
         let kind_str = node.kind();
         let kind = intern(kind_str);
         let child_count = node.child_count();
-        
+
         // Identify important node types for performance
-        let is_decision_point = matches!(kind_str, 
-            "if_statement" | "while_statement" | "for_statement" | "match_statement" | 
-            "try_statement" | "switch_statement" | "conditional_expression" |
-            "and_expression" | "or_expression"
+        let is_decision_point = matches!(
+            kind_str,
+            "if_statement"
+                | "while_statement"
+                | "for_statement"
+                | "match_statement"
+                | "try_statement"
+                | "switch_statement"
+                | "conditional_expression"
+                | "and_expression"
+                | "or_expression"
         );
-        
-        let is_function_definition = matches!(kind_str,
-            "function_definition" | "method_definition" | "function_declaration" |
-            "arrow_function" | "function_expression"
+
+        let is_function_definition = matches!(
+            kind_str,
+            "function_definition"
+                | "method_definition"
+                | "function_declaration"
+                | "arrow_function"
+                | "function_expression"
         );
-        
-        let is_class_definition = matches!(kind_str,
-            "class_definition" | "class_declaration" | "interface_declaration" |
-            "trait_declaration" | "struct_declaration"
+
+        let is_class_definition = matches!(
+            kind_str,
+            "class_definition"
+                | "class_declaration"
+                | "interface_declaration"
+                | "trait_declaration"
+                | "struct_declaration"
         );
 
         Self {
@@ -221,7 +244,10 @@ impl UnifiedVisitor {
 
     /// Add a detector to participate in unified traversal
     pub fn add_detector(&mut self, detector: Box<dyn AstVisitable>) {
-        info!("Adding detector '{}' to unified visitor", detector.detector_name());
+        info!(
+            "Adding detector '{}' to unified visitor",
+            detector.detector_name()
+        );
         self.detectors.push(detector);
         self.detectors_count += 1;
     }
@@ -253,8 +279,9 @@ impl UnifiedVisitor {
         }
 
         debug!(
-            "Starting unified AST traversal for entity {} with {} detectors", 
-            entity.id, self.detectors.len()
+            "Starting unified AST traversal for entity {} with {} detectors",
+            entity.id,
+            self.detectors.len()
         );
 
         // Initialize all detectors
@@ -271,15 +298,27 @@ impl UnifiedVisitor {
             }
         };
 
-        let cached_tree = self.ast_service.get_ast(&entity.file_path, &file_content).await?;
-        let ast_context = self.ast_service.create_context(&cached_tree, &entity.file_path);
+        let cached_tree = self
+            .ast_service
+            .get_ast(&entity.file_path, &file_content)
+            .await?;
+        let ast_context = self
+            .ast_service
+            .create_context(&cached_tree, &entity.file_path);
 
         // Find the specific entity node in the AST (if possible)
         let root_node = cached_tree.tree.root_node();
-        
+
         // Perform unified traversal using iterative approach to avoid async recursion
         let mut combined_features = HashMap::new();
-        self.visit_tree_iterative(root_node, &ast_context, entity, context, &mut combined_features).await?;
+        self.visit_tree_iterative(
+            root_node,
+            &ast_context,
+            entity,
+            context,
+            &mut combined_features,
+        )
+        .await?;
 
         // Finalize all detectors and collect results
         for detector in &mut self.detectors {
@@ -318,8 +357,10 @@ impl UnifiedVisitor {
 
             // Visit this node with all detectors
             for detector in &mut self.detectors {
-                let features = detector.visit_node(node, ast_context, entity, context).await?;
-                
+                let features = detector
+                    .visit_node(node, ast_context, entity, context)
+                    .await?;
+
                 // Merge features with conflict detection
                 for (feature_name, feature_value) in features {
                     if let Some(existing_value) = combined_features.get(&feature_name) {
@@ -408,16 +449,16 @@ mod tests {
             _context: &ExtractionContext,
         ) -> Result<HashMap<String, f64>> {
             let mut features = HashMap::new();
-            
+
             // Generate a feature for function definitions
             if node.kind() == "function_definition" {
                 self.feature_count += 1;
                 features.insert(
-                    format!("{}_function_count", self.name), 
-                    self.feature_count as f64
+                    format!("{}_function_count", self.name),
+                    self.feature_count as f64,
                 );
             }
-            
+
             Ok(features)
         }
 
@@ -429,22 +470,22 @@ mod tests {
     #[tokio::test]
     async fn test_unified_visitor_basic() {
         let mut visitor = UnifiedVisitor::new();
-        
+
         // Add mock detectors
         visitor.add_detector(Box::new(MockDetector::new("detector1")));
         visitor.add_detector(Box::new(MockDetector::new("detector2")));
-        
+
         assert_eq!(visitor.detector_count(), 2);
-        
+
         // Create test entity
         let entity = CodeEntity::new("test", "function", "test_func", "/test/file.py")
             .with_source_code("def test_func():\n    return 1");
-        
+
         let config = Arc::new(ValknutConfig::default());
         let context = ExtractionContext::new(config, "python");
-        
+
         let features = visitor.visit_entity(&entity, &context).await.unwrap();
-        
+
         // Should have visited some nodes
         let stats = visitor.get_statistics();
         assert!(stats.nodes_visited > 0);
@@ -464,7 +505,7 @@ mod tests {
             is_function_definition: true,
             is_class_definition: false,
         };
-        
+
         assert_eq!(metadata.kind_str(), "function_definition");
         assert!(metadata.is_function_definition);
         assert!(!metadata.is_decision_point);

@@ -123,7 +123,6 @@ The bundles maintain full compatibility with existing HTML templates:
 <!-- Include React dependencies first -->
 <script src="react.min.js"></script>
 <script src="react-dom.min.js"></script>
-<script src="react-arborist.min.js"></script>
 
 <!-- Include our Bun-built bundle -->
 <script src="react-tree-bundle.min.js"></script>
@@ -138,14 +137,14 @@ The bundles maintain full compatibility with existing HTML templates:
 ## Key Functions Tested
 
 ### `transformTreeData(data, parentId)`
-Ensures all tree nodes have React Arborist-compatible IDs:
+Ensures all tree nodes have virtual-tree-compatible IDs:
 - Preserves existing IDs
 - Uses `entity_id` as fallback
 - Generates safe IDs from names
 - Handles nested children recursively
 
 ### `validateTreeData(data)`
-Validates tree structure for React Arborist compatibility:
+Validates tree structure for the virtual tree component:
 - Checks for required ID properties
 - Validates nested structure
 - Reports specific validation errors

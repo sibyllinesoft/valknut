@@ -1,7 +1,7 @@
+use crate::core::featureset::CodeEntity;
 use crate::core::interning::{global_interner, intern, resolve, InternedString};
 use crate::lang::common::{EntityKind, ParsedEntity, SourceLocation};
-use crate::core::featureset::CodeEntity;
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -22,7 +22,13 @@ pub struct InternedSourceLocation {
 
 impl InternedSourceLocation {
     /// Create a new interned source location
-    pub fn new(file_path: &str, start_line: usize, end_line: usize, start_column: usize, end_column: usize) -> Self {
+    pub fn new(
+        file_path: &str,
+        start_line: usize,
+        end_line: usize,
+        start_column: usize,
+        end_column: usize,
+    ) -> Self {
         Self {
             file_path: intern(file_path),
             start_line,
@@ -102,7 +108,9 @@ impl InternedParsedEntity {
             parent: entity.parent.as_ref().map(|p| intern(p)),
             children: entity.children.iter().map(|c| intern(c)).collect(),
             location: InternedSourceLocation::from_source_location(&entity.location),
-            metadata: entity.metadata.iter()
+            metadata: entity
+                .metadata
+                .iter()
                 .map(|(k, v)| (intern(k), v.clone()))
                 .collect(),
         }
@@ -115,9 +123,15 @@ impl InternedParsedEntity {
             kind: self.kind,
             name: resolve(self.name).to_string(),
             parent: self.parent.map(|p| resolve(p).to_string()),
-            children: self.children.iter().map(|&c| resolve(c).to_string()).collect(),
+            children: self
+                .children
+                .iter()
+                .map(|&c| resolve(c).to_string())
+                .collect(),
             location: self.location.to_source_location(),
-            metadata: self.metadata.iter()
+            metadata: self
+                .metadata
+                .iter()
                 .map(|(k, v)| (resolve(*k).to_string(), v.clone()))
                 .collect(),
         }
@@ -198,7 +212,9 @@ impl InternedCodeEntity {
             file_path: intern(&entity.file_path),
             line_range: entity.line_range,
             source_code: intern(&entity.source_code),
-            properties: entity.properties.iter()
+            properties: entity
+                .properties
+                .iter()
                 .map(|(k, v)| (intern(k), v.clone()))
                 .collect(),
         }
@@ -213,7 +229,9 @@ impl InternedCodeEntity {
             file_path: resolve(self.file_path).to_string(),
             line_range: self.line_range,
             source_code: resolve(self.source_code).to_string(),
-            properties: self.properties.iter()
+            properties: self
+                .properties
+                .iter()
                 .map(|(k, v)| (resolve(*k).to_string(), v.clone()))
                 .collect(),
         }
@@ -355,22 +373,18 @@ impl InternedParseIndex {
 
         self.entities_by_file
             .get(&file_path_interned)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| self.entities.get(id))
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| self.entities.get(id)).collect())
             .unwrap_or_default()
     }
 
     /// Convert to regular ParseIndex for compatibility
     pub fn to_parse_index(&self) -> crate::lang::common::ParseIndex {
         let mut parse_index = crate::lang::common::ParseIndex::new();
-        
+
         for entity in self.entities.values() {
             parse_index.add_entity(entity.to_parsed_entity());
         }
-        
+
         parse_index
     }
 
@@ -432,7 +446,8 @@ mod tests {
     #[test]
     fn test_interned_parsed_entity_creation() {
         let location = InternedSourceLocation::new("/test/file.rs", 1, 3, 0, 10);
-        let entity = InternedParsedEntity::new("test-id", EntityKind::Function, "test_func", location);
+        let entity =
+            InternedParsedEntity::new("test-id", EntityKind::Function, "test_func", location);
 
         assert_eq!(entity.name_str(), "test_func");
         assert_eq!(entity.id_str(), "test-id");
@@ -473,15 +488,16 @@ mod tests {
     #[test]
     fn test_interned_parse_index() {
         let mut index = InternedParseIndex::new();
-        
+
         let location = InternedSourceLocation::new("/test/file.rs", 1, 3, 0, 10);
-        let entity = InternedParsedEntity::new("test-id", EntityKind::Function, "test_func", location);
-        
+        let entity =
+            InternedParsedEntity::new("test-id", EntityKind::Function, "test_func", location);
+
         index.add_entity(entity);
-        
+
         assert_eq!(index.entity_count(), 1);
         assert_eq!(index.file_count(), 1);
-        
+
         let entities = index.get_entities_in_file("/test/file.rs");
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].name_str(), "test_func");
@@ -491,7 +507,7 @@ mod tests {
     fn test_string_deduplication() {
         let entity1 = InternedCodeEntity::new("id1", "function", "same_name", "/file.rs");
         let entity2 = InternedCodeEntity::new("id2", "function", "same_name", "/file.rs");
-        
+
         // Names should have the same interned key (deduplication)
         assert_eq!(entity1.name, entity2.name);
         assert_eq!(entity1.entity_type, entity2.entity_type);

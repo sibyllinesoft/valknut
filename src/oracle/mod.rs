@@ -4,8 +4,10 @@
 //! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
 
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
-use crate::core::pipeline::AnalysisResults;
+use crate::core::pipeline::{AnalysisResults, CodeDictionary};
+use crate::core::scoring::Priority;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -210,6 +212,8 @@ impl RefactoringOracle {
         let mut files_included = 0;
         let mut files_skipped = 0;
 
+        let refactor_hints = build_refactor_hints(analysis_results, project_path);
+
         // First, find README at root level
         let readme_candidates = ["README.md", "readme.md", "README.txt", "README"];
         for readme_name in &readme_candidates {
@@ -218,12 +222,14 @@ impl RefactoringOracle {
                 if let Ok(content) = std::fs::read_to_string(&readme_path) {
                     let estimated_tokens = content.len() / 4; // Rough token estimate
                     if total_tokens + estimated_tokens < self.config.max_tokens {
+                        let tuple_label = format!("({}, {})", readme_name, "overview");
                         xml_files.push(format!(
-                            "    <file path=\"{}\" type=\"documentation\" tokens=\"{}\">\n{}\n    </file>",
-                            readme_name,
-                            estimated_tokens,
-                            html_escape(&content)
-                        ));
+                "    <file path=\"{}\" tuple=\"{}\" type=\"documentation\" tokens=\"{}\">\n{}\n    </file>",
+                readme_name,
+                html_escape(&tuple_label),
+                estimated_tokens,
+                html_escape(&content)
+            ));
                         total_tokens += estimated_tokens;
                         files_included += 1;
                         println!(
@@ -340,9 +346,19 @@ impl RefactoringOracle {
                 continue;
             }
 
+            let key = normalize_path_for_key(&candidate.path);
+            let hints = refactor_hints
+                .get(&key)
+                .map(|h| h.join("; "))
+                .unwrap_or_else(|| "none".to_string());
+            let hints_truncated = truncate_hint(&hints, 80);
+            let tuple_label = format!("({}, {})", candidate.path, hints_truncated);
+
             xml_files.push(format!(
-                "    <file path=\"{}\" type=\"{}\" tokens=\"{}\" priority=\"{:.2}\">\n{}\n    </file>",
+                "    <file path=\"{}\" tuple=\"{}\" hint=\"{}\" type=\"{}\" tokens=\"{}\" priority=\"{:.2}\">\n{}\n    </file>",
                 candidate.path,
+                html_escape(&tuple_label),
+                html_escape(&hints_truncated),
                 candidate.file_type,
                 candidate.tokens,
                 candidate.priority,
@@ -529,12 +545,15 @@ impl RefactoringOracle {
             "files_analyzed": results.summary.files_processed,
             "entities_analyzed": results.summary.entities_analyzed,
             "avg_refactoring_score": results.summary.avg_refactoring_score,
+            "code_dictionary": results.code_dictionary.clone(),
             "top_refactoring_candidates": results.refactoring_candidates.iter()
                 .take(10)
                 .map(|c| serde_json::json!({
                     "file": c.file_path,
                     "entity": c.name,
                     "score": c.score,
+                    "issue_codes": c.issues.iter().map(|issue| &issue.code).collect::<Vec<_>>(),
+                    "suggestion_codes": c.suggestions.iter().map(|s| &s.code).collect::<Vec<_>>(),
                     "issues": c.issues,
                     "suggestions": c.suggestions
                 }))
@@ -660,6 +679,9 @@ impl RefactoringOracle {
             condensed.push_str(candidates_section);
             current_tokens += candidates_section.len() / 4;
 
+            let issue_defs = &results.code_dictionary.issues;
+            let suggestion_defs = &results.code_dictionary.suggestions;
+
             for (i, candidate) in results.refactoring_candidates.iter()
                 .filter(|c| !matches!(c.priority, crate::core::scoring::Priority::None))
                 .take(15)  // Limit candidates to control size
@@ -680,15 +702,25 @@ impl RefactoringOracle {
                     candidate
                         .issues
                         .iter()
-                        .map(|issue| format!(
-                            "{} (severity: {:.1})",
-                            issue.category, issue.severity
-                        ))
+                        .map(|issue| {
+                            let title = issue_defs
+                                .get(&issue.code)
+                                .map(|def| def.title.as_str())
+                                .unwrap_or(issue.category.as_str());
+                            let severity = format!("{:.1}", issue.severity);
+                            format!("{} – {} [severity {}]", issue.code, title, severity)
+                        })
                         .collect::<Vec<_>>()
                         .join(", "),
                     candidate.suggestions.iter()
                         .take(2)  // Limit suggestions per candidate
-                        .map(|s| s.refactoring_type.clone())
+                        .map(|s| {
+                            let title = suggestion_defs
+                                .get(&s.code)
+                                .map(|def| def.title.as_str())
+                                .unwrap_or(s.refactoring_type.as_str());
+                            format!("{} – {}", s.code, title)
+                        })
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
@@ -864,6 +896,117 @@ fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 {
     }
 
     priority
+}
+
+fn build_refactor_hints(
+    results: &AnalysisResults,
+    project_root: &Path,
+) -> HashMap<String, Vec<String>> {
+    let mut hints: HashMap<String, Vec<String>> = HashMap::new();
+
+    for candidate in &results.refactoring_candidates {
+        if !matches!(candidate.priority, Priority::Critical | Priority::High) {
+            continue;
+        }
+
+        let issue = match candidate.issues.iter().max_by(|a, b| {
+            a.severity
+                .partial_cmp(&b.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            Some(issue) => issue,
+            None => continue,
+        };
+
+        let mut severity_pct = (issue.severity * 100.0).round() as i32;
+        severity_pct = severity_pct.clamp(0, 999);
+
+        let category = abbreviate_label(&issue.category);
+        let suggestion_label = candidate
+            .suggestions
+            .iter()
+            .max_by(|a, b| {
+                a.priority
+                    .partial_cmp(&b.priority)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|s| abbreviate_label(&s.refactoring_type));
+
+        let mut hint = if let Some(suggestion) = suggestion_label {
+            format!("{} {}% {}", category, severity_pct, suggestion)
+        } else {
+            format!("{} {}%", category, severity_pct)
+        };
+
+        hint = truncate_hint(&hint, 60);
+
+        let normalized_path = normalize_path_for_key(
+            Path::new(&candidate.file_path)
+                .strip_prefix(project_root)
+                .unwrap_or_else(|_| Path::new(&candidate.file_path))
+                .to_string_lossy()
+                .as_ref(),
+        );
+
+        hints.entry(normalized_path).or_default().push(hint);
+    }
+
+    hints
+}
+
+fn abbreviate_label(label: &str) -> String {
+    let words = label
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>();
+
+    if words.is_empty() {
+        let trimmed = label.trim();
+        return trimmed.chars().take(8).collect();
+    }
+
+    if words.len() == 1 {
+        let word = words[0];
+        let mut chars = word.chars();
+        let first = chars
+            .next()
+            .map(|c| c.to_ascii_uppercase())
+            .unwrap_or_default();
+        let rest: String = chars.take(6).collect();
+        return format!("{}{}", first, rest);
+    }
+
+    let mut abbr = String::new();
+    for word in words.iter().take(3) {
+        if let Some(ch) = word.chars().next() {
+            abbr.push(ch.to_ascii_uppercase());
+        }
+    }
+
+    if abbr.is_empty() {
+        label.chars().take(3).collect()
+    } else {
+        abbr
+    }
+}
+
+fn truncate_hint(hint: &str, max_len: usize) -> String {
+    if hint.len() <= max_len {
+        return hint.to_string();
+    }
+    let mut truncated = hint
+        .chars()
+        .take(max_len.saturating_sub(1))
+        .collect::<String>();
+    truncated.push('…');
+    truncated
+}
+
+fn normalize_path_for_key(path: &str) -> String {
+    if path.is_empty() {
+        return String::new();
+    }
+    path.replace('\\', "/")
 }
 
 /// HTML escape utility function
@@ -1213,6 +1356,7 @@ mod tests {
             unified_hierarchy: vec![],
             warnings: vec![],
             health_metrics: None,
+            code_dictionary: CodeDictionary::default(),
         };
 
         let condensed = oracle.condense_analysis_results(&results);

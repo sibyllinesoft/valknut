@@ -230,8 +230,6 @@ function createCompatibilityTestHTML() {
     <!-- React dependencies (same as production HTML) -->
     <script crossorigin src="../react.min.js"></script>
     <script crossorigin src="../react-dom.min.js"></script>
-    <script crossorigin src="../react-arborist.min.js"></script>
-    
     <!-- Our Bun-built bundle -->
     <script src="./react-tree-bundle.js"></script>
     
@@ -254,19 +252,7 @@ function createCompatibilityTestHTML() {
             addResult('❌ React dependency error: ' + e.message, false);
         }
         
-        // Test 2: Check react-arborist
-        try {
-            if (typeof ReactArborist === 'undefined') {
-                console.warn('ReactArborist not found - this is expected in some setups');
-                addResult('⚠️ ReactArborist not found (this may be normal)');
-            } else {
-                addResult('✅ React Arborist loaded successfully');
-            }
-        } catch (e) {
-            addResult('⚠️ React Arborist check: ' + e.message);
-        }
-        
-        // Test 3: Check our bundle exports
+        // Test 2: Check our bundle exports
         try {
             if (typeof ReactTreeBundle === 'undefined') throw new Error('ReactTreeBundle not found');
             if (typeof CodeAnalysisTree === 'undefined') {
@@ -277,7 +263,7 @@ function createCompatibilityTestHTML() {
             addResult('❌ Bundle export error: ' + e.message, false);
         }
         
-        // Test 4: Test data structures
+        // Test 3: Test data structures
         const testUnifiedData = ${JSON.stringify(testAnalysisData, null, 2)};
         
         const testLegacyData = ${JSON.stringify(testLegacyData, null, 2)};

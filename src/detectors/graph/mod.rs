@@ -6,7 +6,9 @@
 //! - [`DependencyGraph`], a lightweight helper that can be used in tests and tools to
 //!   construct and inspect dependency structures programmatically.
 
+pub mod clique;
 pub mod config;
+pub use clique::{CliquePartitions, SimilarityCliquePartitioner};
 pub use config::GraphConfig;
 
 use std::collections::HashMap;

@@ -591,17 +591,20 @@ impl AstComplexityAnalyzer {
     fn get_node_text(&self, node: tree_sitter::Node, source: &str) -> String {
         let start = node.start_byte();
         let end = node.end_byte();
-        
+
         // Ensure bounds are valid - clamp and check
         let source_len = source.len();
         let clamped_start = std::cmp::min(start as usize, source_len);
         let clamped_end = std::cmp::min(end as usize, source_len);
-        
+
         if clamped_start > clamped_end {
-            debug!("Invalid node range: start={}, end={}, source_len={}", start, end, source_len);
+            debug!(
+                "Invalid node range: start={}, end={}, source_len={}",
+                start, end, source_len
+            );
             return String::new();
         }
-        
+
         source[clamped_start..clamped_end].to_string()
     }
 
@@ -734,7 +737,12 @@ impl AstComplexityAnalyzer {
             let start = node.start_byte();
             let end = node.end_byte();
             if (start as usize) > source_len || (end as usize) > source_len || start > end {
-                debug!("Skipping invalid node {} with range {}-{}", node.kind(), start, end);
+                debug!(
+                    "Skipping invalid node {} with range {}-{}",
+                    node.kind(),
+                    start,
+                    end
+                );
                 continue;
             }
 
@@ -756,10 +764,18 @@ impl AstComplexityAnalyzer {
                 // Also skip invalid children before pushing to stack
                 let child_start = child.start_byte();
                 let child_end = child.end_byte();
-                if (child_start as usize) <= source_len && (child_end as usize) <= source_len && child_start <= child_end {
+                if (child_start as usize) <= source_len
+                    && (child_end as usize) <= source_len
+                    && child_start <= child_end
+                {
                     stack.push(child);
                 } else {
-                    debug!("Skipping invalid child node {} with range {}-{}", child.kind(), child_start, child_end);
+                    debug!(
+                        "Skipping invalid child node {} with range {}-{}",
+                        child.kind(),
+                        child_start,
+                        child_end
+                    );
                 }
             }
         }
@@ -840,14 +856,17 @@ impl AstComplexityAnalyzer {
     fn operand_representation(&self, node: &tree_sitter::Node, source: &str) -> String {
         let start = node.start_byte();
         let end = node.end_byte();
-        
+
         // Validate bounds before utf8_text to prevent panic
         let source_len = source.len();
         if (start as usize) > source_len || (end as usize) > source_len || start > end {
-            debug!("Invalid operand node range: start={}, end={}, source_len={}", start, end, source_len);
+            debug!(
+                "Invalid operand node range: start={}, end={}, source_len={}",
+                start, end, source_len
+            );
             return node.kind().to_string();
         }
-        
+
         if let Ok(text) = node.utf8_text(source.as_bytes()) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {

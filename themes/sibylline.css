@@ -33,6 +33,12 @@
   --color-text-muted: var(--color-graphite-500);
   --color-border: var(--color-graphite-775);
   --color-border-light: var(--color-graphite-750);
+
+  /* Interactive tree palette */
+  --tree-background: rgba(15, 23, 42, 0.78);
+  --tree-border: rgba(99, 102, 241, 0.28);
+  --tree-foreground: var(--color-text);
+  --tree-muted: var(--color-text-muted);
   
   /* Intermediate graphite shades */
   --color-graphite-775: #202020;
@@ -301,14 +307,15 @@ body {
 
 /* Analysis Tree - Enhanced Nested Structure like Arbiter */
 .analysis-tree {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--tree-background);
+  border: 1px solid var(--tree-border);
   border-radius: 12px;
   padding: 1rem;
   margin-top: 1rem;
   max-height: 70vh;
   overflow-y: auto;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--tree-foreground);
 }
 
 .tree-node {
@@ -334,20 +341,17 @@ body {
 }
 
 .tree-header:hover {
-  background-color: var(--surface-hover);
+  color: var(--accent);
 }
 
 .tree-header:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-  background-color: var(--surface-hover);
 }
 
 /* Active state for selected files */
 .tree-node.active .tree-header {
-  background: linear-gradient(to right, rgba(32, 212, 192, 0.1), rgba(32, 212, 192, 0.05));
   color: var(--accent);
-  border: 1px solid rgba(32, 212, 192, 0.3);
 }
 
 /* Chevron styling with smooth rotation */
@@ -549,16 +553,14 @@ body {
 }
 
 .tree-leaf {
-  background: var(--panel);
-  border: 1px solid var(--keyline);
+  background: transparent;
   border-radius: 6px;
   padding: 0.75rem;
   transition: all 0.2s ease;
 }
 
 .tree-leaf:hover {
-  border-color: var(--border);
-  background: var(--surface);
+  background: transparent;
 }
 
 .tree-leaf-header {
@@ -1119,73 +1121,509 @@ body {
   }
 }
 
-/* React Arborist Tree Styling */
-#react-tree-root {
-  background: var(--background);
-  border: 1px solid var(--keyline);
+/* Valknut analysis tree styling */
+.valknut-analysis-tree {
+  border: none;
   border-radius: 8px;
+  background: var(--tree-background);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
+  color: var(--tree-foreground);
 }
 
-/* Override Arborist default styles to match Sibylline theme */
-.react-arborist-tree {
-  background: transparent !important;
-  color: var(--text) !important;
+.valknut-analysis-tree .tree-scroll-container {
+  max-height: 600px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--keyline) var(--background);
+  background: transparent;
 }
 
-.react-arborist-node-row {
-  background: transparent !important;
-  border-bottom: 1px solid var(--keyline-subtle) !important;
-}
-
-.react-arborist-node-row:hover {
-  background: var(--panel) !important;
-}
-
-.react-arborist-node-row[data-selected="true"] {
-  background: var(--accent-subtle) !important;
-}
-
-/* Focus styles for accessibility */
-.react-arborist-node-row:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-/* Tree node content styling */
-.react-arborist-node-row [data-lucide] {
-  color: var(--text-secondary);
-}
-
-.react-arborist-node-row [data-lucide="folder"] {
-  color: var(--accent);
-}
-
-.react-arborist-node-row [data-lucide="file-code"] {
-  color: var(--text);
-}
-
-.react-arborist-node-row [data-lucide="function-square"] {
-  color: var(--text-secondary);
-}
-
-/* Scrollbar styling for tree */
-#react-tree-root ::-webkit-scrollbar {
+.valknut-analysis-tree .tree-scroll-container::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-#react-tree-root ::-webkit-scrollbar-track {
+.valknut-analysis-tree .tree-scroll-container::-webkit-scrollbar-track {
   background: var(--background);
 }
 
-#react-tree-root ::-webkit-scrollbar-thumb {
+.valknut-analysis-tree .tree-scroll-container::-webkit-scrollbar-thumb {
   background: var(--keyline);
   border-radius: 4px;
 }
 
-#react-tree-root ::-webkit-scrollbar-thumb:hover {
+.valknut-analysis-tree .tree-scroll-container::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+.tree-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-bottom: none;
+  border: none !important;
+  transition: background 0.15s ease;
+  color: var(--tree-foreground);
+}
+
+.tree-header-row:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.tree-header-row--selected {
+  background: var(--accent-subtle);
+}
+
+.tree-header-row:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tree-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--tree-muted);
+}
+
+.tree-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  border: none;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--tree-foreground);
+  gap: 4px;
+}
+
+.tree-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  border-left: 3px solid transparent;
+  border-bottom: none !important;
+  color: var(--tree-foreground);
+}
+
+
+.valknut-tooltip {
+  position: relative;
+  background: rgba(15, 23, 42, 0.96);
+  color: #f8fafc;
+  padding: 1.05rem 1.3rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 26px 58px rgba(15, 23, 42, 0.5);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 540px;
+  backdrop-filter: blur(9px);
+}
+
+.valknut-tooltip .tooltip-name {
+  font-weight: 600;
+  color: #c7d2fe;
+  font-size: 1.02rem;
+  margin-bottom: 0.55rem;
+}
+
+.valknut-tooltip dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.55rem;
+}
+
+.valknut-tooltip dt {
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.valknut-tooltip dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.valknut-tooltip .tooltip-section + .tooltip-section {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.valknut-tooltip .tooltip-section h4 {
+  margin: 0 0 0.38rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.valknut-tooltip .tooltip-section ul,
+.valknut-tooltip .tooltip-section-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+.valknut-tooltip .tooltip-section li {
+  margin-bottom: 0.35rem;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.valknut-tooltip .issue-heading,
+.valknut-tooltip .suggestion-heading {
+  font-weight: 600;
+  color: #c7d2fe;
+  margin-bottom: 0.2rem;
+  font-size: 0.84rem;
+}
+
+.valknut-tooltip .issue-title,
+.valknut-tooltip .issue-summary,
+.valknut-tooltip .suggestion-summary {
+  margin-top: 0.3rem;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.valknut-tooltip .feature-list {
+  margin: 0.3rem 0 0 0;
+  padding-left: 0.9rem;
+  list-style: square;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.valknut-tooltip .feature-list-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.valknut-tooltip .feature-chip {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  padding: 0.12rem 0.45rem;
+  font-size: 0.68rem;
+  color: rgba(226, 232, 240, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.valknut-tooltip .feature-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  color: rgba(226, 232, 240, 0.85);
+  margin-top: 0.2rem;
+}
+
+.valknut-tooltip .feature-table th,
+.valknut-tooltip .feature-table td {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  text-align: left;
+  vertical-align: top;
+}
+
+.valknut-tooltip .feature-table th {
+  font-weight: 600;
+  color: #c7d2fe;
+  padding-right: 0.75rem;
+  white-space: nowrap;
+}
+
+.valknut-tooltip .feature-table tr:last-child th,
+.valknut-tooltip .feature-table tr:last-child td {
+  border-bottom: none;
+}
+
+.valknut-tooltip .suggestion-item {
+  margin-bottom: 0.3rem;
+}
+
+.valknut-tooltip .tooltip-metrics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.15rem;
+  font-size: 0.72rem;
+}
+
+.valknut-tooltip .tooltip-metrics li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.valknut-tooltip .metric-label {
+  color: rgba(148, 163, 184, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+}
+
+.valknut-tooltip .metric-value {
+  font-weight: 600;
+  color: #f8fafc;
+  font-size: 0.88rem;
+}
+
+.valknut-tooltip-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border: inherit;
+  border-left: none;
+  border-top: none;
+  transform: rotate(45deg);
+}
+
+.valknut-tooltip[data-placement^="top"] .valknut-tooltip-arrow {
+  bottom: -5px;
+}
+
+.valknut-tooltip[data-placement^="bottom"] .valknut-tooltip-arrow {
+  top: -5px;
+}
+
+.valknut-tooltip[data-placement^="left"] .valknut-tooltip-arrow {
+  right: -5px;
+}
+
+.valknut-tooltip[data-placement^="right"] .valknut-tooltip-arrow {
+  left: -5px;
+}
+
+.insights-section,
+.clone-section {
+  max-width: 1200px;
+  margin: 0 auto var(--spacing-12);
+  padding: 1.5rem 1.75rem;
+  background: var(--tree-background);
+  border: 1px solid var(--tree-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  color: var(--tree-foreground);
+}
+
+.insights-section__header,
+.clone-section__header {
+  margin-bottom: 1rem;
+}
+
+.insights-section__header h2,
+.clone-section__header h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1.4rem;
+}
+
+.insights-section__header p,
+.clone-section__header p {
+  margin: 0;
+  color: var(--tree-muted);
+  font-size: 0.9rem;
+}
+
+.insights-category__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.insights-category__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.insight-chip {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.insight-chip__label {
+  font-weight: 600;
+  color: #c7d2fe;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+}
+
+.insight-chip__metrics,
+.insight-chip__impact {
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.insights-hotspot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.insight-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.insight-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.insight-card__rank {
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.insight-card__path-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-end;
+}
+
+.insight-card__path {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.92);
+  text-align: right;
+  word-break: break-word;
+}
+
+.insight-card__metric {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.insight-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.insight-card__summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.insight-card__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.insight-card__list li {
+  list-style: disc;
+}
+
+.clone-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.clone-metric-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.clone-metric-card__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.clone-metric-card__value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.clone-empty {
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 0.9rem;
+}
+
+.clone-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.85rem;
+}
+
+.clone-notes li {
+  margin-bottom: 0.4rem;
+}
+
+.clone-notes li:last-child {
+  margin-bottom: 0;
+}
+
+.tree-detail-row--issue {
+  border-left-color: var(--danger, #dc3545);
+  background: rgba(220, 53, 69, 0.12);
+}
+
+.tree-detail-row--suggestion {
+  border-left-color: var(--info, #0d6efd);
+  background: rgba(13, 110, 253, 0.12);
+}
+
+.tree-virtual-row {
+  position: relative;
 }
 
 /* High contrast mode improvements */
@@ -1204,7 +1642,7 @@ body {
     border: 1px solid currentColor;
   }
   
-  .react-arborist-node-row:focus-within {
+  .tree-header-row:focus-within {
     outline: 3px solid var(--accent);
   }
 }

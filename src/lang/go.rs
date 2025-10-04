@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
-use super::registry::{get_tree_sitter_language, create_parser_for_language};
+use super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
 
@@ -272,20 +272,18 @@ impl GoAdapter {
             _ => return Ok(None),
         };
 
-        let name = self
-            .extract_name(&node, source_code)?
-            .unwrap_or_else(|| {
-                // Provide fallback names for entities without extractable names
-                match entity_kind {
-                    EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
-                    EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
-                    EntityKind::Struct => format!("anonymous_struct_{}", *entity_id_counter),
-                    EntityKind::Interface => format!("anonymous_interface_{}", *entity_id_counter),
-                    EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
-                    EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
-                    _ => format!("anonymous_entity_{}", *entity_id_counter),
-                }
-            });
+        let name = self.extract_name(&node, source_code)?.unwrap_or_else(|| {
+            // Provide fallback names for entities without extractable names
+            match entity_kind {
+                EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
+                EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
+                EntityKind::Struct => format!("anonymous_struct_{}", *entity_id_counter),
+                EntityKind::Interface => format!("anonymous_interface_{}", *entity_id_counter),
+                EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
+                EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
+                _ => format!("anonymous_entity_{}", *entity_id_counter),
+            }
+        });
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -760,7 +758,11 @@ impl LanguageAdapter for GoAdapter {
         "go"
     }
 
-    fn extract_code_entities(&mut self, source: &str, file_path: &str) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+    fn extract_code_entities(
+        &mut self,
+        source: &str,
+        file_path: &str,
+    ) -> Result<Vec<crate::core::featureset::CodeEntity>> {
         GoAdapter::extract_code_entities(self, source, file_path)
     }
 }
@@ -774,7 +776,8 @@ impl Default for GoAdapter {
             );
             GoAdapter {
                 parser: tree_sitter::Parser::new(),
-                language: get_tree_sitter_language("go").unwrap_or_else(|_| tree_sitter_go::LANGUAGE.into()),
+                language: get_tree_sitter_language("go")
+                    .unwrap_or_else(|_| tree_sitter_go::LANGUAGE.into()),
             }
         })
     }

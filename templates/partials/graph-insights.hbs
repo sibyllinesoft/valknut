@@ -1,0 +1,62 @@
+<!-- Structural & Graph Insights -->
+{{#if graph_insights.hasInsights}}
+<section class="insights-section">
+    <header class="insights-section__header">
+        <h2>Structural Hotspots</h2>
+        <p>Highlighted directories where dependency and cohesion signals indicate emerging risk.</p>
+    </header>
+
+    {{#if graph_insights.hasCategorySummary}}
+    <div class="insights-category">
+        <h3 class="insights-category__title">Leading Issue Categories</h3>
+        <div class="insights-category__grid">
+            {{#each graph_insights.category_summary}}
+            <div class="insight-chip">
+                <span class="insight-chip__label">{{capitalize category}}</span>
+                <span class="insight-chip__metrics">
+                    {{affectedEntities}} entities · Max {{format maxSeverity "0.1"}}
+                </span>
+                <span class="insight-chip__impact">Impact {{format healthImpact "0.1"}}</span>
+            </div>
+            {{/each}}
+        </div>
+    </div>
+    {{/if}}
+
+    {{#if graph_insights.hasHotspots}}
+    <div class="insights-hotspot-grid">
+        {{#each graph_insights.hotspots}}
+        <article class="insight-card">
+            <div class="insight-card__header">
+                {{#if rank}}
+                <span class="insight-card__rank">#{{rank}}</span>
+                {{/if}}
+                <div class="insight-card__path-group">
+                    <div class="insight-card__path" title="{{path}}">{{path}}</div>
+                    {{#if healthScore}}
+                    <div class="insight-card__metric">Health {{percentage healthScore "1"}}%</div>
+                    {{/if}}
+                </div>
+            </div>
+            {{#if primaryIssueCategory}}
+            <div class="insight-card__tag">{{capitalize primaryIssueCategory}}</div>
+            {{/if}}
+            {{#if recommendation}}
+            <p class="insight-card__summary">{{recommendation}}</p>
+            {{/if}}
+            {{#if categories}}
+            <ul class="insight-card__list">
+                {{#each categories}}
+                <li>
+                    <strong>{{capitalize category}}</strong>
+                    <span>{{affectedEntities}} entities · Avg {{format avgSeverity "0.1"}} · Impact {{format healthImpact "0.1"}}</span>
+                </li>
+                {{/each}}
+            </ul>
+            {{/if}}
+        </article>
+        {{/each}}
+    </div>
+    {{/if}}
+</section>
+{{/if}}

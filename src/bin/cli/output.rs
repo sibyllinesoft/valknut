@@ -118,7 +118,7 @@ pub async fn generate_outputs(
                 let content = generate_html_report(result).await?;
                 tokio::fs::write(&report_file, content).await?;
             }
-        
+
             println!("📊 Team report (html): {}", report_file.display());
         }
         OutputFormat::Sonar => {

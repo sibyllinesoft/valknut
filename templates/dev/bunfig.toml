@@ -34,7 +34,7 @@ dev = true
 trusted = [
   "react",
   "react-dom", 
-  "react-arborist",
+  "@tanstack/react-virtual",
   "@testing-library/react",
   "@testing-library/jest-dom",
   "@testing-library/user-event",

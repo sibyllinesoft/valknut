@@ -174,7 +174,7 @@ describe('Unified Hierarchy Data Processing', () => {
   });
   
   test('should validate node ID uniqueness', () => {
-    // Check that all nodes have unique IDs (required for React Arborist)
+    // Check that all nodes have unique IDs (required for the virtual tree renderer)
     function collectIds(nodes) {
       const ids = [];
       for (const node of nodes) {
@@ -195,12 +195,12 @@ describe('Unified Hierarchy Data Processing', () => {
     expect(allIds.length).toBeGreaterThan(0); // Has IDs
   });
   
-  test('should validate React Arborist data format requirements', () => {
-    // React Arborist expects specific data structure
+  test('should validate tree data format requirements', () => {
+    // The virtual tree expects a consistent shape
     const hierarchyData = mockUnifiedHierarchyData.unifiedHierarchy;
     
     function validateNodeForArborist(node) {
-      // React Arborist requires nodes to have id property
+      // Virtual tree requires nodes to have id property
       expect(node).toHaveProperty('id');
       expect(typeof node.id).toBe('string');
       

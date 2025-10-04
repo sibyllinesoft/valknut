@@ -68,7 +68,7 @@ dist/                        # Built bundles
 ### Core Functionality ✅
 ```bash
 ✅ transformTreeData - ID assignment logic (12 tests)
-✅ validateTreeData - React Arborist compatibility (5 tests) 
+✅ validateTreeData - virtual tree compatibility (5 tests) 
 ✅ getSeverityLevel - Valknut priority mapping (4 tests)
 ✅ countSeverityLevels - Issue/suggestion aggregation (3 tests)
 ✅ generateNodeId - Unique ID generation (6 tests)
@@ -94,7 +94,6 @@ The new Bun-built bundle maintains identical API to the webpack version:
 <!-- Same HTML template usage -->
 <script src="react.min.js"></script>
 <script src="react-dom.min.js"></script>
-<script src="react-arborist.min.js"></script>
 <script src="react-tree-bundle.min.js"></script>
 
 <script>

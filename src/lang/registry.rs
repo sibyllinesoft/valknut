@@ -21,7 +21,7 @@ pub fn language_key_for_path(path: &Path) -> Option<String> {
     // Normalise TypeScript/JavaScript extensions that have multiple variants.
     let key = match ext.as_str() {
         "jsx" | "js" | "mjs" | "cjs" => "js", // tree-sitter javascript (includes ES modules and CommonJS)
-        "tsx" | "ts" => "ts", // tree-sitter typescript
+        "tsx" | "ts" => "ts",                 // tree-sitter typescript
         other => other,
     };
 
@@ -84,7 +84,10 @@ pub fn create_parser_for_language(language_key: &str) -> Result<tree_sitter::Par
     let mut parser = tree_sitter::Parser::new();
     let tree_sitter_language = get_tree_sitter_language(language_key)?;
     parser.set_language(&tree_sitter_language).map_err(|e| {
-        ValknutError::parse(language_key, format!("Failed to set parser language: {}", e))
+        ValknutError::parse(
+            language_key,
+            format!("Failed to set parser language: {}", e),
+        )
     })?;
     Ok(parser)
 }

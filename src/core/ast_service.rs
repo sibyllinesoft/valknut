@@ -5,13 +5,13 @@
 
 use crate::core::errors::{Result, ValknutError};
 use crate::lang::common::{ParsedEntity, SourceLocation};
-use crate::lang::registry::{get_tree_sitter_language, detect_language_from_path};
+use crate::lang::registry::{detect_language_from_path, get_tree_sitter_language};
 use dashmap::DashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 use tree_sitter::{Language, Node, Parser, Tree};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 /// Central AST service for unified parsing and caching
 #[derive(Debug)]
@@ -97,7 +97,7 @@ impl AstService {
         let language = self.detect_language(file_path);
         let content_hash = Self::calculate_content_hash(source, &language);
         let cache_key = Self::generate_cache_key(file_path, content_hash, &language);
-        
+
         // Check cache first using content-based key
         if let Some(cached) = self.tree_cache.get(&cache_key) {
             return Ok(cached.clone());
@@ -107,18 +107,23 @@ impl AstService {
         let language_clone = language.clone();
         let source_clone = source.to_string();
         let file_path_clone = file_path.to_string();
-        
+
         let tree = tokio::task::spawn_blocking(move || -> Result<Tree> {
             let mut parser = Parser::new();
             let tree_sitter_language = get_tree_sitter_language(&language_clone)?;
             parser.set_language(&tree_sitter_language).map_err(|e| {
-                ValknutError::parse(&language_clone, format!("Failed to set parser language: {}", e))
+                ValknutError::parse(
+                    &language_clone,
+                    format!("Failed to set parser language: {}", e),
+                )
             })?;
 
             parser
                 .parse(&source_clone, None)
                 .ok_or_else(|| ValknutError::parse(&language_clone, "Failed to parse source code"))
-        }).await.map_err(|e| ValknutError::parse(&language, &format!("Task join error: {}", e)))??;
+        })
+        .await
+        .map_err(|e| ValknutError::parse(&language, &format!("Task join error: {}", e)))??;
 
         let cached = Arc::new(CachedTree {
             tree,
@@ -129,12 +134,12 @@ impl AstService {
         });
 
         self.tree_cache.insert(cache_key, cached.clone());
-        
+
         // Clean up old cache entries if cache is getting large
         if self.tree_cache.len() > 1000 {
             self.cleanup_cache().await;
         }
-        
+
         Ok(cached)
     }
 
@@ -143,18 +148,18 @@ impl AstService {
         let cache_size = self.tree_cache.len();
         if cache_size > 800 {
             // Remove random entries to get back to reasonable size
-            let keys_to_remove: Vec<_> = self.tree_cache
+            let keys_to_remove: Vec<_> = self
+                .tree_cache
                 .iter()
                 .take(cache_size - 800)
                 .map(|entry| entry.key().clone())
                 .collect();
-            
+
             for key in keys_to_remove {
                 self.tree_cache.remove(&key);
             }
         }
     }
-
 
     /// Detect language from file path
     fn detect_language(&self, file_path: &str) -> String {

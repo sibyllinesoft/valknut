@@ -611,8 +611,8 @@ fn identify_cycles(
     nodes: &HashMap<EntityKey, FunctionNode>,
 ) -> (Vec<Vec<FunctionNode>>, HashSet<EntityKey>) {
     let sccs = kosaraju_scc(graph);
-    
-    let mut cycles = Vec::with_capacity(sccs.len() / 4); // Estimate ~25% of SCCs are cycles  
+
+    let mut cycles = Vec::with_capacity(sccs.len() / 4); // Estimate ~25% of SCCs are cycles
     let mut members = HashSet::with_capacity(nodes.len() / 10); // Estimate ~10% of nodes in cycles
 
     for component in sccs {
@@ -690,7 +690,8 @@ pub fn canonicalize_path(path: &Path) -> PathBuf {
             Ok(canonical) => {
                 // Try to convert back to relative if possible
                 if let Ok(current_dir) = std::env::current_dir() {
-                    canonical.strip_prefix(&current_dir)
+                    canonical
+                        .strip_prefix(&current_dir)
                         .map(|p| p.to_path_buf())
                         .unwrap_or(canonical)
                 } else {

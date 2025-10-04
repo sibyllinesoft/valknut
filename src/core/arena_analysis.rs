@@ -4,7 +4,7 @@
 //!
 //! This module provides high-performance file analysis using arena (bump-pointer) allocation
 //! to eliminate the malloc/free overhead that dominates traditional code analysis tools.
-//! 
+//!
 //! ## Key Performance Benefits
 //!
 //! - **74% reduction in memory allocation overhead** compared to traditional heap allocation
@@ -18,14 +18,14 @@
 //! ```rust,no_run
 //! use valknut_rs::core::arena_analysis::{ArenaFileAnalyzer, ArenaBatchAnalyzer};
 //! use std::path::Path;
-//! 
+//!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Single file analysis
 //! let analyzer = ArenaFileAnalyzer::new();
 //! let path = Path::new("example.py");
 //! let source_code = "def hello(): pass";
 //! let result = analyzer.analyze_file_in_arena(&path, &source_code).await?;
-//! 
+//!
 //! // Batch analysis (recommended for multiple files)
 //! let batch_analyzer = ArenaBatchAnalyzer::new();
 //! let path1 = std::path::PathBuf::from("file1.py");
@@ -80,7 +80,7 @@ impl ArenaFileAnalyzer {
     }
 
     /// Analyze a file using arena allocation for maximum performance
-    /// 
+    ///
     /// This method allocates all temporary analysis objects in a single arena,
     /// providing massive performance benefits over traditional heap allocation.
     pub async fn analyze_file_in_arena(
@@ -89,17 +89,17 @@ impl ArenaFileAnalyzer {
         source_code: &str,
     ) -> Result<ArenaAnalysisResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Pre-size arena based on file size heuristics for optimal memory layout
         // Heuristic: 2.5x file size covers AST nodes, entities, and analysis metadata
         let file_size = source_code.len();
         let estimated_arena_size = (file_size * 25) / 10; // 2.5x multiplier
         let arena_capacity = estimated_arena_size.max(8192); // Minimum 8KB
-        
+
         // Create pre-sized arena to minimize reallocations during analysis
         let arena = Bump::with_capacity(arena_capacity);
         let initial_capacity = arena.allocated_bytes();
-        
+
         debug!(
             "Starting arena-based analysis for file: {}",
             file_path.display()
@@ -107,14 +107,11 @@ impl ArenaFileAnalyzer {
 
         // Get language adapter for this file
         let mut adapter = adapter_for_file(file_path)?;
-        
+
         // Perform arena-based entity extraction
-        let analysis_result = self.extract_entities_in_arena(
-            &arena,
-            &mut *adapter,
-            source_code,
-            file_path,
-        ).await?;
+        let analysis_result = self
+            .extract_entities_in_arena(&arena, &mut *adapter, source_code, file_path)
+            .await?;
 
         let arena_bytes_used = arena.allocated_bytes() - initial_capacity;
         let elapsed = start_time.elapsed();
@@ -132,7 +129,7 @@ impl ArenaFileAnalyzer {
     }
 
     /// Batch analyze multiple files using arena allocation for each file
-    /// 
+    ///
     /// Each file gets its own arena for optimal memory usage patterns.
     pub async fn analyze_files_in_arenas(
         &self,
@@ -141,7 +138,7 @@ impl ArenaFileAnalyzer {
     ) -> Result<Vec<ArenaAnalysisResult>> {
         if file_paths.len() != sources.len() {
             return Err(ValknutError::validation(
-                "File paths and sources must have the same length".to_string()
+                "File paths and sources must have the same length".to_string(),
             ));
         }
 
@@ -178,20 +175,18 @@ impl ArenaFileAnalyzer {
         file_path: &Path,
     ) -> Result<ArenaAnalysisResult> {
         let entity_extraction_start = std::time::Instant::now();
-        
+
         // Use the interned entity extraction for optimal performance
         let file_path_str = file_path.to_string_lossy();
-        
+
         // Use optimized interned extraction to eliminate all string allocations during parsing
-        let interned_entities = adapter.extract_code_entities_interned(source_code, &file_path_str)?;
+        let interned_entities =
+            adapter.extract_code_entities_interned(source_code, &file_path_str)?;
 
         let entity_extraction_time = entity_extraction_start.elapsed();
-        
+
         // Allocate analysis workspace in arena
-        let workspace = arena.alloc(ArenaAnalysisWorkspace::new(
-            interned_entities.len(),
-            arena,
-        ));
+        let workspace = arena.alloc(ArenaAnalysisWorkspace::new(interned_entities.len(), arena));
 
         // Copy interned entities to workspace for analysis
         // NOTE: The actual strings are interned globally, only the Vec is in arena
@@ -229,7 +224,7 @@ impl Default for ArenaFileAnalyzer {
 }
 
 /// Workspace for arena-based entity analysis
-/// 
+///
 /// All vectors and temporary data structures in this workspace are allocated
 /// in the arena, providing excellent cache locality and zero fragmentation.
 struct ArenaAnalysisWorkspace<'arena> {
@@ -247,7 +242,10 @@ impl<'arena> ArenaAnalysisWorkspace<'arena> {
     fn new(expected_entities: usize, arena: &'arena Bump) -> Self {
         Self {
             entities: bumpalo::collections::Vec::with_capacity_in(expected_entities, arena),
-            analysis_metadata: bumpalo::collections::Vec::with_capacity_in(expected_entities, arena),
+            analysis_metadata: bumpalo::collections::Vec::with_capacity_in(
+                expected_entities,
+                arena,
+            ),
             arena,
         }
     }
@@ -356,7 +354,7 @@ impl ArenaBatchAnalyzer {
     }
 
     /// Analyze a batch of files with optimal arena usage
-    /// 
+    ///
     /// Each file gets its own arena for perfect isolation and cleanup.
     pub async fn analyze_batch(
         &self,
@@ -364,19 +362,25 @@ impl ArenaBatchAnalyzer {
     ) -> Result<ArenaBatchResult> {
         let start_time = std::time::Instant::now();
         let file_count = files_and_sources.len();
-        
+
         let mut results = Vec::with_capacity(file_count);
         let mut total_entities = 0;
         let mut total_arena_bytes = 0;
 
-        info!("Starting arena-based batch analysis of {} files", file_count);
+        info!(
+            "Starting arena-based batch analysis of {} files",
+            file_count
+        );
 
         for (file_path, source_code) in files_and_sources {
-            let file_result = self.file_analyzer.analyze_file_in_arena(file_path, source_code).await?;
-            
+            let file_result = self
+                .file_analyzer
+                .analyze_file_in_arena(file_path, source_code)
+                .await?;
+
             total_entities += file_result.entity_count;
             total_arena_bytes += file_result.arena_bytes_used;
-            
+
             results.push(file_result);
         }
 
@@ -445,7 +449,7 @@ impl ArenaBatchResult {
     }
 
     /// Calculate memory savings vs traditional allocation
-    /// 
+    ///
     /// Estimates the memory overhead saved by using arena allocation
     /// instead of individual heap allocations for each entity/metadata.
     pub fn estimated_malloc_savings(&self) -> f64 {
@@ -453,11 +457,12 @@ impl ArenaBatchResult {
         // Arena provides bulk allocation with minimal overhead
         let estimated_individual_allocations = self.total_entities * 7; // Conservative estimate
         let malloc_overhead_per_allocation = 16; // Typical malloc overhead
-        let estimated_traditional_overhead = estimated_individual_allocations * malloc_overhead_per_allocation;
-        
+        let estimated_traditional_overhead =
+            estimated_individual_allocations * malloc_overhead_per_allocation;
+
         // Arena overhead is just the unused space at the end of each bump
         let estimated_arena_overhead = self.file_results.len() * 64; // ~64 bytes per arena
-        
+
         let savings_bytes = estimated_traditional_overhead.saturating_sub(estimated_arena_overhead);
         savings_bytes as f64 / 1024.0 // Convert to KB
     }
@@ -481,19 +486,27 @@ class TestClass:
         return 42
 "#;
 
-        let result = analyzer.analyze_file_in_arena(&test_file, test_source).await;
+        let result = analyzer
+            .analyze_file_in_arena(&test_file, test_source)
+            .await;
         assert!(result.is_ok(), "Arena analysis should succeed");
-        
+
         let analysis_result = result.unwrap();
         assert!(analysis_result.entity_count > 0, "Should extract entities");
-        assert!(analysis_result.arena_bytes_used > 0, "Should use arena memory");
-        assert!(analysis_result.memory_efficiency_score > 0.0, "Should have positive efficiency");
+        assert!(
+            analysis_result.arena_bytes_used > 0,
+            "Should use arena memory"
+        );
+        assert!(
+            analysis_result.memory_efficiency_score > 0.0,
+            "Should have positive efficiency"
+        );
     }
 
     #[tokio::test]
     async fn test_arena_batch_analysis() {
         let analyzer = ArenaBatchAnalyzer::new();
-        
+
         let test_file1 = PathBuf::from("test1.py");
         let test_file2 = PathBuf::from("test2.py");
         let test_files = vec![
@@ -503,7 +516,7 @@ class TestClass:
 
         let result = analyzer.analyze_batch(test_files).await;
         assert!(result.is_ok(), "Batch analysis should succeed");
-        
+
         let batch_result = result.unwrap();
         assert_eq!(batch_result.total_files, 2);
         assert!(batch_result.total_entities > 0);

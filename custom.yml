@@ -19,6 +19,9 @@ analysis:
     - "datasets/**"
   include_patterns:
     - "**/*"
+  ignore_patterns:
+    - "templates/dev/src/tree-component/react-tree-bundle.debug.js"
+    - "templates/dev/src/tree-component/react-tree-bundle.debug.js.map"
 
 scoring:
   normalization_scheme: z_score

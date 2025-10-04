@@ -49,7 +49,9 @@ module.exports = {
     compress: true,
     port: 8080,
     hot: true,
-    open: true,
+    open: {
+      target: '/report-dev.html'
+    },
     historyApiFallback: true,
     headers: {
       'Access-Control-Allow-Origin': '*',
