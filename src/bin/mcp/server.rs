@@ -500,3 +500,341 @@ pub async fn run_mcp_server(version: &str) -> Result<(), Box<dyn std::error::Err
     let server = McpServer::new(version);
     server.run().await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::time::Duration;
+    use tempfile::tempdir;
+    use valknut_rs::core::pipeline::{CodeDefinition, CodeDictionary};
+
+    fn sample_results() -> AnalysisResults {
+        let summary = valknut_rs::api::results::AnalysisSummary {
+            files_processed: 1,
+            entities_analyzed: 1,
+            refactoring_needed: 1,
+            high_priority: 1,
+            critical: 0,
+            avg_refactoring_score: 0.5,
+            code_health_score: 0.7,
+            total_files: 1,
+            total_entities: 1,
+            total_lines_of_code: 120,
+            languages: vec!["Rust".to_string()],
+            total_issues: 1,
+            high_priority_issues: 1,
+            critical_issues: 0,
+        };
+
+        let candidate = valknut_rs::api::results::RefactoringCandidate {
+            entity_id: "src/lib.rs::sample_fn".to_string(),
+            name: "sample_fn".to_string(),
+            file_path: "src/lib.rs".to_string(),
+            line_range: Some((5, 25)),
+            priority: valknut_rs::core::scoring::Priority::High,
+            score: 0.5,
+            confidence: 0.8,
+            issues: vec![valknut_rs::api::results::RefactoringIssue {
+                code: "CMPLX".to_string(),
+                category: "complexity".to_string(),
+                severity: 1.6,
+                contributing_features: vec![valknut_rs::api::results::FeatureContribution {
+                    feature_name: "cyclomatic_complexity".to_string(),
+                    value: 12.0,
+                    normalized_value: 0.6,
+                    contribution: 0.8,
+                }],
+            }],
+            suggestions: vec![valknut_rs::api::results::RefactoringSuggestion {
+                refactoring_type: "extract_method".to_string(),
+                code: "XTRMTH".to_string(),
+                priority: 0.8,
+                effort: 0.3,
+                impact: 0.7,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        };
+
+        let mut code_dictionary = CodeDictionary::default();
+        code_dictionary.issues.insert(
+            "CMPLX".to_string(),
+            CodeDefinition {
+                code: "CMPLX".to_string(),
+                title: "High Complexity".to_string(),
+                summary: "Function is too complex".to_string(),
+                category: Some("complexity".to_string()),
+            },
+        );
+
+        AnalysisResults {
+            summary,
+            refactoring_candidates: vec![candidate],
+            refactoring_candidates_by_file: Vec::new(),
+            statistics: valknut_rs::api::results::AnalysisStatistics {
+                total_duration: Duration::from_secs(1),
+                avg_file_processing_time: Duration::from_millis(120),
+                avg_entity_processing_time: Duration::from_millis(40),
+                features_per_entity: HashMap::new(),
+                priority_distribution: HashMap::new(),
+                issue_distribution: HashMap::new(),
+                memory_stats: valknut_rs::api::results::MemoryStats {
+                    peak_memory_bytes: 256_000,
+                    final_memory_bytes: 128_000,
+                    efficiency_score: 0.75,
+                },
+            },
+            health_metrics: None,
+            directory_health_tree: None,
+            clone_analysis: None,
+            coverage_packs: Vec::new(),
+            unified_hierarchy: vec![serde_json::json!({"id": "root"})],
+            warnings: vec!["Minor warning".to_string()],
+            code_dictionary,
+        }
+    }
+
+    #[test]
+    fn available_tools_expose_expected_entries() {
+        let server = McpServer::new("1.0.0");
+        let tools = server.available_tools();
+        let names: Vec<_> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert!(names.contains(&"analyze_code"));
+        assert!(names.contains(&"get_refactoring_suggestions"));
+        assert!(names.contains(&"validate_quality_gates"));
+        assert!(names.contains(&"analyze_file_quality"));
+    }
+
+    #[test]
+    fn handle_initialize_returns_capabilities() {
+        let server = McpServer::new("1.0.0");
+        let response = server.handle_initialize(Some(json!(1)));
+        assert!(response.error.is_none());
+        assert_eq!(response.id, Some(json!(1)));
+        let result = response.result.unwrap();
+        assert_eq!(result["server_info"]["version"], "1.0.0");
+        assert!(result["capabilities"]["tools"].is_array());
+    }
+
+    #[test]
+    fn handle_tools_list_wraps_available_tools() {
+        let server = McpServer::new("1.0.0");
+        let response = server.handle_tools_list(None);
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(!result["tools"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn format_analysis_results_defaults_to_json() {
+        let server = McpServer::new("1.0.0");
+        let results = sample_results();
+        let json_output = server
+            .format_analysis_results(&results, "json")
+            .expect("json formatting");
+        assert!(json_output.contains("\"files_processed\": 1"));
+
+        let fallback_output = server
+            .format_analysis_results(&results, "unsupported")
+            .expect("fallback formatting");
+        assert!(fallback_output.contains("\"code_health_score\": 0.7"));
+    }
+
+    #[tokio::test]
+    async fn cache_analysis_provides_hits_and_expires() {
+        let server = McpServer::new("1.0.0");
+        let path = PathBuf::from("src/lib.rs");
+        server.cache_analysis(path.clone(), sample_results()).await;
+        assert!(server.get_cached_analysis(&path).await.is_some());
+
+        {
+            let mut cache = server.analysis_cache.lock().await;
+            if let Some(entry) = cache.get_mut(&path) {
+                entry.timestamp = std::time::Instant::now() - Duration::from_secs(400);
+            }
+        }
+
+        assert!(server.get_cached_analysis(&path).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn cache_analysis_evicts_when_limit_exceeded() {
+        let server = McpServer::new("1.0.0");
+        for i in 0..11 {
+            let path = PathBuf::from(format!("src/file{i}.rs"));
+            server.cache_analysis(path, sample_results()).await;
+        }
+
+        let cache = server.analysis_cache.lock().await;
+        assert_eq!(cache.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn handle_request_validates_jsonrpc_version() {
+        let server = McpServer::new("1.0.0");
+        let request = json!({
+            "jsonrpc": "1.0",
+            "method": "initialize",
+            "id": 1
+        });
+        let response = server.handle_request(&request.to_string()).await;
+        assert_eq!(response.error.unwrap().code, error_codes::INVALID_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn handle_request_unknown_method_returns_error() {
+        let server = McpServer::new("1.0.0");
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "does_not_exist",
+            "id": 1
+        });
+        let response = server.handle_request(&request.to_string()).await;
+        assert_eq!(response.error.unwrap().code, error_codes::METHOD_NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn handle_request_rejects_empty_payload() {
+        let server = McpServer::new("1.0.0");
+        let response = server.handle_request("   ").await;
+        let error = response.error.expect("expected error");
+        assert_eq!(error.code, error_codes::INVALID_REQUEST);
+        assert!(
+            error.message.contains("Empty request"),
+            "unexpected error message: {}",
+            error.message
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_request_reports_parse_errors() {
+        let server = McpServer::new("1.0.0");
+        let response = server.handle_request("{\"jsonrpc\":").await;
+        let error = response.error.expect("expected parse error");
+        assert_eq!(error.code, error_codes::PARSE_ERROR);
+        assert!(
+            error.message.contains("Invalid JSON"),
+            "unexpected error message: {}",
+            error.message
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_tool_call_validates_parameters() {
+        let server = McpServer::new("1.0.0");
+        let missing = server.handle_tool_call(Some(json!(1)), None).await;
+        assert_eq!(missing.error.unwrap().code, error_codes::INVALID_PARAMS);
+
+        let invalid = server
+            .handle_tool_call(
+                Some(json!(2)),
+                Some(json!({
+                    "name": "analyze_code",
+                    "arguments": "not an object"
+                })),
+            )
+            .await;
+        assert_eq!(invalid.error.unwrap().code, error_codes::INVALID_PARAMS);
+
+        let unknown = server
+            .handle_tool_call(
+                Some(json!(3)),
+                Some(json!({
+                    "name": "unknown_tool",
+                    "arguments": {}
+                })),
+            )
+            .await;
+        assert_eq!(unknown.error.unwrap().code, error_codes::TOOL_NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn execute_analyze_code_cached_returns_cached_output() {
+        let server = McpServer::new("1.0.0");
+        let temp = tempdir().expect("temp dir");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&project_dir).expect("create project dir");
+        let canonical = project_dir.canonicalize().expect("canonical path");
+
+        server
+            .cache_analysis(canonical.clone(), sample_results())
+            .await;
+
+        let params = AnalyzeCodeParams {
+            path: project_dir.to_string_lossy().to_string(),
+            format: "json".to_string(),
+        };
+
+        let result = server
+            .execute_analyze_code_cached(params)
+            .await
+            .expect("cached analyze");
+
+        assert_eq!(result.content.len(), 1);
+        assert!(result.content[0].text.contains("\"files_processed\": 1"));
+    }
+
+    #[tokio::test]
+    async fn handle_tool_call_analyze_file_quality_missing_file_errors() {
+        let server = McpServer::new("1.0.0");
+        let response = server
+            .handle_tool_call(
+                Some(json!(9)),
+                Some(json!({
+                    "name": "analyze_file_quality",
+                    "arguments": {
+                        "file_path": "/path/that/does/not/exist.rs"
+                    }
+                })),
+            )
+            .await;
+
+        let error = response.error.expect("expected error response");
+        assert_eq!(error.code, error_codes::INVALID_PARAMS);
+        assert!(
+            error.message.contains("File does not exist"),
+            "unexpected error message: {}",
+            error.message
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_analyze_code_cached_rejects_missing_path() {
+        let server = McpServer::new("1.0.0");
+        let params = AnalyzeCodeParams {
+            path: "/definitely/does/not/exist".to_string(),
+            format: "json".to_string(),
+        };
+
+        let err = server
+            .execute_analyze_code_cached(params)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, error_codes::INVALID_PARAMS);
+        assert!(
+            err.1.contains("Path does not exist"),
+            "unexpected error text: {}",
+            err.1
+        );
+    }
+
+    #[test]
+    fn format_analysis_results_attempts_html_generation() {
+        let server = McpServer::new("1.0.0");
+        let results = sample_results();
+        let base_path = std::env::temp_dir().join("valknut_mcp_report");
+        let _ = std::fs::remove_file(&base_path);
+        let _ = std::fs::remove_file(base_path.with_extension("html"));
+
+        let html_result = server.format_analysis_results(&results, "html");
+        assert!(
+            html_result.is_err(),
+            "expected HTML formatting to currently fail due to missing generated file"
+        );
+
+        let _ = std::fs::remove_file(&base_path);
+        let _ = std::fs::remove_file(base_path.with_extension("html"));
+    }
+}

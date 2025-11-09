@@ -149,6 +149,33 @@ impl CloneAnalysisResults {
             other_after,
         );
 
+        self.verification = match (self.verification.take(), other.verification) {
+            (Some(mut left), Some(right)) => {
+                let left_scored = left.pairs_scored;
+                let right_scored = right.pairs_scored;
+                let combined_scored = left_scored + right_scored;
+
+                left.pairs_considered += right.pairs_considered;
+                left.pairs_evaluated += right.pairs_evaluated;
+                left.pairs_scored = combined_scored;
+
+                left.avg_similarity = match (left.avg_similarity, right.avg_similarity) {
+                    (Some(a), Some(b)) if combined_scored > 0 => Some(
+                        ((a * left_scored as f64) + (b * right_scored as f64))
+                            / combined_scored as f64,
+                    ),
+                    (Some(a), _) => Some(a),
+                    (_, Some(b)) => Some(b),
+                    _ => None,
+                };
+
+                Some(left)
+            }
+            (Some(left), None) => Some(left),
+            (None, Some(right)) => Some(right),
+            (None, None) => None,
+        };
+
         self.max_similarity = merge_optional_average(
             self.max_similarity,
             base_after,
@@ -388,5 +415,378 @@ fn merge_health_metrics(
         (Some(a), None) => Some(a),
         (None, Some(b)) => Some(b),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::results::{
+        DirectoryHealthScore, DirectoryHotspot, FeatureContribution, RefactoringCandidate,
+        RefactoringIssue, RefactoringSuggestion, TreeStatistics,
+    };
+    use crate::core::pipeline::CloneVerificationResults;
+    use crate::core::scoring::Priority;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    fn sample_candidate(file_path: &str, priority: Priority, score: f64) -> RefactoringCandidate {
+        RefactoringCandidate {
+            entity_id: format!("{}:entity", file_path),
+            name: "entity".into(),
+            file_path: file_path.into(),
+            line_range: Some((1, 10)),
+            priority,
+            score,
+            confidence: 0.9,
+            issues: vec![RefactoringIssue {
+                code: "complexity".into(),
+                category: "complexity".into(),
+                severity: 0.8,
+                contributing_features: vec![FeatureContribution {
+                    feature_name: "cyclomatic".into(),
+                    value: 12.0,
+                    normalized_value: 0.6,
+                    contribution: 0.3,
+                }],
+            }],
+            suggestions: vec![RefactoringSuggestion {
+                refactoring_type: "extract_method".into(),
+                code: "extract_method".into(),
+                priority: 0.7,
+                effort: 0.4,
+                impact: 0.6,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        }
+    }
+
+    fn sample_directory_score(path: &str, score: f64) -> DirectoryHealthScore {
+        DirectoryHealthScore {
+            path: PathBuf::from(path),
+            health_score: score,
+            file_count: 1,
+            entity_count: 1,
+            refactoring_needed: 1,
+            critical_issues: 0,
+            high_priority_issues: 0,
+            avg_refactoring_score: 0.5,
+            weight: 1.0,
+            children: Vec::new(),
+            parent: None,
+            issue_categories: HashMap::new(),
+        }
+    }
+
+    fn sample_tree(path: &str, hotspot_score: f64) -> DirectoryHealthTree {
+        let root = sample_directory_score(path, hotspot_score);
+        let mut directories = HashMap::new();
+        directories.insert(
+            PathBuf::from(path),
+            sample_directory_score(path, hotspot_score),
+        );
+
+        DirectoryHealthTree {
+            root,
+            directories,
+            tree_statistics: TreeStatistics {
+                total_directories: 1,
+                max_depth: 1,
+                avg_health_score: hotspot_score,
+                health_score_std_dev: 0.0,
+                hotspot_directories: vec![DirectoryHotspot {
+                    path: PathBuf::from(path),
+                    health_score: hotspot_score,
+                    rank: 1,
+                    primary_issue_category: "complexity".into(),
+                    recommendation: "refactor".into(),
+                }],
+                health_by_depth: HashMap::new(),
+            },
+        }
+    }
+
+    fn sample_clone_analysis(
+        after: usize,
+        quality: f64,
+        max_similarity: f64,
+    ) -> CloneAnalysisResults {
+        CloneAnalysisResults {
+            denoising_enabled: true,
+            auto_calibration_applied: Some(true),
+            candidates_before_denoising: Some(after * 2),
+            candidates_after_denoising: after,
+            calibrated_threshold: Some(0.7),
+            quality_score: Some(quality),
+            avg_similarity: Some(0.5),
+            max_similarity: Some(max_similarity),
+            verification: Some(CloneVerificationResults {
+                method: "apted".into(),
+                pairs_considered: after * 3,
+                pairs_evaluated: after * 2,
+                pairs_scored: after,
+                avg_similarity: Some(0.6),
+            }),
+            phase_filtering_stats: Some(PhaseFilteringStats {
+                phase1_weighted_signature: after,
+                phase2_structural_gates: after + 1,
+                phase3_stop_motifs_filter: after + 2,
+                phase4_payoff_ranking: after + 3,
+            }),
+            performance_metrics: Some(CloneAnalysisPerformance {
+                total_time_ms: Some((after as u64) * 100),
+                memory_usage_bytes: Some(1024 * after as u64),
+                entities_per_second: Some(10.0),
+            }),
+            notes: vec!["left".into()],
+        }
+    }
+
+    fn sample_health(score: f64) -> HealthMetrics {
+        HealthMetrics {
+            overall_health_score: score,
+            maintainability_score: score - 0.1,
+            technical_debt_ratio: 1.0 - score,
+            complexity_score: score - 0.2,
+            structure_quality_score: score + 0.1,
+        }
+    }
+
+    #[test]
+    fn weighted_average_respects_weights() {
+        let result = weighted_average(0.6, 4, 0.2, 1);
+        assert!((result - 0.52).abs() < 1e-6);
+
+        let equal_weight = weighted_average(0.5, 0, 0.7, 0);
+        assert!((equal_weight - 0.6).abs() < 1e-6);
+    }
+
+    #[test]
+    fn weighted_duration_handles_zero_weight() {
+        let result = weighted_duration(Duration::from_secs(3), 2, Duration::from_secs(9), 3);
+        assert!((result.as_secs_f64() - 6.6).abs() < 1e-6);
+
+        let zero = weighted_duration(Duration::from_secs(10), 0, Duration::from_secs(5), 0);
+        assert_eq!(zero.as_secs(), 0);
+    }
+
+    #[test]
+    fn optional_merges_behave() {
+        assert_eq!(merge_optional_bool(Some(true), Some(false)), Some(true));
+        assert_eq!(merge_optional_sum(Some(2_usize), Some(3)), Some(5));
+        assert_eq!(merge_optional_sum_u64(Some(2), Some(3)), Some(5));
+        assert_eq!(merge_optional_max_u64(Some(4), Some(6)), Some(6));
+        let averaged = merge_optional_average(Some(0.6), 2, Some(0.2), 1).unwrap();
+        assert!((averaged - 0.4666666666666667).abs() < 1e-12);
+    }
+
+    #[test]
+    fn health_metrics_merge_weighted() {
+        let merged = merge_health_metrics(Some(sample_health(0.7)), 2, Some(sample_health(0.3)), 3)
+            .expect("merged metrics");
+
+        assert!((merged.overall_health_score - 0.46).abs() < 1e-6);
+        assert!((merged.structure_quality_score - 0.56).abs() < 1e-6);
+    }
+
+    #[test]
+    fn directory_health_merge_deduplicates_hotspots() {
+        let mut current = sample_tree("src", 0.6);
+        let mut incoming = sample_tree("src", 0.4);
+
+        // Add additional directory to incoming to ensure union
+        incoming
+            .directories
+            .insert(PathBuf::from("tests"), sample_directory_score("tests", 0.3));
+
+        merge_directory_health(&mut current, &mut incoming);
+
+        assert!(current.directories.contains_key(&PathBuf::from("tests")));
+        assert_eq!(
+            current
+                .tree_statistics
+                .hotspot_directories
+                .iter()
+                .filter(|hotspot| hotspot.path == PathBuf::from("src"))
+                .count(),
+            1,
+            "hotspots with the same path should deduplicate"
+        );
+    }
+
+    #[test]
+    fn clone_analysis_performance_merge_accumulates() {
+        let mut left = CloneAnalysisPerformance {
+            total_time_ms: Some(1000),
+            memory_usage_bytes: Some(2048),
+            entities_per_second: Some(15.0),
+        };
+        let right = CloneAnalysisPerformance {
+            total_time_ms: Some(400),
+            memory_usage_bytes: Some(4096),
+            entities_per_second: Some(5.0),
+        };
+
+        left.merge(right);
+
+        assert_eq!(left.total_time_ms, Some(1400));
+        assert_eq!(left.memory_usage_bytes, Some(4096));
+        assert!(left.entities_per_second.unwrap() > 10.0);
+    }
+
+    #[test]
+    fn clone_analysis_results_merge_combines() {
+        let mut left = sample_clone_analysis(4, 0.8, 0.9);
+        let right = CloneAnalysisResults {
+            denoising_enabled: false,
+            auto_calibration_applied: Some(false),
+            candidates_before_denoising: Some(2),
+            candidates_after_denoising: 2,
+            calibrated_threshold: Some(0.5),
+            quality_score: Some(0.2),
+            avg_similarity: Some(0.4),
+            max_similarity: Some(0.5),
+            verification: Some(CloneVerificationResults {
+                method: "apted".into(),
+                pairs_considered: 4,
+                pairs_evaluated: 3,
+                pairs_scored: 2,
+                avg_similarity: Some(0.5),
+            }),
+            phase_filtering_stats: Some(PhaseFilteringStats {
+                phase1_weighted_signature: 1,
+                phase2_structural_gates: 2,
+                phase3_stop_motifs_filter: 3,
+                phase4_payoff_ranking: 4,
+            }),
+            performance_metrics: Some(CloneAnalysisPerformance {
+                total_time_ms: Some(200),
+                memory_usage_bytes: Some(512),
+                entities_per_second: Some(12.0),
+            }),
+            notes: vec!["right".into()],
+        };
+
+        left.merge(right);
+
+        assert_eq!(left.candidates_after_denoising, 6);
+        assert_eq!(left.candidates_before_denoising, Some(10));
+        assert_eq!(left.notes.len(), 2);
+        assert!(left.denoising_enabled);
+        assert_eq!(
+            left.phase_filtering_stats
+                .as_ref()
+                .unwrap()
+                .phase1_weighted_signature,
+            5
+        );
+        assert_eq!(
+            left.performance_metrics.as_ref().unwrap().total_time_ms,
+            Some(600)
+        );
+        assert!((left.quality_score.unwrap() - 0.6).abs() < 1e-6);
+        assert!((left.max_similarity.unwrap() - 0.7666666667).abs() < 1e-6);
+    }
+
+    #[test]
+    fn analysis_results_merge_in_place_combines_everything() {
+        let mut left = AnalysisResults::empty();
+        left.summary.files_processed = 2;
+        left.summary.entities_analyzed = 4;
+        left.summary.refactoring_needed = 1;
+        left.summary.high_priority = 1;
+        left.summary.avg_refactoring_score = 0.6;
+        left.summary.code_health_score = 0.8;
+        left.health_metrics = Some(sample_health(0.7));
+        left.statistics.total_duration = Duration::from_secs(10);
+        left.statistics.avg_file_processing_time = Duration::from_secs(3);
+        left.statistics.avg_entity_processing_time = Duration::from_secs(2);
+        left.statistics
+            .features_per_entity
+            .insert("cyclomatic".into(), 2.0);
+        left.statistics
+            .priority_distribution
+            .insert("High".into(), 1);
+        left.statistics
+            .issue_distribution
+            .insert("complexity".into(), 1);
+        left.statistics.memory_stats = MemoryStats {
+            peak_memory_bytes: 100,
+            final_memory_bytes: 80,
+            efficiency_score: 0.5,
+        };
+        left.clone_analysis = Some(sample_clone_analysis(4, 0.8, 0.9));
+        left.directory_health_tree = Some(sample_tree("src", 0.6));
+        left.refactoring_candidates = vec![sample_candidate("src/lib.rs", Priority::High, 0.6)];
+        left.refactoring_candidates_by_file =
+            AnalysisResults::group_candidates_by_file(&left.refactoring_candidates);
+        left.coverage_packs = Vec::new();
+        left.unified_hierarchy = vec![serde_json::json!({"root": "left"})];
+        left.warnings.push("left warning".into());
+
+        let mut right = AnalysisResults::empty();
+        right.summary.files_processed = 3;
+        right.summary.entities_analyzed = 6;
+        right.summary.refactoring_needed = 2;
+        right.summary.high_priority = 0;
+        right.summary.avg_refactoring_score = 0.3;
+        right.summary.code_health_score = 0.4;
+        right.health_metrics = Some(sample_health(0.3));
+        right.statistics.total_duration = Duration::from_secs(20);
+        right.statistics.avg_file_processing_time = Duration::from_secs(9);
+        right.statistics.avg_entity_processing_time = Duration::from_secs(4);
+        right
+            .statistics
+            .features_per_entity
+            .insert("nesting".into(), 1.5);
+        right
+            .statistics
+            .priority_distribution
+            .insert("Medium".into(), 3);
+        right
+            .statistics
+            .issue_distribution
+            .insert("structure".into(), 2);
+        right.statistics.memory_stats = MemoryStats {
+            peak_memory_bytes: 120,
+            final_memory_bytes: 90,
+            efficiency_score: 0.9,
+        };
+        right.clone_analysis = Some(sample_clone_analysis(2, 0.2, 0.4));
+        if let Some(clone) = right.clone_analysis.as_mut() {
+            clone.notes = vec!["right".into()];
+        }
+        right.directory_health_tree = Some(sample_tree("tests", 0.3));
+        right.refactoring_candidates =
+            vec![sample_candidate("tests/main.rs", Priority::Medium, 0.3)];
+        right.refactoring_candidates_by_file =
+            AnalysisResults::group_candidates_by_file(&right.refactoring_candidates);
+        right.warnings.push("right warning".into());
+
+        left.merge_in_place(right);
+
+        assert_eq!(left.summary.files_processed, 5);
+        assert_eq!(left.summary.entities_analyzed, 10);
+        assert_eq!(left.summary.refactoring_needed, 3);
+        assert!((left.summary.avg_refactoring_score - 0.42).abs() < 1e-6);
+        assert!((left.summary.code_health_score - 0.56).abs() < 1e-6);
+        assert!(left.statistics.priority_distribution.contains_key("Medium"));
+        assert!(left.statistics.issue_distribution.contains_key("structure"));
+        assert!(left.statistics.memory_stats.peak_memory_bytes >= 120);
+        assert_eq!(left.clone_analysis.as_ref().unwrap().notes.len(), 2);
+        assert!(left
+            .warnings
+            .iter()
+            .any(|warning| warning == "left warning"));
+        assert!(left
+            .warnings
+            .iter()
+            .any(|warning| warning == "right warning"));
+        assert_eq!(left.refactoring_candidates_by_file.len(), 2);
+        assert!(left.directory_health_tree.unwrap().directories.len() >= 2);
+
+        let health = left.health_metrics.unwrap();
+        assert!((health.overall_health_score - 0.46).abs() < 1e-6);
     }
 }

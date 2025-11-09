@@ -5,8 +5,8 @@
 
 use crate::cli::args::{
     AIFeaturesArgs, AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs,
-    CoverageArgs, InitConfigArgs, McpManifestArgs, McpStdioArgs, OutputFormat, PerformanceProfile,
-    QualityGateArgs, SurveyVerbosity, ValidateConfigArgs,
+    CoverageArgs, DocAuditArgs, DocAuditFormat, InitConfigArgs, McpManifestArgs, McpStdioArgs,
+    OutputFormat, PerformanceProfile, QualityGateArgs, SurveyVerbosity, ValidateConfigArgs,
 };
 use crate::cli::config_layer::build_layered_valknut_config;
 use anyhow;
@@ -29,13 +29,21 @@ use valknut_rs::api::results::{AnalysisResults, RefactoringCandidate};
 use valknut_rs::core::config::ReportFormat;
 use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
 use valknut_rs::core::file_utils::CoverageDiscovery;
-use valknut_rs::core::pipeline::{QualityGateConfig, QualityGateResult, QualityGateViolation};
+use valknut_rs::core::pipeline::{
+    AnalysisConfig as PipelineAnalysisConfig, QualityGateConfig, QualityGateResult,
+    QualityGateViolation,
+};
 use valknut_rs::core::scoring::Priority;
 use valknut_rs::detectors::structure::StructureConfig;
 use valknut_rs::io::reports::ReportGenerator;
+use valknut_rs::lang::{extension_is_supported, registered_languages, LanguageStability};
 use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn is_quiet(args: &AnalyzeArgs) -> bool {
+    args.quiet || args.format.is_machine_readable()
+}
 
 /// Main analyze command implementation with comprehensive analysis pipeline
 pub async fn analyze_command(
@@ -43,24 +51,27 @@ pub async fn analyze_command(
     _survey: bool,
     _survey_verbosity: SurveyVerbosity,
 ) -> anyhow::Result<()> {
+    let quiet_mode = is_quiet(&args);
+
     // Print header
-    if !args.quiet {
+    if !quiet_mode {
         print_header();
     }
 
     // Build comprehensive configuration from CLI args and file
     let valknut_config = build_valknut_config(&args).await?;
 
-    if !args.quiet {
+    if !quiet_mode {
         println!(
             "{}",
             "✅ Configuration loaded with comprehensive analysis enabled".green()
         );
         display_analysis_config_summary(&valknut_config);
     }
+    warn_for_unsupported_languages(&valknut_config, quiet_mode);
 
     // Validate and prepare paths
-    if !args.quiet {
+    if !quiet_mode {
         println!("{}", "📂 Validating Input Paths".bright_blue().bold());
         println!();
     }
@@ -69,7 +80,7 @@ pub async fn analyze_command(
     for path in &args.paths {
         if path.exists() {
             valid_paths.push(path.clone());
-            if !args.quiet {
+            if !quiet_mode {
                 let path_type = if path.is_dir() {
                     "📁 Directory"
                 } else {
@@ -89,7 +100,7 @@ pub async fn analyze_command(
     // Create output directory
     tokio::fs::create_dir_all(&args.out).await?;
 
-    if !args.quiet {
+    if !quiet_mode {
         println!();
         println!(
             "{} {}",
@@ -105,12 +116,12 @@ pub async fn analyze_command(
     }
 
     // Preview coverage file discovery if enabled
-    if valknut_config.analysis.enable_coverage_analysis && !args.quiet {
+    if valknut_config.analysis.enable_coverage_analysis && !quiet_mode {
         preview_coverage_discovery(&valid_paths, &valknut_config.coverage).await?;
     }
 
     // Run comprehensive analysis with enhanced progress tracking
-    if !args.quiet {
+    if !quiet_mode {
         println!(
             "{}",
             "🔍 Starting Comprehensive Analysis Pipeline"
@@ -121,7 +132,7 @@ pub async fn analyze_command(
         println!();
     }
 
-    let analysis_result = if args.quiet {
+    let analysis_result = if quiet_mode {
         run_comprehensive_analysis_without_progress(&valid_paths, valknut_config, &args).await?
     } else {
         run_comprehensive_analysis_with_progress(&valid_paths, valknut_config, &args).await?
@@ -134,20 +145,20 @@ pub async fn analyze_command(
         Some(evaluate_quality_gates(
             &analysis_result,
             &quality_config,
-            !args.quiet,
+            !quiet_mode,
         )?)
     } else {
         None
     };
 
     // Display analysis results
-    if !args.quiet {
+    if !quiet_mode {
         display_comprehensive_results(&analysis_result);
     }
 
     // Run Oracle analysis if requested
     let oracle_response = if args.ai_features.oracle {
-        if !args.quiet {
+        if !quiet_mode {
             println!(
                 "{}",
                 "🧠 Running AI Refactoring Oracle Analysis..."
@@ -166,17 +177,17 @@ pub async fn analyze_command(
     // Handle quality gate failures
     if let Some(quality_result) = quality_gate_result {
         if !quality_result.passed {
-            if !args.quiet {
+            if !quiet_mode {
                 println!("{}", "❌ Quality gates failed!".red().bold());
                 display_quality_failures(&quality_result);
             }
             return Err(anyhow::anyhow!("Quality gates failed"));
-        } else if !args.quiet {
+        } else if !quiet_mode {
             println!("{}", "✅ All quality gates passed!".green().bold());
         }
     }
 
-    if !args.quiet {
+    if !quiet_mode {
         println!("{}", "🎉 Analysis completed successfully!".green().bold());
     }
 
@@ -294,14 +305,21 @@ fn display_enabled_analyses(config: &ValknutConfig) {
         println!("    ✅ Impact Analysis - Dependency graphs, cycles, and centrality");
     }
     if config.analysis.enable_lsh_analysis {
-        let denoise_status = if config.denoise.enabled {
-            " (with denoising)"
+        let mut note = if config.denoise.enabled {
+            " (with denoising)".to_string()
         } else {
-            ""
+            String::new()
         };
+        if config.lsh.verify_with_apted {
+            if note.is_empty() {
+                note.push_str(" (APTED verification)");
+            } else {
+                note.push_str(" + APTED verification");
+            }
+        }
         println!(
             "    ✅ Clone Detection - LSH-based similarity analysis{}",
-            denoise_status
+            note
         );
     }
     if config.analysis.enable_coverage_analysis {
@@ -711,6 +729,22 @@ fn display_analysis_summary(result: &AnalysisResults) {
         if let Some(max_similarity) = clone_analysis.max_similarity {
             println!("  Max clone similarity: {:.2}", max_similarity);
         }
+        if let Some(verification) = clone_analysis.verification.as_ref() {
+            let scored = verification.pairs_scored;
+            let evaluated = verification.pairs_evaluated;
+            let considered = verification.pairs_considered;
+            if let Some(avg) = verification.avg_similarity {
+                println!(
+                    "  Verification ({}): scored {}/{} pairs ({}) avg {:.2}",
+                    verification.method, scored, evaluated, considered, avg
+                );
+            } else {
+                println!(
+                    "  Verification ({}): scored {}/{} pairs ({})",
+                    verification.method, scored, evaluated, considered
+                );
+            }
+        }
     }
 
     let mut hotspots: Vec<&RefactoringCandidate> = result
@@ -862,7 +896,11 @@ async fn generate_reports_with_oracle(
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<()> {
-    println!("{}", "📝 Generating Reports".bright_blue().bold());
+    let quiet_mode = is_quiet(args);
+
+    if !quiet_mode {
+        println!("{}", "📝 Generating Reports".bright_blue().bold());
+    }
 
     let output_file = match args.format {
         OutputFormat::Json => {
@@ -967,10 +1005,12 @@ async fn generate_reports_with_oracle(
         }
     };
 
-    println!(
-        "  ✅ Report saved: {}",
-        output_file.display().to_string().cyan()
-    );
+    if !quiet_mode {
+        println!(
+            "  ✅ Report saved: {}",
+            output_file.display().to_string().cyan()
+        );
+    }
     Ok(())
 }
 
@@ -1273,7 +1313,8 @@ pub async fn list_languages() -> anyhow::Result<()> {
         "{}",
         "🔤 Supported Programming Languages".bright_blue().bold()
     );
-    println!("   Found {} supported languages", 8); // TODO: Dynamic count
+    let languages = registered_languages();
+    println!("   Found {} supported languages", languages.len());
     println!();
 
     #[derive(Tabled)]
@@ -1284,65 +1325,37 @@ pub async fn list_languages() -> anyhow::Result<()> {
         features: String,
     }
 
-    let languages = vec![
-        LanguageRow {
-            language: "Python".to_string(),
-            extension: ".py".to_string(),
-            status: "✅ Full Support".to_string(),
-            features: "Full analysis, refactoring suggestions".to_string(),
-        },
-        LanguageRow {
-            language: "TypeScript".to_string(),
-            extension: ".ts, .tsx".to_string(),
-            status: "✅ Full Support".to_string(),
-            features: "Full analysis, type checking".to_string(),
-        },
-        LanguageRow {
-            language: "JavaScript".to_string(),
-            extension: ".js, .jsx".to_string(),
-            status: "✅ Full Support".to_string(),
-            features: "Full analysis, complexity metrics".to_string(),
-        },
-        LanguageRow {
-            language: "Rust".to_string(),
-            extension: ".rs".to_string(),
-            status: "✅ Full Support".to_string(),
-            features: "Full analysis, memory safety checks".to_string(),
-        },
-        LanguageRow {
-            language: "Go".to_string(),
-            extension: ".go".to_string(),
-            status: "🚧 Experimental".to_string(),
-            features: "Basic analysis".to_string(),
-        },
-        LanguageRow {
-            language: "Java".to_string(),
-            extension: ".java".to_string(),
-            status: "🚧 Experimental".to_string(),
-            features: "Basic analysis".to_string(),
-        },
-        LanguageRow {
-            language: "C++".to_string(),
-            extension: ".cpp, .cxx".to_string(),
-            status: "🚧 Experimental".to_string(),
-            features: "Basic analysis".to_string(),
-        },
-        LanguageRow {
-            language: "C#".to_string(),
-            extension: ".cs".to_string(),
-            status: "🚧 Experimental".to_string(),
-            features: "Basic analysis".to_string(),
-        },
-    ];
+    let rows: Vec<LanguageRow> = languages
+        .iter()
+        .map(|info| {
+            let extensions = info
+                .extensions
+                .iter()
+                .map(|ext| format!(".{}", ext))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let status = match info.status {
+                LanguageStability::Stable => "✅ Full Support",
+                LanguageStability::Beta => "🚧 Beta",
+            };
 
-    let mut table = Table::new(languages);
+            LanguageRow {
+                language: info.name.to_string(),
+                extension: extensions,
+                status: status.to_string(),
+                features: info.notes.to_string(),
+            }
+        })
+        .collect();
+
+    let mut table = Table::new(rows);
     table.with(TableStyle::rounded());
     println!("{}", table);
 
     println!();
     println!("{}", "📝 Usage Notes:".bright_blue().bold());
     println!("   • Full Support: Complete feature set with refactoring suggestions");
-    println!("   • Experimental: Basic complexity analysis, limited features");
+    println!("   • Beta: Parsing + structure/complexity insights while features mature");
     println!("   • Configure languages in your config file with language-specific settings");
     println!();
     println!(
@@ -1353,39 +1366,110 @@ pub async fn list_languages() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
+    let DocAuditArgs {
+        root,
+        complexity_threshold,
+        max_readme_commits,
+        strict,
+        format,
+        ignore_dir,
+        ignore_suffix,
+    } = args;
+
+    if !root.exists() {
+        return Err(anyhow::anyhow!(
+            "Audit root does not exist: {}",
+            root.display()
+        ));
+    }
+
+    let root_path = std::fs::canonicalize(&root).map_err(|err| {
+        anyhow::anyhow!("Failed to resolve audit root {}: {}", root.display(), err)
+    })?;
+
+    if !root_path.is_dir() {
+        return Err(anyhow::anyhow!(
+            "Audit root must be a directory: {}",
+            root_path.display()
+        ));
+    }
+
+    let mut config = doc_audit::DocAuditConfig::new(root_path);
+    config.complexity_threshold = complexity_threshold;
+    config.max_readme_commits = max_readme_commits;
+
+    for dir in ignore_dir {
+        if !dir.trim().is_empty() {
+            config.ignore_dirs.insert(dir);
+        }
+    }
+
+    for suffix in ignore_suffix {
+        if !suffix.trim().is_empty() {
+            config.ignore_suffixes.insert(suffix);
+        }
+    }
+
+    let result = doc_audit::run_audit(&config)?;
+
+    match format {
+        DocAuditFormat::Text => {
+            println!("{}", doc_audit::render_text(&result));
+        }
+        DocAuditFormat::Json => {
+            let payload = doc_audit::render_json(&result)?;
+            println!("{payload}");
+        }
+    }
+
+    if strict && result.has_issues() {
+        anyhow::bail!("Documentation audit found issues");
+    }
+
+    Ok(())
+}
+
 /// Print Valknut header with version info
 pub fn print_header() {
-    if Term::stdout().size().1 >= 80 {
-        // Full header for wide terminals
-        println!(
-            "{}",
-            "┌".cyan().bold().to_string()
-                + &"─".repeat(60).cyan().to_string()
-                + &"┐".cyan().bold().to_string()
-        );
-        println!(
-            "{} {} {}",
-            "│".cyan().bold(),
-            format!("⚙️  Valknut v{} - AI-Powered Code Analysis", VERSION)
-                .bright_cyan()
-                .bold(),
-            "│".cyan().bold()
-        );
-        println!(
-            "{}",
-            "└".cyan().bold().to_string()
-                + &"─".repeat(60).cyan().to_string()
-                + &"┘".cyan().bold().to_string()
-        );
+    let width = Term::stdout().size().1;
+    for line in header_lines_for_width(width) {
+        println!("{line}");
+    }
+    println!();
+}
+
+fn header_lines_for_width(width: u16) -> Vec<String> {
+    if width >= 80 {
+        vec![
+            format!(
+                "{}",
+                "┌".cyan().bold().to_string()
+                    + &"─".repeat(60).cyan().to_string()
+                    + &"┐".cyan().bold().to_string()
+            ),
+            format!(
+                "{} {} {}",
+                "│".cyan().bold(),
+                format!("⚙️  Valknut v{} - AI-Powered Code Analysis", VERSION)
+                    .bright_cyan()
+                    .bold(),
+                "│".cyan().bold()
+            ),
+            format!(
+                "{}",
+                "└".cyan().bold().to_string()
+                    + &"─".repeat(60).cyan().to_string()
+                    + &"┘".cyan().bold().to_string()
+            ),
+        ]
     } else {
-        // Compact header for narrow terminals
-        println!(
+        vec![format!(
             "{} {}",
             "⚙️".bright_cyan(),
             format!("Valknut v{}", VERSION).bright_cyan().bold()
-        );
+        )]
     }
-    println!();
 }
 
 /// Display configuration summary in a formatted table
@@ -1439,6 +1523,7 @@ pub async fn run_analysis_with_progress(
     use valknut_rs::core::config::{DenoiseConfig, ValknutConfig};
     use valknut_rs::core::pipeline::{AnalysisConfig, AnalysisPipeline, ProgressCallback};
 
+    let quiet_mode = is_quiet(args);
     let multi_progress = MultiProgress::new();
 
     // Create main progress bar
@@ -1450,14 +1535,30 @@ pub async fn run_analysis_with_progress(
 
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
-    let mut analysis_config = AnalysisConfig {
-        enable_lsh_analysis: true,
-        ..Default::default()
-    };
+    valknut_config.analysis.enable_lsh_analysis = true;
+    valknut_config.analysis.enable_coverage_analysis = true;
+    if valknut_config.analysis.max_files == 0 {
+        valknut_config.analysis.max_files = 5000;
+    }
+    if valknut_config.analysis.max_files == 0 {
+        valknut_config.analysis.max_files = 5000;
+    }
 
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = args.clone_detection.denoise;
     let auto_enabled = !args.advanced_clone.no_auto;
+
+    if args.advanced_clone.no_apted_verify {
+        valknut_config.lsh.verify_with_apted = false;
+    } else if args.advanced_clone.apted_verify {
+        valknut_config.lsh.verify_with_apted = true;
+    }
+    if let Some(max_nodes) = args.advanced_clone.apted_max_nodes {
+        valknut_config.lsh.apted_max_nodes = max_nodes;
+    }
+    if let Some(max_pairs) = args.advanced_clone.apted_max_pairs {
+        valknut_config.lsh.apted_max_pairs_per_entity = max_pairs;
+    }
 
     if denoise_enabled {
         info!("Clone denoising enabled (advanced analysis mode)");
@@ -1549,22 +1650,22 @@ pub async fn run_analysis_with_progress(
 
     // Apply CLI analysis disable/enable flags
     if args.coverage.no_coverage {
-        analysis_config.enable_coverage_analysis = false;
+        valknut_config.analysis.enable_coverage_analysis = false;
     }
     if args.analysis_control.no_complexity {
-        analysis_config.enable_complexity_analysis = false; // Complexity is part of scoring
+        valknut_config.analysis.enable_scoring = false;
     }
     if args.analysis_control.no_structure {
-        analysis_config.enable_structure_analysis = false;
+        valknut_config.analysis.enable_structure_analysis = false;
     }
     if args.analysis_control.no_refactoring {
-        analysis_config.enable_refactoring_analysis = false;
+        valknut_config.analysis.enable_refactoring_analysis = false;
     }
     if args.analysis_control.no_impact {
-        analysis_config.enable_impact_analysis = false; // Impact analysis uses graph analysis
+        valknut_config.analysis.enable_graph_analysis = false;
     }
     if args.analysis_control.no_lsh {
-        analysis_config.enable_lsh_analysis = false;
+        valknut_config.analysis.enable_lsh_analysis = false;
     }
 
     // Configure coverage analysis from CLI args
@@ -1582,17 +1683,19 @@ pub async fn run_analysis_with_progress(
 
     valknut_config.coverage = coverage_config;
 
+    let pipeline_config = PipelineAnalysisConfig::from(valknut_config.clone());
+
     // Log analysis configuration
     let enabled_analyses = vec![
-        ("Complexity", analysis_config.enable_complexity_analysis),
-        ("Structure", analysis_config.enable_structure_analysis),
-        ("Refactoring", analysis_config.enable_refactoring_analysis),
-        ("Impact", analysis_config.enable_impact_analysis),
-        ("Clone Detection (LSH)", analysis_config.enable_lsh_analysis),
-        ("Coverage", analysis_config.enable_coverage_analysis),
+        ("Complexity", pipeline_config.enable_complexity_analysis),
+        ("Structure", pipeline_config.enable_structure_analysis),
+        ("Refactoring", pipeline_config.enable_refactoring_analysis),
+        ("Impact", pipeline_config.enable_impact_analysis),
+        ("Clone Detection (LSH)", pipeline_config.enable_lsh_analysis),
+        ("Coverage", pipeline_config.enable_coverage_analysis),
     ];
 
-    if !args.quiet {
+    if !quiet_mode {
         println!("{}", "📊 Analysis Configuration:".bright_blue().bold());
         for (name, enabled) in enabled_analyses {
             let status = if enabled {
@@ -1605,7 +1708,7 @@ pub async fn run_analysis_with_progress(
         println!();
     }
 
-    let pipeline = AnalysisPipeline::new_with_config(analysis_config, valknut_config);
+    let pipeline = AnalysisPipeline::new_with_config(pipeline_config, valknut_config);
 
     // Create progress callback
     let progress_callback: ProgressCallback = Box::new({
@@ -1648,18 +1751,28 @@ pub async fn run_analysis_without_progress(
     args: &AnalyzeArgs,
 ) -> anyhow::Result<serde_json::Value> {
     use valknut_rs::core::config::{DenoiseConfig, ValknutConfig};
-    use valknut_rs::core::pipeline::{AnalysisConfig, AnalysisPipeline};
+    use valknut_rs::core::pipeline::{AnalysisConfig as PipelineAnalysisConfig, AnalysisPipeline};
 
     // Create full ValknutConfig to properly configure denoising
     let mut valknut_config = ValknutConfig::default();
-    let mut analysis_config = AnalysisConfig {
-        enable_lsh_analysis: true,
-        ..Default::default()
-    };
+    valknut_config.analysis.enable_lsh_analysis = true;
+    valknut_config.analysis.enable_coverage_analysis = true;
 
     // Apply CLI args to denoise configuration (enabled by default)
     let denoise_enabled = args.clone_detection.denoise;
     let auto_enabled = !args.advanced_clone.no_auto;
+
+    if args.advanced_clone.no_apted_verify {
+        valknut_config.lsh.verify_with_apted = false;
+    } else if args.advanced_clone.apted_verify {
+        valknut_config.lsh.verify_with_apted = true;
+    }
+    if let Some(max_nodes) = args.advanced_clone.apted_max_nodes {
+        valknut_config.lsh.apted_max_nodes = max_nodes;
+    }
+    if let Some(max_pairs) = args.advanced_clone.apted_max_pairs {
+        valknut_config.lsh.apted_max_pairs_per_entity = max_pairs;
+    }
 
     if denoise_enabled {
         info!("Clone denoising enabled (advanced analysis mode)");
@@ -1751,22 +1864,22 @@ pub async fn run_analysis_without_progress(
 
     // Apply CLI analysis disable/enable flags
     if args.coverage.no_coverage {
-        analysis_config.enable_coverage_analysis = false;
+        valknut_config.analysis.enable_coverage_analysis = false;
     }
     if args.analysis_control.no_complexity {
-        analysis_config.enable_complexity_analysis = false; // Complexity is part of scoring
+        valknut_config.analysis.enable_scoring = false;
     }
     if args.analysis_control.no_structure {
-        analysis_config.enable_structure_analysis = false;
+        valknut_config.analysis.enable_structure_analysis = false;
     }
     if args.analysis_control.no_refactoring {
-        analysis_config.enable_refactoring_analysis = false;
+        valknut_config.analysis.enable_refactoring_analysis = false;
     }
     if args.analysis_control.no_impact {
-        analysis_config.enable_impact_analysis = false; // Impact analysis uses graph analysis
+        valknut_config.analysis.enable_graph_analysis = false;
     }
     if args.analysis_control.no_lsh {
-        analysis_config.enable_lsh_analysis = false;
+        valknut_config.analysis.enable_lsh_analysis = false;
     }
 
     // Configure coverage analysis from CLI args
@@ -1784,7 +1897,8 @@ pub async fn run_analysis_without_progress(
 
     valknut_config.coverage = coverage_config;
 
-    let pipeline = AnalysisPipeline::new_with_config(analysis_config, valknut_config);
+    let pipeline_config = PipelineAnalysisConfig::from(valknut_config.clone());
+    let pipeline = AnalysisPipeline::new_with_config(pipeline_config, valknut_config);
 
     // Run comprehensive analysis without progress callback
     info!("Starting comprehensive analysis for {} paths", paths.len());
@@ -1882,6 +1996,37 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
         OutputFormat::Csv => "csv",
         OutputFormat::CiSummary => "ci-summary",
         OutputFormat::Pretty => "pretty",
+    }
+}
+
+fn warn_for_unsupported_languages(config: &ValknutConfig, quiet_mode: bool) {
+    use owo_colors::OwoColorize;
+
+    let unsupported: Vec<String> = config
+        .languages
+        .iter()
+        .filter(|(_, cfg)| cfg.enabled)
+        .filter(|(_, cfg)| {
+            !cfg.file_extensions
+                .iter()
+                .any(|ext| extension_is_supported(ext.trim_start_matches('.')))
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    if unsupported.is_empty() {
+        return;
+    }
+
+    let message = format!(
+        "Languages configured but not yet supported: {}. They will be skipped during analysis.",
+        unsupported.join(", ")
+    );
+
+    if quiet_mode {
+        warn!("{}", message);
+    } else {
+        println!("{} {}", "⚠️".yellow(), message);
     }
 }
 
@@ -2150,6 +2295,8 @@ async fn run_oracle_analysis(
     analysis_result: &AnalysisResults,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
+    let quiet_mode = is_quiet(args);
+
     // Check if GEMINI_API_KEY is available
     let oracle_config = match OracleConfig::from_env() {
         Ok(mut config) => {
@@ -2173,7 +2320,7 @@ async fn run_oracle_analysis(
     // Use the first path as the project root for analysis
     let project_path = paths.first().unwrap();
 
-    if !args.quiet {
+    if !quiet_mode {
         println!(
             "  🔍 Analyzing project: {}",
             project_path.display().to_string().cyan()
@@ -2186,7 +2333,7 @@ async fn run_oracle_analysis(
         .await
     {
         Ok(response) => {
-            if !args.quiet {
+            if !quiet_mode {
                 println!("  ✅ Oracle analysis completed successfully!");
                 println!(
                     "  📊 Generated {} refactoring phases with {} total tasks",
@@ -2211,7 +2358,7 @@ async fn run_oracle_analysis(
                         oracle_path.display(),
                         e
                     );
-                } else if !args.quiet {
+                } else if !quiet_mode {
                     println!(
                         "  💾 Oracle recommendations saved to: {}",
                         oracle_path.display().to_string().cyan()
@@ -2222,7 +2369,7 @@ async fn run_oracle_analysis(
             Ok(Some(response))
         }
         Err(e) => {
-            if !args.quiet {
+            if !quiet_mode {
                 eprintln!("{} Oracle analysis failed: {}", "⚠️".yellow(), e);
                 eprintln!(
                     "   {}",
@@ -2244,9 +2391,98 @@ async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use anyhow::Result;
+    use gag::BufferRedirect;
+    use serial_test::serial;
+    use std::collections::HashMap;
+    use std::time::Duration;
+    use std::{
+        env, fs,
+        io::{Read, Write},
+    };
     use tempfile::{NamedTempFile, TempDir};
-    use valknut_rs::core::pipeline::QualityGateViolation;
+    use tokio::runtime::Runtime;
+    use valknut_rs::api::results::{
+        AnalysisResults, AnalysisStatistics, AnalysisSummary, CloneAnalysisResults,
+        FeatureContribution, FileRefactoringGroup, MemoryStats, RefactoringIssue,
+        RefactoringSuggestion,
+    };
+    use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
+    use valknut_rs::core::pipeline::{
+        CodeDictionary, HealthMetrics, QualityGateConfig, QualityGateViolation,
+    };
+    use valknut_rs::oracle::{
+        CodebaseAssessment, IdentifiedRisk, RefactoringOracleResponse, RefactoringPhase,
+        RefactoringPlan, RefactoringSubsystem, RefactoringTask, RiskAssessment,
+    };
+
+    struct ColorOverrideGuard {
+        previous: Option<String>,
+    }
+
+    impl ColorOverrideGuard {
+        fn new() -> Self {
+            let previous = env::var("NO_COLOR").ok();
+            env::set_var("NO_COLOR", "1");
+            Self { previous }
+        }
+    }
+
+    impl Drop for ColorOverrideGuard {
+        fn drop(&mut self) {
+            if let Some(ref value) = self.previous {
+                env::set_var("NO_COLOR", value);
+            } else {
+                env::remove_var("NO_COLOR");
+            }
+        }
+    }
+
+    fn capture_stdout<F: FnOnce()>(action: F) -> String {
+        let mut buffer = Vec::new();
+        {
+            let _color_guard = ColorOverrideGuard::new();
+            let mut redirect = BufferRedirect::stdout().expect("redirect stdout");
+            action();
+            std::io::stdout().flush().expect("flush stdout");
+            redirect
+                .read_to_end(&mut buffer)
+                .expect("read captured stdout");
+        }
+        String::from_utf8(buffer).expect("stdout should be valid utf8")
+    }
+
+    fn sample_candidate(path: &str, priority: Priority, score: f64) -> RefactoringCandidate {
+        RefactoringCandidate {
+            entity_id: format!("{path}::entity"),
+            name: "entity".to_string(),
+            file_path: path.to_string(),
+            line_range: Some((1, 20)),
+            priority,
+            score,
+            confidence: 0.85,
+            issues: vec![RefactoringIssue {
+                code: "CMPLX".to_string(),
+                category: "complexity".to_string(),
+                severity: 1.2,
+                contributing_features: vec![FeatureContribution {
+                    feature_name: "cyclomatic_complexity".to_string(),
+                    value: 18.0,
+                    normalized_value: 0.7,
+                    contribution: 1.3,
+                }],
+            }],
+            suggestions: vec![RefactoringSuggestion {
+                refactoring_type: "extract_method".to_string(),
+                code: "XTRMTH".to_string(),
+                priority: 0.9,
+                effort: 0.4,
+                impact: 0.85,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        }
+    }
 
     // Helper function to create default AnalyzeArgs for tests
     fn create_default_analyze_args() -> AnalyzeArgs {
@@ -2283,6 +2519,10 @@ mod tests {
                 loose_sweep: false,
                 rarity_weighting: false,
                 structural_validation: false,
+                apted_verify: false,
+                apted_max_nodes: None,
+                apted_max_pairs: None,
+                no_apted_verify: false,
                 live_reach_boost: false,
                 ast_weight: None,
                 pdg_weight: None,
@@ -2313,10 +2553,585 @@ mod tests {
         }
     }
 
+    fn create_doc_args(root: PathBuf) -> DocAuditArgs {
+        DocAuditArgs {
+            root,
+            complexity_threshold: usize::MAX,
+            max_readme_commits: usize::MAX,
+            strict: false,
+            format: DocAuditFormat::Text,
+            ignore_dir: vec![],
+            ignore_suffix: vec![],
+        }
+    }
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = env::current_dir().expect("read current dir");
+            env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
+        }
+    }
+
+    fn create_sample_analysis_project() -> TempDir {
+        let project = TempDir::new().expect("temp project");
+        let root = project.path();
+
+        fs::write(
+            root.join("analytics.py"),
+            r#"
+def compute(values):
+    total = sum(values)
+    return total / max(len(values), 1)
+
+def duplicate(values):
+    return [value for value in values if value > 0]
+"#,
+        )
+        .expect("write python file");
+
+        fs::create_dir_all(root.join("src")).expect("create src");
+        fs::write(
+            root.join("src/lib.rs"),
+            r#"
+pub fn helper(value: i32) -> i32 {
+    if value > 0 {
+        value + 1
+    } else {
+        value - 1
+    }
+}
+"#,
+        )
+        .expect("write rust file");
+
+        fs::write(
+            root.join("metrics.ts"),
+            r#"
+export function accumulate(values: number[]): number {
+    return values.reduce((sum, value) => sum + value, 0);
+}
+"#,
+        )
+        .expect("write ts file");
+
+        project
+    }
+
+    fn write_lcov_fixture(root: &Path) -> PathBuf {
+        let coverage_dir = root.join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        let file = coverage_dir.join("coverage.lcov");
+        fs::write(
+            &file,
+            "TN:valknut\nSF:src/lib.rs\nFN:2,helper\nFNF:1\nFNH:1\nFNDA:4,helper\nDA:2,4\nDA:3,4\nDA:4,4\nDA:5,4\nLF:4\nLH:4\nend_of_record\n",
+        )
+        .expect("write coverage");
+        file
+    }
+
+    fn sample_analysis_results() -> AnalysisResults {
+        let candidate = sample_candidate("src/lib.rs", Priority::High, 2.5);
+        let file_candidate = candidate.clone();
+
+        AnalysisResults {
+            summary: AnalysisSummary {
+                files_processed: 1,
+                entities_analyzed: 1,
+                refactoring_needed: 1,
+                high_priority: 1,
+                critical: 0,
+                avg_refactoring_score: 0.75,
+                code_health_score: 0.65,
+                total_files: 1,
+                total_entities: 1,
+                total_lines_of_code: 120,
+                languages: vec!["Rust".to_string()],
+                total_issues: 1,
+                high_priority_issues: 1,
+                critical_issues: 0,
+            },
+            refactoring_candidates: vec![candidate],
+            refactoring_candidates_by_file: vec![FileRefactoringGroup {
+                file_path: "src/lib.rs".to_string(),
+                file_name: "lib.rs".to_string(),
+                entity_count: 1,
+                highest_priority: Priority::High,
+                avg_score: 2.5,
+                total_issues: 1,
+                entities: vec![file_candidate],
+            }],
+            statistics: AnalysisStatistics {
+                total_duration: Duration::from_millis(25),
+                avg_file_processing_time: Duration::from_millis(25),
+                avg_entity_processing_time: Duration::from_millis(25),
+                features_per_entity: HashMap::new(),
+                priority_distribution: HashMap::new(),
+                issue_distribution: HashMap::new(),
+                memory_stats: MemoryStats {
+                    peak_memory_bytes: 2048,
+                    final_memory_bytes: 1024,
+                    efficiency_score: 0.9,
+                },
+            },
+            health_metrics: Some(HealthMetrics {
+                overall_health_score: 72.0,
+                maintainability_score: 70.0,
+                technical_debt_ratio: 25.0,
+                complexity_score: 45.0,
+                structure_quality_score: 78.0,
+            }),
+            directory_health_tree: None,
+            clone_analysis: None,
+            coverage_packs: Vec::new(),
+            unified_hierarchy: Vec::new(),
+            warnings: Vec::new(),
+            code_dictionary: CodeDictionary::default(),
+        }
+    }
+
+    fn sample_oracle_response() -> RefactoringOracleResponse {
+        RefactoringOracleResponse {
+            assessment: CodebaseAssessment {
+                health_score: 70,
+                strengths: vec!["Modular design".to_string()],
+                weaknesses: vec!["Clone density".to_string()],
+                architecture_quality: "Improving".to_string(),
+                organization_quality: "Good".to_string(),
+            },
+            refactoring_plan: RefactoringPlan {
+                phases: vec![RefactoringPhase {
+                    id: "phase-1".to_string(),
+                    name: "Stabilize Core Modules".to_string(),
+                    description: "Address hotspots in core utilities.".to_string(),
+                    priority: 1,
+                    subsystems: vec![RefactoringSubsystem {
+                        id: "core-utils".to_string(),
+                        name: "Core Utilities".to_string(),
+                        affected_files: vec!["src/lib.rs".to_string()],
+                        tasks: vec![RefactoringTask {
+                            id: "task-1".to_string(),
+                            title: "Extract helper utilities".to_string(),
+                            description: "Split monolithic helper into focused modules."
+                                .to_string(),
+                            task_type: "refactor".to_string(),
+                            files: vec!["src/lib.rs".to_string()],
+                            risk_level: "Low".to_string(),
+                            benefits: vec!["Improved readability".to_string()],
+                        }],
+                    }],
+                }],
+            },
+            risk_assessment: RiskAssessment {
+                overall_risk: "Moderate".to_string(),
+                risks: vec![IdentifiedRisk {
+                    category: "Regression".to_string(),
+                    description: "Potential behaviour regressions during extraction".to_string(),
+                    probability: "Medium".to_string(),
+                    impact: "Medium".to_string(),
+                    mitigation: "Add focused regression tests".to_string(),
+                }],
+                mitigation_strategies: vec!["Increase automated test coverage".to_string()],
+            },
+        }
+    }
+
+    #[test]
+    fn output_format_machine_readable_detection() {
+        assert!(OutputFormat::Json.is_machine_readable());
+        assert!(OutputFormat::Jsonl.is_machine_readable());
+        assert!(OutputFormat::Yaml.is_machine_readable());
+        assert!(OutputFormat::Csv.is_machine_readable());
+        assert!(OutputFormat::Sonar.is_machine_readable());
+        assert!(OutputFormat::CiSummary.is_machine_readable());
+        assert!(!OutputFormat::Markdown.is_machine_readable());
+        assert!(!OutputFormat::Html.is_machine_readable());
+        assert!(!OutputFormat::Pretty.is_machine_readable());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_respects_quiet_mode() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = true;
+        args.format = OutputFormat::Json;
+
+        let result = sample_analysis_results();
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("json report generation should succeed");
+
+        assert!(temp.path().join("analysis-results.json").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_html_with_ai_data() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Html;
+
+        let result = sample_analysis_results();
+        let oracle = sample_oracle_response();
+
+        generate_reports_with_oracle(&result, &Some(oracle), &args)
+            .await
+            .expect("html report generation should succeed");
+
+        let html_count = fs::read_dir(temp.path())
+            .expect("read output dir")
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .ok()
+                    .and_then(|e| e.path().extension().map(|ext| ext == "html"))
+                    .unwrap_or(false)
+            })
+            .count();
+
+        assert!(
+            html_count > 0,
+            "expected at least one html report in {:?}",
+            temp.path()
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_markdown() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Markdown;
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("markdown report generation should succeed");
+
+        assert!(temp.path().join("team-report.md").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_csv() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Csv;
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("csv report generation should succeed");
+
+        assert!(temp.path().join("analysis-data.csv").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_yaml() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Yaml;
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("yaml report generation should succeed");
+
+        assert!(temp.path().join("analysis-results.yaml").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_jsonl() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Jsonl;
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("jsonl report generation should succeed");
+
+        assert!(temp.path().join("analysis-results.jsonl").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_writes_sonar() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::Sonar;
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("sonar report generation should succeed");
+
+        assert!(temp.path().join("sonarqube-issues.json").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_oracle_combines_for_ci_summary() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = false;
+        args.format = OutputFormat::CiSummary;
+        args.ai_features.oracle = true;
+
+        let result = sample_analysis_results();
+        let oracle = sample_oracle_response();
+
+        generate_reports_with_oracle(&result, &Some(oracle), &args)
+            .await
+            .expect("ci summary should fall back to combined json");
+
+        let combined_path = temp.path().join("analysis-results.json");
+        assert!(combined_path.exists());
+        let contents = fs::read_to_string(combined_path).expect("read combined output");
+        assert!(
+            contents.contains("oracle_refactoring_plan"),
+            "combined report should include oracle data"
+        );
+    }
+
+    #[test]
+    fn evaluate_quality_gates_disabled_returns_health_score() {
+        let result = sample_analysis_results();
+        let expected = result
+            .health_metrics
+            .as_ref()
+            .map(|m| m.overall_health_score)
+            .unwrap();
+
+        let config = QualityGateConfig {
+            enabled: false,
+            ..Default::default()
+        };
+
+        let gate = evaluate_quality_gates(&result, &config, false)
+            .expect("quality gate evaluation succeeds");
+
+        assert!(gate.passed);
+        assert!(gate.violations.is_empty());
+        assert_eq!(gate.overall_score, expected);
+    }
+
+    #[test]
+    fn evaluate_quality_gates_reports_violations() {
+        let mut result = sample_analysis_results();
+        result.summary.critical = 3;
+        result.summary.high_priority = 4;
+        result.summary.total_issues = 7;
+        if let Some(metrics) = result.health_metrics.as_mut() {
+            metrics.complexity_score = 88.0;
+            metrics.technical_debt_ratio = 65.0;
+            metrics.maintainability_score = 52.0;
+        }
+
+        let config = QualityGateConfig {
+            enabled: true,
+            max_complexity_score: 55.0,
+            max_technical_debt_ratio: 25.0,
+            min_maintainability_score: 85.0,
+            max_critical_issues: 1,
+            max_high_priority_issues: 2,
+        };
+
+        let gate = evaluate_quality_gates(&result, &config, false)
+            .expect("quality gate evaluation succeeds");
+
+        assert!(!gate.passed);
+        assert!(!gate.violations.is_empty());
+
+        let rule_names: Vec<_> = gate
+            .violations
+            .iter()
+            .map(|v| v.rule_name.as_str())
+            .collect();
+        assert!(rule_names.contains(&"Complexity Threshold"));
+        assert!(rule_names.contains(&"Technical Debt Ratio"));
+        assert!(rule_names.contains(&"Maintainability Score"));
+        assert!(rule_names.contains(&"Critical Issues"));
+        assert!(rule_names.contains(&"High Priority Issues"));
+
+        assert!(
+            gate.violations
+                .iter()
+                .all(|v| !v.recommended_actions.is_empty()),
+            "violations should include actionable guidance"
+        );
+    }
+
+    #[test]
+    fn evaluate_quality_gates_handles_missing_metrics_when_verbose() {
+        let mut result = sample_analysis_results();
+        result.health_metrics = None;
+
+        let config = QualityGateConfig {
+            enabled: true,
+            max_complexity_score: 90.0,
+            max_technical_debt_ratio: 90.0,
+            min_maintainability_score: 10.0,
+            max_critical_issues: 10,
+            max_high_priority_issues: 10,
+        };
+
+        let gate = evaluate_quality_gates(&result, &config, true)
+            .expect("quality gate evaluation succeeds");
+
+        assert!(gate.passed);
+        assert!(gate.violations.is_empty());
+        assert!(
+            (gate.overall_score - (result.summary.code_health_score * 100.0)).abs() < f64::EPSILON
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn run_oracle_analysis_returns_none_without_api_key() {
+        // Ensure GEMINI_API_KEY is unset for this test
+        std::env::remove_var("GEMINI_API_KEY");
+
+        let project = create_sample_analysis_project();
+        let mut args = create_default_analyze_args();
+        args.paths = vec![project.path().to_path_buf()];
+        args.ai_features.oracle = true;
+
+        let result = run_oracle_analysis(
+            &[project.path().to_path_buf()],
+            &sample_analysis_results(),
+            &args,
+        )
+        .await
+        .expect("oracle analysis should not error when key missing");
+
+        assert!(
+            result.is_none(),
+            "Oracle should be skipped when GEMINI_API_KEY is absent"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn run_oracle_analysis_handles_generation_error() {
+        // Provide a dummy API key to exercise request failure path
+        std::env::set_var("GEMINI_API_KEY", "test-api-key");
+
+        let project = create_sample_analysis_project();
+        let mut args = create_default_analyze_args();
+        args.paths = vec![project.path().to_path_buf()];
+        args.ai_features.oracle = true;
+        args.ai_features.oracle_max_tokens = Some(256);
+
+        let oracle_result = run_oracle_analysis(
+            &[project.path().to_path_buf()],
+            &sample_analysis_results(),
+            &args,
+        )
+        .await
+        .expect("oracle analysis should gracefully handle request failures");
+
+        assert!(
+            oracle_result.is_none(),
+            "Oracle failures should not propagate fatal errors"
+        );
+
+        std::env::remove_var("GEMINI_API_KEY");
+    }
+
+    #[test]
+    fn doc_audit_command_rejects_missing_root() {
+        let args = create_doc_args(PathBuf::from("./does-not-exist"));
+        assert!(doc_audit_command(args).is_err());
+    }
+
+    #[test]
+    fn doc_audit_command_generates_report() {
+        let temp = TempDir::new().expect("temp dir");
+        fs::write(
+            temp.path().join("lib.rs"),
+            "/// docs\npub fn documented() {}\n",
+        )
+        .expect("write file");
+
+        let mut args = create_doc_args(temp.path().to_path_buf());
+        args.format = DocAuditFormat::Json;
+        doc_audit_command(args).expect("doc audit should succeed");
+    }
+
+    #[test]
+    fn doc_audit_command_strict_flags_issues() {
+        let temp = TempDir::new().expect("temp dir");
+        fs::write(temp.path().join("main.rs"), "pub fn missing_docs() {}\n").expect("write file");
+
+        let mut args = create_doc_args(temp.path().to_path_buf());
+        args.strict = true;
+        let err = doc_audit_command(args).expect_err("strict mode should fail");
+        assert!(err.to_string().contains("Documentation audit found issues"));
+    }
+
+    #[test]
+    fn is_quiet_respects_format_overrides() {
+        let mut args = create_default_analyze_args();
+        args.quiet = false;
+        args.format = OutputFormat::Json;
+        assert!(super::is_quiet(&args));
+
+        args.format = OutputFormat::Pretty;
+        assert!(!super::is_quiet(&args));
+
+        args.quiet = true;
+        assert!(super::is_quiet(&args));
+    }
+
     #[test]
     fn test_print_header() {
         // Test that print_header doesn't panic
         print_header();
+    }
+
+    #[test]
+    fn test_header_lines_for_wide_terminal() {
+        let lines = header_lines_for_width(120);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines[1].contains("Valknut"),
+            "expected middle header line to mention Valknut"
+        );
+    }
+
+    #[test]
+    fn test_header_lines_for_narrow_terminal() {
+        let lines = header_lines_for_width(40);
+        assert_eq!(lines.len(), 1);
+        assert!(
+            lines[0].contains("Valknut"),
+            "expected compact header to mention Valknut"
+        );
     }
 
     #[test]
@@ -2561,6 +3376,72 @@ mod tests {
     }
 
     #[test]
+    fn test_severity_for_excess_handles_zero_threshold() {
+        assert_eq!(severity_for_excess(10.0, 0.0), "Critical");
+        assert_eq!(severity_for_excess(2.0, 0.0), "High");
+        assert_eq!(severity_for_excess(0.5, 0.0), "Medium");
+    }
+
+    #[test]
+    fn test_severity_for_excess_relative_thresholds() {
+        assert_eq!(severity_for_excess(150.0, 200.0), "Medium");
+        assert_eq!(severity_for_excess(108.0, 100.0), "Medium");
+        assert_eq!(severity_for_excess(75.0, 60.0), "High");
+        assert_eq!(severity_for_excess(95.0, 60.0), "Critical");
+    }
+
+    #[test]
+    fn test_severity_for_shortfall_levels() {
+        assert_eq!(severity_for_shortfall(95.0, 100.0), "Medium");
+        assert_eq!(severity_for_shortfall(85.0, 100.0), "High");
+        assert_eq!(severity_for_shortfall(70.0, 100.0), "Critical");
+    }
+
+    #[test]
+    fn test_top_issue_files_ranks_and_limits() {
+        let mut results = AnalysisResults::empty();
+        results.refactoring_candidates = vec![
+            sample_candidate("src/a.rs", Priority::High, 0.82),
+            sample_candidate("src/a.rs", Priority::Medium, 0.65),
+            sample_candidate("src/b.rs", Priority::Critical, 0.91),
+            sample_candidate("src/c.rs", Priority::Low, 0.15),
+        ];
+
+        let top = top_issue_files(
+            &results,
+            |candidate| matches!(candidate.priority, Priority::High | Priority::Critical),
+            2,
+        );
+
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0], PathBuf::from("src/b.rs"));
+        assert_eq!(top[1], PathBuf::from("src/a.rs"));
+    }
+
+    #[test]
+    fn test_priority_label_variants() {
+        assert_eq!(priority_label(Priority::None), "none");
+        assert_eq!(priority_label(Priority::Low), "low");
+        assert_eq!(priority_label(Priority::Medium), "medium");
+        assert_eq!(priority_label(Priority::High), "high");
+        assert_eq!(priority_label(Priority::Critical), "critical");
+    }
+
+    #[test]
+    fn test_is_quiet_considers_flag_and_format() {
+        let mut args = create_default_analyze_args();
+        assert!(is_quiet(&args)); // machine-readable default
+
+        args.quiet = true;
+        args.format = OutputFormat::Markdown;
+        assert!(is_quiet(&args)); // explicit quiet flag
+
+        args.quiet = false;
+        args.format = OutputFormat::Markdown;
+        assert!(!is_quiet(&args)); // human-readable without quiet flag
+    }
+
+    #[test]
     fn test_display_quality_gate_violations_with_violations() {
         let violations = vec![
             QualityGateViolation {
@@ -2589,8 +3470,7 @@ mod tests {
             overall_score: 65.0,
         };
 
-        // Test that display_quality_gate_violations doesn't panic
-        display_quality_gate_violations(&result);
+        let _ = capture_stdout(|| display_quality_gate_violations(&result));
     }
 
     #[test]
@@ -2601,8 +3481,55 @@ mod tests {
             overall_score: 85.0,
         };
 
-        // Test that display_quality_gate_violations doesn't panic
-        display_quality_gate_violations(&result);
+        let _ = capture_stdout(|| display_quality_gate_violations(&result));
+    }
+
+    #[test]
+    fn test_preview_coverage_discovery_reports_absence_stdout() {
+        let runtime = Runtime::new().expect("runtime");
+        let workspace = TempDir::new().expect("temp workspace");
+
+        let mut coverage_config = CoverageConfig::default();
+        coverage_config.search_paths = vec![".".into()];
+        coverage_config.file_patterns = vec!["coverage.lcov".into()];
+        coverage_config.auto_discover = true;
+
+        let paths = vec![workspace.path().to_path_buf()];
+        let _ = capture_stdout(|| {
+            runtime.block_on(async {
+                preview_coverage_discovery(&paths, &coverage_config)
+                    .await
+                    .expect("preview discovery");
+            });
+        });
+    }
+
+    #[test]
+    fn test_preview_coverage_discovery_lists_files_stdout() {
+        let runtime = Runtime::new().expect("runtime");
+        let workspace = TempDir::new().expect("temp workspace");
+        let coverage_dir = workspace.path().join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        let coverage_file = coverage_dir.join("coverage.lcov");
+        fs::write(
+            &coverage_file,
+            "TN:valknut\nSF:src/lib.rs\nFN:1,foo\nFNF:1\nFNH:1\nDA:1,1\nLF:1\nLH:1\n",
+        )
+        .expect("write coverage file");
+
+        let mut coverage_config = CoverageConfig::default();
+        coverage_config.search_paths = vec!["coverage".into()];
+        coverage_config.file_patterns = vec!["coverage.lcov".into()];
+        coverage_config.auto_discover = true;
+
+        let paths = vec![workspace.path().to_path_buf()];
+        let _ = capture_stdout(|| {
+            runtime.block_on(async {
+                preview_coverage_discovery(&paths, &coverage_config)
+                    .await
+                    .expect("preview discovery");
+            });
+        });
     }
 
     #[test]
@@ -2623,8 +3550,51 @@ mod tests {
             overall_score: 30.0,
         };
 
-        // Test that display_quality_gate_violations doesn't panic with blocker
-        display_quality_gate_violations(&result);
+        let _ = capture_stdout(|| display_quality_gate_violations(&result));
+    }
+
+    #[test]
+    fn test_display_quality_failures_with_recommendations() {
+        let result = QualityGateResult {
+            passed: false,
+            violations: vec![
+                QualityGateViolation {
+                    rule_name: "Maintainability Score".to_string(),
+                    description: "Maintainability below threshold".to_string(),
+                    current_value: 55.0,
+                    threshold: 75.0,
+                    severity: "Critical".to_string(),
+                    affected_files: vec![],
+                    recommended_actions: vec![
+                        "Refactor large modules".to_string(),
+                        "Improve documentation".to_string(),
+                    ],
+                },
+                QualityGateViolation {
+                    rule_name: "High Priority Issues".to_string(),
+                    description: "High-priority issues exceed limit".to_string(),
+                    current_value: 8.0,
+                    threshold: 3.0,
+                    severity: "High".to_string(),
+                    affected_files: vec![],
+                    recommended_actions: Vec::new(),
+                },
+            ],
+            overall_score: 62.5,
+        };
+
+        let _ = capture_stdout(|| display_quality_failures(&result));
+    }
+
+    #[test]
+    fn test_display_quality_failures_without_violations() {
+        let result = QualityGateResult {
+            passed: true,
+            violations: Vec::new(),
+            overall_score: 91.0,
+        };
+
+        let _ = capture_stdout(|| display_quality_failures(&result));
     }
 
     // Mock test for handle_quality_gates since it requires complex analysis result structure
@@ -2696,5 +3666,435 @@ mod tests {
 
         let result = handle_quality_gates(&args, &analysis_result).await;
         assert!(result.is_err()); // Should fail due to missing summary
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn analyze_command_errors_on_missing_path() {
+        let temp_out = TempDir::new().expect("temp out dir");
+        let mut args = create_default_analyze_args();
+        args.paths = vec![PathBuf::from("definitely_missing_path")];
+        args.out = temp_out.path().join("reports");
+        args.quiet = false;
+        args.format = OutputFormat::Json;
+
+        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn analyze_command_errors_when_no_paths() {
+        let temp_out = TempDir::new().expect("temp out dir");
+        let mut args = create_default_analyze_args();
+        args.paths.clear();
+        args.out = temp_out.path().join("reports");
+        args.quiet = false;
+        args.format = OutputFormat::Json;
+
+        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_command_quiet_mode_on_minimal_project() {
+        let project = TempDir::new().expect("temp project");
+        let project_root = project.path().to_path_buf();
+        fs::write(
+            project_root.join("lib.rs"),
+            "pub fn add(a: i32, b: i32) -> i32 { a + b }",
+        )
+        .expect("write sample file");
+
+        let output = TempDir::new().expect("output dir");
+        let out_path = output.path().join("reports");
+
+        let mut args = create_default_analyze_args();
+        args.paths = vec![project_root];
+        args.out = out_path;
+        args.quiet = true;
+        args.format = OutputFormat::Json;
+        args.profile = PerformanceProfile::Fast;
+        args.coverage.no_coverage = true;
+        args.coverage.no_coverage_auto_discover = true;
+        args.analysis_control.no_complexity = true;
+        args.analysis_control.no_structure = true;
+        args.analysis_control.no_refactoring = true;
+        args.analysis_control.no_impact = true;
+        args.analysis_control.no_lsh = true;
+
+        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        assert!(
+            result.is_ok(),
+            "analyze_command should succeed for minimal quiet invocation: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn run_analysis_with_progress_handles_denoise_configuration() -> Result<()> {
+        let project = create_sample_analysis_project();
+        let project_path = project.path().to_path_buf();
+        let coverage_file = write_lcov_fixture(project.path());
+        let output_dir = TempDir::new().expect("output dir");
+
+        let mut args = create_default_analyze_args();
+        args.paths = vec![project_path.clone()];
+        args.out = output_dir.path().to_path_buf();
+        args.format = OutputFormat::Pretty;
+        args.clone_detection.denoise = true;
+        args.clone_detection.denoise_dry_run = true;
+        args.clone_detection.min_function_tokens = Some(12);
+        args.clone_detection.min_match_tokens = Some(4);
+        args.clone_detection.require_blocks = Some(1);
+        args.clone_detection.similarity = Some(0.88);
+        args.advanced_clone.ast_weight = Some(0.6);
+        args.advanced_clone.pdg_weight = Some(0.25);
+        args.advanced_clone.emb_weight = Some(0.15);
+        args.advanced_clone.apted_verify = true;
+        args.advanced_clone.apted_max_nodes = Some(256);
+        args.advanced_clone.apted_max_pairs = Some(24);
+        args.advanced_clone.quality_target = Some(0.92);
+        args.advanced_clone.sample_size = Some(42);
+        args.advanced_clone.min_saved_tokens = Some(3);
+        args.advanced_clone.min_rarity_gain = Some(0.05);
+        args.advanced_clone.io_mismatch_penalty = Some(0.33);
+        args.coverage.coverage_file = Some(coverage_file.clone());
+        args.coverage.coverage_max_age_days = Some(30);
+        args.analysis_control.no_complexity = true;
+        args.analysis_control.no_refactoring = true;
+
+        let _guard = DirGuard::change_to(&project_path);
+        let result =
+            run_analysis_with_progress(&args.paths, StructureConfig::default(), &args).await?;
+
+        assert!(
+            result["summary"]["total_files"]
+                .as_u64()
+                .unwrap_or_default()
+                >= 1
+        );
+        let cache_dir = project_path.join(".valknut/cache/denoise");
+        assert!(cache_dir.join("stop_motifs.v1.json").exists());
+        assert!(cache_dir.join("auto_calibration.v1.json").exists());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn run_analysis_without_progress_toggles_modules() -> Result<()> {
+        let project = create_sample_analysis_project();
+        let project_path = project.path().to_path_buf();
+        let output_dir = TempDir::new().expect("output dir");
+
+        let mut args = create_default_analyze_args();
+        args.paths = vec![project_path.clone()];
+        args.out = output_dir.path().to_path_buf();
+        args.format = OutputFormat::Json;
+        args.clone_detection.denoise = true;
+        args.clone_detection.min_function_tokens = Some(8);
+        args.clone_detection.min_match_tokens = Some(4);
+        args.clone_detection.require_blocks = Some(1);
+        args.clone_detection.similarity = Some(0.9);
+        args.advanced_clone.no_auto = true;
+        args.advanced_clone.no_apted_verify = true;
+        args.coverage.no_coverage = true;
+        args.coverage.no_coverage_auto_discover = true;
+        args.coverage.coverage_max_age_days = Some(14);
+        args.analysis_control.no_complexity = true;
+        args.analysis_control.no_structure = true;
+        args.analysis_control.no_refactoring = true;
+        args.analysis_control.no_impact = true;
+        args.analysis_control.no_lsh = true;
+
+        {
+            let _guard = DirGuard::change_to(&project_path);
+            let summary =
+                run_analysis_without_progress(&args.paths, StructureConfig::default(), &args)
+                    .await?;
+            assert!(
+                summary["summary"]["total_files"]
+                    .as_u64()
+                    .unwrap_or_default()
+                    >= 1
+            );
+        }
+
+        let mut args_no_denoise = create_default_analyze_args();
+        args_no_denoise.paths = vec![project_path.clone()];
+        args_no_denoise.out = output_dir.path().to_path_buf();
+        args_no_denoise.format = OutputFormat::Json;
+        args_no_denoise.clone_detection.denoise = false;
+        args_no_denoise.clone_detection.denoise_dry_run = false;
+        args_no_denoise.coverage.no_coverage = true;
+        args_no_denoise.coverage.no_coverage_auto_discover = true;
+        args_no_denoise.coverage.coverage_max_age_days = Some(14);
+        args_no_denoise.analysis_control.no_complexity = true;
+        args_no_denoise.analysis_control.no_structure = true;
+        args_no_denoise.analysis_control.no_refactoring = true;
+        args_no_denoise.analysis_control.no_impact = true;
+        args_no_denoise.analysis_control.no_lsh = true;
+
+        {
+            let _guard = DirGuard::change_to(&project_path);
+            let summary = run_analysis_without_progress(
+                &args_no_denoise.paths,
+                StructureConfig::default(),
+                &args_no_denoise,
+            )
+            .await?;
+            assert!(
+                summary["summary"]["total_files"]
+                    .as_u64()
+                    .unwrap_or_default()
+                    >= 1
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn create_denoise_cache_directories_is_idempotent() -> Result<()> {
+        let temp = TempDir::new().expect("temp dir");
+        let _guard = DirGuard::change_to(temp.path());
+        create_denoise_cache_directories().await?;
+        let stop_file = temp
+            .path()
+            .join(".valknut/cache/denoise/stop_motifs.v1.json");
+        let auto_file = temp
+            .path()
+            .join(".valknut/cache/denoise/auto_calibration.v1.json");
+        assert!(stop_file.exists());
+        assert!(auto_file.exists());
+
+        create_denoise_cache_directories().await?;
+        assert!(stop_file.exists());
+        assert!(auto_file.exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn apply_performance_profile_adjusts_configuration() {
+        let mut config = ValknutConfig::default();
+        apply_performance_profile(&mut config, &PerformanceProfile::Fast);
+        assert_eq!(config.analysis.max_files, 500);
+        apply_performance_profile(&mut config, &PerformanceProfile::Balanced);
+        apply_performance_profile(&mut config, &PerformanceProfile::Thorough);
+        assert!(config.denoise.enabled);
+        apply_performance_profile(&mut config, &PerformanceProfile::Extreme);
+        assert_eq!(config.lsh.num_hashes, 200);
+    }
+
+    #[test]
+    fn test_display_enabled_analyses_all_features() {
+        let mut config = ValknutConfig::default();
+        config.analysis.enable_scoring = true;
+        config.analysis.enable_structure_analysis = true;
+        config.analysis.enable_refactoring_analysis = true;
+        config.analysis.enable_graph_analysis = true;
+        config.analysis.enable_lsh_analysis = true;
+        config.analysis.enable_coverage_analysis = true;
+        config.coverage.auto_discover = true;
+        config.denoise.enabled = true;
+        config.lsh.verify_with_apted = true;
+
+        display_enabled_analyses(&config);
+    }
+
+    #[test]
+    fn test_display_analysis_config_summary_with_flags() {
+        let mut config = ValknutConfig::default();
+        config.analysis.enable_coverage_analysis = true;
+        config.coverage.max_age_days = 7;
+        config.coverage.file_patterns = vec!["coverage.lcov".into()];
+        config.analysis.max_files = 42;
+        config.denoise.enabled = true;
+        config.denoise.similarity = 0.87;
+        config.analysis.enable_lsh_analysis = true;
+
+        display_analysis_config_summary(&config);
+    }
+
+    #[tokio::test]
+    async fn test_preview_coverage_discovery_handles_absence() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = CoverageConfig::default();
+
+        let result = preview_coverage_discovery(&[temp_dir.path().to_path_buf()], &config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_preview_coverage_discovery_lists_files() {
+        let coverage_dir = TempDir::new().unwrap();
+        let root = coverage_dir.path();
+        let nested = root.join("coverage");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("coverage.lcov"), "TN:demo\nend_of_record\n").unwrap();
+
+        let mut config = CoverageConfig::default();
+        config.auto_discover = true;
+        config.file_patterns = vec!["coverage.lcov".into()];
+
+        let result = preview_coverage_discovery(&[root.to_path_buf()], &config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_preview_coverage_discovery_truncates_listing() {
+        let coverage_dir = TempDir::new().unwrap();
+        let root = coverage_dir.path();
+        let nested = root.join("coverage");
+        fs::create_dir_all(&nested).unwrap();
+
+        for idx in 0..4 {
+            let file_path = nested.join(format!("report_{idx}.lcov"));
+            fs::write(&file_path, "TN:demo\nend_of_record\n").unwrap();
+        }
+
+        let mut config = CoverageConfig::default();
+        config.auto_discover = true;
+        config.search_paths = vec!["coverage".to_string()];
+        config.file_patterns = vec!["*.lcov".to_string()];
+
+        let result = preview_coverage_discovery(&[root.to_path_buf()], &config).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn severity_for_excess_covers_threshold_cases() {
+        assert_eq!(severity_for_excess(10.0, 0.0), "Critical");
+        assert_eq!(severity_for_excess(20.0, 10.0), "Critical");
+        assert_eq!(severity_for_excess(26.0, 20.0), "High");
+        assert_eq!(severity_for_excess(22.0, 20.0), "Medium");
+    }
+
+    #[test]
+    fn severity_for_shortfall_respects_delta() {
+        assert_eq!(severity_for_shortfall(50.0, 80.0), "Critical");
+        assert_eq!(severity_for_shortfall(65.0, 80.0), "High");
+        assert_eq!(severity_for_shortfall(75.0, 80.0), "Medium");
+    }
+
+    #[test]
+    fn display_analysis_summary_prints_hotspots_and_metrics() {
+        let mut result = sample_analysis_results();
+        result.summary.refactoring_needed = 2;
+        result.summary.high_priority = 2;
+        result.summary.critical = 1;
+
+        result.refactoring_candidates.push(sample_candidate(
+            "src/utils.rs",
+            Priority::Critical,
+            3.8,
+        ));
+
+        result.refactoring_candidates.push(sample_candidate(
+            "src/helpers/mod.rs",
+            Priority::High,
+            2.9,
+        ));
+
+        result.clone_analysis = Some(CloneAnalysisResults {
+            denoising_enabled: true,
+            auto_calibration_applied: Some(true),
+            candidates_before_denoising: Some(10),
+            candidates_after_denoising: 4,
+            calibrated_threshold: Some(0.75),
+            quality_score: Some(0.82),
+            avg_similarity: Some(0.68),
+            max_similarity: Some(0.91),
+            verification: None,
+            phase_filtering_stats: None,
+            performance_metrics: None,
+            notes: vec!["Filtered duplicates".to_string()],
+        });
+
+        result.warnings = vec!["Sample warning".to_string()];
+
+        display_comprehensive_results(&result);
+    }
+
+    #[test]
+    fn combine_analysis_results_merges_runs() {
+        let mut first = sample_analysis_results();
+        first.summary.files_processed = 2;
+        first.summary.entities_analyzed = 4;
+        first.summary.avg_refactoring_score = 0.6;
+        first.summary.code_health_score = 0.7;
+        first.statistics.total_duration = Duration::from_millis(30);
+        first
+            .statistics
+            .features_per_entity
+            .insert("cyclomatic".into(), 3.0);
+        first.summary.refactoring_needed = 1;
+        first.summary.high_priority = 1;
+        first.statistics.memory_stats = MemoryStats {
+            peak_memory_bytes: 2048,
+            final_memory_bytes: 1024,
+            efficiency_score: 0.8,
+        };
+
+        let mut second = sample_analysis_results();
+        second.summary.files_processed = 3;
+        second.summary.entities_analyzed = 6;
+        second.summary.avg_refactoring_score = 0.9;
+        second.summary.code_health_score = 0.5;
+        second.statistics.total_duration = Duration::from_millis(60);
+        second
+            .statistics
+            .features_per_entity
+            .insert("cyclomatic".into(), 5.0);
+        second
+            .statistics
+            .features_per_entity
+            .insert("maintainability".into(), 2.0);
+        second.summary.refactoring_needed = 2;
+        second.summary.high_priority = 1;
+        second.statistics.memory_stats = MemoryStats {
+            peak_memory_bytes: 4096,
+            final_memory_bytes: 2048,
+            efficiency_score: 0.6,
+        };
+        second.warnings.push("Second warning".into());
+
+        let expected_files = first.summary.files_processed + second.summary.files_processed;
+        let expected_entities = first.summary.entities_analyzed + second.summary.entities_analyzed;
+        let expected_refactoring =
+            first.summary.refactoring_needed + second.summary.refactoring_needed;
+        let expected_high_priority = first.summary.high_priority + second.summary.high_priority;
+        let expected_duration = first.statistics.total_duration + second.statistics.total_duration;
+
+        let combined = combine_analysis_results(vec![first, second]).expect("merge succeeds");
+
+        assert_eq!(combined.summary.files_processed, expected_files);
+        assert_eq!(combined.summary.entities_analyzed, expected_entities);
+        assert_eq!(combined.summary.refactoring_needed, expected_refactoring);
+        assert_eq!(combined.summary.high_priority, expected_high_priority);
+        assert!(
+            combined.summary.avg_refactoring_score >= 0.6
+                && combined.summary.avg_refactoring_score <= 0.9
+        );
+        assert!(
+            combined.summary.code_health_score >= 0.5 && combined.summary.code_health_score <= 0.7
+        );
+        assert_eq!(combined.statistics.total_duration, expected_duration);
+        assert!(combined
+            .statistics
+            .features_per_entity
+            .contains_key("maintainability"));
+        assert_eq!(combined.warnings.len(), 1);
+        assert_eq!(combined.refactoring_candidates.len(), 2);
+    }
+
+    #[test]
+    fn combine_analysis_results_errors_on_empty() {
+        let err = combine_analysis_results(vec![]);
+        assert!(err.is_err());
     }
 }

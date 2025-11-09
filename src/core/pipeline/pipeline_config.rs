@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::core::config::ValknutConfig;
+use crate::lang::registry;
 
 /// Configuration for comprehensive analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,16 +93,14 @@ impl From<ValknutConfig> for AnalysisConfig {
             .collect();
 
         let final_file_extensions = if file_extensions.is_empty() {
-            vec![
-                "py".to_string(),
-                "js".to_string(),
-                "ts".to_string(),
-                "tsx".to_string(),
-                "jsx".to_string(),
-                "rs".to_string(),
-                "go".to_string(),
-                "java".to_string(),
-            ]
+            let mut fallback: Vec<String> = registry::registered_languages()
+                .iter()
+                .flat_map(|info| info.extensions.iter())
+                .map(|ext| ext.trim_start_matches('.').to_string())
+                .collect();
+            fallback.sort();
+            fallback.dedup();
+            fallback
         } else {
             file_extensions
         };
@@ -121,7 +120,7 @@ impl From<ValknutConfig> for AnalysisConfig {
 
         Self {
             enable_structure_analysis: config.analysis.enable_structure_analysis,
-            enable_complexity_analysis: true, // Default enabled, no equivalent in core config
+            enable_complexity_analysis: config.analysis.enable_scoring,
             enable_refactoring_analysis: config.analysis.enable_refactoring_analysis,
             enable_impact_analysis: config.analysis.enable_graph_analysis, // Map graph analysis to impact analysis
             enable_lsh_analysis: config.analysis.enable_lsh_analysis,

@@ -215,3 +215,146 @@ pub fn create_analyze_file_quality_schema() -> serde_json::Value {
         "required": ["file_path"]
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_rpc_success_has_result_and_no_error() {
+        let payload = json!({"status": "ok"});
+        let response = JsonRpcResponse::success(Some(json!(1)), payload.clone());
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(json!(1)));
+        assert!(response.error.is_none());
+        assert_eq!(response.result, Some(payload));
+    }
+
+    #[test]
+    fn json_rpc_error_sets_error_payload() {
+        let response =
+            JsonRpcResponse::error(None, error_codes::METHOD_NOT_FOUND, "missing method".into());
+
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(response.result.is_none());
+        assert!(response.id.is_none());
+
+        let error = response.error.expect("error payload");
+        assert_eq!(error.code, error_codes::METHOD_NOT_FOUND);
+        assert_eq!(error.message, "missing method");
+        assert!(error.data.is_none());
+    }
+
+    #[test]
+    fn analyze_code_schema_declares_required_fields_and_enum() {
+        let schema = create_analyze_code_schema();
+        assert_eq!(schema["type"], "object");
+
+        let properties = schema["properties"].as_object().expect("properties object");
+        let path = properties
+            .get("path")
+            .expect("path property present")
+            .as_object()
+            .expect("path property object");
+        assert_eq!(path.get("type"), Some(&json!("string")));
+
+        let format = properties
+            .get("format")
+            .expect("format property present")
+            .as_object()
+            .expect("format property object");
+        let allowed_values = format
+            .get("enum")
+            .and_then(|value| value.as_array())
+            .expect("enum array");
+        assert_eq!(
+            allowed_values,
+            &vec![json!("json"), json!("markdown"), json!("html")]
+        );
+        assert_eq!(format.get("default"), Some(&json!("json")));
+
+        let required = schema["required"].as_array().expect("required array");
+        assert!(required.iter().any(|value| value == "path"));
+    }
+
+    #[test]
+    fn refactoring_suggestions_schema_limits_max_suggestions() {
+        let schema = create_refactoring_suggestions_schema();
+
+        let required = schema["required"].as_array().expect("required entries");
+        assert_eq!(required, &vec![json!("entity_id")]);
+
+        let properties = schema["properties"].as_object().expect("properties object");
+        let max_suggestions = properties
+            .get("max_suggestions")
+            .expect("max_suggestions property")
+            .as_object()
+            .expect("max_suggestions object");
+
+        assert_eq!(max_suggestions.get("type"), Some(&json!("number")));
+        assert_eq!(max_suggestions.get("minimum"), Some(&json!(1)));
+        assert_eq!(max_suggestions.get("maximum"), Some(&json!(50)));
+        assert_eq!(max_suggestions.get("default"), Some(&json!(10)));
+    }
+
+    #[test]
+    fn validate_quality_gates_schema_has_optional_thresholds() {
+        let schema = create_validate_quality_gates_schema();
+        assert_eq!(schema["type"], "object");
+
+        let required = schema["required"].as_array().expect("required array");
+        assert_eq!(required, &vec![json!("path")]);
+
+        let properties = schema["properties"].as_object().expect("properties object");
+        let path = properties
+            .get("path")
+            .expect("path property")
+            .as_object()
+            .expect("path object");
+        assert_eq!(path.get("type"), Some(&json!("string")));
+
+        for key in ["max_complexity", "min_health", "max_debt"] {
+            let entry = properties
+                .get(key)
+                .unwrap_or_else(|| panic!("{key} property missing"));
+            assert!(
+                entry.is_object(),
+                "{key} property should be an object describing constraints"
+            );
+        }
+
+        let max_issues = properties
+            .get("max_issues")
+            .expect("max_issues property")
+            .as_object()
+            .expect("max_issues object");
+        assert_eq!(max_issues.get("type"), Some(&json!("integer")));
+        assert_eq!(max_issues.get("minimum"), Some(&json!(0)));
+    }
+
+    #[test]
+    fn analyze_file_quality_schema_requires_file_path() {
+        let schema = create_analyze_file_quality_schema();
+
+        let required = schema["required"].as_array().expect("required entries");
+        assert_eq!(required, &vec![json!("file_path")]);
+
+        let properties = schema["properties"].as_object().expect("properties object");
+        let file_path = properties
+            .get("file_path")
+            .expect("file_path property")
+            .as_object()
+            .expect("file_path object");
+        assert_eq!(file_path.get("type"), Some(&json!("string")));
+
+        let include_suggestions = properties
+            .get("include_suggestions")
+            .expect("include_suggestions property")
+            .as_object()
+            .expect("include_suggestions object");
+        assert_eq!(include_suggestions.get("type"), Some(&json!("boolean")));
+        assert_eq!(include_suggestions.get("default"), Some(&json!(true)));
+    }
+}

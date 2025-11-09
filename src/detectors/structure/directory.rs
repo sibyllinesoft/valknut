@@ -1048,6 +1048,7 @@ mod tests {
         FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig, StructureToggles,
     };
     use crate::lang::registry::adapter_for_language;
+    use petgraph::graph::Graph;
     use std::fs;
     use tempfile::TempDir;
 
@@ -1743,6 +1744,31 @@ use serde::{Serialize, Deserialize};
     }
 
     #[test]
+    fn test_build_dependency_graph_records_edges() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("main.py"),
+            "import helpers\nfrom helpers import helper\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("helpers.py"),
+            "def helper():\n    return 42\n",
+        )
+        .unwrap();
+
+        let config = create_test_config();
+        let analyzer = DirectoryAnalyzer::new(config);
+
+        let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
+        assert_eq!(graph.node_count(), 2);
+        assert!(
+            graph.edge_count() > 0,
+            "expected at least one dependency edge between modules"
+        );
+    }
+
+    #[test]
     fn test_partition_directory_basic() {
         let temp_dir = setup_test_directory();
         let config = create_test_config();
@@ -1757,6 +1783,117 @@ use serde::{Serialize, Deserialize};
 
         assert!(!partitions.is_empty());
         assert!(partitions.iter().all(|p| !p.files.is_empty()));
+    }
+
+    #[test]
+    fn test_brute_force_partition_uses_random_fallback_for_multi_cluster() {
+        let config = create_test_config();
+        let analyzer = DirectoryAnalyzer::new(config);
+
+        let mut graph: DependencyGraph = Graph::new();
+        let nodes: Vec<_> = (0..4)
+            .map(|i| {
+                graph.add_node(FileNode {
+                    path: PathBuf::from(format!("file{i}.py")),
+                    loc: 10,
+                    size_bytes: 100,
+                })
+            })
+            .collect();
+
+        let communities = analyzer
+            .brute_force_partition(&nodes, &graph, 3)
+            .expect("partitioning should succeed");
+        assert_eq!(communities.len(), 3);
+        assert_eq!(
+            communities.iter().map(|c| c.len()).sum::<usize>(),
+            nodes.len()
+        );
+    }
+
+    #[test]
+    fn test_brute_force_partition_falls_back_to_simple_split() {
+        let mut config = create_test_config();
+        config.partitioning.balance_tolerance = 0.0;
+        let analyzer = DirectoryAnalyzer::new(config);
+
+        let mut graph: DependencyGraph = Graph::new();
+        let node_a = graph.add_node(FileNode {
+            path: PathBuf::from("a.py"),
+            loc: 10,
+            size_bytes: 100,
+        });
+        let node_b = graph.add_node(FileNode {
+            path: PathBuf::from("b.py"),
+            loc: 40,
+            size_bytes: 400,
+        });
+        let partitions = analyzer
+            .brute_force_partition(&[node_a, node_b], &graph, 2)
+            .expect("partitioning should succeed");
+        assert_eq!(partitions.len(), 2);
+        assert!(partitions.iter().all(|part| !part.is_empty()));
+    }
+
+    #[test]
+    fn test_kernighan_lin_refinement_applies_improving_swap() {
+        let config = create_test_config();
+        let analyzer = DirectoryAnalyzer::new(config);
+        let mut graph: DependencyGraph = Graph::new();
+
+        let node_a = graph.add_node(FileNode {
+            path: PathBuf::from("a.py"),
+            loc: 10,
+            size_bytes: 100,
+        });
+        let node_b = graph.add_node(FileNode {
+            path: PathBuf::from("b.py"),
+            loc: 12,
+            size_bytes: 120,
+        });
+        let node_c = graph.add_node(FileNode {
+            path: PathBuf::from("c.py"),
+            loc: 15,
+            size_bytes: 150,
+        });
+        let node_d = graph.add_node(FileNode {
+            path: PathBuf::from("d.py"),
+            loc: 18,
+            size_bytes: 180,
+        });
+
+        // Connect node_a strongly to community 2 and weakly to community 1
+        for &(from, to, weight) in &[
+            (node_a, node_c, 3),
+            (node_c, node_a, 3),
+            (node_a, node_d, 2),
+            (node_d, node_a, 2),
+            (node_a, node_b, 1),
+            (node_b, node_a, 1),
+        ] {
+            graph.add_edge(
+                from,
+                to,
+                DependencyEdge {
+                    weight,
+                    relationship_type: "module".to_string(),
+                },
+            );
+        }
+
+        let refined = analyzer
+            .kernighan_lin_refinement(&graph, vec![vec![node_a, node_b], vec![node_c, node_d]])
+            .expect("refinement should succeed");
+
+        let total_nodes: usize = refined.iter().map(|c| c.len()).sum();
+        assert_eq!(
+            total_nodes, 4,
+            "refinement should preserve the number of nodes"
+        );
+        assert!(
+            refined[0].len() < 2 || refined[1].len() > 2,
+            "expected Kernighan-Lin refinement to rebalance partitions"
+        );
     }
 
     #[test]

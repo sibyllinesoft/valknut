@@ -34,13 +34,18 @@ pub use pipeline_config::{
 };
 pub use pipeline_executor::{AnalysisPipeline, ExtractorRegistry, ProgressCallback};
 pub use pipeline_results::{
-    ComplexityAnalysisResults, ComprehensiveAnalysisResult, CoverageAnalysisResults, FileScore,
-    HealthMetrics, ImpactAnalysisResults, PipelineResults, PipelineStatistics, PipelineStatus,
-    RefactoringAnalysisResults, ResultSummary, ScoringResults, StructureAnalysisResults,
+    CloneVerificationResults, ComplexityAnalysisResults, ComprehensiveAnalysisResult,
+    CoverageAnalysisResults, FileScore, HealthMetrics, ImpactAnalysisResults, PipelineResults,
+    PipelineStatistics, PipelineStatus, RefactoringAnalysisResults, ResultSummary, ScoringResults,
+    StructureAnalysisResults,
 };
 pub use pipeline_stages::AnalysisStages;
 pub use result_conversions::*;
 pub use result_types::*;
+pub use services::{
+    BatchedFileReader, DefaultResultAggregator, FileBatchReader, FileDiscoverer,
+    GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator, StageResultsBundle,
+};
 
 mod code_dictionary;
 mod file_discovery;
@@ -50,6 +55,7 @@ mod pipeline_results;
 mod pipeline_stages;
 mod result_conversions;
 mod result_types;
+mod services;
 
 /// Additional tests for pipeline modules to improve coverage
 
@@ -150,6 +156,8 @@ mod tests {
                 max_similarity: 0.0,
                 avg_similarity: 0.0,
                 duplicate_count: 0,
+                apted_verification_enabled: false,
+                verification: None,
                 denoising_enabled: false,
                 tfidf_stats: None,
             },

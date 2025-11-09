@@ -268,15 +268,13 @@ pub struct AnalysisConfig {
 
 impl Default for AnalysisConfig {
     fn default() -> Self {
-        let module_defaults = crate::api::config_types::AnalysisModules::default();
-
         Self {
-            enable_scoring: module_defaults.complexity,
-            enable_graph_analysis: module_defaults.dependencies,
+            enable_scoring: true,
+            enable_graph_analysis: true,
             enable_lsh_analysis: false,
-            enable_refactoring_analysis: module_defaults.refactoring,
-            enable_coverage_analysis: false,
-            enable_structure_analysis: module_defaults.structure,
+            enable_refactoring_analysis: true,
+            enable_coverage_analysis: true,
+            enable_structure_analysis: true,
             enable_names_analysis: true,
             confidence_threshold: 0.7,
             max_files: 0,
@@ -565,6 +563,18 @@ pub struct LshConfig {
     /// Use advanced similarity algorithms
     #[serde(default)]
     pub use_semantic_similarity: bool,
+
+    /// Verify candidate clone pairs using tree edit distance (APTED)
+    #[serde(default)]
+    pub verify_with_apted: bool,
+
+    /// Maximum AST nodes allowed when building APTED trees per entity
+    #[serde(default = "LshConfig::default_apted_max_nodes")]
+    pub apted_max_nodes: usize,
+
+    /// Maximum number of clone candidates per entity to verify via APTED (0 = use max_candidates)
+    #[serde(default)]
+    pub apted_max_pairs_per_entity: usize,
 }
 
 impl Default for LshConfig {
@@ -576,11 +586,19 @@ impl Default for LshConfig {
             similarity_threshold: 0.7,
             max_candidates: 100,
             use_semantic_similarity: false, // Keep name for backward compatibility
+            verify_with_apted: true,
+            apted_max_nodes: LshConfig::default_apted_max_nodes(),
+            apted_max_pairs_per_entity: 25,
         }
     }
 }
 
 impl LshConfig {
+    /// Default maximum number of AST nodes considered when building APTED trees
+    pub const fn default_apted_max_nodes() -> usize {
+        4000
+    }
+
     /// Validate LSH configuration
     pub fn validate(&self) -> Result<()> {
         if self.num_hashes == 0 {
@@ -604,6 +622,13 @@ impl LshConfig {
                 "similarity_threshold must be between 0.0 and 1.0, got {}",
                 self.similarity_threshold
             )));
+        }
+
+        if self.verify_with_apted && self.apted_max_nodes == 0 {
+            return Err(ValknutError::validation(
+                "apted_max_nodes must be greater than 0 when APTED verification is enabled"
+                    .to_string(),
+            ));
         }
 
         Ok(())
@@ -1714,5 +1739,129 @@ impl DedupeConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::errors::ValknutError;
+    use std::collections::HashMap;
+
+    fn expect_validation_error<T: std::fmt::Debug>(result: Result<T>) -> ValknutError {
+        result.expect_err("expected validation failure")
+    }
+
+    #[test]
+    fn default_configs_validate_successfully() {
+        ValknutConfig::default()
+            .validate()
+            .expect("valknut default");
+        AnalysisConfig::default()
+            .validate()
+            .expect("analysis default");
+        ScoringConfig::default()
+            .validate()
+            .expect("scoring default");
+        CoverageConfig::default()
+            .validate()
+            .expect("coverage default");
+        PerformanceConfig::default()
+            .validate()
+            .expect("performance default");
+        DedupeConfig::default().validate().expect("dedupe default");
+        DenoiseConfig::default()
+            .validate()
+            .expect("denoise default");
+    }
+
+    #[test]
+    fn analysis_config_confidence_threshold_bounds() {
+        let mut config = AnalysisConfig::default();
+        config.confidence_threshold = 1.5;
+        let err = expect_validation_error(config.validate());
+        assert!(matches!(err, ValknutError::Validation { .. }));
+    }
+
+    #[test]
+    fn coverage_config_requires_patterns_when_auto_discovering() {
+        let mut config = CoverageConfig::default();
+        config.file_patterns.clear();
+        let err = expect_validation_error(config.validate());
+        assert!(
+            format!("{err}").contains("file_patterns"),
+            "unexpected error message: {err}"
+        );
+
+        config.file_patterns = vec!["coverage.xml".into()];
+        config.search_paths.clear();
+        let err = expect_validation_error(config.validate());
+        assert!(
+            format!("{err}").contains("search_paths"),
+            "unexpected error message: {err}"
+        );
+    }
+
+    #[test]
+    fn performance_config_rejects_zero_limits() {
+        let mut config = PerformanceConfig::default();
+        config.max_threads = Some(0);
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("max_threads"));
+
+        config.max_threads = Some(4);
+        config.batch_size = 0;
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("batch_size"));
+    }
+
+    #[test]
+    fn language_config_requires_extensions_and_thresholds() {
+        let config = LanguageConfig {
+            enabled: true,
+            file_extensions: Vec::new(),
+            tree_sitter_language: "rust".into(),
+            max_file_size_mb: 10.0,
+            complexity_threshold: 5.0,
+            additional_settings: HashMap::new(),
+        };
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("file_extensions"));
+
+        let config = LanguageConfig {
+            enabled: true,
+            file_extensions: vec![".rs".into()],
+            tree_sitter_language: "rust".into(),
+            max_file_size_mb: -1.0,
+            complexity_threshold: 5.0,
+            additional_settings: HashMap::new(),
+        };
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("max_file_size_mb"));
+    }
+
+    #[test]
+    fn denoise_config_validates_weight_sum() {
+        let mut config = DenoiseConfig::default();
+        config.enabled = true;
+        config.weights.ast = -0.1;
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("weights"), "{err}");
+    }
+
+    #[test]
+    fn dedupe_config_enforces_positive_thresholds() {
+        let mut config = DedupeConfig::default();
+        config.min_match_tokens = 0;
+        let err = expect_validation_error(config.validate());
+        assert!(format!("{err}").contains("min_match_tokens"), "{err}");
+
+        let mut config = DedupeConfig::default();
+        config.adaptive.hub_suppression_threshold = 1.5;
+        let err = expect_validation_error(config.validate());
+        assert!(
+            format!("{err}").contains("hub_suppression_threshold"),
+            "{err}"
+        );
     }
 }

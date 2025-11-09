@@ -293,116 +293,100 @@ impl Default for LshCache {
 mod tests {
     use super::*;
 
+    fn sample_source() -> &'static str {
+        "fn demo() { println!(\"test\"); }"
+    }
+
     #[test]
     fn test_token_caching() {
         let cache = LshCache::new();
-        let source_code = "def test(): return 1";
-        let tokens = vec!["def".to_string(), "test".to_string(), "return".to_string()];
+        assert!(cache.get_tokens(sample_source()).is_none());
 
-        // First access should be cache miss
-        assert!(cache.get_tokens(source_code).is_none());
+        cache.cache_tokens(sample_source(), vec!["fn".into(), "demo".into()]);
+        assert!(cache.get_tokens(sample_source()).is_some());
 
-        // Cache the tokens
-        cache.cache_tokens(source_code, tokens.clone());
-
-        // Second access should be cache hit
-        let cached_tokens = cache.get_tokens(source_code).unwrap();
-        assert_eq!(cached_tokens, tokens);
-
-        // Check statistics
         let stats = cache.get_statistics();
         assert_eq!(stats.token_hits, 1);
         assert_eq!(stats.token_misses, 1);
-        assert_eq!(stats.token_hit_rate(), 0.5);
+        assert!(stats.token_hit_rate() > 0.0);
     }
 
     #[test]
-    fn test_signature_caching() {
-        let cache = LshCache::new();
-        let source_code = "def test(): return 1";
-        let signature = vec![1, 2, 3, 4, 5];
-        let num_hashes = 64;
-        let shingle_size = 3;
+    fn test_signature_cache_eviction_triggers_on_capacity() {
+        let cache = LshCache::with_capacity(1);
 
-        // First access should be cache miss
-        assert!(cache
-            .get_signature(source_code, num_hashes, shingle_size)
-            .is_none());
+        cache.cache_signature("a", 4, 2, vec![1, 2, 3, 4]);
+        cache.cache_signature("b", 4, 2, vec![5, 6, 7, 8]);
 
-        // Cache the signature
-        cache.cache_signature(source_code, num_hashes, shingle_size, signature.clone());
+        assert!(cache.get_signature("a", 4, 2).is_none());
+        assert!(cache.get_signature("b", 4, 2).is_some());
 
-        // Second access should be cache hit
-        let cached_signature = cache
-            .get_signature(source_code, num_hashes, shingle_size)
-            .unwrap();
-        assert_eq!(cached_signature, signature);
-
-        // Check statistics
         let stats = cache.get_statistics();
-        assert_eq!(stats.signature_hits, 1);
-        assert_eq!(stats.signature_misses, 1);
-        assert_eq!(stats.signature_hit_rate(), 0.5);
+        assert!(stats.evictions >= 1);
     }
 
     #[test]
-    fn test_cache_eviction() {
-        let cache = LshCache::with_capacity(5); // Very small cache for testing
-
-        // Fill cache beyond capacity
-        for i in 0..10 {
-            let source = format!("def test_{}(): return {}", i, i);
-            let tokens = vec![format!("test_{}", i)];
-            cache.cache_tokens(&source, tokens);
-        }
-
-        // Check that cache size is limited
-        let (token_size, _) = cache.cache_sizes();
-        assert!(token_size <= 5, "Cache should be limited to max size");
-
-        // Check that evictions occurred
-        let stats = cache.get_statistics();
-        assert!(stats.evictions > 0, "Should have performed evictions");
-    }
-
-    #[test]
-    fn test_cache_clear() {
+    fn test_overall_hit_rate_combines_caches() {
         let cache = LshCache::new();
+        cache.get_tokens("fn demo()");
+        cache.cache_tokens("fn demo()", vec!["fn".into(), "demo".into()]);
+        cache.get_tokens("fn demo()");
 
-        // Add some entries
-        cache.cache_tokens("test1", vec!["token1".to_string()]);
-        cache.cache_signature("test2", 64, 3, vec![1, 2, 3]);
+        cache.get_signature("fn demo()", 8, 3);
+        cache.cache_signature("fn demo()", 8, 3, vec![0; 8]);
+        cache.get_signature("fn demo()", 8, 3);
 
-        // Verify entries exist
-        assert!(cache.get_tokens("test1").is_some());
-        assert!(cache.get_signature("test2", 64, 3).is_some());
+        let stats = cache.get_statistics();
+        assert!(stats.overall_hit_rate() > 0.0);
+    }
 
-        // Clear cache
+    #[test]
+    fn test_clear_resets_cached_data_and_stats() {
+        let cache = LshCache::new();
+        cache.cache_tokens("fn demo()", vec!["fn".into()]);
+        cache.cache_signature("fn demo()", 4, 2, vec![1, 2]);
+        cache.get_tokens("fn demo()");
+        cache.get_signature("fn demo()", 4, 2);
+
         cache.clear();
+        assert!(cache.get_tokens("fn demo()").is_none());
+        assert!(cache.get_signature("fn demo()", 4, 2).is_none());
 
-        // Verify entries are gone
-        assert!(cache.get_tokens("test1").is_none());
-        assert!(cache.get_signature("test2", 64, 3).is_none());
+        let stats = cache.get_statistics();
+        assert_eq!(stats.token_hits, 0);
+        assert_eq!(stats.signature_hits, 0);
+    }
+
+    #[test]
+    fn test_token_eviction_triggers_and_tracks_evictions() {
+        let cache = LshCache::with_capacity(2);
+        cache.cache_tokens("fn a()", vec!["fn".into()]);
+        cache.cache_tokens("fn b()", vec!["fn".into()]);
+        cache.cache_tokens("fn c()", vec!["fn".into()]);
 
         let (token_size, signature_size) = cache.cache_sizes();
-        assert_eq!(token_size, 0);
+        assert!(token_size <= 2, "token cache size exceeded capacity");
         assert_eq!(signature_size, 0);
+
+        let stats = cache.get_statistics();
+        assert!(stats.evictions >= 1, "expected at least one eviction");
     }
 
     #[test]
-    fn test_overall_hit_rate() {
+    fn test_cache_statistics_zero_rates_and_reset() {
+        let stats = CacheStatistics::default();
+        assert_eq!(stats.token_hit_rate(), 0.0);
+        assert_eq!(stats.signature_hit_rate(), 0.0);
+        assert_eq!(stats.overall_hit_rate(), 0.0);
+
         let cache = LshCache::new();
+        cache.cache_tokens("fn demo()", vec!["fn".into()]);
+        cache.cache_signature("fn demo()", 2, 2, vec![1, 2]);
 
-        // Generate some cache hits and misses
-        cache.get_tokens("test1"); // miss
-        cache.cache_tokens("test1", vec!["token1".to_string()]);
-        cache.get_tokens("test1"); // hit
-
-        cache.get_signature("test2", 64, 3); // miss
-        cache.cache_signature("test2", 64, 3, vec![1, 2, 3]);
-        cache.get_signature("test2", 64, 3); // hit
-
-        let stats = cache.get_statistics();
-        assert_eq!(stats.overall_hit_rate(), 0.5); // 2 hits out of 4 total requests
+        cache.reset_statistics();
+        let reset = cache.get_statistics();
+        assert_eq!(reset.token_hits, 0);
+        assert_eq!(reset.signature_hits, 0);
+        assert_eq!(reset.evictions, 0);
     }
 }

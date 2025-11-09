@@ -12,7 +12,7 @@ This directory contains user-facing guides and contributor references. Start her
 
 Additional references:
 
-- `AGENT_USAGE_GUIDE.md` – Valknut MCP/Agent integration
+  - `AGENT_USAGE_GUIDE.md` – Valknut MCP/Agent integration
 - `mcp/` – Manifest and MCP tooling docs
 - `setup/` – Environment bootstrap helpers
 - `archive/` – Historical reports and project journals retained for posterity

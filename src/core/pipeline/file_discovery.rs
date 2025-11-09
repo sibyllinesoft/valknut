@@ -329,3 +329,110 @@ fn is_within_requested_roots(roots: &[PathBuf], path: &Path) -> bool {
 fn default_base_for(path: &Path) -> &Path {
     path.parent().unwrap_or(path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::config::ValknutConfig;
+    use crate::core::pipeline::pipeline_config::AnalysisConfig as PipelineAnalysisConfig;
+
+    #[test]
+    fn allowed_extensions_prioritises_language_config() {
+        let pipeline_config = PipelineAnalysisConfig::default();
+        let mut valknut_config = ValknutConfig::default();
+        let extensions = allowed_extensions_from(&pipeline_config, Some(&valknut_config));
+        assert!(extensions.contains("rs"));
+        assert!(extensions.contains("py"));
+
+        // Disable all languages so the pipeline config extensions are used instead
+        valknut_config
+            .languages
+            .values_mut()
+            .for_each(|lang| lang.enabled = false);
+        let pipeline_extensions = allowed_extensions_from(&pipeline_config, Some(&valknut_config));
+        for ext in &pipeline_config.file_extensions {
+            assert!(pipeline_extensions.contains(&ext.trim_start_matches('.').to_string()));
+        }
+    }
+
+    #[test]
+    fn compile_globset_rejects_invalid_patterns() {
+        let result = compile_globset(&["[invalid".to_string()]);
+        assert!(result.is_err());
+
+        let valid = compile_globset(&["**/*.rs".to_string()]).unwrap();
+        assert!(valid.unwrap().is_match("src/lib.rs"));
+    }
+
+    #[test]
+    fn should_keep_respects_include_exclude_and_extension() {
+        let include = compile_globset(&["**/*.rs".to_string()]).unwrap();
+        let exclude = compile_globset(&["**/generated/**".to_string()]).unwrap();
+        let ignore = compile_globset(&["**/ignored.rs".to_string()]).unwrap();
+
+        let mut allowed = HashSet::new();
+        allowed.insert("rs".to_string());
+
+        let base = Path::new("workspace");
+        let keep_path = base.join("src/lib.rs");
+        assert!(should_keep(
+            &keep_path,
+            base,
+            include.as_ref(),
+            exclude.as_ref(),
+            ignore.as_ref(),
+            &allowed,
+        ));
+
+        let generated_path = base.join("generated/file.rs");
+        assert!(!should_keep(
+            &generated_path,
+            base,
+            include.as_ref(),
+            exclude.as_ref(),
+            ignore.as_ref(),
+            &allowed,
+        ));
+
+        let ignored_path = base.join("src/ignored.rs");
+        assert!(!should_keep(
+            &ignored_path,
+            base,
+            include.as_ref(),
+            exclude.as_ref(),
+            ignore.as_ref(),
+            &allowed,
+        ));
+
+        let wrong_extension = base.join("src/lib.ts");
+        assert!(!should_keep(
+            &wrong_extension,
+            base,
+            include.as_ref(),
+            exclude.as_ref(),
+            ignore.as_ref(),
+            &allowed,
+        ));
+    }
+
+    #[test]
+    fn roots_membership_detects_files_and_directories() {
+        let roots = vec![PathBuf::from("src"), PathBuf::from("README.md")];
+        let file_in_src = Path::new("src/lib.rs");
+        let exact_file = Path::new("README.md");
+        let outside = Path::new("other/mod.rs");
+
+        assert!(is_within_requested_roots(&roots, file_in_src));
+        assert!(is_within_requested_roots(&roots, exact_file));
+        assert!(!is_within_requested_roots(&roots, outside));
+    }
+
+    #[test]
+    fn default_base_for_returns_parent_when_available() {
+        let path = Path::new("src/lib.rs");
+        assert_eq!(default_base_for(path), Path::new("src"));
+
+        let standalone = Path::new("workspace");
+        assert_eq!(default_base_for(standalone), Path::new(""));
+    }
+}

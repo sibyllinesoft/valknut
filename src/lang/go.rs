@@ -988,4 +988,65 @@ var (
             .unwrap();
         assert_eq!(global_var.entity_type, "Variable");
     }
+
+    #[test]
+    fn test_go_adapter_analysis_helpers() {
+        let mut adapter = GoAdapter::new().expect("adapter");
+        let source = r#"
+package main
+
+import (
+    "fmt"
+)
+
+func main() {
+    fmt.Println("hi")
+    helper()
+}
+
+func helper() int {
+    return 42
+}
+"#;
+
+        let calls = adapter
+            .extract_function_calls(source)
+            .expect("function calls");
+        assert!(
+            calls.iter().any(|call| call.contains("fmt.Println")),
+            "expected fmt.Println in {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|call| call.contains("helper")),
+            "expected helper call in {calls:?}"
+        );
+
+        let boilerplate = adapter
+            .contains_boilerplate_patterns(
+                source,
+                &["fmt.Println".to_string(), "nonexistent".to_string()],
+            )
+            .expect("boilerplate detection");
+        assert_eq!(boilerplate, vec!["fmt.Println".to_string()]);
+
+        let identifiers = adapter.extract_identifiers(source).expect("identifiers");
+        assert!(identifiers.contains(&"main".to_string()));
+        assert!(identifiers.contains(&"helper".to_string()));
+
+        let normalized = adapter.normalize_source(source).expect("normalize");
+        assert!(
+            normalized.starts_with("(source_file"),
+            "expected normalized S-expression"
+        );
+
+        let ast_nodes = adapter.count_ast_nodes(source).expect("ast node count");
+        assert!(ast_nodes > 0);
+
+        let blocks = adapter
+            .count_distinct_blocks(source)
+            .expect("distinct blocks");
+        assert!(blocks > 0);
+
+        assert_eq!(adapter.language_name(), "go");
+    }
 }

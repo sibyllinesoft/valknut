@@ -87,6 +87,10 @@ pub enum Commands {
     /// List supported programming languages and their status
     #[command(name = "list-languages")]
     ListLanguages,
+
+    /// Audit documentation coverage and README freshness
+    #[command(name = "doc-audit")]
+    DocAudit(DocAuditArgs),
 }
 
 /// Quality gate configuration for CI/CD integration
@@ -184,6 +188,22 @@ pub struct AdvancedCloneArgs {
     #[arg(long)]
     pub structural_validation: bool,
 
+    /// Enable optional APTED verification for structural clone confirmation
+    #[arg(long)]
+    pub apted_verify: bool,
+
+    /// Maximum AST nodes to include when building APTED trees
+    #[arg(long)]
+    pub apted_max_nodes: Option<usize>,
+
+    /// Maximum clone candidates per entity to verify with APTED
+    #[arg(long)]
+    pub apted_max_pairs: Option<usize>,
+
+    /// Disable APTED verification (enabled by default)
+    #[arg(long)]
+    pub no_apted_verify: bool,
+
     /// Enable live reachability boost for clone prioritization
     #[arg(long)]
     pub live_reach_boost: bool,
@@ -219,6 +239,44 @@ pub struct AdvancedCloneArgs {
     /// Minimum rarity gain threshold (default: 1.2)
     #[arg(long)]
     pub min_rarity_gain: Option<f64>,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum DocAuditFormat {
+    Text,
+    Json,
+}
+
+/// Documentation audit configuration options
+#[derive(Args, Clone, Debug)]
+pub struct DocAuditArgs {
+    /// Project root to scan (defaults to current directory)
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+
+    /// Require READMEs for directories above this descendant threshold
+    #[arg(long, default_value_t = doc_audit::DEFAULT_COMPLEXITY_THRESHOLD)]
+    pub complexity_threshold: usize,
+
+    /// Mark README as stale after this many commits touch the directory
+    #[arg(long, default_value_t = doc_audit::DEFAULT_MAX_README_COMMITS)]
+    pub max_readme_commits: usize,
+
+    /// Exit with non-zero status when any issues are detected
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Output format for audit results
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: DocAuditFormat,
+
+    /// Additional directory names to ignore (repeatable)
+    #[arg(long)]
+    pub ignore_dir: Vec<String>,
+
+    /// Additional file suffixes to ignore (repeatable)
+    #[arg(long)]
+    pub ignore_suffix: Vec<String>,
 }
 
 /// Coverage analysis configuration
@@ -378,6 +436,21 @@ pub enum OutputFormat {
     CiSummary,
     /// Human-readable format
     Pretty,
+}
+
+impl OutputFormat {
+    #[must_use]
+    pub fn is_machine_readable(&self) -> bool {
+        matches!(
+            self,
+            OutputFormat::Json
+                | OutputFormat::Jsonl
+                | OutputFormat::Yaml
+                | OutputFormat::Csv
+                | OutputFormat::Sonar
+                | OutputFormat::CiSummary
+        )
+    }
 }
 
 #[derive(Debug, Clone, ValueEnum)]

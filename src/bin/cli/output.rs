@@ -1887,9 +1887,267 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::HashMap;
     use std::fs;
-    use tempfile::TempDir;
+    use std::time::Duration;
+    use tempfile::{tempdir, TempDir};
     use tokio;
+    use valknut_rs::core::pipeline::{
+        AnalysisResults, AnalysisStatistics, AnalysisSummary, CodeDictionary, FeatureContribution,
+        FileRefactoringGroup, MemoryStats, RefactoringCandidate, RefactoringIssue,
+        RefactoringSuggestion,
+    };
+    use valknut_rs::core::scoring::Priority;
+
+    fn minimal_analysis_value() -> serde_json::Value {
+        json!({
+            "summary": {
+                "total_files": 3,
+                "total_issues": 0,
+                "processing_time": 1.25,
+                "critical_issues": 0,
+                "high_priority_issues": 0,
+                "languages": ["rust"]
+            },
+            "health_metrics": {
+                "overall_health_score": 82.5,
+                "complexity_score": 24.0,
+                "maintainability_score": 70.0,
+                "technical_debt_ratio": 12.0
+            },
+            "complexity": {
+                "average_cyclomatic_complexity": 3.2,
+                "average_cognitive_complexity": 4.6,
+                "enabled": true,
+                "detailed_results": []
+            },
+            "refactoring": {
+                "enabled": true,
+                "opportunities_count": 0,
+                "detailed_results": []
+            },
+            "analysis_id": "test-analysis",
+            "timestamp": "2024-01-01T00:00:00Z"
+        })
+    }
+
+    fn rich_analysis_value() -> serde_json::Value {
+        json!({
+            "summary": {
+                "total_files": 4,
+                "total_issues": 3,
+                "processing_time": 2.5,
+                "critical_issues": 1,
+                "high_priority_issues": 2,
+                "languages": ["rust", "python"],
+                "health_score": 45.0
+            },
+            "health_metrics": {
+                "overall_health_score": 58.2,
+                "complexity_score": 70.0,
+                "maintainability_score": 40.0,
+                "technical_debt_ratio": 35.0
+            },
+            "complexity": {
+                "average_cyclomatic_complexity": 18.0,
+                "average_cognitive_complexity": 22.0,
+                "detailed_results": [
+                    {
+                        "file_path": "src/lib.rs",
+                        "issues": [
+                            {
+                                "severity": "Critical",
+                                "description": "Function `analyze` has excessive branching",
+                                "category": "cyclomatic",
+                                "line": 42
+                            },
+                            {
+                                "severity": "High",
+                                "description": "Function `process` exceeds recommended length",
+                                "category": "size",
+                                "line": 58
+                            }
+                        ],
+                        "recommendations": [
+                            { "description": "Split `analyze` into focused helpers", "effort": 6 },
+                            { "description": "Simplify nested conditionals in `process`", "effort": 4 }
+                        ]
+                    }
+                ],
+                "top_entities": [
+                    {
+                        "name": "src/lib.rs::analyze",
+                        "kind": "function",
+                        "cyclomatic_complexity": 21.0,
+                        "cognitive_complexity": 27.0
+                    }
+                ],
+                "hotspots": [
+                    { "path": "src/lib.rs", "commit_count": 12, "change_frequency": 0.8 }
+                ]
+            },
+            "refactoring": {
+                "opportunities_count": 2,
+                "detailed_results": [
+                    {
+                        "file_path": "src/lib.rs",
+                        "recommendations": [
+                            {
+                                "refactoring_type": "ExtractMethod",
+                                "description": "Extract helper for parsing block",
+                                "estimated_impact": 8.5,
+                                "estimated_effort": 3.0,
+                                "priority_score": 0.92,
+                                "location": [42]
+                            },
+                            {
+                                "refactoring_type": "ReduceComplexity",
+                                "description": "Flatten nested loops in `process`",
+                                "estimated_impact": 6.7,
+                                "estimated_effort": 2.5,
+                                "priority_score": 0.61,
+                                "location": [58]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "structure": {
+                "packs": [
+                    {
+                        "kind": "branch",
+                        "file": "src/lib.rs",
+                        "reasons": ["Too many sibling modules"]
+                    },
+                    {
+                        "kind": "file_split",
+                        "directory": "src",
+                        "reasons": ["File exceeds recommended size"]
+                    }
+                ]
+            },
+            "comprehensive_analysis": {
+                "structure": {
+                    "packs": [
+                        { "kind": "branch" },
+                        { "kind": "file_split" },
+                        { "kind": "other" }
+                    ]
+                }
+            },
+            "coverage": {
+                "summary": {
+                    "overall_coverage": 72.4
+                }
+            },
+            "issues": [
+                { "severity": "Critical", "description": "Unreachable branch detected" }
+            ],
+            "analysis_id": "rich-analysis",
+            "timestamp": "2024-01-02T03:04:05Z"
+        })
+    }
+
+    fn build_sample_analysis_results() -> AnalysisResults {
+        let mut features_per_entity = HashMap::new();
+        features_per_entity.insert("complexity".to_string(), 3.0);
+
+        let mut priority_distribution = HashMap::new();
+        priority_distribution.insert("high".to_string(), 1);
+
+        let mut issue_distribution = HashMap::new();
+        issue_distribution.insert("complexity".to_string(), 1);
+
+        let issue = RefactoringIssue {
+            code: "complexity_high".to_string(),
+            category: "complexity".to_string(),
+            severity: 0.85,
+            contributing_features: vec![FeatureContribution {
+                feature_name: "cyclomatic_complexity".to_string(),
+                value: 22.0,
+                normalized_value: 0.9,
+                contribution: 0.6,
+            }],
+        };
+
+        let suggestion = RefactoringSuggestion {
+            refactoring_type: "extract_method".to_string(),
+            code: "extract_method".to_string(),
+            priority: 0.9,
+            effort: 0.4,
+            impact: 0.8,
+        };
+
+        let candidate = RefactoringCandidate {
+            entity_id: "entity-1".to_string(),
+            name: "analyze_module".to_string(),
+            file_path: "src/lib.rs".to_string(),
+            line_range: Some((5, 25)),
+            priority: Priority::High,
+            score: 0.91,
+            confidence: 0.88,
+            issues: vec![issue],
+            suggestions: vec![suggestion],
+            issue_count: 1,
+            suggestion_count: 1,
+        };
+
+        let file_group = FileRefactoringGroup {
+            file_path: "src/lib.rs".to_string(),
+            file_name: "lib.rs".to_string(),
+            entity_count: 1,
+            highest_priority: Priority::High,
+            avg_score: 0.91,
+            total_issues: 1,
+            entities: vec![candidate.clone()],
+        };
+
+        AnalysisResults {
+            summary: AnalysisSummary {
+                files_processed: 1,
+                entities_analyzed: 1,
+                refactoring_needed: 1,
+                high_priority: 1,
+                critical: 0,
+                avg_refactoring_score: 0.91,
+                code_health_score: 0.74,
+                total_files: 1,
+                total_entities: 1,
+                total_lines_of_code: 140,
+                languages: vec!["rust".to_string()],
+                total_issues: 1,
+                high_priority_issues: 1,
+                critical_issues: 0,
+            },
+            refactoring_candidates: vec![candidate.clone()],
+            refactoring_candidates_by_file: vec![file_group],
+            statistics: AnalysisStatistics {
+                total_duration: Duration::from_secs(1),
+                avg_file_processing_time: Duration::from_millis(400),
+                avg_entity_processing_time: Duration::from_millis(200),
+                features_per_entity,
+                priority_distribution,
+                issue_distribution,
+                memory_stats: MemoryStats {
+                    peak_memory_bytes: 2_048,
+                    final_memory_bytes: 1_024,
+                    efficiency_score: 0.85,
+                },
+            },
+            health_metrics: None,
+            directory_health_tree: None,
+            clone_analysis: None,
+            coverage_packs: Vec::new(),
+            unified_hierarchy: vec![serde_json::json!({"id": "root", "children": []})],
+            warnings: vec!["Sample warning".to_string()],
+            code_dictionary: CodeDictionary::default(),
+        }
+    }
+
+    fn typed_analysis_results_json() -> serde_json::Value {
+        serde_json::to_value(build_sample_analysis_results())
+            .expect("analysis results should serialize")
+    }
 
     #[test]
     fn test_format_to_string() {
@@ -1934,6 +2192,21 @@ mod tests {
     }
 
     #[test]
+    fn test_display_analysis_results_low_issue_branch() {
+        let result = json!({
+            "summary": {
+                "total_files": 12,
+                "total_issues": 3,
+                "high_priority_issues": 1,
+                "critical_issues": 0,
+                "processing_time": 12.5
+            }
+        });
+
+        display_analysis_results(&result);
+    }
+
+    #[test]
     fn test_display_completion_summary() {
         let result = json!({
             "summary": {
@@ -1946,6 +2219,216 @@ mod tests {
 
         // Test that display_completion_summary doesn't panic
         display_completion_summary(&result, out_path, &OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_display_completion_summary_with_structure_packs() {
+        let result = rich_analysis_value();
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Html);
+    }
+
+    #[test]
+    fn test_display_completion_summary_with_hotspots_and_coverage() {
+        let result = json!({
+            "summary": {
+                "total_files": 42,
+                "total_issues": 7
+            },
+            "comprehensive_analysis": {
+                "structure": {
+                    "packs": [
+                        {
+                            "kind": "file_split",
+                            "name": "Large module.rs",
+                            "value": {
+                                "score": 0.88
+                            },
+                            "effort": {
+                                "exports": 5,
+                                "external_importers": 2
+                            }
+                        },
+                        {
+                            "kind": "branch_pack",
+                            "name": "services/api.py",
+                            "value": {
+                                "score": 0.75
+                            },
+                            "effort": {
+                                "exports": 2,
+                                "external_importers": 1
+                            }
+                        }
+                    ]
+                }
+            },
+            "coverage": {
+                "recommendations": [
+                    {
+                        "file": "src/lib.rs",
+                        "reason": "Low branch coverage"
+                    }
+                ]
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_display_completion_summary_no_issues() {
+        let result = json!({
+            "summary": {
+                "total_files": 15,
+                "total_issues": 0
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Pretty);
+    }
+
+    #[test]
+    fn test_display_completion_summary_handles_missing_summary() {
+        let result = json!({
+            "comprehensive_analysis": {
+                "structure": {
+                    "packs": []
+                }
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Markdown);
+    }
+
+    #[test]
+    fn test_display_completion_summary_with_existing_html_report() {
+        let result = json!({
+            "summary": {
+                "total_files": 8,
+                "total_issues": 2
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        let html_path = temp_dir.path().join("team_report.html");
+        fs::write(&html_path, "<!doctype html>").expect("html file should be created");
+
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Html);
+    }
+
+    #[test]
+    fn test_display_completion_summary_sonar_branch() {
+        let result = json!({
+            "summary": {
+                "total_issues": 5
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Sonar);
+    }
+
+    #[test]
+    fn test_display_completion_summary_csv_branch() {
+        let result = json!({
+            "summary": {
+                "total_issues": 4
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::Csv);
+    }
+
+    #[test]
+    fn test_display_completion_summary_ci_summary_branch() {
+        let result = json!({
+            "summary": {
+                "total_issues": 1
+            }
+        });
+
+        let temp_dir = TempDir::new().unwrap();
+        display_completion_summary(&result, temp_dir.path(), &OutputFormat::CiSummary);
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_writes_expected_files_without_analysis_results() {
+        let result = minimal_analysis_value();
+        let formats = vec![
+            (OutputFormat::Jsonl, "report.jsonl"),
+            (OutputFormat::Json, "analysis_results.json"),
+            (OutputFormat::Yaml, "analysis_results.yaml"),
+            (OutputFormat::Markdown, "team_report.md"),
+            (OutputFormat::Html, "team_report.html"),
+            (OutputFormat::Sonar, "sonarqube_issues.json"),
+            (OutputFormat::Csv, "analysis_data.csv"),
+            (OutputFormat::CiSummary, "ci_summary.json"),
+        ];
+
+        for (format, expected_file) in formats {
+            let temp_dir = tempdir().unwrap();
+            generate_outputs(&result, temp_dir.path(), &format)
+                .await
+                .unwrap();
+
+            let output_path = temp_dir.path().join(expected_file);
+            assert!(
+                output_path.exists(),
+                "Expected {} output at {}",
+                format_to_string(&format),
+                output_path.display()
+            );
+
+            match format {
+                OutputFormat::Jsonl => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    let expected = serde_json::to_string_pretty(&result).unwrap();
+                    assert_eq!(content, expected);
+                }
+                OutputFormat::Json => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    let expected = serde_json::to_string_pretty(&result).unwrap();
+                    assert_eq!(content, expected);
+                }
+                OutputFormat::Yaml => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    serde_yaml::from_str::<serde_json::Value>(&content).unwrap();
+                }
+                OutputFormat::Markdown => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    assert!(content.contains("# Valknut Analysis Report"));
+                }
+                OutputFormat::Html => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    assert!(content.contains("<!DOCTYPE html>"));
+                }
+                OutputFormat::Sonar => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+                    assert!(parsed.get("issues").is_some());
+                }
+                OutputFormat::Csv => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    assert!(content.starts_with("File,Issue Type,Severity,Description"));
+                }
+                OutputFormat::CiSummary => {
+                    let content = tokio::fs::read_to_string(&output_path).await.unwrap();
+                    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+                    assert_eq!(parsed["status"], "success");
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let pretty_dir = tempdir().unwrap();
+        generate_outputs(&result, pretty_dir.path(), &OutputFormat::Pretty)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1967,6 +2450,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_generate_markdown_report_with_detailed_sections() {
+        let result = rich_analysis_value();
+        let markdown = generate_markdown_report(&result).await.unwrap();
+        assert!(markdown.contains("## Issues Requiring Attention"));
+        assert!(markdown.contains("### High Priority Files"));
+        assert!(markdown.contains("Split `analyze` into focused helpers"));
+        assert!(markdown.contains("Average Cyclomatic Complexity"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_with_feedback_runs_spinner() {
+        let result = minimal_analysis_value();
+        let temp_dir = tempdir().unwrap();
+
+        generate_outputs_with_feedback(&result, temp_dir.path(), &OutputFormat::Json, false)
+            .await
+            .expect("spinner path should succeed");
+
+        let output_path = temp_dir.path().join("analysis_results.json");
+        assert!(
+            output_path.exists(),
+            "json output should exist after generation with feedback"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_with_feedback_quiet_mode() {
+        let result = minimal_analysis_value();
+        let temp_dir = tempdir().unwrap();
+
+        generate_outputs_with_feedback(&result, temp_dir.path(), &OutputFormat::Jsonl, true)
+            .await
+            .expect("quiet path should succeed");
+
+        let output_path = temp_dir.path().join("report.jsonl");
+        assert!(
+            output_path.exists(),
+            "jsonl output should exist after quiet generation"
+        );
+    }
+
+    #[tokio::test]
     async fn test_generate_html_report() {
         let result = json!({
             "summary": {
@@ -1982,6 +2507,16 @@ mod tests {
         assert!(html.contains("<title>Valknut Analysis Report</title>"));
         assert!(html.contains("5"));
         assert!(html.contains("body"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_html_report_with_detailed_sections() {
+        let result = rich_analysis_value();
+        let html = generate_html_report(&result).await.unwrap();
+        assert!(html.contains("🔥 High Priority Files"));
+        assert!(html.contains("📊 Health Metrics"));
+        assert!(html.contains("Extract helper for parsing block"));
+        assert!(html.contains("metric-card"));
     }
 
     #[tokio::test]
@@ -2003,6 +2538,27 @@ mod tests {
         assert!(sonar.contains("\"issues\": []"));
         assert!(sonar.contains("\"version\": \"1.0\""));
         assert!(sonar.contains("\"summary\""));
+    }
+
+    #[tokio::test]
+    async fn test_generate_sonar_report_with_nested_data() {
+        let result = rich_analysis_value();
+        let sonar = generate_sonar_report(&result).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&sonar).unwrap();
+        let issues = parsed["issues"].as_array().unwrap();
+        assert!(!issues.is_empty());
+        assert!(issues.iter().any(|issue| {
+            issue["ruleId"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("cyclomatic")
+        }));
+        assert!(issues.iter().any(|issue| {
+            issue["ruleId"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("extractmethod")
+        }));
     }
 
     #[tokio::test]
@@ -2028,6 +2584,15 @@ mod tests {
 
         let csv = generate_csv_report(&result).await.unwrap();
         assert!(csv.contains("File,Issue Type,Severity,Description"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_csv_report_with_nested_data() {
+        let result = rich_analysis_value();
+        let csv = generate_csv_report(&result).await.unwrap();
+        assert!(csv.contains("ExtractMethod"));
+        assert!(csv.contains("ReduceComplexity"));
+        assert!(csv.contains("branch"));
     }
 
     #[tokio::test]
@@ -2085,6 +2650,30 @@ mod tests {
         assert_eq!(parsed["summary"]["critical_issues"], 8);
     }
 
+    #[tokio::test]
+    async fn test_generate_ci_summary_report_with_metrics() {
+        let result = rich_analysis_value();
+        let summary = generate_ci_summary_report(&result).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&summary).unwrap();
+        assert_eq!(parsed["status"], "issues_found");
+        assert_eq!(parsed["summary"]["total_files"], 4);
+        assert!(
+            (parsed["metrics"]["average_cyclomatic_complexity"]
+                .as_f64()
+                .unwrap()
+                - 18.0)
+                .abs()
+                < f64::EPSILON
+        );
+        assert!(
+            parsed["quality_gates"]["recommendations"]
+                .as_array()
+                .unwrap()
+                .len()
+                >= 1
+        );
+    }
+
     #[test]
     fn test_print_human_readable_results() {
         let results = json!({
@@ -2106,6 +2695,34 @@ mod tests {
     }
 
     #[test]
+    fn test_print_human_readable_results_with_packs() {
+        let results = json!({
+            "packs": [
+                {
+                    "kind": "branch",
+                    "file": "src/lib.rs",
+                    "directory": "src",
+                    "reasons": [
+                        "Directory has divergent responsibilities",
+                        "High change frequency"
+                    ]
+                }
+            ]
+        });
+
+        print_human_readable_results(&results);
+    }
+
+    #[test]
+    fn test_print_human_readable_results_with_empty_packs() {
+        let results = json!({
+            "packs": []
+        });
+
+        print_human_readable_results(&results);
+    }
+
+    #[test]
     fn test_print_comprehensive_results_pretty() {
         let results = json!({
             "summary": {
@@ -2122,64 +2739,124 @@ mod tests {
     }
 
     #[test]
-    fn test_display_refactoring_suggestions() {
+    fn test_print_comprehensive_results_pretty_with_issues() {
         let results = json!({
-            "refactoring_opportunities": [
-                {
-                    "type": "extract_method",
-                    "file": "main.rs",
-                    "line": 50,
-                    "description": "Extract complex method",
-                    "impact": "high"
-                },
-                {
-                    "type": "reduce_complexity",
-                    "file": "utils.rs",
-                    "line": 25,
-                    "description": "Simplify conditional logic",
-                    "impact": "medium"
-                }
-            ]
+            "summary": {
+                "total_files": 12,
+                "total_issues": 6
+            }
         });
 
-        // Test that display_refactoring_suggestions doesn't panic
+        print_comprehensive_results_pretty(&results);
+    }
+
+    #[test]
+    fn test_display_refactoring_suggestions_renders_recommendations() {
+        let results = json!({
+            "refactoring": {
+                "enabled": true,
+                "opportunities_count": 2,
+                "detailed_results": [
+                    {
+                        "file_path": "src/lib.rs",
+                        "recommendations": [
+                            {
+                                "refactoring_type": "ExtractMethod",
+                                "description": "Extract helper function",
+                                "estimated_impact": 8.0,
+                                "estimated_effort": 3.0,
+                                "priority_score": 0.95
+                            },
+                            {
+                                "refactoring_type": "ReduceComplexity",
+                                "description": "Flatten nested loops",
+                                "estimated_impact": 6.5,
+                                "estimated_effort": 4.0,
+                                "priority_score": 0.75
+                            }
+                        ]
+                    },
+                    {
+                        "file_path": "src/helpers.rs",
+                        "recommendations": [
+                            {
+                                "refactoring_type": "ImproveNaming",
+                                "description": "Clarify helper names",
+                                "estimated_impact": 4.0,
+                                "estimated_effort": 2.0,
+                                "priority_score": 0.4
+                            }
+                        ]
+                    }
+                ]
+            }
+        });
+
         display_refactoring_suggestions(&results);
     }
 
     #[test]
     fn test_display_refactoring_suggestions_empty() {
         let results = json!({
-            "refactoring_opportunities": []
+            "refactoring": {
+                "enabled": true,
+                "opportunities_count": 0,
+                "detailed_results": []
+            }
         });
 
-        // Test that display_refactoring_suggestions handles empty list
         display_refactoring_suggestions(&results);
     }
 
     #[test]
-    fn test_display_complexity_recommendations() {
+    fn test_display_complexity_recommendations_outputs_effort_labels() {
         let results = json!({
-            "complexity_issues": [
-                {
-                    "file": "complex.rs",
-                    "function": "process_data",
-                    "complexity": 15,
-                    "recommendation": "Split into smaller functions"
-                }
-            ]
+            "complexity": {
+                "enabled": true,
+                "detailed_results": [
+                    {
+                        "file_path": "src/service.rs",
+                        "recommendations": [
+                            {
+                                "description": "Split handler into smaller modules",
+                                "effort": 3
+                            },
+                            {
+                                "description": "Introduce early returns",
+                                "effort": 6
+                            }
+                        ]
+                    },
+                    {
+                        "file_path": "src/worker.rs",
+                        "recommendations": [
+                            {
+                                "description": "Reduce branching depth",
+                                "effort": 8
+                            }
+                        ]
+                    }
+                ]
+            }
         });
 
-        // Test that display_complexity_recommendations doesn't panic
         display_complexity_recommendations(&results);
     }
 
     #[test]
     fn test_display_complexity_recommendations_empty() {
         let results = json!({
-            "complexity_issues": []
+            "complexity": {
+                "enabled": true,
+                "detailed_results": [
+                    {
+                        "file_path": "src/lib.rs",
+                        "recommendations": []
+                    }
+                ]
+            }
         });
 
-        // Test that display_complexity_recommendations handles empty data
         display_complexity_recommendations(&results);
     }
 
@@ -2202,6 +2879,30 @@ mod tests {
 
         let content = fs::read_to_string(&json_file).unwrap();
         assert!(content.contains("total_files"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_json_with_serialized_results() {
+        let temp_dir = TempDir::new().unwrap();
+        let out_path = temp_dir.path().join("output_structured");
+
+        let mut analysis = AnalysisResults::empty();
+        analysis.summary.files_processed = 2;
+        analysis.summary.entities_analyzed = 4;
+        analysis.summary.code_health_score = 0.82;
+        let value = serde_json::to_value(&analysis).expect("serialize analysis results");
+
+        generate_outputs(&value, &out_path, &OutputFormat::Json)
+            .await
+            .expect("structured output generation");
+
+        let json_file = out_path.join("analysis_results.json");
+        assert!(
+            json_file.exists(),
+            "expected generator to write json report"
+        );
+        let content = fs::read_to_string(&json_file).unwrap();
+        assert!(content.contains("\"files_processed\": 2"));
     }
 
     #[tokio::test]
@@ -2442,5 +3143,72 @@ mod tests {
         // Should handle missing fields gracefully
         let result = generate_outputs(&result, &out_path, &OutputFormat::Json).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_with_structured_analysis_results() {
+        let temp_dir = TempDir::new().unwrap();
+        let out_path = temp_dir.path().join("typed_results");
+
+        let structured = typed_analysis_results_json();
+
+        generate_outputs(&structured, &out_path, &OutputFormat::Json)
+            .await
+            .expect("json report generation should succeed");
+        generate_outputs(&structured, &out_path, &OutputFormat::Markdown)
+            .await
+            .expect("markdown report generation should succeed");
+
+        let json_path = out_path.join("analysis_results.json");
+        let markdown_path = out_path.join("team_report.md");
+
+        assert!(json_path.exists());
+        assert!(markdown_path.exists());
+
+        let json_contents = fs::read_to_string(&json_path).unwrap();
+        assert!(
+            json_contents.contains("refactoring_candidates"),
+            "structured JSON output should include candidate data"
+        );
+
+        let markdown_contents = fs::read_to_string(&markdown_path).unwrap();
+        assert!(
+            markdown_contents.contains("Files Analyzed"),
+            "markdown output should include summary heading"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_outputs_with_analysis_results_across_formats() {
+        let temp_dir = TempDir::new().unwrap();
+        let out_path = temp_dir.path().join("analysis_formats");
+        let structured = serde_json::to_value(build_sample_analysis_results()).unwrap();
+
+        generate_outputs(&structured, &out_path, &OutputFormat::Html)
+            .await
+            .expect("html generation with analysis results should succeed");
+        let html = fs::read_to_string(out_path.join("team_report.html")).unwrap();
+        assert!(
+            html.contains("Analysis Overview") || html.contains("Valknut"),
+            "html report should include rendered content"
+        );
+
+        generate_outputs(&structured, &out_path, &OutputFormat::Csv)
+            .await
+            .expect("csv generation with analysis results should succeed");
+        let csv = fs::read_to_string(out_path.join("analysis_data.csv")).unwrap();
+        assert!(
+            csv.contains("src/lib.rs"),
+            "csv output should reference file paths from AnalysisResults"
+        );
+
+        generate_outputs(&structured, &out_path, &OutputFormat::Sonar)
+            .await
+            .expect("sonar generation with analysis results should succeed");
+        let sonar = fs::read_to_string(out_path.join("sonarqube_issues.json")).unwrap();
+        assert!(
+            sonar.contains("\"issues\""),
+            "sonar output should contain issues array"
+        );
     }
 }

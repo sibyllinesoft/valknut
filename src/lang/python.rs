@@ -178,6 +178,112 @@ if __name__ == "__main__":
             "Should find no entities in comment-only file"
         );
     }
+
+    #[test]
+    fn test_extract_imports_supports_star_and_named() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+import os
+from typing import List, Dict
+from custom.utils import *
+"#;
+
+        let imports = adapter.extract_imports(source).expect("imports parsed");
+        assert_eq!(imports.len(), 3);
+        assert!(imports.iter().any(|imp| imp.module == "os"));
+        assert!(imports
+            .iter()
+            .any(|imp| imp.module == "typing" && imp.import_type == "named"));
+        assert!(imports
+            .iter()
+            .any(|imp| imp.module == "custom.utils" && imp.import_type == "star"));
+    }
+
+    #[test]
+    fn test_extract_function_calls_and_identifiers() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+import math
+
+def compute(value):
+    print(value)
+    math.sqrt(value)
+    helper(value)
+
+def helper(value):
+    return value * 2
+
+compute(10)
+"#;
+
+        let calls = adapter
+            .extract_function_calls(source)
+            .expect("function calls extracted");
+        assert!(calls.contains(&"print".to_string()));
+        assert!(calls.iter().any(|call| call.contains("math.sqrt")));
+        assert!(calls.contains(&"helper".to_string()));
+
+        let identifiers = adapter
+            .extract_identifiers(source)
+            .expect("identifiers extracted");
+        assert!(identifiers.contains(&"compute".to_string()));
+        assert!(identifiers.contains(&"helper".to_string()));
+    }
+
+    #[test]
+    fn test_contains_boilerplate_patterns_detects_common_cases() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+import os
+from typing import List
+
+def main():
+    pass
+
+if __name__ == "__main__":
+    main()
+"#;
+
+        let patterns = vec![
+            "import os".to_string(),
+            "from typing import".to_string(),
+            "if __name__ == \"__main__\"".to_string(),
+        ];
+        let found = adapter
+            .contains_boilerplate_patterns(source, &patterns)
+            .expect("boilerplate detection");
+
+        assert!(found.contains(&"import os".to_string()));
+        assert!(found.contains(&"from typing import".to_string()));
+        assert!(found.contains(&"if __name__ == \"__main__\"".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_and_count_python_ast_metrics() {
+        let mut adapter = PythonAdapter::new().unwrap();
+        let source = r#"
+def outer(value):
+    if value > 10:
+        return value + 1
+    return value - 1
+"#;
+
+        let normalized = adapter
+            .normalize_source(source)
+            .expect("normalization should succeed");
+        assert!(normalized.contains("function_definition"));
+        assert!(normalized.contains("if_statement"));
+
+        let node_count = adapter
+            .count_ast_nodes(source)
+            .expect("node counting should succeed");
+        assert!(node_count > 0);
+
+        let block_count = adapter
+            .count_distinct_blocks(source)
+            .expect("block counting should succeed");
+        assert!(block_count >= 2);
+    }
 }
 
 /// Python-specific parsing and analysis

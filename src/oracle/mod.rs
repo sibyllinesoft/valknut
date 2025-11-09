@@ -1022,9 +1022,282 @@ fn html_escape(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use once_cell::sync::Lazy;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+    use std::time::Duration;
+    use tempfile::tempdir;
+
+    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
     use crate::core::pipeline::*;
     use crate::core::scoring::Priority;
-    use std::path::PathBuf;
+
+    fn oracle_config_fixture(max_tokens: usize) -> OracleConfig {
+        OracleConfig {
+            api_key: "test-key".to_string(),
+            max_tokens,
+            api_endpoint: "https://api.example.com".to_string(),
+            model: "test-model".to_string(),
+        }
+    }
+
+    fn sample_candidate(
+        file_path: &Path,
+        entity_name: &str,
+        issue_code: &str,
+        suggestion_code: &str,
+        suggestion_type: &str,
+        priority: Priority,
+        severity: f64,
+        suggestion_priority: f64,
+    ) -> RefactoringCandidate {
+        RefactoringCandidate {
+            entity_id: format!("{}::{entity_name}", file_path.display()),
+            name: entity_name.to_string(),
+            file_path: file_path.to_string_lossy().to_string(),
+            line_range: Some((12, 48)),
+            priority,
+            score: 70.0 + severity * 20.0,
+            confidence: 0.8 + (severity / 5.0).min(0.15),
+            issues: vec![RefactoringIssue {
+                code: issue_code.to_string(),
+                category: "Complexity Hotspot".to_string(),
+                severity,
+                contributing_features: vec![FeatureContribution {
+                    feature_name: "cyclomatic_complexity".to_string(),
+                    value: 18.0,
+                    normalized_value: 0.9,
+                    contribution: 0.45,
+                }],
+            }],
+            suggestions: vec![RefactoringSuggestion {
+                refactoring_type: suggestion_type.to_string(),
+                code: suggestion_code.to_string(),
+                priority: suggestion_priority,
+                effort: 0.3,
+                impact: 0.7,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        }
+    }
+
+    fn sample_directory_tree(project_root: &Path) -> DirectoryHealthTree {
+        let root_path = project_root.to_path_buf();
+        let src_path = project_root.join("src");
+
+        let mut root_score = DirectoryHealthScore {
+            path: root_path.clone(),
+            health_score: 0.48,
+            file_count: 3,
+            entity_count: 5,
+            refactoring_needed: 2,
+            critical_issues: 1,
+            high_priority_issues: 1,
+            avg_refactoring_score: 74.0,
+            weight: 1.0,
+            children: vec![src_path.clone()],
+            parent: None,
+            issue_categories: HashMap::new(),
+        };
+
+        let mut src_score = DirectoryHealthScore {
+            path: src_path.clone(),
+            health_score: 0.35,
+            file_count: 2,
+            entity_count: 4,
+            refactoring_needed: 2,
+            critical_issues: 1,
+            high_priority_issues: 1,
+            avg_refactoring_score: 70.0,
+            weight: 1.0,
+            children: Vec::new(),
+            parent: Some(root_path.clone()),
+            issue_categories: HashMap::new(),
+        };
+
+        root_score.issue_categories.insert(
+            "complexity".to_string(),
+            DirectoryIssueSummary {
+                category: "complexity".to_string(),
+                affected_entities: 2,
+                avg_severity: 0.75,
+                max_severity: 0.92,
+                health_impact: 0.5,
+            },
+        );
+
+        src_score.issue_categories.insert(
+            "complexity".to_string(),
+            DirectoryIssueSummary {
+                category: "complexity".to_string(),
+                affected_entities: 2,
+                avg_severity: 0.82,
+                max_severity: 0.95,
+                health_impact: 0.6,
+            },
+        );
+
+        let mut directories = HashMap::new();
+        directories.insert(root_path.clone(), root_score.clone());
+        directories.insert(src_path.clone(), src_score.clone());
+
+        let mut health_by_depth = HashMap::new();
+        health_by_depth.insert(
+            0,
+            DepthHealthStats {
+                depth: 0,
+                directory_count: 1,
+                avg_health_score: 0.48,
+                min_health_score: 0.48,
+                max_health_score: 0.48,
+            },
+        );
+        health_by_depth.insert(
+            1,
+            DepthHealthStats {
+                depth: 1,
+                directory_count: 1,
+                avg_health_score: 0.35,
+                min_health_score: 0.35,
+                max_health_score: 0.35,
+            },
+        );
+
+        DirectoryHealthTree {
+            root: root_score,
+            directories,
+            tree_statistics: TreeStatistics {
+                total_directories: 2,
+                max_depth: 1,
+                avg_health_score: 0.415,
+                health_score_std_dev: 0.05,
+                hotspot_directories: vec![DirectoryHotspot {
+                    path: src_path,
+                    health_score: 0.35,
+                    rank: 1,
+                    primary_issue_category: "complexity".to_string(),
+                    recommendation: "Split large modules".to_string(),
+                }],
+                health_by_depth,
+            },
+        }
+    }
+
+    fn analysis_results_fixture(project_root: &Path) -> AnalysisResults {
+        let lib_path = project_root.join("src/lib.rs");
+        let utils_path = project_root.join("src/utils.rs");
+
+        let summary = AnalysisSummary {
+            files_processed: 3,
+            entities_analyzed: 6,
+            refactoring_needed: 2,
+            high_priority: 1,
+            critical: 1,
+            avg_refactoring_score: 72.5,
+            code_health_score: 0.42,
+            total_files: 3,
+            total_entities: 6,
+            total_lines_of_code: 420,
+            languages: vec!["Rust".to_string()],
+            total_issues: 4,
+            high_priority_issues: 2,
+            critical_issues: 1,
+        };
+
+        let mut code_dictionary = CodeDictionary::default();
+        code_dictionary.issues.insert(
+            "VX001".to_string(),
+            CodeDefinition {
+                code: "VX001".to_string(),
+                title: "Cyclomatic spike".to_string(),
+                summary: "Cyclomatic complexity exceeded preferred range".to_string(),
+                category: Some("complexity".to_string()),
+            },
+        );
+        code_dictionary.issues.insert(
+            "VX002".to_string(),
+            CodeDefinition {
+                code: "VX002".to_string(),
+                title: "Excessive branching".to_string(),
+                summary: "Branching factor suggests decomposition".to_string(),
+                category: Some("structure".to_string()),
+            },
+        );
+        code_dictionary.suggestions.insert(
+            "RX001".to_string(),
+            CodeDefinition {
+                code: "RX001".to_string(),
+                title: "Extract helper".to_string(),
+                summary: "Split logic into dedicated helper functions".to_string(),
+                category: Some("refactoring".to_string()),
+            },
+        );
+        code_dictionary.suggestions.insert(
+            "RX002".to_string(),
+            CodeDefinition {
+                code: "RX002".to_string(),
+                title: "Simplify branches".to_string(),
+                summary: "Reduce branching to clarify business rules".to_string(),
+                category: Some("refactoring".to_string()),
+            },
+        );
+
+        AnalysisResults {
+            summary,
+            refactoring_candidates: vec![
+                sample_candidate(
+                    &lib_path,
+                    "crate::lib::hotspot",
+                    "VX001",
+                    "RX001",
+                    "Extract Method",
+                    Priority::Critical,
+                    0.92,
+                    0.9,
+                ),
+                sample_candidate(
+                    &utils_path,
+                    "crate::utils::helper",
+                    "VX002",
+                    "RX002",
+                    "Simplify Branches",
+                    Priority::High,
+                    0.78,
+                    0.7,
+                ),
+            ],
+            refactoring_candidates_by_file: Vec::new(),
+            statistics: AnalysisStatistics {
+                total_duration: Duration::from_secs(2),
+                avg_file_processing_time: Duration::from_millis(120),
+                avg_entity_processing_time: Duration::from_millis(45),
+                features_per_entity: HashMap::new(),
+                priority_distribution: HashMap::new(),
+                issue_distribution: HashMap::new(),
+                memory_stats: MemoryStats {
+                    peak_memory_bytes: 512_000,
+                    final_memory_bytes: 256_000,
+                    efficiency_score: 0.82,
+                },
+            },
+            directory_health_tree: Some(sample_directory_tree(project_root)),
+            clone_analysis: None,
+            coverage_packs: Vec::new(),
+            unified_hierarchy: Vec::new(),
+            warnings: Vec::new(),
+            health_metrics: Some(HealthMetrics {
+                overall_health_score: 58.0,
+                maintainability_score: 52.0,
+                technical_debt_ratio: 71.0,
+                complexity_score: 83.0,
+                structure_quality_score: 45.0,
+            }),
+            code_dictionary,
+        }
+    }
 
     #[test]
     fn test_oracle_config_creation() {
@@ -1043,7 +1316,7 @@ mod tests {
 
     #[test]
     fn test_oracle_config_from_env_missing_key() {
-        // Remove any existing GEMINI_API_KEY
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::remove_var("GEMINI_API_KEY");
 
         let result = OracleConfig::from_env();
@@ -1053,6 +1326,7 @@ mod tests {
 
     #[test]
     fn test_oracle_config_from_env_with_key() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("GEMINI_API_KEY", "test-api-key");
 
         let result = OracleConfig::from_env();
@@ -1411,6 +1685,132 @@ mod tests {
         assert_eq!(
             response.candidates[0].content.parts[0].text,
             "response text"
+        );
+    }
+
+    #[test]
+    fn truncate_hint_adds_ellipsis_for_long_labels() {
+        let short = truncate_hint("High risk", 20);
+        assert_eq!(short, "High risk");
+
+        let long = truncate_hint("VeryLongRefactorHintIdentifierThatShouldBeTrimmed", 16);
+        assert!(long.ends_with('…'));
+        assert!(long.chars().count() <= 16);
+    }
+
+    #[test]
+    fn normalize_path_for_key_flattens_backslashes() {
+        assert_eq!(
+            normalize_path_for_key(r"src\module\lib.rs"),
+            "src/module/lib.rs"
+        );
+        assert_eq!(normalize_path_for_key(""), "");
+    }
+
+    #[test]
+    fn build_refactor_hints_normalizes_paths_and_limits_size() {
+        let project = tempdir().unwrap();
+        let root = project.path().join("workspace");
+        fs::create_dir_all(root.join("src")).unwrap();
+        let results = analysis_results_fixture(&root);
+        let hints = build_refactor_hints(&results, &root);
+
+        let entry = hints
+            .get("src/lib.rs")
+            .expect("expected lib.rs hints entry");
+        assert!(
+            entry.iter().all(|hint| hint.len() <= 60),
+            "hint should be truncated to configured length"
+        );
+        assert!(
+            entry.iter().any(|hint| hint.contains("CH")),
+            "category abbreviation should be included"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_codebase_bundle_includes_readme_and_skips_large_files() {
+        let project = tempdir().unwrap();
+        let root = project.path().join("workspace");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("README.md"),
+            "# Sample Project\n\nImportant overview.",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn compute(value: i32) -> i32 { value * 2 }\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/utils.rs"),
+            "pub fn helper(flag: bool) -> bool { if flag { !flag } else { flag } }\n",
+        )
+        .unwrap();
+        let large_body = "fn enormous_task() {}\n".repeat(400);
+        fs::write(root.join("src/huge.rs"), large_body).unwrap();
+
+        let results = analysis_results_fixture(&root);
+        let oracle = RefactoringOracle::new(oracle_config_fixture(180));
+
+        let bundle = oracle
+            .create_codebase_bundle(&root, &results)
+            .await
+            .expect("bundle creation");
+
+        assert!(bundle.contains("README.md"));
+        assert!(bundle.contains("src/lib.rs"));
+        assert!(
+            !bundle.contains("src/huge.rs"),
+            "large file should be skipped when exceeding budget"
+        );
+        assert!(
+            bundle.contains("CH 92%") && bundle.contains("EM"),
+            "refactor hints should be embedded in tuple labels"
+        );
+    }
+
+    #[test]
+    fn condense_analysis_results_with_budget_handles_limits_and_health_section() {
+        let project = tempdir().unwrap();
+        let root = project.path().join("workspace");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn demo() {}\n").unwrap();
+        fs::write(root.join("src/utils.rs"), "fn helper() {}\n").unwrap();
+
+        let results = analysis_results_fixture(&root);
+        let oracle = RefactoringOracle::new(oracle_config_fixture(500));
+
+        let limited = oracle
+            .condense_analysis_results_with_budget(&results, 90)
+            .expect("condense with tight budget");
+        assert!(
+            !limited.contains("crate::lib::hotspot") && !limited.contains("crate::utils::helper"),
+            "candidates should be omitted when budget is exhausted before listing them"
+        );
+
+        let mut expanded_results = analysis_results_fixture(&root);
+        expanded_results
+            .refactoring_candidates
+            .push(sample_candidate(
+                &root.join("src/core.rs"),
+                "crate::core::planner",
+                "VX002",
+                "RX002",
+                "Simplify Branches",
+                Priority::High,
+                0.68,
+                0.6,
+            ));
+
+        let expanded = oracle
+            .condense_analysis_results_with_budget(&expanded_results, 420)
+            .expect("condense with ample budget");
+        assert!(expanded.contains("Directory Health Overview"));
+        assert!(
+            expanded.contains("helper"),
+            "refactoring candidate names should appear when budget allows"
         );
     }
 }

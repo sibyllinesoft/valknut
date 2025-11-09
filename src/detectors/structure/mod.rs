@@ -316,3 +316,220 @@ impl FeatureExtractor for StructureExtractor {
         Ok(features)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::config::ValknutConfig;
+    use crate::core::featureset::{CodeEntity, ExtractionContext};
+    use serde_json::Value;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    fn sample_directory_metrics() -> DirectoryMetrics {
+        DirectoryMetrics {
+            files: 10,
+            subdirs: 2,
+            loc: 1_000,
+            gini: 0.5,
+            entropy: 0.8,
+            file_pressure: 0.4,
+            branch_pressure: 0.3,
+            size_pressure: 0.6,
+            dispersion: 0.55,
+            imbalance: 0.9,
+        }
+    }
+
+    fn sample_branch_pack() -> BranchReorgPack {
+        BranchReorgPack {
+            kind: "branch_reorg".to_string(),
+            dir: PathBuf::from("src"),
+            current: sample_directory_metrics(),
+            proposal: vec![DirectoryPartition {
+                name: "src/core".to_string(),
+                files: vec![PathBuf::from("src/core/lib.rs")],
+                loc: 600,
+            }],
+            file_moves: vec![FileMove {
+                from: PathBuf::from("src/lib.rs"),
+                to: PathBuf::from("src/core/lib.rs"),
+            }],
+            gain: ReorganizationGain {
+                imbalance_delta: 0.3,
+                cross_edges_reduced: 2,
+            },
+            effort: ReorganizationEffort {
+                files_moved: 1,
+                import_updates_est: 0,
+            },
+            rules: vec!["Preserve module boundaries".to_string()],
+        }
+    }
+
+    fn sample_file_split_pack() -> FileSplitPack {
+        FileSplitPack {
+            kind: "file_split".to_string(),
+            file: PathBuf::from("src/big.rs"),
+            reasons: vec!["loc 2500 > 1500".to_string()],
+            suggested_splits: vec![SuggestedSplit {
+                name: "src/big_extract.rs".to_string(),
+                entities: vec!["process".to_string(), "handle".to_string()],
+                loc: 800,
+            }],
+            value: SplitValue { score: 0.75 },
+            effort: SplitEffort {
+                exports: 2,
+                external_importers: 1,
+            },
+        }
+    }
+
+    #[test]
+    fn structure_recommendations_iterates_all_packs() {
+        let recommendations = StructureRecommendations {
+            branch_reorg_packs: vec![sample_branch_pack()],
+            file_split_packs: vec![sample_file_split_pack()],
+        };
+
+        assert_eq!(recommendations.len(), 2);
+        assert!(!recommendations.is_empty());
+
+        let json_values: Vec<_> = recommendations.into_iter().collect();
+        assert_eq!(json_values.len(), 2);
+        assert!(json_values
+            .iter()
+            .any(|value| value.get("kind") == Some(&Value::String("branch_reorg".into()))));
+    }
+
+    #[tokio::test]
+    async fn structure_extractor_respects_disabled_packs() {
+        let temp = tempdir().expect("temp dir");
+        let mut config = StructureConfig::default();
+        config.enable_branch_packs = false;
+        config.enable_file_split_packs = false;
+        let extractor = StructureExtractor::with_config(config);
+
+        let recommendations = extractor
+            .generate_recommendations(temp.path())
+            .await
+            .expect("generate recommendations");
+
+        assert!(recommendations.is_empty());
+    }
+
+    #[test]
+    fn structure_extractor_registers_expected_features() {
+        let extractor = StructureExtractor::new();
+        assert_eq!(extractor.name(), "structure");
+
+        let feature_names: Vec<_> = extractor
+            .features()
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
+        assert_eq!(
+            feature_names,
+            vec![
+                "directory_imbalance",
+                "file_pressure",
+                "branch_pressure",
+                "size_pressure",
+                "loc_dispersion",
+                "branch_reorg_value",
+                "file_split_value"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn structure_extractor_extract_returns_defaults_on_error() {
+        let extractor = StructureExtractor::default();
+        let config = Arc::new(ValknutConfig::default());
+        let context = ExtractionContext::new(config, "rust");
+
+        let entity = CodeEntity::new("entity-1", "File", "missing.rs", "/tmp/missing.rs")
+            .with_line_range(1, 10);
+
+        let features = extractor
+            .extract(&entity, &context)
+            .await
+            .expect("extract features");
+
+        assert_eq!(extractor.features().len(), 7);
+        for key in [
+            "directory_imbalance",
+            "file_pressure",
+            "branch_pressure",
+            "size_pressure",
+            "loc_dispersion",
+            "branch_reorg_value",
+            "file_split_value",
+        ] {
+            let value = *features
+                .get(key)
+                .unwrap_or_else(|| panic!("missing feature {key}"));
+            assert!(
+                value >= 0.0 && value <= 1.0,
+                "expected normalized value for feature {key}, got {value}"
+            );
+        }
+
+        assert_eq!(features["file_split_value"], 0.0);
+    }
+
+    #[tokio::test]
+    async fn structure_extractor_extracts_and_caches_directory_metrics() {
+        let temp = tempdir().expect("temp dir");
+        let src_dir = temp.path().join("src");
+        std::fs::create_dir(&src_dir).expect("create src directory");
+
+        let file_path = src_dir.join("lib.rs");
+        std::fs::write(&file_path, "fn demo() {}\n// comment\nfn helper() {}\n")
+            .expect("write file");
+
+        let extractor = StructureExtractor::new();
+
+        let first_metrics = extractor
+            .calculate_directory_metrics(&src_dir)
+            .expect("metrics");
+        assert_eq!(first_metrics.files, 1);
+
+        let cached_metrics = extractor
+            .calculate_directory_metrics(&src_dir)
+            .expect("cached metrics");
+        assert!(
+            (first_metrics.imbalance - cached_metrics.imbalance).abs() < f64::EPSILON,
+            "cached metrics should match initial computation"
+        );
+
+        let entity = CodeEntity::new(
+            "entity-src",
+            "module",
+            "demo",
+            file_path.to_string_lossy().to_string(),
+        )
+        .with_line_range(1, 4);
+        let context = ExtractionContext::new(Arc::new(ValknutConfig::default()), "rust");
+        let features = extractor
+            .extract(&entity, &context)
+            .await
+            .expect("extract features");
+
+        assert!(features.contains_key("directory_imbalance"));
+        assert!(features.contains_key("file_split_value"));
+    }
+
+    #[test]
+    fn structure_extractor_exposes_statistical_helpers() {
+        let extractor = StructureExtractor::default();
+        assert!((extractor.calculate_gini_coefficient(&[1, 1, 1]) - 0.0).abs() < 1e-6);
+        assert!((extractor.calculate_entropy(&[1, 1]) - 1.0).abs() < 1e-6);
+        assert!(
+            extractor.calculate_size_normalization_factor(10, 1_000) >= 1.0,
+            "size normalization should be non-zero"
+        );
+    }
+}

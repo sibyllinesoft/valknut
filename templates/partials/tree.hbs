@@ -112,6 +112,106 @@
                 };
             }
 
+            function collectEntityDetails(nodes) {
+                if (!Array.isArray(nodes)) {
+                    return;
+                }
+
+                const ISSUE_TYPES = new Set(['issue', 'issue-row']);
+                const SUGGESTION_TYPES = new Set(['suggestion', 'suggestion-row']);
+                const CATEGORY_TYPES = new Set(['category']);
+                const INFO_TYPES = new Set(['info', 'info-row']);
+
+                const cloneNode = (detail) => {
+                    if (!detail || typeof detail !== 'object') {
+                        return null;
+                    }
+                    const { children, ...rest } = detail;
+                    return { ...rest };
+                };
+
+                const appendIssue = (entity, issue) => {
+                    const payload = cloneNode(issue);
+                    if (!payload) return;
+                    entity.issues = Array.isArray(entity.issues) ? entity.issues : [];
+                    entity.issues.push(payload);
+                };
+
+                const appendSuggestion = (entity, suggestion) => {
+                    const payload = cloneNode(suggestion);
+                    if (!payload) return;
+                    entity.suggestions = Array.isArray(entity.suggestions) ? entity.suggestions : [];
+                    entity.suggestions.push(payload);
+                };
+
+                const appendInfo = (entity, info) => {
+                    if (!info || typeof info !== 'object') {
+                        return;
+                    }
+                    const label = String(info.name || info.title || '').toLowerCase();
+                    const numeric = Number(String(info.name || '').replace(/[^0-9.]/g, ''));
+                    entity.coverage = entity.coverage || { coverageBefore: null, coverageAfter: null, linesOfCode: null };
+                    if (label.includes('coverage before') && Number.isFinite(numeric)) {
+                        entity.coverage.coverageBefore = numeric > 1 ? numeric / 100 : numeric;
+                    } else if (label.includes('coverage after') && Number.isFinite(numeric)) {
+                        entity.coverage.coverageAfter = numeric > 1 ? numeric / 100 : numeric;
+                    } else if (label.includes('lines of code') && Number.isFinite(numeric)) {
+                        entity.coverage.linesOfCode = Math.round(numeric);
+                    }
+                };
+
+                nodes.forEach((node) => {
+                    if (!node || typeof node !== 'object' || !Array.isArray(node.children)) {
+                        return;
+                    }
+
+                    collectEntityDetails(node.children);
+
+                    if (String(node.type || '').toLowerCase() !== 'entity') {
+                        return;
+                    }
+
+                    const filteredChildren = [];
+
+                    node.children.forEach((child) => {
+                        const type = String(child?.type || '').toLowerCase();
+                        if (CATEGORY_TYPES.has(type) && Array.isArray(child.children)) {
+                            child.children.forEach((grandchild) => {
+                                const grandType = String(grandchild?.type || '').toLowerCase();
+                                if (ISSUE_TYPES.has(grandType)) {
+                                    appendIssue(node, grandchild);
+                                } else if (SUGGESTION_TYPES.has(grandType)) {
+                                    appendSuggestion(node, grandchild);
+                                } else if (INFO_TYPES.has(grandType)) {
+                                    appendInfo(node, grandchild);
+                                }
+                            });
+                            return;
+                        }
+
+                        if (ISSUE_TYPES.has(type)) {
+                            appendIssue(node, child);
+                            return;
+                        }
+
+                        if (SUGGESTION_TYPES.has(type)) {
+                            appendSuggestion(node, child);
+                            return;
+                        }
+
+                        if (INFO_TYPES.has(type)) {
+                            appendInfo(node, child);
+                            return;
+                        }
+
+                        filteredChildren.push(child);
+                    });
+
+                    node.children = filteredChildren;
+                });
+
+            }
+
             function aggregateHierarchy(nodes) {
                 if (!Array.isArray(nodes)) {
                     return;
@@ -135,6 +235,7 @@
                     }
 
                     if (Array.isArray(payload.unifiedHierarchy)) {
+                        collectEntityDetails(payload.unifiedHierarchy);
                         aggregateHierarchy(payload.unifiedHierarchy);
                     }
 

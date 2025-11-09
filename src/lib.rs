@@ -127,7 +127,10 @@ pub mod lang {
     pub mod typescript;
 
     pub use common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
-    pub use registry::{adapter_for_file, adapter_for_language, language_key_for_path};
+    pub use registry::{
+        adapter_for_file, adapter_for_language, extension_is_supported, language_key_for_path,
+        registered_languages, LanguageInfo, LanguageStability,
+    };
 }
 
 // I/O, caching, and reporting
@@ -174,5 +177,72 @@ pub mod features {
     /// Check if parallel processing is enabled
     pub const fn has_parallel() -> bool {
         cfg!(feature = "parallel")
+    }
+}
+
+#[cfg(test)]
+mod lib_exports_tests {
+    use super::*;
+
+    #[test]
+    fn version_constant_is_non_empty() {
+        assert!(
+            !VERSION.trim().is_empty(),
+            "VERSION should contain the crate version at build time"
+        );
+    }
+
+    #[test]
+    fn feature_flags_match_cfg_settings() {
+        assert_eq!(
+            features::has_simd(),
+            cfg!(feature = "simd"),
+            "has_simd should mirror the compile-time cfg flag"
+        );
+        assert_eq!(
+            features::has_parallel(),
+            cfg!(feature = "parallel"),
+            "has_parallel should mirror the compile-time cfg flag"
+        );
+    }
+
+    #[test]
+    fn analysis_config_reexports_support_builder_flows() {
+        let config = AnalysisConfig::default()
+            .disable_all_modules()
+            .with_language("rust")
+            .enable_all_modules()
+            .with_confidence_threshold(0.6)
+            .exclude_pattern("target/generated/*");
+
+        assert!(config.modules.complexity);
+        assert!(config.modules.coverage);
+        assert!(
+            config.languages.enabled.iter().any(|lang| lang == "rust"),
+            "builder should append requested language"
+        );
+        assert!(
+            config
+                .files
+                .exclude_patterns
+                .iter()
+                .any(|pattern| pattern.contains("generated")),
+            "exclude pattern from builder should be retained"
+        );
+        assert!(
+            config.validate().is_ok(),
+            "valid builder configuration should pass validation"
+        );
+
+        let essentials = AnalysisConfig::default().essential_modules_only();
+        assert!(essentials.modules.complexity);
+        assert!(!essentials.modules.dependencies);
+        assert!(!essentials.modules.coverage);
+
+        let invalid = AnalysisConfig::default().with_confidence_threshold(1.5);
+        assert!(
+            invalid.validate().is_err(),
+            "confidence thresholds outside 0.0-1.0 should be rejected"
+        );
     }
 }

@@ -291,3 +291,141 @@ pub fn suggestion_code_for_kind(kind: &str) -> String {
 pub fn issue_code_for_category(category: &str) -> String {
     issue_definition_for_category(category).code
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn issue_definition_falls_back_for_unknown_category() {
+        let def = issue_definition_for_category("Custom-Signal");
+        assert_eq!(def.code, "CUSTOMSI");
+        assert_eq!(def.title, "Custom-signal Issue");
+        assert!(
+            def.summary.contains("custom-signal"),
+            "summary should reference the original category"
+        );
+        assert_eq!(def.category.as_deref(), Some("custom-signal"));
+
+        let generic = issue_definition_for_category("!!!");
+        assert_eq!(generic.code, "GENERIC");
+        assert!(
+            generic.summary.contains("!!!"),
+            "original category should appear in summary even when generic"
+        );
+    }
+
+    #[test]
+    fn issue_definition_covers_known_categories() {
+        let expectations = [
+            ("complexity", "CMPLX"),
+            ("cognitive", "COGNIT"),
+            ("structure", "STRUCTR"),
+            ("graph", "COUPLNG"),
+            ("style", "STYLE"),
+            ("coverage", "COVGAP"),
+            ("debt", "TECHDEBT"),
+            ("maintainability", "MAINTAIN"),
+            ("readability", "READABL"),
+            ("refactoring", "REFACTR"),
+        ];
+
+        for (category, code) in expectations {
+            let definition = issue_definition_for_category(category);
+            assert_eq!(definition.code, code, "unexpected code for {category}");
+            assert_eq!(
+                definition.category.as_deref(),
+                Some(category),
+                "category field should echo input"
+            );
+            assert!(
+                !definition.summary.is_empty(),
+                "summary should not be empty for {category}"
+            );
+        }
+    }
+
+    #[test]
+    fn sanitize_and_title_case_helpers() {
+        assert_eq!(sanitize_code("refactor"), "REFACTOR");
+        assert_eq!(sanitize_code("???"), "GENERIC");
+        assert_eq!(sanitize_code("snake-case"), "SNAKECAS");
+        assert_eq!(title_case("refine"), "Refine");
+        assert_eq!(title_case(""), "");
+    }
+
+    #[test]
+    fn suggestion_definition_maps_known_kinds() {
+        let extract = suggestion_definition_for_kind("extract_method_for_cleanup");
+        assert_eq!(extract.code, "XTRMTH");
+        assert_eq!(extract.title, "Extract Method");
+        assert_eq!(extract.category.as_deref(), Some("refactoring"));
+
+        let rename = suggestion_definition_for_kind("rename_variable");
+        assert_eq!(rename.code, "RENVAR");
+        assert!(rename.summary.contains("Rename identifiers"));
+    }
+
+    #[test]
+    fn suggestion_definition_covers_specialised_actions() {
+        let cases = [
+            ("eliminate_duplication_block", "DEDUP"),
+            ("extract_class_controller", "XTRCLS"),
+            ("simplify_nested_conditional_paths", "SIMPCND"),
+            ("reduce_cyclomatic_complexity_in_loop", "RDCYCLEX"),
+            ("reduce_fan_in_hotspot", "RDFANIN"),
+            ("reduce_fan_out_calls", "RDFANOUT"),
+            ("reduce_centrality_module", "RDCNTRL"),
+            ("reduce_chokepoint_service", "RDCHOKE"),
+            ("address_nested_branching_issue", "RDNEST"),
+            ("simplify_logic", "SMPLOGIC"),
+            ("split_responsibilities_module", "SPLRESP"),
+            ("move_method_to_helper", "MOVEMTH"),
+            ("organize_imports_cleanup", "ORGIMPT"),
+            ("introduce_facade_layer", "FACAD"),
+            ("extract_interface_adapter", "XTRIFCE"),
+            ("inline_temp_variable", "INLTEMP"),
+            ("rename_class_handler", "RENCLSS"),
+            ("rename_method_handler", "RENMTHD"),
+            ("extract_variable_threshold", "XTRVAR"),
+            ("add_comments_for_complex_flow", "ADDCMNT"),
+            ("replace_magic_number_pi", "REPMAG"),
+            ("format_code_style_update", "FMTSTYLE"),
+            ("refactor_code_quality_sweep", "REFQLTY"),
+        ];
+
+        for (kind, expected_code) in cases {
+            let definition = suggestion_definition_for_kind(kind);
+            assert_eq!(
+                definition.code, expected_code,
+                "unexpected code for suggestion kind {kind}"
+            );
+            assert_eq!(
+                definition.category.as_deref(),
+                Some("refactoring"),
+                "category should remain 'refactoring'"
+            );
+            assert!(
+                !definition.summary.is_empty(),
+                "summary should not be empty for {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn suggestion_definition_handles_unknown_kind() {
+        let fallback = suggestion_definition_for_kind("rename@something");
+        assert_eq!(fallback.code, "RENAMESO");
+        assert_eq!(fallback.title, "Refactor Rename@something");
+        assert_eq!(fallback.category.as_deref(), Some("refactoring"));
+    }
+
+    #[test]
+    fn helpers_return_codes_directly() {
+        assert_eq!(issue_code_for_category("complexity"), "CMPLX");
+        assert_eq!(
+            suggestion_code_for_kind("reduce_cognitive_complexity"),
+            "RDCOGN"
+        );
+    }
+}

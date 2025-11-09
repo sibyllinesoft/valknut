@@ -8,6 +8,8 @@ Complete reference for the Valknut command-line interface.
 - [Commands](#commands)
 - [Analysis Commands](#analysis-commands)
 - [Configuration Commands](#configuration-commands)
+- [Information Commands](#information-commands)
+- [`doc-audit` - Documentation Coverage](#doc-audit---documentation-coverage)
 - [Integration Commands](#integration-commands)
 - [Output Formats](#output-formats)
 - [Quality Gates](#quality-gates)
@@ -52,6 +54,28 @@ valknut analyze [OPTIONS] <PATHS>...
 | `-f, --format <FORMAT>` | ENUM | `jsonl` | Output format |
 | `-q, --quiet` | FLAG | - | Suppress non-essential output |
 
+#### Clone Detection Options
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--semantic-clones` | FLAG | - | Enable semantic clone detection using LSH |
+| `--strict-dedupe` | FLAG | - | Favor high-precision clone filtering |
+| `--denoise` | FLAG | - | Enable weighted denoising heuristics for higher accuracy |
+| `--min-function-tokens <COUNT>` | INT | 40 | Minimum tokens per entity considered for clone search |
+| `--min-match-tokens <COUNT>` | INT | 24 | Minimum overlap tokens required to treat entities as clones |
+| `--require-blocks <COUNT>` | INT | 2 | Minimum distinct structural blocks required for matches |
+| `--similarity <SCORE>` | FLOAT | 0.82 | Similarity threshold (0.0-1.0) for accepted clone pairs |
+| `--denoise-dry-run` | FLAG | - | Collect denoising stats without affecting clone ranking |
+
+#### Structural Verification (APTED)
+> **Default:** Structural verification runs automatically using APTED. Pass `--no-apted-verify` to skip this step when benchmarking raw LSH output.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--apted-verify` | FLAG | - | Verify clone candidates with tree edit distance (APTED) |
+| `--apted-max-nodes <COUNT>` | INT | 4000 | Maximum AST nodes to include per entity when building APTED trees |
+| `--apted-max-pairs <COUNT>` | INT | 25 | Maximum clone candidates per entity to verify (0 = reuse LSH limit) |
+| `--no-apted-verify` | FLAG | - | Disable structural verification (APTED is enabled by default) |
+
 #### Quality Gate Options
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -81,6 +105,9 @@ valknut analyze --fail-on-issues ./src
 
 # Custom configuration
 valknut analyze --config custom.yml --format markdown ./src
+
+# Benchmark clone verification (default path = .)
+make bench-clone-verification BENCH_CLONE_PATH=../path/to/project
 ```
 
 ### Configuration Commands
@@ -134,6 +161,31 @@ Shows:
 - File extensions
 - Support status (Full/Experimental)
 - Available features
+
+#### `doc-audit` - Documentation Coverage
+
+Audit source files for missing docstrings or doc comments, verify README coverage
+in complex directories, and flag READMEs that may be stale.
+
+```bash
+valknut doc-audit [OPTIONS]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--root <DIR>` | PATH | `.` | Project root to scan |
+| `--complexity-threshold <COUNT>` | INT | `8` | Require READMEs for directories with more descendants than this threshold |
+| `--max-readme-commits <COUNT>` | INT | `10` | Mark README as stale when more commits than this touch the directory |
+| `--strict` | FLAG | - | Exit with non-zero status if any issues are detected |
+| `--format <FORMAT>` | ENUM | `text` | Output format (`text`, `json`) |
+| `--ignore-dir <NAME>` | STRING | - | Additional directory name to ignore (repeatable) |
+| `--ignore-suffix <SUFFIX>` | STRING | - | Additional file suffix to ignore (repeatable) |
+
+Example strict audit with JSON output:
+
+```bash
+valknut doc-audit --strict --format json --ignore-dir node_modules
+```
 
 ### Integration Commands
 

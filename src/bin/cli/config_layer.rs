@@ -7,7 +7,7 @@ use anyhow;
 
 use crate::cli::args::AnalyzeArgs;
 use valknut_rs::api::config_types as api_config;
-use valknut_rs::core::config::{CoverageConfig, DenoiseConfig, ValknutConfig};
+use valknut_rs::core::config::{CoverageConfig, DenoiseConfig, LshConfig, ValknutConfig};
 
 /// Trait for merging configuration layers
 pub trait ConfigMerge<T> {
@@ -124,9 +124,150 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         if other.io.cache_ttl_seconds != self.io.cache_ttl_seconds {
             self.io.cache_ttl_seconds = other.io.cache_ttl_seconds;
         }
+        if other.lsh.verify_with_apted != self.lsh.verify_with_apted {
+            self.lsh.verify_with_apted = other.lsh.verify_with_apted;
+        }
+        let default_lsh = LshConfig::default();
+        if other.lsh.apted_max_nodes != default_lsh.apted_max_nodes {
+            self.lsh.apted_max_nodes = other.lsh.apted_max_nodes;
+        }
+        if other.lsh.apted_max_pairs_per_entity != default_lsh.apted_max_pairs_per_entity {
+            self.lsh.apted_max_pairs_per_entity = other.lsh.apted_max_pairs_per_entity;
+        }
         if other.io.enable_caching != self.io.enable_caching {
             self.io.enable_caching = other.io.enable_caching;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::args::{Cli, Commands};
+    use clap::Parser;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use tempfile::tempdir;
+
+    #[test]
+    fn layered_config_honors_file_and_cli_priorities() {
+        let temp = tempdir().expect("temp dir");
+        let config_path = temp.path().join("valknut.yml");
+        let coverage_file_path = temp.path().join("coverage.lcov");
+        fs::write(&coverage_file_path, "TN:\n").expect("coverage file");
+
+        let mut file_config = ValknutConfig::default();
+        file_config.coverage.auto_discover = false;
+        file_config.coverage.max_age_days = 14;
+        file_config
+            .languages
+            .entry("python".into())
+            .and_modify(|lang| {
+                lang.enabled = false;
+                lang.max_file_size_mb = 4.0;
+                lang.additional_settings
+                    .insert("source".into(), "file".into());
+            });
+        file_config.io.cache_dir = Some(PathBuf::from("file-cache"));
+        file_config.lsh.verify_with_apted = false;
+        file_config
+            .to_yaml_file(&config_path)
+            .expect("write config");
+
+        let cli = Cli::parse_from([
+            "valknut",
+            "analyze",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--no-coverage",
+            "--no-structure",
+            "--no-impact",
+            "--coverage-file",
+            coverage_file_path.to_str().unwrap(),
+            "--no-coverage-auto-discover",
+            "--denoise",
+            "--denoise-dry-run",
+            "--min-function-tokens",
+            "50",
+            "--min-match-tokens",
+            "30",
+            "--require-blocks",
+            "3",
+            "--similarity",
+            "0.9",
+            "--ast-weight",
+            "0.4",
+            "--pdg-weight",
+            "0.4",
+            "--emb-weight",
+            "0.2",
+            "--io-mismatch-penalty",
+            "0.3",
+            "--quality-target",
+            "0.9",
+            "--sample-size",
+            "300",
+            "--min-saved-tokens",
+            "150",
+            "--min-rarity-gain",
+            "1.4",
+            "--apted-max-nodes",
+            "512",
+            "--apted-max-pairs",
+            "10",
+            "--apted-verify",
+        ]);
+        let Commands::Analyze(args_box) = cli.command else {
+            panic!("expected analyze command");
+        };
+        let args = *args_box;
+
+        let config = build_layered_valknut_config(&args).expect("build config");
+
+        // File-driven advanced sections retained
+        assert_eq!(
+            config.io.cache_dir.as_deref(),
+            Some(Path::new("file-cache"))
+        );
+
+        // CLI overrides applied
+        assert!(!config.coverage.auto_discover);
+        assert_eq!(
+            config.coverage.coverage_file.as_deref(),
+            Some(coverage_file_path.as_path())
+        );
+        assert_eq!(config.coverage.max_age_days, 14);
+
+        assert!(config.denoise.dry_run);
+        assert_eq!(config.denoise.min_function_tokens, 50);
+        assert_eq!(config.denoise.min_match_tokens, 30);
+        assert_eq!(config.denoise.require_blocks, 3);
+        assert!((config.denoise.similarity - 0.9).abs() < f64::EPSILON);
+        assert!((config.denoise.weights.ast - 0.4).abs() < f64::EPSILON);
+        assert!((config.denoise.weights.pdg - 0.4).abs() < f64::EPSILON);
+        assert!((config.denoise.weights.emb - 0.2).abs() < f64::EPSILON);
+        assert!((config.denoise.io_mismatch_penalty - 0.3).abs() < f64::EPSILON);
+        assert!((config.denoise.auto_calibration.quality_target - 0.9).abs() < f64::EPSILON);
+        assert_eq!(config.denoise.auto_calibration.sample_size, 300);
+        assert_eq!(config.denoise.ranking.min_saved_tokens, 150);
+        assert!((config.denoise.ranking.min_rarity_gain - 1.4).abs() < f64::EPSILON);
+
+        // LSH overrides
+        assert!(config.lsh.verify_with_apted);
+        assert_eq!(config.lsh.apted_max_nodes, 512);
+        assert_eq!(config.lsh.apted_max_pairs_per_entity, 10);
+
+        // Language merge retains file-specified metadata and re-enables via CLI defaults
+        let python = config.languages.get("python").expect("python config");
+        assert!(!python.enabled, "file-level disablement should persist");
+        assert_eq!(python.max_file_size_mb, 4.0);
+        assert_eq!(
+            python
+                .additional_settings
+                .get("source")
+                .and_then(|value| value.as_str()),
+            Some("file")
+        );
     }
 }
 
@@ -302,6 +443,17 @@ impl FromCliArgs<AnalyzeArgs> for ValknutConfig {
         let mut config = ValknutConfig::default();
         config.coverage = CoverageConfig::from_cli_args(args);
         config.denoise = DenoiseConfig::from_cli_args(args);
+        if args.advanced_clone.no_apted_verify {
+            config.lsh.verify_with_apted = false;
+        } else if args.advanced_clone.apted_verify {
+            config.lsh.verify_with_apted = true;
+        }
+        if let Some(max_nodes) = args.advanced_clone.apted_max_nodes {
+            config.lsh.apted_max_nodes = max_nodes;
+        }
+        if let Some(max_pairs) = args.advanced_clone.apted_max_pairs {
+            config.lsh.apted_max_pairs_per_entity = max_pairs;
+        }
         config
     }
 }
@@ -316,6 +468,15 @@ impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
         // config.modules.duplicates = !args.analysis_control.no_lsh; // Clone analysis (LSH) disabled by default for performance
         if args.analysis_control.no_lsh {
             config.modules.duplicates = false;
+        } else {
+            config.modules.duplicates = true;
+            if args.clone_detection.semantic_clones
+                || args.clone_detection.denoise
+                || args.advanced_clone.no_apted_verify
+                || args.advanced_clone.apted_verify
+            {
+                config.modules.duplicates = true;
+            }
         }
         config.modules.coverage = !args.coverage.no_coverage;
         config.modules.complexity = !args.analysis_control.no_complexity;

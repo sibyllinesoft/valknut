@@ -1,7 +1,9 @@
 # Valknut - Comprehensive Build and Test Makefile
 # Supports all test targets, compilation, and development workflows
 
-.PHONY: help build test test-unit test-cli test-e2e test-all bench clean install dev lint fmt check release docs docker
+.PHONY: help build test test-unit test-cli test-e2e test-all bench clean install dev lint fmt check release docs doc-audit docker
+
+DOC_AUDIT_FLAGS ?=
 
 # Default target
 help:
@@ -29,6 +31,7 @@ help:
 	@echo ""
 	@echo "Documentation:"
 	@echo "  docs          - Generate and open documentation"
+	@echo "  doc-audit     - Audit doc coverage and README freshness"
 	@echo ""
 	@echo "Feature Builds:"
 	@echo "  build-simd    - Build with SIMD optimizations"
@@ -108,6 +111,12 @@ bench:
 	@echo "⚡ Running performance benchmarks..."
 	cargo bench --features benchmarks
 
+BENCH_CLONE_PATH ?= .
+bench-clone-verification:
+	@echo "📊 Comparing clone verification quality (path: $(BENCH_CLONE_PATH))..."
+	cargo run --release --example clone_verification -- "$(BENCH_CLONE_PATH)" baseline
+	cargo run --release --example clone_verification -- "$(BENCH_CLONE_PATH)" apted
+
 # Test with specific features
 test-simd:
 	@echo "🧮 Testing SIMD optimizations..."
@@ -156,6 +165,10 @@ docs:
 docs-no-open:
 	@echo "📖 Generating documentation..."
 	cargo doc --all-features
+
+doc-audit:
+	@echo "Running documentation audit..."
+	@cargo run -- doc-audit $(DOC_AUDIT_FLAGS)
 
 # ==============================================================================
 # Quality Assurance and CI/CD

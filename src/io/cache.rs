@@ -1854,8 +1854,260 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+    use std::collections::HashSet;
     use std::path::PathBuf;
-    use tempfile::tempdir;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tempfile::{tempdir, TempDir};
+
+    fn sample_codebase_info() -> CodebaseInfo {
+        let mut file_info = HashMap::new();
+        let hash = Sha256::digest(b"fn sample() {}").to_vec();
+        file_info.insert(
+            "sample.rs".to_string(),
+            FileInfo {
+                line_count: 2,
+                content_hash: hash,
+            },
+        );
+
+        CodebaseInfo {
+            functions: vec![FunctionInfo {
+                id: "sample".to_string(),
+                source_code: "fn sample() {\n    let value = 42;\n}".to_string(),
+                file_path: "sample.rs".to_string(),
+                line_count: 2,
+            }],
+            total_lines: 2,
+            file_info,
+        }
+    }
+
+    fn write_cache(manager: &StopMotifCacheManager, cache: &StopMotifCache) {
+        let cache_path = manager.get_cache_path();
+        if let Some(parent) = cache_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        let serialized = serde_json::to_string_pretty(cache).unwrap();
+        fs::write(cache_path, serialized).unwrap();
+    }
+
+    #[test]
+    fn test_get_valid_cache_returns_none_when_expired() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut policy = CacheRefreshPolicy::default();
+        policy.max_age_days = 1;
+        let manager = StopMotifCacheManager::new(temp_dir.path(), policy.clone());
+
+        let codebase = sample_codebase_info();
+        let signature = manager.compute_codebase_signature(&codebase);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let expired_cache = StopMotifCache {
+            version: 1,
+            k_gram_size: policy.k_gram_size,
+            token_grams: Vec::new(),
+            pdg_motifs: Vec::new(),
+            ast_patterns: Vec::new(),
+            last_updated: now - (policy.max_age_days * 24 * 60 * 60) - 1,
+            codebase_signature: signature,
+            mining_stats: MiningStats::default(),
+        };
+
+        write_cache(&manager, &expired_cache);
+
+        let result = manager.get_valid_cache(&codebase).unwrap();
+        assert!(result.is_none(), "expected expired cache to be invalidated");
+    }
+
+    #[test]
+    fn test_get_valid_cache_returns_none_on_large_signature_change() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut policy = CacheRefreshPolicy::default();
+        policy.change_threshold_percent = 1.0;
+        let manager = StopMotifCacheManager::new(temp_dir.path(), policy.clone());
+
+        let original = sample_codebase_info();
+        let signature = manager.compute_codebase_signature(&original);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let cache = StopMotifCache {
+            version: 1,
+            k_gram_size: policy.k_gram_size,
+            token_grams: Vec::new(),
+            pdg_motifs: Vec::new(),
+            ast_patterns: Vec::new(),
+            last_updated: now,
+            codebase_signature: signature,
+            mining_stats: MiningStats::default(),
+        };
+
+        write_cache(&manager, &cache);
+
+        let mut updated = sample_codebase_info();
+        updated.total_lines = 10;
+
+        let result = manager.get_valid_cache(&updated).unwrap();
+        assert!(
+            result.is_none(),
+            "expected cache to be refreshed when signature diverges"
+        );
+    }
+
+    #[test]
+    fn test_get_valid_cache_returns_cache_when_fresh() {
+        let temp_dir = TempDir::new().unwrap();
+        let policy = CacheRefreshPolicy::default();
+        let manager = StopMotifCacheManager::new(temp_dir.path(), policy.clone());
+
+        let codebase = sample_codebase_info();
+        let signature = manager.compute_codebase_signature(&codebase);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let cache = StopMotifCache {
+            version: 1,
+            k_gram_size: policy.k_gram_size,
+            token_grams: Vec::new(),
+            pdg_motifs: Vec::new(),
+            ast_patterns: Vec::new(),
+            last_updated: now,
+            codebase_signature: signature,
+            mining_stats: MiningStats::default(),
+        };
+
+        write_cache(&manager, &cache);
+
+        let result = manager.get_valid_cache(&codebase).unwrap();
+        assert!(result.is_some(), "expected fresh cache to remain valid");
+    }
+
+    #[test]
+    fn test_pattern_miner_extracts_kgrams_and_motifs() {
+        let mut policy = CacheRefreshPolicy::default();
+        policy.k_gram_size = 2;
+        let miner = PatternMiner::new(policy);
+
+        let function = FunctionInfo {
+            id: "f".to_string(),
+            source_code: "if value == 10 {\n    println!(\"value\");\n    total += value;\n}"
+                .to_string(),
+            file_path: "sample.rs".to_string(),
+            line_count: 4,
+        };
+
+        let kgrams = miner.extract_function_kgrams(&function);
+        assert!(
+            !kgrams.is_empty(),
+            "expected k-grams when token window threshold is satisfied"
+        );
+
+        let motifs = miner.extract_function_motifs(&function).unwrap();
+        assert!(
+            motifs.keys().any(|key| key.contains("control")),
+            "expected control flow motif"
+        );
+        assert!(
+            motifs.keys().any(|key| key.contains("boiler")),
+            "expected boilerplate motif from println!/unwrap"
+        );
+    }
+
+    #[test]
+    fn test_pattern_miner_select_stop_motifs_respects_percentile() {
+        let mut policy = CacheRefreshPolicy::default();
+        policy.stop_motif_percentile = 1.0;
+        let mut miner = PatternMiner::new(policy);
+
+        miner.kgram_frequencies = HashMap::from([
+            ("alpha beta".to_string(), 10),
+            ("beta gamma".to_string(), 5),
+        ]);
+        miner.motif_frequencies = HashMap::from([("call:helper".to_string(), 7)]);
+        miner.total_documents = 20;
+
+        let idf_scores = miner.calculate_idf_scores();
+        let stop_motifs = miner.select_stop_motifs(&idf_scores).unwrap();
+        assert_eq!(stop_motifs.len(), 1, "percentile should cap the selection");
+        assert_eq!(stop_motifs[0].pattern, "alpha beta");
+        assert_eq!(
+            stop_motifs[0].category,
+            PatternCategory::TokenGram,
+            "expected token gram category for highest frequency k-gram"
+        );
+    }
+
+    #[test]
+    fn test_normalize_token_handles_literals_and_keywords() {
+        let mut policy = CacheRefreshPolicy::default();
+        policy.k_gram_size = 2;
+        let miner = PatternMiner::new(policy);
+
+        assert_eq!(miner.normalize_token("if"), "if");
+        assert_eq!(miner.normalize_token("=="), "==");
+        assert_eq!(miner.normalize_token("42"), "INT_LIT");
+        assert_eq!(miner.normalize_token("3.14"), "FLOAT_LIT");
+        assert_eq!(miner.normalize_token("\"text\""), "STR_LIT");
+        assert_eq!(miner.normalize_token("variable_name"), "LOCAL_VAR");
+        assert_eq!(miner.normalize_token("SOME_CONSTANT"), "SOME_CONSTANT");
+    }
+
+    #[test]
+    fn test_compute_codebase_signature_deterministic() {
+        let policy = CacheRefreshPolicy::default();
+        let manager = StopMotifCacheManager::new("unused", policy);
+        let info = sample_codebase_info();
+        let sig1 = manager.compute_codebase_signature(&info);
+        let sig2 = manager.compute_codebase_signature(&info);
+        assert_eq!(sig1, sig2);
+    }
+
+    #[test]
+    fn test_estimate_change_percentage_detects_difference() {
+        let policy = CacheRefreshPolicy::default();
+        let manager = StopMotifCacheManager::new("unused", policy);
+        assert_eq!(manager.estimate_change_percentage("aaaa", "aaaa"), 0.0);
+        assert!(
+            manager.estimate_change_percentage("aaaa", "bbbb") >= 50.0,
+            "expected large heuristic change"
+        );
+    }
+
+    #[test]
+    fn test_ast_stop_motif_miner_extracts_patterns() -> Result<()> {
+        let mut miner = AstStopMotifMiner::new();
+        let functions = vec![
+            FunctionInfo {
+                id: "py_func".to_string(),
+                source_code: "def greet(name):\n    print(f\"hi {name}\")\n".to_string(),
+                file_path: "greet.py".to_string(),
+                line_count: 2,
+            },
+            FunctionInfo {
+                id: "js_func".to_string(),
+                source_code: "export function add(a, b) { return a + b; }\n".to_string(),
+                file_path: "math.js".to_string(),
+                line_count: 1,
+            },
+        ];
+
+        let patterns = miner.mine_ast_stop_motifs(&functions)?;
+        assert!(
+            patterns.len() <= functions.len(),
+            "stop-motif selection should not exceed number of functions"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_stop_motif_cache_serialization() {
@@ -2185,6 +2437,177 @@ mod tests {
         assert_eq!(cache2.mining_stats.functions_analyzed, 2);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_cache_retains_when_change_below_threshold() -> Result<()> {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        let policy = CacheRefreshPolicy {
+            change_threshold_percent: 75.0,
+            ..Default::default()
+        };
+        let cache_manager = StopMotifCacheManager::new(&cache_dir, policy);
+
+        let mut base_file_info = HashMap::new();
+        base_file_info.insert(
+            "src/lib.rs".to_string(),
+            FileInfo {
+                line_count: 10,
+                content_hash: vec![1, 2, 3, 4],
+            },
+        );
+
+        let base_info = CodebaseInfo {
+            functions: vec![FunctionInfo {
+                id: "func1".to_string(),
+                source_code: "fn func1() {}".to_string(),
+                file_path: "src/lib.rs".to_string(),
+                line_count: 1,
+            }],
+            total_lines: 10,
+            file_info: base_file_info.clone(),
+        };
+
+        let cache1 = cache_manager.get_cache(&base_info)?;
+        assert_eq!(cache1.mining_stats.functions_analyzed, 1);
+
+        let mut changed_info = base_info.clone();
+        changed_info.functions.push(FunctionInfo {
+            id: "func2".to_string(),
+            source_code: "fn func2() {}".to_string(),
+            file_path: "src/new.rs".to_string(),
+            line_count: 1,
+        });
+        changed_info.total_lines = 11;
+        let mut changed_file_info = base_file_info;
+        changed_file_info.insert(
+            "src/new.rs".to_string(),
+            FileInfo {
+                line_count: 5,
+                content_hash: vec![9, 9, 9, 9],
+            },
+        );
+        changed_info.file_info = changed_file_info;
+
+        let cache2 = cache_manager.get_cache(&changed_info)?;
+        assert_eq!(
+            cache2.codebase_signature, cache1.codebase_signature,
+            "expected cache reuse when change below threshold"
+        );
+        assert_eq!(
+            cache2.mining_stats.functions_analyzed, 1,
+            "expected mining stats unchanged for reused cache"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cache_expires_when_past_max_age() -> Result<()> {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        let policy = CacheRefreshPolicy {
+            max_age_days: 0,
+            ..Default::default()
+        };
+        let cache_manager = StopMotifCacheManager::new(&cache_dir, policy);
+
+        let codebase_info = CodebaseInfo {
+            functions: vec![FunctionInfo {
+                id: "func1".to_string(),
+                source_code: "fn func1() {}".to_string(),
+                file_path: "src/lib.rs".to_string(),
+                line_count: 1,
+            }],
+            total_lines: 1,
+            file_info: HashMap::new(),
+        };
+
+        let cache1 = cache_manager.get_cache(&codebase_info)?;
+        let cache_path = cache_dir.join("stop_motifs.v1.json");
+        assert!(cache_path.exists());
+
+        let mut cache_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&cache_path)?).expect("parse cache json");
+        if let Some(obj) = cache_json.as_object_mut() {
+            obj.insert("last_updated".to_string(), json!(0));
+        }
+        fs::write(&cache_path, serde_json::to_string_pretty(&cache_json)?)?;
+
+        let refreshed = cache_manager.get_cache(&codebase_info)?;
+        let refreshed_file: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&cache_path)?)
+                .expect("parse refreshed cache json");
+        let refreshed_disk = refreshed_file["last_updated"]
+            .as_u64()
+            .expect("last_updated should be number");
+        assert_eq!(refreshed_disk, refreshed.last_updated);
+        assert!(refreshed.last_updated >= cache1.last_updated);
+        assert!(
+            refreshed.last_updated > 0,
+            "expected refreshed cache timestamp to be non-zero"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_codebase_signature_order_independent() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let cache_manager =
+            StopMotifCacheManager::new(temp_dir.path(), CacheRefreshPolicy::default());
+
+        let mut file_info_a = HashMap::new();
+        file_info_a.insert(
+            "b.rs".to_string(),
+            FileInfo {
+                line_count: 20,
+                content_hash: vec![2, 3, 4],
+            },
+        );
+        file_info_a.insert(
+            "a.rs".to_string(),
+            FileInfo {
+                line_count: 10,
+                content_hash: vec![1, 2, 3],
+            },
+        );
+        let info_a = CodebaseInfo {
+            functions: vec![],
+            total_lines: 30,
+            file_info: file_info_a,
+        };
+
+        let mut file_info_b = HashMap::new();
+        file_info_b.insert(
+            "a.rs".to_string(),
+            FileInfo {
+                line_count: 10,
+                content_hash: vec![1, 2, 3],
+            },
+        );
+        file_info_b.insert(
+            "b.rs".to_string(),
+            FileInfo {
+                line_count: 20,
+                content_hash: vec![2, 3, 4],
+            },
+        );
+        let info_b = CodebaseInfo {
+            functions: vec![],
+            total_lines: 30,
+            file_info: file_info_b,
+        };
+
+        let sig_a = cache_manager.compute_codebase_signature(&info_a);
+        let sig_b = cache_manager.compute_codebase_signature(&info_b);
+        assert_eq!(
+            sig_a, sig_b,
+            "expected signature independence from file ordering"
+        );
     }
 
     #[test]

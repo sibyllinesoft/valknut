@@ -49,3 +49,32 @@ impl GraphConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_configuration_is_valid() {
+        let config = GraphConfig::default();
+        assert!(config.validate().is_ok());
+        assert!(config.enable_betweenness);
+        assert!(config.enable_cycle_detection);
+        assert!(config.use_approximation);
+        assert!((0.0..=1.0).contains(&config.approximation_sample_rate));
+    }
+
+    #[test]
+    fn validate_rejects_out_of_range_sampling_rate() {
+        let mut config = GraphConfig::default();
+        config.approximation_sample_rate = 1.5;
+        let err = config
+            .validate()
+            .expect_err("sampling rate must be in range");
+        let message = format!("{}", err);
+        assert!(
+            message.contains("approximation_sample_rate"),
+            "unexpected error message: {message}"
+        );
+    }
+}

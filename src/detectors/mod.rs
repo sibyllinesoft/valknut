@@ -36,4 +36,3 @@ pub mod lsh;
 pub mod structure;
 pub mod coverage;
 pub mod refactoring;
-pub mod embedding;

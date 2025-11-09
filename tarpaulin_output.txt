@@ -1,0 +1,2066 @@
+[2m2025-10-29T20:14:14.726474Z[0m [32m INFO[0m [2mcargo_tarpaulin::config[0m[2m:[0m Creating config
+[2m2025-10-29T20:14:15.080674Z[0m [32m INFO[0m [2mcargo_tarpaulin[0m[2m:[0m Running Tarpaulin
+[2m2025-10-29T20:14:15.080729Z[0m [32m INFO[0m [2mcargo_tarpaulin[0m[2m:[0m Building project
+[2m2025-10-29T20:14:15.080736Z[0m [32m INFO[0m [2mcargo_tarpaulin::cargo[0m[2m:[0m Cleaning project
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.19
+   Compiling libc v0.2.175
+   Compiling cfg-if v1.0.3
+   Compiling serde_core v1.0.225
+   Compiling serde v1.0.225
+   Compiling autocfg v1.5.0
+   Compiling memchr v2.7.5
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.1
+   Compiling version_check v0.9.5
+   Compiling once_cell v1.21.3
+   Compiling itoa v1.0.15
+   Compiling pin-project-lite v0.2.16
+   Compiling libm v0.2.15
+   Compiling zerocopy v0.8.27
+   Compiling parking_lot_core v0.9.11
+   Compiling futures-core v0.3.31
+   Compiling scopeguard v1.2.0
+   Compiling bytes v1.10.1
+   Compiling log v0.4.28
+   Compiling fnv v1.0.7
+   Compiling futures-sink v0.3.31
+   Compiling ryu v1.0.20
+   Compiling getrandom v0.3.3
+   Compiling futures-channel v0.3.31
+   Compiling stable_deref_trait v1.2.0
+   Compiling hashbrown v0.15.5
+   Compiling equivalent v1.0.2
+   Compiling futures-io v0.3.31
+   Compiling typenum v1.18.0
+   Compiling pin-utils v0.1.0
+   Compiling slab v0.4.11
+   Compiling futures-task v0.3.31
+   Compiling regex-syntax v0.8.6
+   Compiling pkg-config v0.3.32
+   Compiling crossbeam-utils v0.8.21
+   Compiling aho-corasick v1.1.3
+   Compiling tracing-core v0.1.34
+   Compiling serde_json v1.0.145
+   Compiling num-traits v0.2.19
+   Compiling lock_api v0.4.13
+   Compiling indexmap v2.11.3
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling generic-array v0.14.7
+   Compiling jobserver v0.1.34
+   Compiling getrandom v0.2.16
+   Compiling signal-hook-registry v1.4.6
+   Compiling mio v1.0.4
+   Compiling cc v1.2.37
+   Compiling socket2 v0.6.0
+   Compiling rand_core v0.6.4
+   Compiling vcpkg v0.2.15
+   Compiling httparse v1.10.1
+   Compiling thiserror v2.0.16
+   Compiling tower-service v0.3.3
+   Compiling litemap v0.8.0
+   Compiling thiserror v1.0.69
+   Compiling writeable v0.6.1
+   Compiling syn v1.0.109
+   Compiling utf8parse v0.2.2
+   Compiling ahash v0.7.8
+   Compiling bitflags v2.9.4
+   Compiling try-lock v0.2.5
+   Compiling icu_normalizer_data v2.0.0
+   Compiling icu_properties_data v2.0.1
+   Compiling percent-encoding v2.3.2
+   Compiling regex-automata v0.4.10
+   Compiling want v0.3.1
+   Compiling zeroize v1.8.1
+   Compiling crossbeam-epoch v0.9.18
+   Compiling http v1.3.1
+   Compiling http v0.2.12
+   Compiling ahash v0.8.12
+   Compiling either v1.15.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling getrandom v0.1.16
+   Compiling bytemuck v1.23.2
+   Compiling anyhow v1.0.99
+   Compiling ucd-trie v0.1.7
+   Compiling paste v1.0.15
+   Compiling rand_chacha v0.3.1
+   Compiling safe_arch v0.7.4
+   Compiling crossbeam-deque v0.8.6
+   Compiling hashbrown v0.12.3
+   Compiling rustls-pki-types v1.12.0
+   Compiling matrixmultiply v0.3.10
+   Compiling tower-layer v0.3.3
+   Compiling rand v0.8.5
+   Compiling http-body v1.0.1
+   Compiling minimal-lexical v0.2.1
+   Compiling untrusted v0.9.0
+   Compiling tree-sitter-language v0.1.5
+   Compiling lazy_static v1.5.0
+   Compiling anstyle v1.0.11
+   Compiling rustix v1.1.2
+   Compiling nom v7.1.3
+   Compiling wide v0.7.33
+   Compiling openssl-sys v0.9.109
+   Compiling ring v0.17.14
+   Compiling libz-sys v1.1.22
+   Compiling libssh2-sys v0.3.1
+   Compiling form_urlencoded v1.2.2
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.46
+   Compiling vte_generate_state_changes v0.1.2
+   Compiling proc-macro-error-attr v1.0.4
+   Compiling rustls v0.23.32
+   Compiling rayon-core v1.13.0
+   Compiling utf8_iter v1.0.4
+   Compiling allocator-api2 v0.2.21
+   Compiling rustc-hash v1.1.0
+   Compiling rawpointer v0.2.1
+   Compiling base64 v0.13.1
+   Compiling linux-raw-sys v0.11.0
+   Compiling cpufeatures v0.2.17
+   Compiling arrayvec v0.5.2
+   Compiling hashbrown v0.14.5
+   Compiling synstructure v0.13.2
+   Compiling vte v0.10.1
+   Compiling rand_core v0.5.1
+   Compiling libgit2-sys v0.16.2+1.7.2
+   Compiling regex v1.11.2
+   Compiling http-body v0.4.6
+   Compiling itertools v0.10.5
+   Compiling block-buffer v0.9.0
+   Compiling digest v0.9.0
+   Compiling anstyle-parse v0.2.7
+   Compiling indexmap v1.9.3
+   Compiling proc-macro-error v1.0.4
+   Compiling opaque-debug v0.3.1
+   Compiling unicode-width v0.2.1
+   Compiling colorchoice v1.0.4
+   Compiling winnow v0.5.40
+   Compiling toml_datetime v0.6.3
+   Compiling anstyle-query v1.1.4
+   Compiling wasm_sync v0.1.2
+   Compiling subtle v2.6.1
+   Compiling fastrand v2.3.0
+   Compiling is_terminal_polyfill v1.70.1
+   Compiling atomic-waker v1.1.2
+   Compiling heck v0.4.1
+   Compiling httpdate v1.0.3
+   Compiling anstream v0.6.20
+   Compiling sha-1 v0.9.8
+   Compiling ansitok v0.2.0
+   Compiling bstr v1.12.0
+   Compiling num-rational v0.4.2
+   Compiling tempfile v3.22.0
+   Compiling libmimalloc-sys v0.1.44
+   Compiling integer-sqrt v0.1.5
+   Compiling sync_wrapper v1.0.2
+   Compiling radium v0.7.0
+   Compiling heck v0.5.0
+   Compiling same-file v1.0.6
+   Compiling dlv-list v0.3.0
+   Compiling base64 v0.22.1
+   Compiling clap_lex v0.7.5
+   Compiling portable-atomic v1.11.1
+   Compiling strsim v0.11.1
+   Compiling ipnet v2.11.0
+   Compiling bytecount v0.6.9
+   Compiling fixedbitset v0.4.2
+   Compiling toml_edit v0.20.2
+   Compiling clap_builder v4.5.47
+   Compiling ordered-multimap v0.4.3
+   Compiling walkdir v2.5.0
+   Compiling serde_derive v1.0.225
+   Compiling zerofrom-derive v0.1.6
+   Compiling yoke-derive v0.8.0
+   Compiling tokio-macros v2.5.0
+   Compiling futures-macro v0.3.31
+   Compiling zerovec-derive v0.11.1
+   Compiling displaydoc v0.2.5
+   Compiling tracing-attributes v0.1.30
+   Compiling thiserror-impl v2.0.16
+   Compiling thiserror-impl v1.0.69
+   Compiling async-trait v0.1.89
+   Compiling rustls-webpki v0.103.6
+   Compiling pin-project-internal v1.1.10
+   Compiling futures-util v0.3.31
+   Compiling tree-sitter v0.25.9
+   Compiling proc-macro-crate v2.0.2
+   Compiling zerofrom v0.1.6
+   Compiling nalgebra-macros v0.1.0
+   Compiling yoke v0.8.0
+   Compiling clap_derive v4.5.47
+   Compiling zerovec v0.11.4
+   Compiling zerotrie v0.2.2
+   Compiling ansi-str v0.8.0
+   Compiling pest v2.8.2
+   Compiling rayon v1.11.0
+   Compiling console v0.15.11
+   Compiling rand_chacha v0.2.2
+   Compiling tree-sitter-python v0.25.0
+   Compiling tracing v0.1.41
+   Compiling tree-sitter-rust v0.24.0
+   Compiling tree-sitter-typescript v0.23.2
+   Compiling tower v0.4.13
+   Compiling tree-sitter-go v0.25.0
+   Compiling tree-sitter-javascript v0.25.0
+   Compiling blake3 v1.8.2
+   Compiling rand_distr v0.4.3
+   Compiling pin-project v1.1.10
+   Compiling webpki-roots v1.0.2
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling rand_core v0.9.3
+   Compiling iana-time-zone v0.1.64
+   Compiling option-ext v0.2.0
+   Compiling linked-hash-map v0.5.6
+   Compiling bitflags v1.3.2
+   Compiling route-recognizer v0.3.1
+   Compiling tinystr v0.8.1
+   Compiling potential_utf v0.1.3
+   Compiling unicode-width v0.1.14
+   Compiling icu_collections v2.0.0
+   Compiling icu_locale_core v2.0.0
+   Compiling pest_meta v2.8.2
+   Compiling arrayvec v0.7.6
+   Compiling semver v1.0.27
+   Compiling siphasher v0.3.11
+   Compiling openssl-probe v0.1.6
+   Compiling iri-string v0.7.8
+   Compiling tap v1.0.1
+   Compiling papergrid v0.10.0
+   Compiling futures-executor v0.3.31
+   Compiling wyz v0.5.1
+   Compiling futures v0.3.31
+   Compiling pest_generator v2.8.2
+   Compiling soketto v0.7.1
+   Compiling deprecate-until v0.1.1
+   Compiling yaml-rust v0.4.5
+   Compiling icu_provider v2.0.0
+   Compiling dirs-sys v0.4.1
+   Compiling smallvec v1.15.1
+   Compiling num-complex v0.4.6
+   Compiling beef v0.5.2
+   Compiling parking_lot v0.12.4
+   Compiling jsonrpsee-types v0.21.0
+   Compiling dashmap v5.5.3
+   Compiling dashmap v6.1.0
+   Compiling ron v0.7.1
+   Compiling icu_normalizer v2.0.0
+   Compiling tokio v1.47.1
+   Compiling icu_properties v2.0.1
+   Compiling simba v0.6.0
+   Compiling simba v0.8.1
+   Compiling clap v4.5.47
+   Compiling toml v0.5.11
+   Compiling chrono v0.4.42
+   Compiling serde_urlencoded v0.7.1
+   Compiling tracing-serde v0.2.0
+   Compiling bincode v1.3.3
+   Compiling digest v0.10.7
+   Compiling idna_adapter v1.2.1
+   Compiling idna v1.1.0
+   Compiling pest_derive v2.8.2
+   Compiling jsonrpsee-proc-macros v0.21.0
+   Compiling url v2.5.7
+   Compiling json5 v0.4.1
+   Compiling rand v0.7.3
+   Compiling pathfinding v3.0.14
+   Compiling tabled_derive v0.6.0
+   Compiling rust-ini v0.18.0
+   Compiling derive_more v0.99.20
+   Compiling nalgebra-macros v0.2.2
+   Compiling globset v0.4.16
+   Compiling matchers v0.2.0
+   Compiling rand_xorshift v0.2.0
+   Compiling sharded-slab v0.1.7
+   Compiling http-body-util v0.1.3
+   Compiling crossbeam-channel v0.5.15
+   Compiling crossbeam-queue v0.3.12
+   Compiling wait-timeout v0.2.1
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.9
+   Compiling tokio-util v0.7.16
+   Compiling tokio-stream v0.1.17
+   Compiling hyper v1.7.0
+   Compiling tower v0.5.2
+   Compiling tokio-rustls v0.26.3
+   Compiling half v2.6.0
+   Compiling unsafe-libyaml v0.2.11
+   Compiling funty v2.0.0
+   Compiling unicode-linebreak v0.1.5
+   Compiling h2 v0.3.27
+   Compiling tower-http v0.6.6
+   Compiling pathdiff v0.2.3
+   Compiling shell-words v1.1.0
+   Compiling rustc-hash v2.1.1
+   Compiling byteorder v1.5.0
+   Compiling smawk v0.3.2
+   Compiling bit-vec v0.4.4
+   Compiling predicates-core v1.0.9
+   Compiling hyper-util v0.1.17
+   Compiling static_assertions v1.1.0
+   Compiling arrayref v0.3.9
+   Compiling number_prefix v0.4.0
+   Compiling streaming-iterator v0.1.9
+   Compiling doc-comment v0.3.3
+   Compiling plotters-backend v0.3.7
+   Compiling constant_time_eq v0.3.1
+   Compiling nu-ansi-term v0.50.1
+   Compiling ciborium-io v0.2.2
+   Compiling indicatif v0.17.11
+   Compiling ciborium-ll v0.2.2
+   Compiling tree-edit-distance v0.4.0
+   Compiling twox-hash v1.6.3
+   Compiling nalgebra v0.29.0
+   Compiling plotters-svg v0.3.7
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling tracing-subscriber v0.3.20
+   Compiling probabilistic-collections v0.7.0
+   Compiling bloom v0.3.2
+   Compiling textwrap v0.16.2
+   Compiling pathfinding v4.14.0
+   Compiling dialoguer v0.11.0
+   Compiling nalgebra v0.32.6
+   Compiling hyper-rustls v0.27.7
+   Compiling bitvec v1.0.1
+   Compiling config v0.13.4
+   Compiling reqwest v0.12.23
+   Compiling tabled v0.14.0
+   Compiling crossbeam v0.8.4
+   Compiling ignore v0.4.23
+   Compiling mimalloc v0.1.48
+   Compiling handlebars v4.5.0
+   Compiling sha2 v0.10.9
+   Compiling lasso v0.7.3
+   Compiling ndarray v0.15.6
+   Compiling hyper v0.14.32
+   Compiling dirs v5.0.1
+   Compiling petgraph v0.6.5
+   Compiling uuid v1.18.1
+   Compiling hyperloglog v1.0.2
+   Compiling async-stream-impl v0.3.6
+   Compiling float-cmp v0.10.0
+   Compiling quick-xml v0.31.0
+   Compiling xxhash-rust v0.8.15
+   Compiling quick-error v1.2.3
+   Compiling seahash v4.1.0
+   Compiling edit-distance v2.1.3
+   Compiling normalize-line-endings v0.3.0
+   Compiling termtree v0.5.1
+   Compiling assert_cmd v2.0.17
+   Compiling cast v0.3.0
+   Compiling difflib v0.4.0
+   Compiling bumpalo v3.19.0
+   Compiling owo-colors v3.5.0
+   Compiling bit-vec v0.8.0
+   Compiling unicode-segmentation v1.12.0
+   Compiling arc-swap v1.7.1
+   Compiling glob v0.3.3
+   Compiling bit-set v0.8.0
+   Compiling predicates v3.1.3
+   Compiling criterion-plot v0.5.0
+   Compiling predicates-tree v1.0.12
+   Compiling async-stream v0.3.6
+   Compiling rusty-fork v0.3.0
+   Compiling plotters v0.3.7
+   Compiling ciborium v0.2.2
+   Compiling tinytemplate v1.2.1
+   Compiling rand_chacha v0.9.0
+   Compiling rand v0.9.2
+   Compiling rand_xorshift v0.4.0
+   Compiling jsonrpsee-core v0.21.0
+   Compiling serial_test_derive v2.0.0
+   Compiling env_logger v0.8.4
+   Compiling is-terminal v0.4.16
+   Compiling unarray v0.1.4
+   Compiling anes v0.1.6
+   Compiling oorandom v11.1.5
+   Compiling quickcheck v1.0.3
+   Compiling tokio-test v0.4.4
+   Compiling serial_test v2.0.0
+   Compiling quickcheck_macros v1.1.0
+   Compiling proptest v1.7.0
+   Compiling jsonrpsee-server v0.21.0
+   Compiling criterion v0.5.1
+   Compiling jsonrpsee v0.21.0
+   Compiling statrs v0.16.1
+   Compiling git2 v0.18.3
+   Compiling doc_audit v0.1.0 (/home/nathan/Projects/valknut/crates/doc_audit)
+   Compiling valknut-rs v1.2.3 (/home/nathan/Projects/valknut)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 39s
+[2m2025-10-29T20:15:57.201573Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling::linux[0m[2m:[0m Launching test
+[2m2025-10-29T20:15:57.201638Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling[0m[2m:[0m running /home/nathan/Projects/valknut/target/debug/deps/full_analysis-32601384fdc4e45c
+
+running 2 tests
+🔍 ENGINE DEBUG: Calling pipeline.analyze_directory
+test pipeline_enables_lsh_and_coverage_analysis ... ok
+🔍 ENGINE DEBUG: Pipeline returned 16 scoring files
+test full_pipeline_smoke_test_covers_key_modules ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+[2m2025-10-29T20:16:08.363143Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling::linux[0m[2m:[0m Launching test
+[2m2025-10-29T20:16:08.363194Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling[0m[2m:[0m running /home/nathan/Projects/valknut/target/debug/deps/valknut_rs-e98dfce48099ec49
+
+running 507 tests
+test api::config_types::tests::test_module_presets ... ok
+test api::config_types::tests::test_unified_config_default ... ok
+test api::config_types::tests::test_builder_pattern_immutability ... ok
+test api::config_types::tests::test_serialization ... ok
+test api::config_types::tests::test_convenience_methods ... ok
+test api::config_types::tests::test_backward_compatibility ... ok
+test api::config_types::tests::test_module_convenience_methods ... ok
+test api::engine::tests::test_engine_status_debug ... ok
+test api::config_types::tests::test_validation ... ok
+test api::config_types::tests::test_fluent_interface ... ok
+test api::config_types::tests::test_config_conversion ... ok
+test api::engine::tests::test_health_check_debug ... ok
+test api::engine::tests::test_health_check_no_message ... ok
+test api::engine::tests::test_health_check_result_debug ... ok
+test api::engine::tests::test_health_check_status_equality ... ok
+test api::engine::tests::test_config_access ... ok
+test api::engine::tests::test_is_ready ... ok
+test api::engine::tests::test_get_supported_languages ... ok
+test api::engine::tests::test_engine_creation ... ok
+test api::engine::tests::test_engine_status ... ok
+test api::engine::tests::test_analyze_files_empty_list ... ok
+🔍 ENGINE DEBUG: Calling pipeline.analyze_directory
+test api::engine::tests::test_analyze_file_not_directory ... ok
+test api::engine::tests::test_analyze_nonexistent_directory ... ok
+test api::results::merge::tests::clone_analysis_performance_merge_accumulates ... ok
+test api::results::merge::tests::weighted_average_respects_weights ... ok
+test api::results::merge::tests::optional_merges_behave ... ok
+test api::results::merge::tests::directory_health_merge_deduplicates_hotspots ... ok
+test core::arena_analysis::tests::test_memory_efficiency_calculation ... ok
+test core::ast_service::tests::test_ast_service_creation ... ok
+test api::results::merge::tests::weighted_duration_handles_zero_weight ... ok
+test core::ast_service::tests::test_cache_stats ... ok
+test core::ast_service::tests::test_complexity_metrics_creation ... ok
+test core::ast_service::tests::test_cache_operations ... ok
+test core::ast_service::tests::test_decision_kind_variants ... ok
+test core::ast_service::tests::test_decision_point_creation ... ok
+test api::engine::tests::test_health_check_comprehensive ... ok
+test api::engine::tests::test_health_check ... ok
+test api::results::merge::tests::health_metrics_merge_weighted ... ok
+test core::ast_service::tests::test_language_detection ... ok
+test core::ast_service::tests::test_parse_error_handling ... ok
+test core::ast_service::tests::test_cache_reuse ... ok
+test api::results::merge::tests::clone_analysis_results_merge_combines ... ok
+test core::ast_service::tests::test_rust_complexity ... ok
+test core::ast_service::tests::test_typescript_complexity ... ok
+test core::ast_service::tests::test_python_complexity_calculation ... ok
+test core::ast_service::tests::test_go_complexity ... ok
+test core::ast_service::tests::test_unsupported_language ... ok
+test core::ast_service::tests::test_javascript_complexity ... ok
+test core::ast_service::tests::test_complexity_with_deep_nesting ... ok
+test core::bayesian::tests::test_bayesian_normalizer_create_generic_prior ... ok
+test core::ast_service::tests::test_empty_source ... ok
+test core::bayesian::tests::test_bayesian_normalizer_add_prior ... ok
+test core::bayesian::tests::test_bayesian_normalizer_get_all_statistics ... ok
+test core::bayesian::tests::test_feature_prior_effective_sample_size ... ok
+test core::bayesian::tests::test_feature_prior ... ok
+test core::bayesian::tests::test_feature_prior_type_variants ... ok
+test core::bayesian::tests::test_feature_prior_with_type ... ok
+test core::bayesian::tests::test_feature_prior_with_range ... ok
+test core::bayesian::tests::test_feature_prior_prior_variance ... ok
+test core::bayesian::tests::test_bayesian_normalizer_normalize_value ... ok
+test core::bayesian::tests::test_variance_confidence ... ok
+test core::bayesian::tests::test_variance_confidence_score ... ok
+test core::errors::tests::test_config_field_error ... ok
+test core::errors::tests::test_error_debug_formatting ... ok
+test core::bayesian::tests::test_feature_statistics_from_values ... ok
+test core::errors::tests::test_error_creation ... ok
+test core::errors::tests::test_error_display_formatting ... ok
+test core::errors::tests::test_feature_unavailable ... ok
+test core::errors::tests::test_from_io_error ... ok
+test core::errors::tests::test_from_parse_float_error ... ok
+test core::bayesian::tests::test_posterior_calculation ... ok
+test core::errors::tests::test_error_with_context ... ok
+test core::errors::tests::test_from_json_error ... ok
+test core::errors::tests::test_from_parse_int_error ... ok
+test core::errors::tests::test_io_error_creation ... ok
+test core::errors::tests::test_graph_error ... ok
+test core::errors::tests::test_lsh_error ... ok
+test core::errors::tests::test_parse_with_location ... ok
+test core::errors::tests::test_from_utf8_error ... ok
+test core::errors::tests::test_pipeline_error ... ok
+test core::errors::tests::test_math_with_context ... ok
+test core::errors::tests::test_unsupported_error ... ok
+test core::errors::tests::test_validation_error ... ok
+test core::errors::tests::test_result_extension ... ok
+test core::errors::tests::test_with_context_non_contextual_error ... ok
+test core::errors::tests::test_result_ext_with_context ... ok
+test core::errors::tests::test_from_yaml_error ... ok
+test core::errors::tests::test_with_context_math_error ... ok
+test core::featureset::tests::test_code_entity_add_property ... ok
+test core::featureset::tests::test_code_entity_with_source_code ... ok
+test core::bayesian::tests::test_bayesian_normalizer_confidence_methods ... ok
+test core::featureset::tests::test_cosine_similarity_empty_vectors ... ok
+test core::featureset::tests::test_code_entity_line_count ... ok
+test core::featureset::tests::test_cosine_similarity_orthogonal ... ok
+test core::featureset::tests::test_cosine_similarity ... ok
+test core::featureset::tests::test_feature_definition_with_polarity ... ok
+test core::bayesian::tests::test_bayesian_normalizer_batch_normalization ... ok
+test core::bayesian::tests::test_bayesian_normalizer ... ok
+test core::featureset::tests::test_feature_definition ... ok
+test core::featureset::tests::test_feature_extractor_registry_get_compatible_extractors ... ok
+test core::featureset::tests::test_feature_extractor_registry_get_all_feature_definitions ... ok
+test core::featureset::tests::test_feature_polarity_variants ... ok
+test core::featureset::tests::test_feature_vector_feature_names ... ok
+test core::featureset::tests::test_feature_vector_l2_norm ... ok
+test core::featureset::tests::test_extraction_context ... ok
+test core::featureset::tests::test_feature_vector ... ok
+test core::featureset::tests::test_feature_vector_normalized_features ... ok
+test core::featureset::tests::test_feature_vector_metadata ... ok
+test core::featureset::tests::test_feature_vector_suggestions ... ok
+test core::featureset::tests::test_feature_validation ... ok
+test core::featureset::tests::test_refactoring_suggestion_with_location ... ok
+test core::featureset::tests::test_refactoring_suggestion_with_context ... ok
+test core::featureset::tests::test_refactoring_suggestion ... ok
+test core::featureset::tests::test_feature_definition_clamp_value ... ok
+test core::file_utils::tests::test_binary_detection_by_extension ... ok
+test core::file_utils::tests::test_code_file_detection ... ok
+test core::file_utils::tests::test_binary_detection_by_sampling_content ... ok
+test core::featureset::tests::test_feature_extractor_validate_features ... ok
+test core::file_utils::tests::test_read_valid_utf8 ... ok
+test core::file_utils::tests::test_read_to_string_rejects_binary_files ... ok
+test core::file_utils::tests::test_count_lines_of_code ... ok
+test core::file_utils::tests::test_read_invalid_utf8_is_lossy ... ok
+test core::interned_entities::tests::test_interned_parsed_entity_creation ... ok
+test core::file_utils::tests::test_coverage_format_detection_by_filename_and_content ... ok
+test core::file_utils::tests::test_expand_patterns_and_validation_helpers ... ok
+test core::interned_entities::tests::test_string_deduplication ... ok
+test core::interning::tests::test_global_interner ... ok
+test core::interning::tests::test_thread_safety ... ok
+test core::interning::tests::test_basic_interning ... ok
+test core::interned_entities::tests::test_interned_code_entity_creation ... ok
+test core::pipeline::file_discovery::tests::default_base_for_returns_parent_when_available ... ok
+test core::interning::tests::test_memory_usage_tracking ... ok
+test core::pipeline::file_discovery::tests::compile_globset_rejects_invalid_patterns ... ok
+test core::pipeline::file_discovery::tests::allowed_extensions_prioritises_language_config ... ok
+test core::pipeline::file_discovery::tests::roots_membership_detects_files_and_directories ... ok
+test core::pipeline::file_discovery::tests::should_keep_respects_include_exclude_and_extension ... ok
+test core::interned_entities::tests::test_interned_parse_index ... ok
+test core::interned_entities::tests::test_conversion_compatibility ... ok
+test core::pipeline::pipeline_executor::tests::health_from_scores_handles_empty_and_weighted_values ... ok
+test core::pipeline::pipeline_executor::tests::analyze_vectors_scores_and_wraps_results ... ok
+test core::pipeline::pipeline_executor::tests::should_include_for_dedupe_respects_patterns ... ok
+test core::pipeline::pipeline_executor::tests::evaluate_quality_gates_handles_disabled_and_permissive_configs ... ok
+test api::results::merge::tests::analysis_results_merge_in_place_combines_everything ... ok
+test core::pipeline::pipeline_stages::tests::analyze_json_coverage_returns_zero ... ok
+test core::pipeline::pipeline_stages::tests::hash_kind_is_stable_for_identical_input ... ok
+test core::arena_analysis::tests::test_arena_file_analysis ... ok
+test core::pipeline::pipeline_stages::tests::parse_byte_range_extracts_start_and_end ... ok
+test core::pipeline::pipeline_stages::tests::run_arena_file_analysis_with_content_returns_empty_for_none ... ok
+test core::arena_analysis::tests::test_arena_batch_analysis ... ok
+test core::pipeline::pipeline_stages::tests::analyze_xml_coverage_counts_uncovered_lines ... ok
+test core::pipeline::result_conversions::tests::build_unified_hierarchy_with_fallback_returns_empty_when_no_data ... ok
+test core::pipeline::result_conversions::tests::build_unified_hierarchy_with_fallback_prefers_directory_tree ... ok
+test core::pipeline::result_conversions::tests::group_candidates_by_file_sorts_by_priority_and_score ... ok
+test core::pipeline::result_conversions::tests::test_analysis_summary_default ... ok
+test core::pipeline::result_conversions::tests::test_code_health_calculation ... ok
+test core::pipeline::pipeline_stages::tests::calculate_overall_coverage_parses_lcov_percentage ... ok
+test core::pipeline::result_conversions::tests::test_refactoring_candidate_creation ... ok
+test core::pipeline::pipeline_stages::tests::run_arena_file_analysis_skips_missing_files ... ok
+test core::pipeline::result_conversions::tests::test_unified_hierarchy_empty_candidates ... ok
+test core::file_utils::tests::test_discover_coverage_files_and_filters ... ok
+test core::pipeline::result_types::tests::code_dictionary_reports_when_empty ... ok
+test core::pipeline::result_types::tests::memory_stats_merge_preserves_extremes_and_averages ... ok
+test core::pipeline::result_conversions::tests::top_issues_returns_sorted_categories ... ok
+test core::pipeline::pipeline_executor::tests::creates_feature_vectors_from_analysis_results ... ok
+test core::pipeline::tests::test_pipeline_analyze_vectors_legacy ... ok
+test core::pipeline::tests::test_pipeline_extractor_registry ... ok
+test core::pipeline::result_conversions::tests::directory_metrics_reflect_tree_data ... ok
+test core::pipeline::tests::test_pipeline_status ... ok
+test core::pipeline::tests::test_quality_gates_evaluation ... ok
+test core::pipeline::tests::test_pipeline_fit_legacy_api ... ok
+test core::pipeline::pipeline_executor::tests::converts_analysis_results_into_scoring_entries ... ok
+test api::engine::tests::test_analyze_vectors_empty ... ok
+Vector test - entities analyzed: 2
+test api::engine::tests::test_analyze_vectors ... ok
+test api::engine::tests::test_analyze_vectors_with_multiple_features ... ok
+test core::scoring::tests::test_feature_normalizer_get_statistics ... ok
+test core::scoring::tests::test_feature_normalizer_get_all_statistics ... ok
+test core::scoring::tests::test_normalization_statistics ... ok
+test core::scoring::tests::test_feature_scorer_get_category_weight ... ok
+test core::scoring::tests::test_normalization_statistics_percentile ... ok
+test core::scoring::tests::test_normalization_statistics_empty ... ok
+test core::pipeline::result_conversions::tests::test_unified_hierarchy_has_id_fields ... ok
+test core::pipeline::result_conversions::tests::build_unified_hierarchy_with_fallback_uses_candidates_when_tree_empty ... ok
+test core::scoring::tests::test_feature_normalizer_normalize_value ... ok
+test core::scoring::tests::test_priority_calculation ... ok
+test core::scoring::tests::test_scoring_result_needs_refactoring ... ok
+test core::scoring::tests::test_scoring_result_is_high_priority ... ok
+test core::scoring::tests::test_feature_scorer_compute_scores ... ok
+test core::unified_visitor::tests::test_node_metadata ... ok
+test core::scoring::tests::test_priority_value ... ok
+test core::scoring::tests::test_feature_normalizer ... ok
+test detectors::complexity::tests::test_ast_complexity_metrics_creation ... ok
+test detectors::complexity::tests::test_complexity_config ... ok
+test detectors::complexity::tests::test_complexity_thresholds ... ok
+test detectors::complexity::tests::test_complexity_thresholds_validation ... ok
+test core::scoring::tests::test_feature_scorer ... ok
+test detectors::complexity::tests::test_halstead_metrics ... ok
+test core::scoring::tests::test_scoring_result ... ok
+test detectors::complexity::tests::test_ast_complexity_extractor ... ok
+test detectors::complexity::tests::test_error_handling ... ok
+test core::pipeline::pipeline_executor::tests::evaluate_quality_gates_reports_violations ... ok
+test core::pipeline::pipeline_stages::tests::analyze_coverage_gaps_combines_multiple_formats ... ok
+test detectors::coverage::parsers::tests::test_detect_format_unknown_returns_error ... ok
+test core::pipeline::result_types::tests::directory_health_tree_builds_hierarchy_and_metrics ... ok
+test detectors::coverage::parsers::tests::test_parse_istanbul_nested_data_array ... ok
+test detectors::coverage::parsers::tests::test_parse_istanbul_json_basic ... ok
+test detectors::coverage::parsers::tests::test_parse_lcov_report_basic ... ok
+test core::unified_visitor::tests::test_unified_visitor_basic ... ok
+test detectors::coverage::tests::coverage_extractor_default_builds ... ok
+test detectors::coverage::tests::lines_to_spans_respects_min_gap_and_merges_runs ... ok
+test detectors::coverage::tests::chunk_spans_python_splits_on_function_boundaries ... ok
+test api::engine::tests::test_analyze_files_no_parent_directory ... ok
+🔍 ENGINE DEBUG: Pipeline returned 0 scoring files
+Files processed: 0, entities analyzed: 0
+test api::engine::tests::test_analyze_empty_directory ... ok
+test detectors::coverage::parsers::tests::test_parse_cobertura_with_package_and_conditions ... ok
+test detectors::complexity::tests::test_simple_function_no_issues ... ok
+test detectors::graph::tests::dependency_graph_cycle_detection ... ok
+test detectors::complexity::tests::test_large_file_detection ... ok
+test detectors::complexity::tests::test_javascript_complexity_analysis ... ok
+test detectors::complexity::tests::test_analyze_multiple_files ... ok
+test detectors::complexity::tests::test_ast_complexity_analysis ... ok
+Found 1 Rust results:
+  Entity: process_data, type: function, cyclomatic: 3, cognitive: 5
+Found 0 Rust issues:
+test detectors::complexity::tests::test_rust_complexity_analysis ... ok
+test detectors::lsh::config::tests::lsh_config_validation_and_conversion ... ok
+test detectors::lsh::lsh_cache::tests::test_token_caching ... ok
+test detectors::lsh::lsh_cache::tests::test_signature_cache_eviction_triggers_on_capacity ... ok
+test detectors::lsh::config::tests::denoise_config_validation_rules ... ok
+test detectors::lsh::config::tests::dedupe_config_validation_rules ... ok
+test detectors::lsh::lsh_cache::tests::test_overall_hit_rate_combines_caches ... ok
+test detectors::graph::clique::tests::partitions_similar_entities ... ok
+test detectors::graph::clique::tests::splits_large_components ... ok
+test detectors::lsh::lsh_cache::tests::test_clear_resets_cached_data_and_stats ... ok
+test detectors::lsh::memory_pool::tests::test_pool_size_limits ... ok
+test detectors::lsh::memory_pool::tests::test_string_vec_pool ... ok
+test detectors::lsh::memory_pool::tests::test_u64_vec_pool ... ok
+test detectors::lsh::memory_pool::tests::test_lsh_memory_pools ... ok
+test detectors::lsh::tests::test_jaccard_similarity ... ok
+test detectors::lsh::tests::test_lsh_extractor_with_denoise ... ok
+test detectors::complexity::tests::test_ast_complexity_extractor_produces_metrics ... ok
+test detectors::lsh::tests::test_generate_cache_key_is_order_insensitive ... ok
+test detectors::lsh::tests::test_entity_threshold_short_circuit_behavior ... ok
+test detectors::lsh::tests::test_kgram_generation ... ok
+test detectors::lsh::tests::test_interned_shingle_creation ... ok
+test detectors::lsh::tests::test_shingle_creation ... ok
+test detectors::lsh::tests::test_shingle_variants_produce_consistent_lengths ... ok
+test detectors::lsh::tests::test_lsh_performance_metrics_validation_paths ... ok
+test detectors::lsh::tests::test_interned_minhash_signature ... ok
+test detectors::lsh::tests::test_minhash_signature ... ok
+test detectors::lsh::tests::test_lsh_extractor_configuration_helpers ... ok
+test detectors::lsh::tests::test_similarity_context_cache_reuses_last_context ... ok
+test detectors::lsh::tests::test_partitions_without_entry_skip_similarity_search ... ok
+test detectors::lsh::tests::test_similarity_context_cache_is_invalidateable ... ok
+test detectors::lsh::tests::test_lsh_index ... ok
+test detectors::refactoring::tests::test_analyze_files_disabled ... ok
+test detectors::lsh::tests::test_lsh_extractor ... ok
+test detectors::lsh::tests::test_weighted_jaccard_similarity ... ok
+test detectors::lsh::tests::test_similarity_context_path_produces_matches ... ok
+test detectors::refactoring::tests::test_refactoring_analyzer_creation ... ok
+test detectors::refactoring::tests::test_refactoring_config_default ... ok
+test detectors::lsh::tests::test_meets_fragment_thresholds_respects_ast_stats ... ok
+test detectors::lsh::tests::test_weighted_shingle_analyzer ... ok
+test detectors::graph::tests::graph_extractor_reports_dependency_metrics ... ok
+test detectors::lsh::tests::test_weighted_signature_statistics_helpers ... ok
+test detectors::graph::tests::graph_extractor_detects_self_cycle ... ok
+test detectors::lsh::tests::test_weighted_signature_cache_hits ... ok
+test detectors::structure::directory::tests::test_brute_force_partition_uses_random_fallback_for_multi_cluster ... ok
+test detectors::refactoring::tests::test_detects_long_method ... ok
+test detectors::refactoring::tests::test_detects_complex_conditionals ... ok
+test detectors::refactoring::tests::test_detects_duplicate_functions ... ok
+test detectors::structure::directory::tests::test_calculate_cut_size ... ok
+test detectors::refactoring::tests::test_detects_large_class ... ok
+test detectors::structure::directory::tests::test_calculate_entropy_empty ... ok
+test detectors::structure::directory::tests::test_calculate_entropy_equal_values ... ok
+test detectors::lsh::tests::test_candidate_filter_bruteforce_uses_weighted_cache ... ok
+test detectors::structure::directory::tests::test_calculate_entropy_single_value ... ok
+test detectors::structure::directory::tests::test_calculate_entropy_total_zero ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_empty ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_equal_values ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_large_array_parallel ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_single_value ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_sum_zero ... ok
+test detectors::structure::directory::tests::test_calculate_gini_coefficient_unequal_values ... ok
+test detectors::structure::directory::tests::test_calculate_directory_metrics ... ok
+test detectors::structure::directory::tests::test_calculate_entropy_large_array_parallel ... ok
+test detectors::structure::directory::tests::test_calculate_reorganization_effort ... ok
+test detectors::structure::directory::tests::test_calculate_size_normalization_factor ... ok
+test detectors::structure::directory::tests::test_count_lines_of_code ... ok
+test detectors::structure::directory::tests::test_directory_analyzer_new ... ok
+test detectors::structure::directory::tests::test_brute_force_partition_falls_back_to_simple_split ... ok
+test detectors::structure::directory::tests::test_brute_force_partition ... ok
+test detectors::structure::directory::tests::test_calculate_directory_metrics_caching ... ok
+test detectors::structure::directory::tests::test_analyze_directory_for_reorg_small_directory_skipped ... ok
+test detectors::structure::directory::tests::test_analyze_directory_for_reorg_low_imbalance ... ok
+test detectors::structure::directory::tests::test_discover_directories ... ok
+test detectors::structure::directory::tests::test_estimate_cross_edges_reduced ... ok
+test detectors::structure::directory::tests::test_find_optimal_bipartition ... ok
+test detectors::structure::directory::tests::test_gather_directory_stats ... ok
+test detectors::structure::directory::tests::test_extract_python_imports_star_import ... ok
+test detectors::structure::directory::tests::test_extract_python_imports_basic ... ok
+test core::pipeline::tests::test_analyze_paths_with_progress ... ok
+test detectors::structure::directory::tests::test_is_code_file ... ok
+test detectors::structure::directory::tests::test_generate_file_moves ... ok
+test detectors::structure::directory::tests::test_generate_partition_name_fallback ... ok
+test detectors::structure::directory::tests::test_build_dependency_graph_records_edges ... ok
+test detectors::structure::directory::tests::test_build_dependency_graph_basic ... ok
+test detectors::structure::directory::tests::test_random_partition ... ok
+test detectors::structure::directory::tests::test_resolve_import_to_local_file ... ok
+test detectors::structure::directory::tests::test_generate_partition_name_with_common_tokens ... ok
+test detectors::structure::directory::tests::test_should_skip_directory ... ok
+test detectors::structure::directory::tests::test_resolve_import_to_local_file_not_found ... ok
+test detectors::structure::directory::tests::test_resolve_import_relative_import_skipped ... ok
+test detectors::structure::directory::tests::test_partition_directory_basic ... ok
+test detectors::structure::directory::tests::test_communities_to_partitions ... ok
+test core::pipeline::tests::test_analyze_directory_integration ... ok
+test detectors::structure::directory::tests::test_extract_rust_imports_basic ... ok
+test detectors::structure::directory::tests::test_label_propagation_partition_empty ... ok
+test detectors::structure::file::tests::test_analyze_file_for_split_small_file ... ok
+test detectors::structure::directory::tests::test_calculate_reorganization_gain ... ok
+test detectors::structure::file::tests::test_analyze_entity_names_io_focused ... ok
+test detectors::structure::file::tests::test_calculate_jaccard_similarity_no_overlap ... ok
+test detectors::structure::file::tests::test_calculate_jaccard_similarity_empty_sets ... ok
+test detectors::structure::file::tests::test_calculate_jaccard_similarity_partial_overlap ... ok
+test detectors::structure::file::tests::test_calculate_jaccard_similarity_identical_sets ... ok
+test detectors::structure::directory::tests::test_extract_javascript_imports_basic ... ok
+test detectors::structure::file::tests::test_count_lines_of_code ... ok
+test detectors::structure::file::tests::test_calculate_split_effort ... ok
+test detectors::structure::file::tests::test_discover_large_files ... ok
+test detectors::structure::file::tests::test_collect_large_files_recursive_skips_directories ... ok
+test detectors::structure::file::tests::test_extract_javascript_imports ... ok
+test detectors::structure::file::tests::test_extract_rust_imports ... ok
+test detectors::structure::file::tests::test_extract_python_imports ... ok
+test detectors::structure::file::tests::test_file_analyzer_new ... ok
+test detectors::structure::directory::tests::test_extract_imports_by_extension ... ok
+test detectors::structure::file::tests::test_extract_imports_by_extension ... ok
+test detectors::structure::file::tests::test_is_code_file ... ok
+test detectors::structure::file::tests::test_find_cohesion_communities_empty_graph ... ok
+test detectors::structure::file::tests::test_calculate_split_value ... ok
+test detectors::structure::file::tests::test_should_skip_directory ... ok
+test detectors::structure::file::tests::test_analyze_entity_names_util_focused ... ok
+test detectors::structure::file::tests::test_resolve_import_to_local_file_not_found ... ok
+test detectors::structure::file::tests::test_resolve_import_to_local_file ... ok
+test detectors::structure::file::tests::test_generate_split_name ... ok
+test detectors::structure::file::tests::test_build_entity_cohesion_graph_empty ... ok
+test detectors::structure::file::tests::test_analyze_entity_names_core_fallback ... ok
+test io::cache::tests::test_cache_debug ... ok
+test io::cache::tests::test_cache_default ... ok
+test detectors::structure::tests::structure_extractor_respects_disabled_packs ... ok
+test detectors::structure::tests::structure_extractor_exposes_statistical_helpers ... ok
+test detectors::structure::file::tests::test_analyze_entity_names_api_focused ... ok
+test io::cache::tests::test_cache_new ... ok
+test detectors::structure::directory::tests::test_analyze_directory_for_reorg_meets_conditions ... ok
+test detectors::refactoring::tests::test_refactoring_extractor_produces_features ... ok
+test detectors::structure::tests::structure_recommendations_iterates_all_packs ... ok
+test io::cache::tests::test_estimate_change_percentage_detects_difference ... ok
+test io::cache::tests::test_compute_codebase_signature_order_independent ... ok
+test io::cache::tests::test_compute_codebase_signature_deterministic ... ok
+test detectors::structure::file::tests::test_generate_split_suggestions_empty_communities ... ok
+test api::engine::tests::test_analyze_files_with_parent_directory ... ok
+test detectors::coverage::tests::builds_coverage_pack_from_minimal_lcov_report ... ok
+test io::cache::tests::test_get_valid_cache_returns_none_when_expired ... ok
+test io::cache::tests::test_normalize_token_handles_literals_and_keywords ... ok
+test io::cache::tests::test_get_valid_cache_returns_cache_when_fresh ... ok
+test io::cache::tests::test_pattern_miner_kgram_extraction ... ok
+test io::cache::tests::test_pattern_normalization ... ok
+test io::cache::tests::test_get_valid_cache_returns_none_on_large_signature_change ... ok
+test io::cache::tests::test_stop_motif_cache_serialization ... ok
+test io::cache::tests::test_motif_categorization ... ok
+test detectors::structure::tests::structure_extractor_extract_returns_defaults_on_error ... ok
+test detectors::structure::directory::tests::test_kernighan_lin_refinement_applies_improving_swap ... ok
+test detectors::structure::file::tests::test_build_entity_cohesion_graph_with_entities ... ok
+test io::cache::tests::test_pattern_miner_motif_extraction ... ok
+test io::reports::assets::tests::copy_theme_css_prefers_existing_theme_and_falls_back ... ok
+test io::cache::tests::test_pattern_miner_extracts_kgrams_and_motifs ... ok
+test io::cache::tests::test_pattern_miner_select_stop_motifs_respects_percentile ... ok
+Warning: JavaScript asset react-tree-bundle.debug.js not found; the interactive tree may not render
+Warning: JavaScript asset tree-fallback.js not found; the interactive tree may not render
+test io::reports::assets::tests::copy_js_assets_copies_available_files ... ok
+test io::reports::generator::tests::test_add_files_to_hierarchy_empty_file_groups ... ok
+test detectors::structure::file::tests::test_analyze_file_for_split_large_file ... ok
+test io::reports::generator::tests::test_add_files_to_hierarchy_nested_directories ... ok
+test io::reports::generator::tests::test_add_files_to_hierarchy_basic ... ok
+test io::reports::generator::tests::test_add_files_to_hierarchy_preserves_existing_children ... ok
+
+thread 'io::reports::assets::tests::copy_webpage_assets_creates_directories_and_copies_present_assets' panicked at src/io/reports/assets.rs:218:51:
+copy webpage assets: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test io::reports::assets::tests::copy_webpage_assets_creates_directories_and_copies_present_assets ... FAILED
+
+thread 'io::reports::generator::tests::test_clean_path_helpers_strip_prefixes' panicked at src/io/reports/generator.rs:1454:50:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+AST stop-motif mining completed in 359ms
+AST stop-motif mining completed in 359ms
+test io::reports::generator::tests::test_clean_path_helpers_strip_prefixes ... FAILED
+AST stop-motif mining completed in 356ms
+Found 9 AST patterns, selected 0 as stop-motifs
+AST stop-motif mining completed in 356ms
+Found 3 AST patterns, selected 0 as stop-motifs
+AST stop-motif mining completed in 366ms
+Found 3 AST patterns, selected 0 as stop-motifs
+Found 2 AST patterns, selected 0 as stop-motifs
+Languages processed: {"rust"}
+Found 2 AST patterns, selected 0 as stop-motifs
+Languages processed: {"rust"}
+Languages processed: {"rust"}
+Languages processed: {"rust"}
+Languages processed: {"rust"}
+test io::reports::generator::tests::test_calculate_summary ... ok
+test io::reports::generator::tests::test_clean_path_prefixes_in_file_groups_and_candidates ... ok
+test io::cache::tests::test_pattern_miner_stop_motif_selection ... ok
+test io::reports::generator::tests::test_clean_directory_health_tree_paths ... ok
+test io::reports::generator::tests::test_add_files_to_hierarchy_enriches_metadata ... ok
+test io::reports::generator::tests::test_build_unified_hierarchy_sorts_by_priority ... ok
+test io::reports::generator::tests::test_create_file_groups_from_candidates_groups_stats ... ok
+AST stop-motif mining completed in 0ms
+Found 2 AST patterns, selected 0 as stop-motifs
+Languages processed: {"rust"}
+test io::cache::tests::test_cache_expires_when_past_max_age ... ok
+AST stop-motif mining completed in 0ms
+Found 5 AST patterns, selected 0 as stop-motifs
+Languages processed: {"rust"}
+test io::cache::tests::test_cache_invalidation_by_change ... ok
+test io::cache::tests::test_cache_retains_when_change_below_threshold ... ok
+test io::cache::tests::test_cache_manager_persistence ... ok
+test io::reports::generator::tests::test_generate_json_report ... ok
+test io::reports::generator::tests::test_report_error_debug ... ok
+test io::reports::generator::tests::test_report_error_display ... ok
+test io::reports::generator::tests::test_generator_with_config_stores_analysis_config ... ok
+test io::reports::generator::tests::test_load_templates_from_dir_invalid_filename ... ok
+test io::reports::generator::tests::test_generate_yaml_report ... ok
+test io::reports::generator::tests::test_generate_html_report_custom_template ... ok
+test io::reports::generator::tests::test_load_templates_from_dir_non_hbs_files ... ok
+test io::reports::generator::tests::test_report_generator_debug ... ok
+test io::reports::generator::tests::test_generate_csv_report ... ok
+test io::reports::generator::tests::test_prepare_template_data_marks_oracle_presence ... ok
+test io::reports::generator::tests::test_prepare_template_data ... ok
+test lang::common::tests::test_entity_kind_variants ... ok
+Warning: Failed to serialize value to JSON: intentional failure
+test lang::common::tests::test_parse_index_add_entity ... ok
+test lang::common::tests::test_parse_index_default ... ok
+test lang::common::tests::test_parse_index_get_entities_in_file ... ok
+test io::reports::generator::tests::test_report_generator_default ... ok
+test io::reports::generator::tests::test_report_generator_new ... ok
+test lang::common::tests::test_parse_index_new ... ok
+test lang::common::tests::test_source_location ... ok
+test lang::common::tests::test_parsed_entity ... ok
+test io::reports::helpers::tests::safe_json_value_returns_null_on_error ... ok
+test lang::common::tests::test_parse_index_get_entity ... ok
+test lang::go::tests::test_go_adapter_creation ... ok
+test io::reports::generator::tests::test_generate_markdown_sonar_and_csv_table_reports ... ok
+test lang::common::tests::language_adapter_default_methods_cover_interning ... ok
+test io::reports::generator::tests::test_with_templates_dir_nonexistent ... ok
+test io::reports::generator::tests::test_with_templates_dir_existing ... ok
+test lang::javascript::tests::test_empty_javascript_file ... ok
+test lang::javascript::tests::test_extract_javascript_import_variants ... ok
+test lang::javascript::tests::test_javascript_adapter_creation ... ok
+Warning: JavaScript file 'missing.js' not found, using empty content
+test io::reports::helpers::tests::file_helpers_load_assets_and_fallback_gracefully ... ok
+test lang::javascript::tests::test_parse_arrow_functions ... ok
+test io::reports::generator::tests::test_html_report_uses_hierarchical_data ... ok
+test io::reports::generator::tests::test_generate_html_report_default_template ... ok
+test lang::javascript::tests::test_parse_simple_function ... ok
+test lang::common::tests::test_parse_index_metadata_helpers ... ok
+test lang::javascript::tests::test_parse_simple_class ... ok
+test lang::python::tests::test_extract_entity_name ... ok
+test lang::javascript::tests::test_parse_complex_javascript ... ok
+test lang::python::tests::test_extract_imports_supports_star_and_named ... ok
+test lang::python::tests::test_get_entities_empty_file ... ok
+test io::reports::generator::tests::test_generate_report_with_oracle_all_formats ... ok
+test lang::python::tests::test_extract_function_calls_and_identifiers ... ok
+test lang::python::tests::test_parse_simple_class ... ok
+test lang::python::tests::test_parse_simple_function ... ok
+test lang::python::tests::test_python_adapter_creation ... ok
+test lang::registry::tests::test_adapter_creation_language_aliases ... ok
+test lang::registry::tests::test_adapter_creation_supported_languages ... ok
+test lang::registry::tests::test_adapter_creation_unknown_language ... ok
+test lang::registry::tests::test_language_key_detection ... ok
+test lang::registry::tests::test_tree_sitter_functions ... ok
+test lang::rust_lang::additional_tests::test_const_and_static ... ok
+AST stop-motif mining completed in 2428ms
+Found 3 AST patterns, selected 0 as stop-motifs
+Languages processed: {"javascript", "python"}
+test io::cache::tests::test_ast_stop_motif_miner_extracts_patterns ... ok
+test lang::python::tests::test_parse_complex_python ... ok
+test lang::python::tests::test_convert_to_code_entity ... ok
+test lang::rust_lang::additional_tests::test_rust_adapter_creation_additional ... ok
+test lang::javascript::tests::test_extract_javascript_metadata_and_fallback_names ... ok
+test lang::javascript::tests::test_detects_constants_and_variables ... ok
+test lang::rust_lang::tests::test_empty_rust_file ... ok
+test lang::rust_lang::additional_tests::test_module_parsing ... ok
+test lang::rust_lang::tests::test_parse_simple_function ... ok
+test lang::rust_lang::tests::test_parse_modules ... ok
+test lang::rust_lang::additional_tests::test_function_parsing ... ok
+test lang::rust_lang::tests::test_rust_adapter_creation ... ok
+test lang::go::tests::test_struct_parsing ... ok
+test lang::go::tests::test_interface_parsing ... ok
+test lang::go::tests::test_method_parsing ... ok
+test lang::go::tests::test_function_parsing ... ok
+test lang::rust_lang::tests::test_parse_struct_and_impl ... ok
+test lang::rust_lang::additional_tests::test_enum_parsing ... ok
+test lang::python::tests::test_contains_boilerplate_patterns_detects_common_cases ... ok
+test lang::go::tests::test_go_adapter_analysis_helpers ... ok
+test lang::typescript::tests::test_typescript_adapter_creation ... ok
+test lang::go::tests::test_const_and_var ... ok
+test lang::typescript::tests::test_empty_typescript_file ... ok
+test lang::rust_lang::tests::test_parse_traits_and_enums ... ok
+test lang::python::tests::test_normalize_and_count_python_ast_metrics ... ok
+   🔄 Condensing valknut analysis with 90 token budget
+test lang::rust_lang::additional_tests::test_trait_parsing ... ok
+test lang::rust_lang::additional_tests::test_struct_parsing ... ok
+test oracle::tests::test_codebase_assessment_structure ... ok
+
+🔍 [ORACLE DEBUG] Starting codebase bundle creation
+   📁 Project path: /tmp/.tmp04Nuxp/workspace
+test oracle::tests::normalize_path_for_key_flattens_backslashes ... ok
+test oracle::tests::test_file_candidate_creation ... ok
+test oracle::tests::test_gemini_request_structure ... ok
+test oracle::tests::test_gemini_response_structure ... ok
+   📊 Token budget: 180 tokens
+test oracle::tests::test_html_escape ... ok
+test oracle::tests::test_identified_risk_structure ... ok
+test lang::javascript::tests::test_javascript_identifiers_and_calls ... ok
+test oracle::tests::test_oracle_config_creation ... ok
+test oracle::tests::test_condense_analysis_results ... ok
+test oracle::tests::test_oracle_config_from_env_missing_key ... ok
+test oracle::tests::test_oracle_config_with_max_tokens ... ok
+test oracle::tests::test_oracle_response_structure ... ok
+test oracle::tests::test_refactoring_oracle_creation ... ok
+test oracle::tests::test_refactoring_phase_structure ... ok
+test oracle::tests::test_refactoring_plan_structure ... ok
+test oracle::tests::test_refactoring_subsystem_structure ... ok
+test oracle::tests::test_refactoring_task_structure ... ok
+test oracle::tests::test_risk_assessment_structure ... ok
+test oracle::tests::test_token_budget_constants ... ok
+test oracle::tests::test_oracle_config_from_env_with_key ... ok
+Skipping test - coverage.lcov file not found
+test test_coverage_integration::coverage_fix_tests::test_coverage_analysis_uses_real_data_not_fake ... ok
+test oracle::tests::truncate_hint_adds_ellipsis_for_long_labels ... ok
+test oracle::tests::test_calculate_file_priority ... ok
+test oracle::tests::build_refactor_hints_normalizes_paths_and_limits_size ... ok
+test lang::typescript::tests::test_extract_typescript_import_variants ... ok
+test lang::typescript::tests::test_parse_simple_function ... ok
+test lang::typescript::tests::test_parse_modules_and_exports ... ok
+test oracle::tests::test_is_test_file_patterns ... ok
+test lang::typescript::tests::test_parse_interface_and_class ... ok
+test lang::typescript::tests::test_parse_generic_types ... ok
+   ✅ Included README: README.md (9 tokens)
+   ⏭️  Stopping at candidate 1 due to token budget
+test io::reports::helpers::tests::template_helpers_render_expected_values ... ok
+test lang::typescript::tests::test_detects_enums_and_type_aliases ... ok
+   ✅ Condensed analysis: 91 tokens (budget: 90)
+   ⚠️  Warning: Exceeded token budget by 1 tokens
+   🔄 Condensing valknut analysis with 420 token budget
+   ✅ Condensed analysis: 242 tokens (budget: 420)
+test oracle::tests::condense_analysis_results_with_budget_handles_limits_and_health_section ... ok
+test lang::typescript::tests::test_typescript_identifiers_calls_and_normalization ... ok
+   📋 Found 3 candidate source files
+test lang::typescript::tests::test_extract_typescript_metadata_and_entities ... ok
+   ✅ Included: src/lib.rs (12 tokens, priority: 7.20)
+   ✅ Included: src/utils.rs (17 tokens, priority: 3.60)
+   ⏭️  Skipped: src/huge.rs (2200 tokens) - would exceed budget
+
+🔍 [ORACLE DEBUG] Creating condensed valknut analysis
+   📊 Analysis token budget: 50000 tokens
+   🔄 Condensing valknut analysis with 50000 token budget
+   ✅ Condensed analysis: 192 tokens (budget: 50000)
+
+🎯 [ORACLE DEBUG] Bundle creation complete
+   📦 Final bundle: ~1257 tokens
+   📁 Files included: 3
+   ⏭️  Files skipped: 1
+test oracle::tests::create_codebase_bundle_includes_readme_and_skips_large_files ... ok
+
+failures:
+
+failures:
+    io::reports::assets::tests::copy_webpage_assets_creates_directories_and_copies_present_assets
+    io::reports::generator::tests::test_clean_path_helpers_strip_prefixes
+
+test result: FAILED. 505 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.04s
+
+[2m2025-10-29T20:16:24.618305Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling::linux[0m[2m:[0m Launching test
+[2m2025-10-29T20:16:24.618359Z[0m [32m INFO[0m [2mcargo_tarpaulin::process_handling[0m[2m:[0m running /home/nathan/Projects/valknut/target/debug/deps/valknut-e3938be0f865edfc
+
+running 107 tests
+
+
+
+[1m[31m❌ Quality Gate Failed[39m[0m
+[1m[31m❌ Quality Gate Failed[39m[0m
+[1m[31m❌ Quality Gate Failed[39m[0m
+[2mQuality Score:[0m [33m6[39m
+[2mQuality Score:[0m [33m8[39m
+[2mQuality Score:[0m [33m3[39m
+
+
+
+test cli::commands::tests::output_format_machine_readable_detection ... ok
+test cli::commands::tests::is_quiet_respects_format_overrides ... ok
+test cli::commands::tests::test_build_quality_gate_config_defaults ... ok
+test cli::commands::tests::test_format_to_string ... ok
+test cli::commands::tests::test_build_quality_gate_config_quality_gate_enabled ... ok
+test cli::commands::tests::test_build_quality_gate_config_fail_on_issues ... ok
+test cli::commands::tests::test_handle_quality_gates_missing_summary ... ok
+[1m[31m🚫 BLOCKER Issues:[39m[0m
+[1m[31m🔴 CRITICAL Issues:[39m[0m
+[1m[94m🔤 Supported Programming Languages[39m[0m
+   Found 8 supported languages
+[1mTo fix these issues:[0m
+  • [33mBlocker Rule[39m: 95.0 (threshold: 70.0)
+test cli::commands::tests::doc_audit_command_rejects_missing_root ... ok
+
+  • [33mTest Rule[39m: 85.0 (threshold: 70.0)
+  1. Reduce code complexity by refactoring large functions
+    [2mBlocker violation[0m
+    [2mTest violation[0m
+  2. Address critical and high-priority issues first
+
+[1mTo fix these issues:[0m
+  1. Reduce code complexity by refactoring large functions
+  2. Address critical and high-priority issues first
+test cli::commands::tests::test_load_configuration_default ... ok
+  3. Improve code maintainability through better structure
+  3. Improve code maintainability through better structure
+
+  4. Reduce technical debt by following best practices
+  4. Reduce technical debt by following best practices
+[1m[33m⚠️  WARNING Issues:[39m[0m
+
+
+test cli::commands::tests::test_display_quality_gate_violations_no_violations ... ok
+test cli::commands::tests::test_display_quality_gate_violations_blocker_severity ... ok
+  • [33mWarning Rule[39m: 25.0 (threshold: 20.0)
+    [2mWarning violation[0m
+
+[1mTo fix these issues:[0m
+  1. Reduce code complexity by refactoring large functions
+  2. Address critical and high-priority issues first
+  3. Improve code maintainability through better structure
+  4. Reduce technical debt by following best practices
+
+test cli::commands::tests::test_display_quality_gate_violations_with_violations ... ok
+test cli::commands::tests::test_load_configuration_yaml_file ... ok
+test cli::commands::tests::test_load_configuration_invalid_file ... ok
+📡 Starting MCP stdio server for IDE integration...
+📡 Starting MCP stdio server for IDE integration...
+test cli::commands::tests::test_load_configuration_json_file ... ok
+{
+  "author": "Nathan Rice",
+  "capabilities": {
+    "tools": [
+      {
+        "description": "Analyze code for complexity, technical debt, and refactoring opportunities",
+        "name": "analyze_code",
+        "parameters": {
+          "properties": {
+            "format": {
+              "description": "Output format",
+              "enum": [
+                "json",
+                "markdown",
+                "html"
+              ],
+              "type": "string"
+            },
+            "path": {
+              "description": "Path to code directory or file",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Get specific refactoring suggestions for code entities",
+        "name": "get_refactoring_suggestions",
+        "parameters": {
+          "properties": {
+            "entity_id": {
+              "description": "Code entity identifier",
+              "type": "string"
+            },
+            "max_suggestions": {
+              "description": "Maximum number of suggestions",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "entity_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Validate code against quality gate thresholds for CI/CD integration",
+        "name": "validate_quality_gates",
+        "parameters": {
+          "properties": {
+            "max_complexity": {
+              "description": "Maximum allowed complexity score",
+              "type": "number"
+            },
+            "max_debt": {
+              "description": "Maximum allowed technical debt ratio",
+              "type": "number"
+            },
+            "max_issues": {
+              "description": "Maximum allowed number of issues",
+              "type": "integer"
+            },
+            "min_health": {
+              "description": "Minimum required health score",
+              "type": "number"
+            },
+            "path": {
+              "description": "Path to code directory or file",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "description": "Analyze quality metrics and issues for a specific file",
+        "name": "analyze_file_quality",
+        "parameters": {
+          "properties": {
+            "file_path": {
+              "description": "Path to the specific file to analyze",
+              "type": "string"
+            },
+            "include_suggestions": {
+              "description": "Whether to include refactoring suggestions",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "file_path"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "description": "AI-Powered Code Analysis & Refactoring Assistant",
+  "homepage": "https://github.com/nathanricedev/valknut",
+  "license": "MIT",
+  "name": "valknut",
+  "server": {
+    "args": [
+      "mcp-stdio"
+    ],
+    "command": "valknut"
+  },
+  "version": "1.2.3"
+}
+test cli::commands::tests::test_mcp_manifest_command_stdout ... ok
+╭───────────────┬────────────────────╮
+│ setting       │ value              │
+├───────────────┼────────────────────┤
+│ Languages     │ Auto-detected      │
+│ Top-K Results │ 20                 │
+│ Granularity   │ File and Directory │
+│ Analysis Mode │ Full Analysis      │
+╰───────────────┴────────────────────╯
+📊 Survey disabled
+✅ MCP manifest saved to /tmp/.tmpN59ESO/manifest.json
+
+📊 Survey enabled with High verbosity
+🚀 MCP JSON-RPC 2.0 server ready for requests
+🚀 MCP JSON-RPC 2.0 server ready for requests
+test cli::commands::tests::test_display_config_summary ... ok
+test cli::commands::tests::test_mcp_manifest_command_file_output ... ok
+[1m[94m📋 Coverage File Discovery Preview[39m[0m
+[1m[94m📋 Coverage File Discovery Preview[39m[0m
+[2m# Default valknut configuration[0m
+[1m[36m┌[39m[0m[36m────────────────────────────────────────────────────────────[39m[1m[36m┐[39m[0m
+[2m# Save this to a file and customize as needed[0m
+[1m[36m│[39m[0m [1m[96m⚙️  Valknut v1.2.3 - AI-Powered Code Analysis[39m[0m [1m[36m│[39m[0m
+[2m# Usage: valknut analyze --config your-config.yml[0m
+
+test cli::commands::tests::test_handle_quality_gates_basic ... ok
+[1m[36m└[39m[0m[36m────────────────────────────────────────────────────────────[39m[1m[36m┘[39m[0m
+
+test cli::commands::tests::test_print_header ... ok
+[1m[94m🔍 Validating configuration:[39m[0m [36m/tmp/.tmp0Gbpeh[39m
+[1m[94m🔍 Validating configuration:[39m[0m [36m/tmp/.tmp584iJe[39m
+
+
+[1m[92m✅ Configuration file is valid![39m[0m
+[1m[92m✅ Configuration file is valid![39m[0m
+
+
+╭───────────────┬────────────────────╮
+│ setting       │ value              │
+├───────────────┼────────────────────┤
+│ Languages     │ Auto-detected      │
+│ Top-K Results │ 20                 │
+│ Granularity   │ File and Directory │
+│ Analysis Mode │ Full Analysis      │
+╰───────────────┴────────────────────╯
+
+test cli::commands::tests::test_handle_quality_gates_violations ... ok
+╭───────────────┬────────────────────╮
+│ setting       │ value              │
+├───────────────┼────────────────────┤
+│ Languages     │ Auto-detected      │
+│ Top-K Results │ 20                 │
+│ Granularity   │ File and Directory │
+│ Analysis Mode │ Full Analysis      │
+╰───────────────┴────────────────────╯
+
+[1m[94m🔧 Detailed Settings[39m[0m
+
+
+[1m[94m💡 Recommendations:[39m[0m
+   ✅ Configuration looks optimal!
+test cli::commands::tests::test_validate_config_valid_file ... ok
+[1m[92m✅ Analysis Complete[39m[0m
+test cli::commands::tests::test_mcp_stdio_command ... ok
+[1m[92m✅ Analysis Complete[39m[0m
+
+
+test cli::commands::tests::test_mcp_stdio_command_with_config ... ok
+[1m[92m✅ Analysis Complete![39m[0m
+
+  Enabled Analyses:
+  📊 Analysis Configuration:
+[1m📁 Results saved to:[0m [36m/tmp/.tmp6qLDM7[39m
+analysis:
+  enable_scoring: true
+  enable_graph_analysis: true
+  enable_lsh_analysis: false
+  enable_refactoring_analysis: true
+  enable_coverage_analysis: false
+  enable_structure_analysis: true
+  enable_names_analysis: true
+  confidence_threshold: 0.7
+  max_files: 0
+  exclude_patterns:
+  - '*/node_modules/*'
+  - '*/venv/*'
+  - '*/target/*'
+  - '*/__pycache__/*'
+  - '*.min.js'
+  include_patterns:
+  - '**/*'
+  ignore_patterns: []
+scoring:
+  normalization_scheme: z_score
+  use_bayesian_fallbacks: true
+  confidence_reporting: false
+  weights:
+    complexity: 1.0
+    graph: 0.8
+    structure: 0.9
+    style: 0.5
+    coverage: 0.7
+  statistical_params:
+    confidence_level: 0.95
+    min_sample_size: 10
+    outlier_threshold: 3.0
+graph:
+  enable_betweenness: true
+  enable_closeness: false
+  enable_cycle_detection: true
+  max_exact_size: 10000
+  use_approximation: true
+  approximation_sample_rate: 0.1
+lsh:
+  num_hashes: 128
+  num_bands: 8
+  shingle_size: 3
+  similarity_threshold: 0.7
+  max_candidates: 100
+  use_semantic_similarity: false
+  verify_with_apted: true
+  apted_max_nodes: 4000
+  apted_max_pairs_per_entity: 25
+dedupe:
+  include:
+  - src/**
+  exclude:
+  - benchmarks/**
+  - examples/**
+  - datasets/**
+  - '**/generated/**'
+  - '**/*.pb.rs'
+  min_function_tokens: 40
+  min_ast_nodes: 35
+  min_match_tokens: 24
+  min_match_coverage: 0.4
+  shingle_k: 9
+  require_distinct_blocks: 2
+  weights:
+    ast: 0.35
+    pdg: 0.45
+    emb: 0.2
+  io_mismatch_penalty: 0.25
+  threshold_s: 0.82
+  stop_phrases:
+  - ^\s*@staticmethod\b
+  - group\.bench_with_input\s*\(
+  - \bb\.iter\s*\(\|\|
+  - \bgroup\.finish\s*\(\)\s*;?
+  - \blet\s+config\s*=\s*AnalysisConfig::(new|default)\s*\(\)\s*;?
+  - \bchecks\.push\s*\(\s*HealthCheck\s*\{
+  rank_by: saved_tokens
+  min_saved_tokens: 100
+  keep_top_per_file: 3
+  adaptive:
+    auto_denoise: true
+    adaptive_learning: true
+    rarity_weighting: true
+    structural_validation: true
+    live_reach_integration: true
+    stop_motif_percentile: 0.75
+    hub_suppression_threshold: 0.6
+    quality_gate_percentage: 0.8
+    tfidf_kgram_size: 8
+    wl_iterations: 3
+    min_rarity_gain: 1.2
+    external_call_jaccard_threshold: 0.2
+    cache_refresh_days: 7
+    auto_refresh_cache: true
+denoise:
+  enabled: false
+  auto: true
+  min_function_tokens: 60
+  min_match_tokens: 32
+  require_blocks: 2
+  similarity: 0.8
+  weights:
+    ast: 0.35
+    pdg: 0.45
+    emb: 0.2
+  io_mismatch_penalty: 0.25
+  threshold_s: 0.8
+  stop_motifs:
+    enabled: true
+    percentile: 0.5
+    refresh_days: 7
+  auto_calibration:
+    enabled: true
+    quality_target: 0.8
+    sample_size: 200
+    max_iterations: 50
+  ranking:
+    by: saved_tokens
+    min_saved_tokens: 100
+    min_rarity_gain: 1.2
+    live_reach_boost: true
+  dry_run: false
+languages:
+  typescript:
+    enabled: true
+    file_extensions:
+    - .ts
+    - .tsx
+    - .d.ts
+    tree_sitter_language: typescript
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  python:
+    enabled: true
+    file_extensions:
+    - .py
+    - .pyi
+    tree_sitter_language: python
+    max_file_size_mb: 10.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  rust:
+    enabled: true
+    file_extensions:
+    - .rs
+    tree_sitter_language: rust
+    max_file_size_mb: 10.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  go:
+    enabled: true
+    file_extensions:
+    - .go
+    tree_sitter_language: go
+    max_file_size_mb: 8.0
+    complexity_threshold: 12.0
+    additional_settings: {}
+  javascript:
+    enabled: true
+    file_extensions:
+    - .js
+    - .mjs
+    - .jsx
+    tree_sitter_language: javascript
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+io:
+  cache_dir: null
+  enable_caching: true
+  cache_ttl_seconds: 3600
+  report_dir: null
+  report_format: json
+performance:
+  max_threads: null
+  memory_limit_mb: null
+  file_timeout_seconds: 30
+  total_timeout_seconds: null
+  enable_simd: true
+  batch_size: 100
+structure:
+  enable_branch_packs: true
+  enable_file_split_packs: true
+  top_packs: 20
+  fsdir:
+    max_files_per_dir: 25
+    max_subdirs_per_dir: 10
+    max_dir_loc: 2000
+    min_branch_recommendation_gain: 0.15
+    min_files_for_split: 5
+    target_loc_per_subdir: 1000
+  fsfile:
+    huge_loc: 800
+    huge_bytes: 128000
+    min_split_loc: 200
+    min_entities_per_split: 3
+  partitioning:
+    balance_tolerance: 0.25
+    max_clusters: 4
+    min_clusters: 2
+    naming_fallbacks:
+    - core
+    - io
+    - api
+    - util
+coverage:
+  auto_discover: true
+  search_paths:
+  - ./coverage/
+  - ./target/coverage/
+  - ./target/tarpaulin/
+  - ./target/
+  - ./.coverage/
+  - ./htmlcov/
+  - ./coverage-reports/
+  - ./reports/
+  - ./test-results/
+  - ./build/coverage/
+  - ./build/test-results/
+  - ./
+  file_patterns:
+  - coverage.xml
+  - lcov.info
+  - coverage.json
+  - coverage.lcov
+  - cobertura.xml
+  - coverage-final.json
+  - coverage-summary.json
+  - .coverage
+  - junit.xml
+  - jacoco.xml
+  - clover.xml
+  - '**/coverage.xml'
+  - '**/lcov.info'
+  - '**/coverage.json'
+  - '**/cobertura.xml'
+  - '**/jacoco.xml'
+  - '**/clover.xml'
+  - target/coverage/*.xml
+  - target/tarpaulin/coverage.xml
+  - target/llvm-cov/coverage.lcov
+  - build/coverage/*.xml
+  - coverage/coverage-final.json
+  - htmlcov/coverage.json
+  - '**/build/jacoco/*.xml'
+  - '**/build/reports/jacoco/test/*.xml'
+  - '**/build/test-results/test/*.xml'
+  max_age_days: 7
+  coverage_file: null
+
+    • Confidence threshold: 70.0%
+
+test cli::commands::tests::test_print_default_config ... ok
+╭────────────┬────────────┬─────────────────┬────────────────────────────────────────╮
+│ language   │ extension  │ status          │ features                               │
+├────────────┼────────────┼─────────────────┼────────────────────────────────────────┤
+│ Python     │ .py        │ ✅ Full Support │ Full analysis, refactoring suggestions │
+│ TypeScript │ .ts, .tsx  │ ✅ Full Support │ Full analysis, type checking           │
+│ JavaScript │ .js, .jsx  │ ✅ Full Support │ Full analysis, complexity metrics      │
+│ Rust       │ .rs        │ ✅ Full Support │ Full analysis, memory safety checks    │
+│ Go         │ .go        │ 🚧 Experimental │ Basic analysis                         │
+│ Java       │ .java      │ 🚧 Experimental │ Basic analysis                         │
+│ C++        │ .cpp, .cxx │ 🚧 Experimental │ Basic analysis                         │
+│ C#         │ .cs        │ 🚧 Experimental │ Basic analysis                         │
+╰────────────┴────────────┴─────────────────┴────────────────────────────────────────╯
+[1m[92m✅ Configuration saved to:[39m[0m [36m/tmp/.tmpN1WM6c/test_config.yml[39m
+[1m[92m✅ Configuration saved to:[39m[0m [36m/tmp/.tmpIERi3s/existing_config.yml[39m
+    ✅ Complexity Analysis - Cyclomatic and cognitive complexity scoring
+    • Max files: 42
+[92m🎉 Great job! No significant issues found.[39m
+╭──────────────────────────┬───────╮
+│ setting                  │ value │
+├──────────────────────────┼───────┤
+│ Branch Packs Enabled     │ true  │
+│ File Split Packs Enabled │ true  │
+│ Top Packs Limit          │ 20    │
+╰──────────────────────────┴───────╯
+
+[1m[94m💡 Recommendations:[39m[0m
+   ✅ Configuration looks optimal!
+
+
+
+test cli::output::tests::test_display_complexity_recommendations ... ok
+test cli::output::tests::test_display_complexity_recommendations_empty ... ok
+   Your code appears to be well-structured and maintainable.
+
+test cli::commands::tests::test_validate_config_verbose ... ok
+test cli::output::tests::test_display_refactoring_suggestions ... ok
+test cli::output::tests::test_display_refactoring_suggestions_empty ... ok
+[1m[94m📢 Next Steps:[39m[0m
+[1m[94m📝 Usage Notes:[39m[0m
+[1m[94m📝 Next steps:[39m[0m
+[1m[94m📝 Next steps:[39m[0m
+    ✅ Structure Analysis - Directory organization and architectural patterns
+    • Coverage max age: 7 days
+    • Coverage patterns: 1 patterns
+   1. Edit the configuration file to customize analysis settings
+   • Full Support: Complete feature set with refactoring suggestions
+   1. Edit the configuration file to customize analysis settings
+   • Experimental: Basic complexity analysis, limited features
+   2. Run analysis with: [36mvalknut analyze --config /tmp/.tmpN1WM6c/test_config.yml <paths>[39m
+    ✅ Refactoring Analysis - Refactoring opportunity detection
+   2. Run analysis with: [36mvalknut analyze --config /tmp/.tmpIERi3s/existing_config.yml <paths>[39m
+
+   1. Review the generated json report for detailed findings
+   • Configure languages in your config file with language-specific settings
+
+[1m[94m🔧 Key settings you can customize:[39m[0m
+[1m[94m🔧 Key settings you can customize:[39m[0m
+   2. Address high-priority issues identified in the analysis
+
+    ✅ Impact Analysis - Dependency graphs, cycles, and centrality
+    • Clone detection: denoising enabled (similarity: 87%)
+test cli::commands::tests::test_display_analysis_config_summary_with_flags ... ok
+   3. Consider running analysis regularly to track improvements
+[2m💡 Tip: Use 'valknut init-config' to create a configuration file[0m
+test cli::output::tests::test_display_completion_summary ... ok
+test cli::commands::tests::test_list_languages ... ok
+test cli::output::tests::test_format_to_string ... ok
+╭─────────────────────┬────────────╮
+│ metric              │ value      │
+├─────────────────────┼────────────┤
+│ 📄 Files Analyzed   │ 0          │
+│ 🏢 Code Entities    │ 0          │
+│ ⏱️  Processing Time │ 0.00s      │
+│ 🏆 Health Score     │ 🟢 100/100 │
+│ ⚠️  Priority Issues │ ✅ 0       │
+╰─────────────────────┴────────────╯
+╭─────────────────────┬───────────╮
+│ metric              │ value     │
+├─────────────────────┼───────────┤
+│ 📄 Files Analyzed   │ 10        │
+│ 🏢 Code Entities    │ 500       │
+│ ⏱️  Processing Time │ 0.00s     │
+│ 🏆 Health Score     │ 🟡 60/100 │
+│ ⚠️  Priority Issues │ ❌ 25     │
+╰─────────────────────┴───────────╯
+
+
+test cli::output::tests::test_display_analysis_results ... ok
+test cli::output::tests::test_display_analysis_results_minimal ... ok
+    ✅ Clone Detection - LSH-based similarity analysis (with denoising) + APTED verification
+╭───────────────────────────────────┬──────────────────────────────────────────────────────────╮
+│ setting                           │ description                                              │
+├───────────────────────────────────┼──────────────────────────────────────────────────────────┤
+│ denoise.enabled                   │ Enable intelligent clone detection (default: true)       │
+│ denoise.auto                      │ Enable auto-calibration (default: true)                  │
+│ denoise.min_function_tokens       │ Minimum function size for analysis (default: 40)         │
+│ denoise.similarity                │ Similarity threshold for clone detection (default: 0.82) │
+│ structure.enable_branch_packs     │ Enable directory reorganization analysis                 │
+│ structure.enable_file_split_packs │ Enable file splitting recommendations                    │
+╰───────────────────────────────────┴──────────────────────────────────────────────────────────╯
+╭───────────────────────────────────┬──────────────────────────────────────────────────────────╮
+│ setting                           │ description                                              │
+├───────────────────────────────────┼──────────────────────────────────────────────────────────┤
+│ denoise.enabled                   │ Enable intelligent clone detection (default: true)       │
+│ denoise.auto                      │ Enable auto-calibration (default: true)                  │
+│ denoise.min_function_tokens       │ Minimum function size for analysis (default: 40)         │
+│ denoise.similarity                │ Similarity threshold for clone detection (default: 0.82) │
+│ structure.enable_branch_packs     │ Enable directory reorganization analysis                 │
+│ structure.enable_file_split_packs │ Enable file splitting recommendations                    │
+╰───────────────────────────────────┴──────────────────────────────────────────────────────────╯
+test cli::output::tests::test_generate_csv_report_empty ... ok
+test cli::output::tests::test_generate_csv_report ... ok
+test cli::commands::tests::test_init_config_force_overwrite ... ok
+test cli::output::tests::test_generate_html_report ... ok
+test cli::commands::tests::test_init_config_new_file ... ok
+test cli::output::tests::test_generate_ci_summary_report ... ok
+test cli::output::tests::test_generate_ci_summary_report_fail ... ok
+    ✅ Coverage Analysis - Test gap analysis (auto-discovery enabled)
+test cli::output::tests::test_generate_markdown_report ... ok
+  📊 Total: 6 analyses enabled
+test cli::commands::tests::test_display_enabled_analyses_all_features ... ok
+  [33m⚠️[39m No coverage files found - coverage analysis will be skipped
+  [32m✅[39m Found 1 coverage files:
+  💡 Tip: Generate coverage files using your test runner, e.g.:
+    - Rust: cargo tarpaulin --out xml
+    - Python: pytest --cov --cov-report=xml
+    1. /tmp/.tmpkAp5JA/./coverage/coverage.lcov (format: Lcov, size: 0 KB)
+    - JavaScript: npm test -- --coverage --coverageReporters=cobertura
+
+
+test cli::commands::tests::test_preview_coverage_discovery_lists_files ... ok
+test cli::commands::tests::test_preview_coverage_discovery_handles_absence ... ok
+[1m[94m📊 Comprehensive Analysis Results[39m[0m
+[2m=================================[0m
+📄 Analysis results: /tmp/.tmpqpGG4c/output/analysis_results.json
+📄 Analysis results: /tmp/.tmpdkLK6S/output/analysis_results.json
+
+📄 Analysis results: /tmp/.tmptCxOoN/output/analysis_results.json
+[1m🎯 Analysis Summary:[0m
+test cli::output::tests::test_generate_outputs_json ... ok
+test cli::output::tests::test_generate_outputs_missing_fields ... ok
+test cli::output::tests::test_generate_outputs_with_feedback_quiet ... ok
+[1m[94m📊 Comprehensive Analysis Results[39m[0m
+[2m=================================[0m
+
+[1m🎯 Analysis Summary:[0m
+   • [93m0[39m total issues found
+📄 Analysis results: /tmp/.tmpX0rbDl/output/analysis_results.yaml
+   • [93m0[39m total issues found
+📄 Feature report: /tmp/.tmpPy5V6E/output/report.jsonl
+   • [92m15[39m files analyzed
+   • [92m25[39m files analyzed
+
+
+📊 CI Summary: /tmp/.tmpiVnZOn/output/ci_summary.json
+[92m🎉 Great job! No significant issues found across all analyzers.[39m
+[92m🎉 Great job! No significant issues found across all analyzers.[39m
+   Your code appears to be well-structured and maintainable.
+📊 Team report (markdown): /tmp/.tmpSscRp8/output/team_report.md
+test cli::output::tests::test_generate_outputs_jsonl ... ok
+   Your code appears to be well-structured and maintainable.
+[1m[94m🏗️  Valknut Structure Analysis Results[39m[0m
+[2m=====================================[0m
+
+test cli::output::tests::test_generate_outputs_markdown ... ok
+test cli::output::tests::test_print_comprehensive_results_pretty ... ok
+test cli::output::tests::test_generate_outputs_with_feedback_not_quiet ... ok
+test cli::output::tests::test_generate_outputs_ci_summary ... ok
+test cli::output::tests::test_print_human_readable_results ... ok
+test cli::output::tests::test_generate_outputs_pretty ... ok
+test mcp::protocol::tests::analyze_code_schema_declares_required_fields_and_enum ... ok
+test mcp::protocol::tests::analyze_file_quality_schema_requires_file_path ... ok
+test mcp::protocol::tests::json_rpc_error_sets_error_payload ... ok
+📊 CSV report: /tmp/.tmpu7upj3/output/analysis_data.csv
+test cli::output::tests::test_generate_outputs_csv ... ok
+test mcp::protocol::tests::validate_quality_gates_schema_has_optional_thresholds ... ok
+test mcp::protocol::tests::refactoring_suggestions_schema_limits_max_suggestions ... ok
+test cli::output::tests::test_generate_sonar_report ... ok
+test mcp::protocol::tests::json_rpc_success_has_result_and_no_error ... ok
+test mcp::server::tests::format_analysis_results_defaults_to_json ... ok
+📊 SonarQube report: /tmp/.tmpM5eLib/output/sonarqube_issues.json
+test mcp::server::tests::handle_request_rejects_empty_payload ... ok
+📄 Analysis results: /tmp/.tmpmLJTE0/output_structured/analysis_results.json
+test cli::output::tests::test_generate_outputs_sonar ... ok
+test cli::output::tests::test_generate_outputs_json_with_serialized_results ... ok
+test mcp::server::tests::handle_request_validates_jsonrpc_version ... ok
+test mcp::server::tests::handle_request_reports_parse_errors ... ok
+test mcp::tools::tests::default_parameter_helpers_match_expected_values ... ok
+test mcp::server::tests::available_tools_expose_expected_entries ... ok
+test mcp::server::tests::handle_tools_list_wraps_available_tools ... ok
+test mcp::server::tests::handle_initialize_returns_capabilities ... ok
+test mcp::server::tests::handle_request_unknown_method_returns_error ... ok
+test tests::test_cli_global_flags ... ok
+test mcp::server::tests::cache_analysis_evicts_when_limit_exceeded ... ok
+test tests::test_cli_parsing_analyze_default ... ok
+test tests::test_cli_parsing_analyze_with_options ... ok
+test tests::test_cli_parsing_doc_audit_defaults ... ok
+test tests::test_cli_parsing_init_config ... ok
+test tests::test_cli_parsing_list_languages ... ok
+test tests::test_cli_parsing_mcp_manifest ... ok
+test tests::test_cli_parsing_mcp_stdio ... ok
+test tests::test_cli_parsing_print_default_config ... ok
+test tests::test_cli_parsing_output_format_variants ... ok
+test tests::test_cli_parsing_survey_verbosity_variants ... ok
+test mcp::server::tests::cache_analysis_provides_hits_and_expires ... ok
+test tests::test_cli_parsing_quality_gate_options ... ok
+test tests::test_cli_parsing_validate_config ... ok
+📄 Analysis results: /tmp/.tmpRDQywd/output/analysis_results.yaml
+test mcp::tools::tests::extract_suggested_actions_reflects_priority_and_issues ... ok
+test cli::output::tests::test_generate_outputs_yaml ... ok
+{
+  "documentation_issues": [],
+  "missing_readmes": [],
+  "stale_readmes": []
+}
+[2m# Default valknut configuration[0m
+[2m# Save this to a file and customize as needed[0m
+[2m# Usage: valknut analyze --config your-config.yml[0m
+
+analysis:
+  enable_scoring: true
+  enable_graph_analysis: true
+  enable_lsh_analysis: false
+  enable_refactoring_analysis: true
+  enable_coverage_analysis: false
+  enable_structure_analysis: true
+  enable_names_analysis: true
+  confidence_threshold: 0.7
+  max_files: 0
+  exclude_patterns:
+  - '*/node_modules/*'
+  - '*/venv/*'
+  - '*/target/*'
+  - '*/__pycache__/*'
+  - '*.min.js'
+  include_patterns:
+  - '**/*'
+  ignore_patterns: []
+scoring:
+  normalization_scheme: z_score
+  use_bayesian_fallbacks: true
+  confidence_reporting: false
+  weights:
+    complexity: 1.0
+    graph: 0.8
+    structure: 0.9
+    style: 0.5
+    coverage: 0.7
+  statistical_params:
+    confidence_level: 0.95
+    min_sample_size: 10
+    outlier_threshold: 3.0
+graph:
+  enable_betweenness: true
+  enable_closeness: false
+  enable_cycle_detection: true
+  max_exact_size: 10000
+  use_approximation: true
+  approximation_sample_rate: 0.1
+lsh:
+  num_hashes: 128
+  num_bands: 8
+  shingle_size: 3
+  similarity_threshold: 0.7
+  max_candidates: 100
+  use_semantic_similarity: false
+  verify_with_apted: true
+  apted_max_nodes: 4000
+  apted_max_pairs_per_entity: 25
+dedupe:
+  include:
+  - src/**
+  exclude:
+  - benchmarks/**
+  - examples/**
+  - datasets/**
+  - '**/generated/**'
+  - '**/*.pb.rs'
+  min_function_tokens: 40
+  min_ast_nodes: 35
+  min_match_tokens: 24
+  min_match_coverage: 0.4
+  shingle_k: 9
+  require_distinct_blocks: 2
+  weights:
+    ast: 0.35
+    pdg: 0.45
+    emb: 0.2
+  io_mismatch_penalty: 0.25
+  threshold_s: 0.82
+  stop_phrases:
+  - ^\s*@staticmethod\b
+  - group\.bench_with_input\s*\(
+  - \bb\.iter\s*\(\|\|
+  - \bgroup\.finish\s*\(\)\s*;?
+  - \blet\s+config\s*=\s*AnalysisConfig::(new|default)\s*\(\)\s*;?
+  - \bchecks\.push\s*\(\s*HealthCheck\s*\{
+  rank_by: saved_tokens
+  min_saved_tokens: 100
+  keep_top_per_file: 3
+  adaptive:
+    auto_denoise: true
+    adaptive_learning: true
+    rarity_weighting: true
+    structural_validation: true
+    live_reach_integration: true
+    stop_motif_percentile: 0.75
+    hub_suppression_threshold: 0.6
+    quality_gate_percentage: 0.8
+    tfidf_kgram_size: 8
+    wl_iterations: 3
+    min_rarity_gain: 1.2
+    external_call_jaccard_threshold: 0.2
+    cache_refresh_days: 7
+    auto_refresh_cache: true
+denoise:
+  enabled: false
+  auto: true
+  min_function_tokens: 60
+  min_match_tokens: 32
+  require_blocks: 2
+  similarity: 0.8
+  weights:
+    ast: 0.35
+    pdg: 0.45
+    emb: 0.2
+  io_mismatch_penalty: 0.25
+  threshold_s: 0.8
+  stop_motifs:
+    enabled: true
+    percentile: 0.5
+    refresh_days: 7
+  auto_calibration:
+    enabled: true
+    quality_target: 0.8
+    sample_size: 200
+    max_iterations: 50
+  ranking:
+    by: saved_tokens
+    min_saved_tokens: 100
+    min_rarity_gain: 1.2
+    live_reach_boost: true
+  dry_run: false
+languages:
+  typescript:
+    enabled: true
+    file_extensions:
+    - .ts
+    - .tsx
+    - .d.ts
+    tree_sitter_language: typescript
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  python:
+    enabled: true
+    file_extensions:
+    - .py
+    - .pyi
+    tree_sitter_language: python
+    max_file_size_mb: 10.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+  rust:
+    enabled: true
+    file_extensions:
+    - .rs
+    tree_sitter_language: rust
+    max_file_size_mb: 10.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  go:
+    enabled: true
+    file_extensions:
+    - .go
+    tree_sitter_language: go
+    max_file_size_mb: 8.0
+    complexity_threshold: 12.0
+    additional_settings: {}
+  javascript:
+    enabled: true
+    file_extensions:
+    - .js
+    - .mjs
+    - .jsx
+    tree_sitter_language: javascript
+    max_file_size_mb: 5.0
+    complexity_threshold: 10.0
+    additional_settings: {}
+io:
+  cache_dir: null
+  enable_caching: true
+  cache_ttl_seconds: 3600
+  report_dir: null
+  report_format: json
+performance:
+  max_threads: null
+  memory_limit_mb: null
+  file_timeout_seconds: 30
+  total_timeout_seconds: null
+  enable_simd: true
+  batch_size: 100
+structure:
+  enable_branch_packs: true
+  enable_file_split_packs: true
+  top_packs: 20
+  fsdir:
+    max_files_per_dir: 25
+    max_subdirs_per_dir: 10
+    max_dir_loc: 2000
+    min_branch_recommendation_gain: 0.15
+    min_files_for_split: 5
+    target_loc_per_subdir: 1000
+  fsfile:
+    huge_loc: 800
+    huge_bytes: 128000
+    min_split_loc: 200
+    min_entities_per_split: 3
+  partitioning:
+    balance_tolerance: 0.25
+    max_clusters: 4
+    min_clusters: 2
+    naming_fallbacks:
+    - core
+    - io
+    - api
+    - util
+coverage:
+  auto_discover: true
+  search_paths:
+  - ./coverage/
+  - ./target/coverage/
+  - ./target/tarpaulin/
+  - ./target/
+  - ./.coverage/
+  - ./htmlcov/
+  - ./coverage-reports/
+  - ./reports/
+  - ./test-results/
+  - ./build/coverage/
+  - ./build/test-results/
+  - ./
+  file_patterns:
+  - coverage.xml
+  - lcov.info
+  - coverage.json
+  - coverage.lcov
+  - cobertura.xml
+  - coverage-final.json
+  - coverage-summary.json
+  - .coverage
+  - junit.xml
+  - jacoco.xml
+  - clover.xml
+  - '**/coverage.xml'
+  - '**/lcov.info'
+  - '**/coverage.json'
+  - '**/cobertura.xml'
+  - '**/jacoco.xml'
+  - '**/clover.xml'
+  - target/coverage/*.xml
+  - target/tarpaulin/coverage.xml
+  - target/llvm-cov/coverage.lcov
+  - build/coverage/*.xml
+  - coverage/coverage-final.json
+  - htmlcov/coverage.json
+  - '**/build/jacoco/*.xml'
+  - '**/build/reports/jacoco/test/*.xml'
+  - '**/build/test-results/test/*.xml'
+  max_age_days: 7
+  coverage_file: null
+
+[1m[94m🔤 Supported Programming Languages[39m[0m
+   Found 8 supported languages
+
+╭────────────┬────────────┬─────────────────┬────────────────────────────────────────╮
+│ language   │ extension  │ status          │ features                               │
+├────────────┼────────────┼─────────────────┼────────────────────────────────────────┤
+│ Python     │ .py        │ ✅ Full Support │ Full analysis, refactoring suggestions │
+│ TypeScript │ .ts, .tsx  │ ✅ Full Support │ Full analysis, type checking           │
+│ JavaScript │ .js, .jsx  │ ✅ Full Support │ Full analysis, complexity metrics      │
+│ Rust       │ .rs        │ ✅ Full Support │ Full analysis, memory safety checks    │
+│ Go         │ .go        │ 🚧 Experimental │ Basic analysis                         │
+│ Java       │ .java      │ 🚧 Experimental │ Basic analysis                         │
+│ C++        │ .cpp, .cxx │ 🚧 Experimental │ Basic analysis                         │
+│ C#         │ .cs        │ 🚧 Experimental │ Basic analysis                         │
+╰────────────┴────────────┴─────────────────┴────────────────────────────────────────╯
+
+[1m[94m📝 Usage Notes:[39m[0m
+   • Full Support: Complete feature set with refactoring suggestions
+   • Experimental: Basic complexity analysis, limited features
+   • Configure languages in your config file with language-specific settings
+
+[2m💡 Tip: Use 'valknut init-config' to create a configuration file[0m
+test mcp::tools::tests::filter_refactoring_suggestions_limits_results ... ok
+test tests::test_run_cli_print_default_config ... ok
+test tests::test_run_cli_list_languages ... ok
+test mcp::server::tests::handle_tool_call_validates_parameters ... ok
+test cli::commands::tests::doc_audit_command_generates_report ... ok
+test mcp::tools::tests::parse_entity_id_handles_delimiters_and_errors ... ok
+📊 Team report (html): /tmp/.tmphuNKsI/output/team_report.html
+test cli::output::tests::test_generate_outputs_html ... ok
+test mcp::tools::tests::create_file_quality_report_includes_optional_suggestions ... ok
+test mcp::tools::tests::evaluate_quality_gates_reports_violations ... ok
+Documentation gaps
+------------------
+  - main.rs:1 - Function 'missing_docs' lacks rustdoc
+
+Missing READMEs
+---------------
+  None
+
+Stale READMEs
+-------------
+  None
+
+Summary: 1 issue(s) detected across documentation and READMEs.
+
+Documentation gaps
+------------------
+  None
+
+Missing READMEs
+---------------
+  None
+
+Stale READMEs
+-------------
+  None
+
+Summary: 0 issue(s) detected across documentation and READMEs.
+
+test tests::test_run_cli_doc_audit_with_temp_project ... ok
+test cli::commands::tests::doc_audit_command_strict_flags_issues ... ok
+test mcp::tools::tests::format_analysis_results_supports_json_and_markdown ... ok
+test cli::config_layer::tests::layered_config_honors_file_and_cli_priorities ... ok
+[2m2025-10-29T20:16:38.331657Z[0m [32m INFO[0m 🚀 Performance profile: Fast mode - optimized for speed
+[2m2025-10-29T20:16:38.340376Z[0m [32m INFO[0m Initializing Valknut analysis engine
+[2m2025-10-29T20:16:38.398831Z[0m [32m INFO[0m Valknut engine initialized successfully
+[2m2025-10-29T20:16:38.404359Z[0m [32m INFO[0m Starting directory analysis: /tmp/.tmpvpNV0b
+🔍 ENGINE DEBUG: Calling pipeline.analyze_directory
+[2m2025-10-29T20:16:38.409619Z[0m [32m INFO[0m Starting comprehensive analysis d79b6af2-cdd9-4961-bd98-a4de51d9a96f for 1 paths
+[2m2025-10-29T20:16:38.439090Z[0m [32m INFO[0m No git repository found in any of the provided paths
+[2m2025-10-29T20:16:38.441285Z[0m [33m WARN[0m No git repository found for paths: ["/tmp/.tmpvpNV0b"]. Falling back to filesystem walk. This may be slower.
+[2m2025-10-29T20:16:38.441782Z[0m [32m INFO[0m Using filesystem traversal with ignore rules for file discovery
+[2m2025-10-29T20:16:38.469574Z[0m [32m INFO[0m File discovery completed: 1 files selected for analysis
+[2m2025-10-29T20:16:38.471804Z[0m [32m INFO[0m Discovered 1 files in 59.008106ms
+[2m2025-10-29T20:16:38.472584Z[0m [32m INFO[0m Discovered 1 files for analysis
+[2m2025-10-29T20:16:38.483762Z[0m [32m INFO[0m Read 1 files (0.00 MB) in 6.607824ms using batched I/O
+[2m2025-10-29T20:16:38.484553Z[0m [32m INFO[0m Read 1 files in batches
+[2m2025-10-29T20:16:38.494184Z[0m [32m INFO[0m Starting arena-based batch analysis of 1 files
+[2m2025-10-29T20:16:38.611165Z[0m [32m INFO[0m Arena analysis completed for /tmp/.tmpvpNV0b/lib.rs in 113.725356ms: 1 entities extracted, 0.00 KB arena used
+[2m2025-10-29T20:16:38.616284Z[0m [32m INFO[0m Arena batch analysis completed: 1 files, 1 entities, 11.94 KB total arena usage, 8.2 entities/sec overall
+[2m2025-10-29T20:16:38.617286Z[0m [32m INFO[0m Arena analysis completed: 1 files, 1 entities, 11.94 KB arena memory, 8.2 entities/sec
+[2m2025-10-29T20:16:38.620679Z[0m [32m INFO[0m Estimated malloc savings: 0.05 KB overhead reduction vs traditional allocation
+[2m2025-10-29T20:16:38.622911Z[0m [32m INFO[0m Arena analysis completed: 1 files processed with 11.94 KB total arena usage
+[2m2025-10-29T20:16:38.821928Z[0m [32m INFO[0m Comprehensive analysis completed in 0.41s
+[2m2025-10-29T20:16:38.822472Z[0m [32m INFO[0m Total issues found: 0
+[2m2025-10-29T20:16:38.822961Z[0m [32m INFO[0m Overall health score: 99.2
+🔍 ENGINE DEBUG: Pipeline returned 1 scoring files
+[2m2025-10-29T20:16:38.939446Z[0m [32m INFO[0m Directory analysis completed: 1 files processed, 1 entities analyzed
+test cli::commands::tests::test_analyze_command_quiet_mode_on_minimal_project ... ok
+
+test result: ok. 107 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.44s
+
+Error: "Test failed during run"

@@ -472,6 +472,7 @@ impl ArenaBatchResult {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::time::{Duration, Instant};
 
     #[tokio::test]
     async fn test_arena_file_analysis() {
@@ -523,9 +524,185 @@ class TestClass:
         assert!(batch_result.arena_efficiency_score > 0.0);
     }
 
+    #[tokio::test]
+    async fn test_arena_batch_analysis_handles_empty_input() {
+        let analyzer = ArenaBatchAnalyzer::new();
+        let batch = analyzer
+            .analyze_batch(Vec::new())
+            .await
+            .expect("empty batch should succeed");
+
+        assert_eq!(batch.total_files, 0);
+        assert_eq!(batch.total_entities, 0);
+        assert_eq!(batch.average_entities_per_file, 0.0);
+        assert_eq!(batch.arena_efficiency_score, 0.0);
+        assert_eq!(batch.entities_per_second(), 0.0);
+    }
+
     #[test]
     fn test_memory_efficiency_calculation() {
         let efficiency = calculate_memory_efficiency(100, 10240); // 100 entities in 10KB
         assert!((efficiency - 10.0).abs() < 0.001); // Should be 10.0 entities/KB
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_in_arenas_validates_lengths() {
+        let analyzer = ArenaFileAnalyzer::new();
+        let file_path = PathBuf::from("test.py");
+        let err = analyzer
+            .analyze_files_in_arenas(&[file_path.as_path()], &[])
+            .await
+            .expect_err("mismatched lengths should error");
+
+        assert!(
+            format!("{err}").contains("same length"),
+            "unexpected validation message: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_analyze_files_in_arenas_batches_results() {
+        let analyzer = ArenaFileAnalyzer::new();
+        let file_a = PathBuf::from("a.py");
+        let file_b = PathBuf::from("b.py");
+        let results = analyzer
+            .analyze_files_in_arenas(
+                &[file_a.as_path(), file_b.as_path()],
+                &["def a(): pass", "def b():\n    return a()"],
+            )
+            .await
+            .expect("batch analysis should succeed");
+
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.entity_count > 0));
+    }
+
+    #[test]
+    fn test_arena_analysis_result_metrics() {
+        let result = ArenaAnalysisResult {
+            entity_count: 10,
+            file_path: intern("sample/file.py"),
+            entity_extraction_time: Duration::from_millis(10),
+            total_analysis_time: Duration::from_millis(20),
+            arena_bytes_used: 4096, // 4 KB
+            memory_efficiency_score: calculate_memory_efficiency(10, 4096),
+            entities: Vec::new(),
+        };
+
+        assert_eq!(result.file_path_str(), "sample/file.py");
+        assert!(
+            (result.entities_per_second() - 500.0).abs() < 1.0,
+            "entities per second should reflect duration"
+        );
+        assert!(
+            (result.arena_kb_used() - 4.0).abs() < f64::EPSILON,
+            "arena usage should convert bytes to KB"
+        );
+    }
+
+    #[test]
+    fn arena_analysis_result_handles_zero_duration() {
+        let result = ArenaAnalysisResult {
+            entity_count: 5,
+            file_path: intern("sample.rs"),
+            entity_extraction_time: Duration::from_millis(1),
+            total_analysis_time: Duration::from_secs(0),
+            arena_bytes_used: 2048,
+            memory_efficiency_score: calculate_memory_efficiency(5, 2048),
+            entities: Vec::new(),
+        };
+
+        assert_eq!(result.entities_per_second(), 0.0);
+        assert_eq!(result.arena_kb_used(), 2.0);
+    }
+
+    #[test]
+    fn workspace_tracks_entities_and_metadata() {
+        let arena = Bump::new();
+        let mut workspace = ArenaAnalysisWorkspace::new(2, &arena);
+        let start = Instant::now();
+
+        let entity =
+            InternedCodeEntity::new("test::entity", "function", "entity", "sample/path.rs");
+        workspace.add_entity(entity);
+
+        assert_eq!(workspace.entities.len(), 1);
+        assert_eq!(workspace.analysis_metadata.len(), 1);
+        let metadata = &workspace.analysis_metadata[0];
+        assert_eq!(metadata.complexity_score, 0.0);
+        assert_eq!(metadata.refactoring_score, 0.0);
+        assert!(
+            metadata.last_analyzed >= start,
+            "metadata timestamp should be initialized during add_entity"
+        );
+    }
+
+    #[test]
+    fn calculate_memory_efficiency_handles_zero_bytes() {
+        assert_eq!(calculate_memory_efficiency(10, 0), 0.0);
+    }
+
+    #[test]
+    fn estimated_malloc_savings_handles_empty_batch() {
+        let batch = ArenaBatchResult {
+            file_results: Vec::new(),
+            total_files: 0,
+            total_entities: 0,
+            total_arena_bytes: 0,
+            total_analysis_time: Duration::from_secs(0),
+            average_entities_per_file: 0.0,
+            arena_efficiency_score: 0.0,
+        };
+
+        assert_eq!(batch.estimated_malloc_savings(), 0.0);
+    }
+
+    #[test]
+    fn estimated_malloc_savings_accounts_for_entities() {
+        let file_result = ArenaAnalysisResult {
+            entity_count: 10,
+            file_path: intern("src/file.rs"),
+            entity_extraction_time: Duration::from_millis(5),
+            total_analysis_time: Duration::from_millis(10),
+            arena_bytes_used: 8192,
+            memory_efficiency_score: calculate_memory_efficiency(10, 8192),
+            entities: Vec::new(),
+        };
+
+        let batch = ArenaBatchResult {
+            file_results: vec![file_result],
+            total_files: 1,
+            total_entities: 10,
+            total_arena_bytes: 8192,
+            total_analysis_time: Duration::from_millis(10),
+            average_entities_per_file: 10.0,
+            arena_efficiency_score: calculate_memory_efficiency(10, 8192),
+        };
+
+        let expected = ((10 * 7 * 16) - 64) as f64 / 1024.0;
+        assert!(
+            (batch.estimated_malloc_savings() - expected).abs() < f64::EPSILON,
+            "expected {:.3} KB savings",
+            expected
+        );
+    }
+
+    #[test]
+    fn arena_batch_result_reports_totals_in_kb_and_eps() {
+        let batch = ArenaBatchResult {
+            file_results: Vec::new(),
+            total_files: 3,
+            total_entities: 30,
+            total_arena_bytes: 3072,
+            total_analysis_time: Duration::from_secs(3),
+            average_entities_per_file: 10.0,
+            arena_efficiency_score: calculate_memory_efficiency(30, 3072),
+        };
+
+        assert_eq!(batch.total_arena_kb(), 3.0);
+        assert!(
+            (batch.entities_per_second() - 10.0).abs() < f64::EPSILON,
+            "throughput should reflect totals and duration"
+        );
     }
 }

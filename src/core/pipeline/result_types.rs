@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::pipeline::HealthMetrics;
+use crate::core::pipeline::{CloneVerificationResults, HealthMetrics};
 use crate::core::scoring::Priority;
 // use crate::detectors::names::{RenamePack, ContractMismatchPack, ConsistencyIssue};
 
@@ -204,6 +204,111 @@ impl CodeDictionary {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::scoring::Priority;
+    use std::path::Path;
+
+    fn sample_candidate(path: &str, severity: f64, priority: Priority) -> RefactoringCandidate {
+        RefactoringCandidate {
+            entity_id: format!("{path}::entity"),
+            name: "entity".to_string(),
+            file_path: path.to_string(),
+            line_range: Some((1, 20)),
+            priority,
+            score: severity * 20.0,
+            confidence: 0.85,
+            issues: vec![RefactoringIssue {
+                code: "CMPLX".to_string(),
+                category: "complexity".to_string(),
+                severity,
+                contributing_features: vec![FeatureContribution {
+                    feature_name: "cyclomatic_complexity".to_string(),
+                    value: 18.0,
+                    normalized_value: 0.7,
+                    contribution: 1.3,
+                }],
+            }],
+            suggestions: vec![RefactoringSuggestion {
+                refactoring_type: "extract_method".to_string(),
+                code: "XTRMTH".to_string(),
+                priority: 0.9,
+                effort: 0.4,
+                impact: 0.85,
+            }],
+            issue_count: 1,
+            suggestion_count: 1,
+        }
+    }
+
+    #[test]
+    fn code_dictionary_reports_when_empty() {
+        let mut dictionary = CodeDictionary::default();
+        assert!(dictionary.is_empty());
+
+        dictionary.issues.insert(
+            "CMPLX".to_string(),
+            CodeDefinition {
+                code: "CMPLX".to_string(),
+                title: "High Complexity".to_string(),
+                summary: "Cyclomatic complexity exceeded target".to_string(),
+                category: Some("complexity".to_string()),
+            },
+        );
+        assert!(!dictionary.is_empty());
+    }
+
+    #[test]
+    fn memory_stats_merge_preserves_extremes_and_averages() {
+        let mut base = MemoryStats {
+            peak_memory_bytes: 5_000_000,
+            final_memory_bytes: 3_000_000,
+            efficiency_score: 0.8,
+        };
+        let other = MemoryStats {
+            peak_memory_bytes: 7_500_000,
+            final_memory_bytes: 2_000_000,
+            efficiency_score: 0.4,
+        };
+
+        base.merge(other);
+        assert_eq!(base.peak_memory_bytes, 7_500_000);
+        assert_eq!(base.final_memory_bytes, 3_000_000);
+        assert!((base.efficiency_score - 0.6).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn directory_health_tree_builds_hierarchy_and_metrics() {
+        let candidates = vec![
+            sample_candidate("src/lib.rs", 2.2, Priority::Critical),
+            sample_candidate("src/utils/mod.rs", 1.6, Priority::High),
+        ];
+
+        let tree = DirectoryHealthTree::from_candidates(&candidates);
+
+        assert!(!tree.directories.is_empty());
+        assert_eq!(
+            tree.tree_statistics.total_directories,
+            tree.directories.len()
+        );
+
+        let src_health = tree.get_health_score(Path::new("src"));
+        assert!(src_health <= 1.0 && src_health >= 0.0);
+
+        let missing_health = tree.get_health_score(Path::new("src/missing"));
+        assert_eq!(missing_health, src_health);
+
+        let children = tree.get_children(Path::new("src"));
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].path, Path::new("src/utils"));
+
+        let tree_string = tree.to_tree_string();
+        assert!(tree_string.contains("src"));
+        assert!(tree_string.contains("src/utils"));
+    }
+}
+
 /// Human-friendly description of a code emitted by the analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeDefinition {
@@ -326,6 +431,10 @@ pub struct CloneAnalysisResults {
     /// Maximum similarity observed amongst clone pairs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_similarity: Option<f64>,
+
+    /// Structural verification summary
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<CloneVerificationResults>,
 
     /// Phase-level filtering statistics (when telemetry captured)
     #[serde(skip_serializing_if = "Option::is_none")]

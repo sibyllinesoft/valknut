@@ -1,3 +1,7 @@
+[workspace]
+members = ["crates/doc_audit"]
+resolver = "2"
+
 [package]
 name = "valknut-rs"
 version = "1.2.3"
@@ -91,6 +95,7 @@ tree-sitter-javascript = "0.25"
 tree-sitter-typescript = "0.23"  
 tree-sitter-rust = "0.24"
 tree-sitter-go = "0.25"
+tree-edit-distance = "0.4"
 
 # CLI and configuration
 clap = { version = "4.0", features = ["derive", "env", "color"] }
@@ -101,6 +106,7 @@ globset = "0.4"
 git2 = "0.18"
 ignore = "0.4"
 walkdir = "2.4"
+doc_audit = { path = "crates/doc_audit" }
 
 # UUID and time handling (moved below to avoid duplicate)
 # uuid and chrono are defined in the Time and UUID utilities section
@@ -157,6 +163,8 @@ tempfile = "3.8"
 approx = "0.5"
 assert_cmd = "2.0"
 predicates = "3.0"
+serial_test = "2.0"
+gag = "1"
 
 [features]
 default = ["mimalloc", "simd", "parallel"]

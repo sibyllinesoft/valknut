@@ -5,6 +5,7 @@
 
 use crate::core::config::CoverageConfig;
 use crate::core::errors::{Result, ValknutError};
+use crate::lang::registry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -116,42 +117,10 @@ impl FileReader {
 
     /// Check if a file has a supported programming language extension
     pub fn is_code_file(file_path: &Path) -> bool {
-        if let Some(extension) = file_path.extension().and_then(|ext| ext.to_str()) {
-            matches!(
-                extension.to_lowercase().as_str(),
-                "py" | "js"
-                    | "ts"
-                    | "jsx"
-                    | "tsx"
-                    | "rs"
-                    | "go"
-                    | "java"
-                    | "cpp"
-                    | "c"
-                    | "h"
-                    | "hpp"
-                    | "cs"
-                    | "php"
-                    | "rb"
-                    | "kt"
-                    | "swift"
-                    | "scala"
-                    | "clj"
-                    | "hs"
-                    | "ml"
-                    | "fs"
-                    | "elm"
-                    | "dart"
-                    | "lua"
-                    | "perl"
-                    | "r"
-                    | "jl"
-                    | "nim"
-                    | "zig"
-            )
-        } else {
-            false
-        }
+        file_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map_or(false, registry::extension_is_supported)
     }
 }
 
@@ -498,6 +467,8 @@ impl CoverageDiscovery {
 mod tests {
     use super::*;
     use std::fs;
+    use std::thread::sleep;
+    use std::time::Duration;
     use tempfile::TempDir;
 
     #[test]
@@ -517,6 +488,20 @@ mod tests {
         fs::write(&binary_file, b"\x89PNG\r\n\x1a\n").unwrap();
 
         assert!(FileReader::is_likely_binary(&binary_file).unwrap());
+    }
+
+    #[test]
+    fn test_read_to_string_rejects_binary_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let binary_file = temp_dir.path().join("image.png");
+        fs::write(&binary_file, &[0u8, 1, 2, 3, 4, 5]).unwrap();
+
+        let err = FileReader::read_to_string(&binary_file).expect_err("binary read should fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("binary"),
+            "unexpected error message: {message}"
+        );
     }
 
     #[test]
@@ -540,5 +525,116 @@ mod tests {
 
         let loc = FileReader::count_lines_of_code(&file_path).unwrap();
         assert_eq!(loc, 2); // Only non-empty, non-comment lines
+    }
+
+    #[test]
+    fn test_read_invalid_utf8_is_lossy() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("invalid.txt");
+        // Invalid UTF-8 sequence 0xFF
+        fs::write(&file_path, b"hello\xFFworld").unwrap();
+
+        let content = FileReader::read_to_string(&file_path).unwrap();
+        assert!(
+            content.contains("hello"),
+            "content should include valid prefix: {content}"
+        );
+        assert!(
+            content.contains('\u{FFFD}'),
+            "content should contain replacement character: {content}"
+        );
+    }
+
+    #[test]
+    fn test_binary_detection_by_sampling_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let binary_path = temp_dir.path().join("no_extension");
+        // Create file with embedded null bytes triggering sampling heuristic
+        fs::write(&binary_path, b"\0\0\0BINARY DATA HERE\0").unwrap();
+
+        let is_binary = FileReader::is_likely_binary(&binary_path).unwrap();
+        assert!(is_binary, "expected sampling to detect binary content");
+    }
+
+    #[test]
+    fn test_coverage_format_detection_by_filename_and_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let lcov = temp_dir.path().join("lcov.info");
+        fs::write(&lcov, "TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\n").unwrap();
+        assert_eq!(CoverageFormat::detect(&lcov).unwrap(), CoverageFormat::Lcov);
+
+        let cobertura = temp_dir.path().join("cobertura.xml");
+        fs::write(
+            &cobertura,
+            r#"<?xml version="1.0"?><coverage branch-rate="0.5"></coverage>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            CoverageFormat::detect(&cobertura).unwrap(),
+            CoverageFormat::Cobertura
+        );
+
+        let jacoco = temp_dir.path().join("jacoco.xml");
+        fs::write(
+            &jacoco,
+            r#"<?xml version="1.0"?><report><package/></report>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            CoverageFormat::detect(&jacoco).unwrap(),
+            CoverageFormat::JaCoCo
+        );
+    }
+
+    #[test]
+    fn test_expand_patterns_and_validation_helpers() {
+        let base = Path::new("/tmp/project");
+        let direct = CoverageDiscovery::expand_direct_pattern(base, "coverage.xml");
+        assert!(direct.iter().any(|p| p
+            .display()
+            .to_string()
+            .contains("target/coverage/coverage.xml")));
+
+        let globs = CoverageDiscovery::expand_glob_pattern(Path::new("/work"), "**/coverage.xml");
+        assert!(
+            globs
+                .iter()
+                .any(|pattern| pattern.contains("**/coverage.xml")),
+            "expected recursive pattern expansion"
+        );
+    }
+
+    #[test]
+    fn test_discover_coverage_files_and_filters() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let coverage_dir = root.join("coverage");
+        fs::create_dir_all(&coverage_dir).unwrap();
+        let lcov_path = coverage_dir.join("lcov.info");
+        fs::write(&lcov_path, "TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\n").unwrap();
+
+        // Ensure there is a timestamp difference
+        sleep(Duration::from_millis(50));
+
+        let json_path = coverage_dir.join("coverage.json");
+        fs::write(&json_path, r#"{"path": "src/lib.rs"}"#).unwrap();
+
+        let mut config = CoverageConfig::default();
+        config.search_paths = vec!["coverage".to_string()];
+        config.file_patterns = vec!["lcov.info".to_string(), "coverage.json".to_string()];
+        config.max_age_days = 0;
+
+        let discovered =
+            CoverageDiscovery::discover_coverage_files(root, &config).expect("discover coverage");
+        assert_eq!(discovered.len(), 2);
+        assert_eq!(discovered[0].format, CoverageFormat::IstanbulJson);
+        assert_eq!(discovered[1].format, CoverageFormat::Lcov);
+
+        let most_recent = CoverageDiscovery::get_most_recent(&discovered).unwrap();
+        assert_eq!(most_recent.format, CoverageFormat::IstanbulJson);
+
+        let lcov_only = CoverageDiscovery::filter_by_format(&discovered, CoverageFormat::Lcov);
+        assert_eq!(lcov_only.len(), 1);
+        assert_eq!(lcov_only[0].path, lcov_path);
     }
 }

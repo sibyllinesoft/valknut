@@ -280,7 +280,9 @@ pub trait LanguageAdapter: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_entity_kind_variants() {
@@ -470,5 +472,155 @@ mod tests {
 
         let entities_in_other = index.get_entities_in_file("other.rs");
         assert!(entities_in_other.is_empty());
+    }
+
+    #[test]
+    fn test_parse_index_metadata_helpers() {
+        let mut index = ParseIndex::new();
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "function_calls".to_string(),
+            json!(["helper()", "utility_call()"]),
+        );
+        metadata.insert(
+            "source_text".to_string(),
+            json!("fn helper() { /* boilerplate */ }"),
+        );
+        metadata.insert("identifiers".to_string(), json!(["helper", "value"]));
+
+        let function = ParsedEntity {
+            id: "func1".to_string(),
+            kind: EntityKind::Function,
+            name: "helper".to_string(),
+            parent: None,
+            children: vec![],
+            location: SourceLocation {
+                file_path: "test.rs".to_string(),
+                start_line: 10,
+                end_line: 20,
+                start_column: 0,
+                end_column: 5,
+            },
+            metadata,
+        };
+
+        let class = ParsedEntity {
+            id: "class1".to_string(),
+            kind: EntityKind::Class,
+            name: "Utility".to_string(),
+            parent: None,
+            children: vec!["func1".to_string()],
+            location: SourceLocation {
+                file_path: "test.rs".to_string(),
+                start_line: 1,
+                end_line: 40,
+                start_column: 0,
+                end_column: 1,
+            },
+            metadata: HashMap::new(),
+        };
+
+        index.add_entity(function);
+        index.add_entity(class);
+
+        assert_eq!(index.count_ast_nodes(), index.entities.len() * 8);
+        assert!(index.count_distinct_blocks() >= 3);
+
+        let calls = index.get_function_calls();
+        assert!(calls.contains(&"helper()".to_string()));
+        assert!(calls.contains(&"utility_call()".to_string()));
+
+        let patterns = index.contains_boilerplate_patterns(&[
+            "helper".to_string(),
+            "boilerplate".to_string(),
+            "absent".to_string(),
+        ]);
+        assert!(patterns.contains(&"helper".to_string()));
+        assert!(patterns.contains(&"boilerplate".to_string()));
+        assert!(!patterns.contains(&"absent".to_string()));
+
+        let identifiers = index.extract_identifiers();
+        assert!(identifiers.contains(&"helper".to_string()));
+        assert!(identifiers.contains(&"value".to_string()));
+        assert!(identifiers.contains(&"Utility".to_string()));
+        assert_eq!(
+            identifiers.iter().filter(|id| *id == "helper").count(),
+            1,
+            "identifiers should be deduplicated"
+        );
+    }
+
+    struct DummyAdapter {
+        call_count: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl LanguageAdapter for DummyAdapter {
+        fn parse_source(&mut self, _source: &str, _file_path: &str) -> Result<ParseIndex> {
+            Ok(ParseIndex::new())
+        }
+
+        fn extract_function_calls(&mut self, _source: &str) -> Result<Vec<String>> {
+            Ok(vec!["call()".to_string()])
+        }
+
+        fn contains_boilerplate_patterns(
+            &mut self,
+            _source: &str,
+            patterns: &[String],
+        ) -> Result<Vec<String>> {
+            Ok(patterns.iter().cloned().collect())
+        }
+
+        fn extract_identifiers(&mut self, _source: &str) -> Result<Vec<String>> {
+            Ok(vec!["identifier".to_string()])
+        }
+
+        fn count_ast_nodes(&mut self, _source: &str) -> Result<usize> {
+            Ok(1)
+        }
+
+        fn count_distinct_blocks(&mut self, _source: &str) -> Result<usize> {
+            Ok(1)
+        }
+
+        fn normalize_source(&mut self, source: &str) -> Result<String> {
+            Ok(source.to_string())
+        }
+
+        fn language_name(&self) -> &str {
+            "dummy"
+        }
+
+        fn extract_code_entities(
+            &mut self,
+            _source: &str,
+            file_path: &str,
+        ) -> Result<Vec<crate::core::featureset::CodeEntity>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            let entity = crate::core::featureset::CodeEntity::new(
+                "entity-1", "Function", "Dummy", file_path,
+            )
+            .with_line_range(1, 5)
+            .with_source_code("fn dummy() {}");
+            Ok(vec![entity])
+        }
+    }
+
+    #[test]
+    fn language_adapter_default_methods_cover_interning() {
+        let mut adapter = DummyAdapter {
+            call_count: AtomicUsize::new(0),
+        };
+        let imports = adapter.extract_imports("package main").unwrap();
+        assert!(imports.is_empty());
+
+        let interned = adapter
+            .extract_code_entities_interned("fn main() {}", "main.rs")
+            .expect("interned conversion");
+        assert_eq!(interned.len(), 1);
+        assert_eq!(interned[0].name_str(), "Dummy");
+        assert_eq!(adapter.call_count.load(Ordering::SeqCst), 1);
     }
 }

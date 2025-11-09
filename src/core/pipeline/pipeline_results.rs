@@ -112,10 +112,31 @@ pub struct LshAnalysisResults {
     pub avg_similarity: f64,
     /// Total potential duplicates found
     pub duplicate_count: usize,
+    /// Whether APTED verification was applied
+    pub apted_verification_enabled: bool,
+    /// Verification summary (e.g. APTED)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<CloneVerificationResults>,
     /// Whether denoise mode was active
     pub denoising_enabled: bool,
     /// TF-IDF statistics (if denoising enabled)
     pub tfidf_stats: Option<TfIdfStats>,
+}
+
+/// Summary of structural verification applied to clone pairs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneVerificationResults {
+    /// Verification method identifier (e.g. "apted")
+    pub method: String,
+    /// Total clone pairs produced by LSH
+    pub pairs_considered: usize,
+    /// Clone pairs where structural verification was attempted
+    pub pairs_evaluated: usize,
+    /// Clone pairs that produced a verification similarity score
+    pub pairs_scored: usize,
+    /// Average structural similarity across scored pairs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_similarity: Option<f64>,
 }
 
 /// TF-IDF statistics for denoise mode

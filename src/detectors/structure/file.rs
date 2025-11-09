@@ -1,6 +1,7 @@
 //! File analysis, entity extraction, and file splitting logic
 
 use petgraph::graph::NodeIndex;
+use petgraph::Graph;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -152,7 +153,7 @@ impl FileAnalyzer {
 
     /// Build entity cohesion graph for file
     pub fn build_entity_cohesion_graph(&self, file_path: &Path) -> Result<CohesionGraph> {
-        let mut graph = petgraph::Graph::new_undirected();
+        let mut graph = Graph::new_undirected();
         let content = FileReader::read_to_string(file_path)?;
 
         // Extract entities based on file type using tree-sitter
@@ -1046,7 +1047,12 @@ mod tests {
     use crate::detectors::structure::config::{
         FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig, StructureToggles,
     };
+    use crate::lang::common::{EntityKind, ParsedEntity, SourceLocation};
     use crate::lang::registry::adapter_for_language;
+    use petgraph::Graph;
+    use serde_json::Value;
+    use std::collections::HashSet;
+    use std::env;
     use std::fs;
     use tempfile::TempDir;
 
@@ -1143,6 +1149,160 @@ def hello():
         assert!(analyzer.should_skip_directory(Path::new("dist")));
         assert!(!analyzer.should_skip_directory(Path::new("src")));
         assert!(!analyzer.should_skip_directory(Path::new("lib")));
+    }
+
+    #[test]
+    fn test_find_cohesion_communities_filters_small_clusters() {
+        let mut config = create_test_config();
+        config.fsfile.min_entities_per_split = 2;
+        let analyzer = FileAnalyzer::new(config);
+
+        let mut graph = Graph::new_undirected();
+        let mut symbols_a = HashSet::new();
+        symbols_a.insert("value".to_string());
+        symbols_a.insert("count".to_string());
+        let node_a = graph.add_node(EntityNode {
+            name: "alpha".into(),
+            entity_type: "function".into(),
+            loc: 10,
+            symbols: symbols_a,
+        });
+
+        let mut symbols_b = HashSet::new();
+        symbols_b.insert("value".to_string());
+        symbols_b.insert("result".to_string());
+        let node_b = graph.add_node(EntityNode {
+            name: "beta".into(),
+            entity_type: "function".into(),
+            loc: 12,
+            symbols: symbols_b,
+        });
+
+        let mut symbols_c = HashSet::new();
+        symbols_c.insert("temp".to_string());
+        let node_c = graph.add_node(EntityNode {
+            name: "gamma".into(),
+            entity_type: "function".into(),
+            loc: 8,
+            symbols: symbols_c,
+        });
+
+        graph.add_edge(
+            node_a,
+            node_b,
+            CohesionEdge {
+                similarity: 0.85,
+                shared_symbols: 1,
+            },
+        );
+        graph.add_edge(
+            node_b,
+            node_c,
+            CohesionEdge {
+                similarity: 0.1,
+                shared_symbols: 0,
+            },
+        );
+
+        let communities = analyzer.find_cohesion_communities(&graph).unwrap();
+        assert_eq!(communities.len(), 1);
+        assert_eq!(communities[0].len(), 2);
+        assert!(communities[0].contains(&node_a));
+        assert!(communities[0].contains(&node_b));
+    }
+
+    #[test]
+    fn test_estimate_clone_factor_counts_heavy_edges() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let mut graph = Graph::new_undirected();
+        let n1 = graph.add_node(EntityNode {
+            name: "a".into(),
+            entity_type: "fn".into(),
+            loc: 10,
+            symbols: HashSet::new(),
+        });
+        let n2 = graph.add_node(EntityNode {
+            name: "b".into(),
+            entity_type: "fn".into(),
+            loc: 12,
+            symbols: HashSet::new(),
+        });
+        let n3 = graph.add_node(EntityNode {
+            name: "c".into(),
+            entity_type: "fn".into(),
+            loc: 6,
+            symbols: HashSet::new(),
+        });
+
+        graph.add_edge(
+            n1,
+            n2,
+            CohesionEdge {
+                similarity: 0.9,
+                shared_symbols: 3,
+            },
+        );
+        graph.add_edge(
+            n2,
+            n3,
+            CohesionEdge {
+                similarity: 0.8,
+                shared_symbols: 4,
+            },
+        );
+        graph.add_edge(
+            n1,
+            n3,
+            CohesionEdge {
+                similarity: 0.4,
+                shared_symbols: 2,
+            },
+        );
+
+        let factor = analyzer.estimate_clone_factor(&graph);
+        assert!(factor > 0.0);
+        assert!(factor <= 1.0);
+    }
+
+    #[test]
+    fn test_line_has_keyword_skips_comments() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let content = r#"
+// export function fake() {}
+export function real() {}
+"#;
+
+        assert!(!analyzer.line_has_keyword(content, 2, "export"));
+        assert!(analyzer.line_has_keyword(content, 3, "export"));
+    }
+
+    #[test]
+    fn test_line_has_keyword_detects_keyword_inline() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let content = "export class Service {}\n";
+        assert!(analyzer.line_has_keyword(content, 1, "export"));
+    }
+
+    #[test]
+    fn test_line_has_keyword_detects_keyword_from_previous_line() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let content = "export\nfunction helper() {}\n";
+        assert!(analyzer.line_has_keyword(content, 2, "export"));
+    }
+
+    #[test]
+    fn test_line_has_keyword_handles_zero_start_line() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let content = "export const value = 1;\n";
+        assert!(!analyzer.line_has_keyword(content, 0, "export"));
+    }
+
+    #[test]
+    fn test_canonicalize_path_returns_relative() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let absolute = std::env::current_dir().unwrap().join("src").join("lib.rs");
+        let canonical = analyzer.canonicalize_path(&absolute);
+        assert_eq!(canonical, PathBuf::from("src/lib.rs"));
     }
 
     #[test]
@@ -1292,7 +1452,7 @@ def hello():
         let config = create_test_config();
         let analyzer = FileAnalyzer::new(config);
 
-        let graph = petgraph::Graph::new_undirected();
+        let graph = Graph::new_undirected();
         let metrics = FileDependencyMetrics::default();
         let value = analyzer
             .calculate_split_value(100, &file_path, &graph, &metrics)
@@ -1300,6 +1460,100 @@ def hello():
 
         assert!(value.score >= 0.0);
         assert!(value.score <= 1.0);
+    }
+
+    #[test]
+    fn test_calculate_split_value_includes_cycle_and_clone_factors() {
+        let config = create_test_config();
+        let analyzer = FileAnalyzer::new(config);
+
+        let mut graph = Graph::new_undirected();
+        let mut symbols_a = HashSet::new();
+        symbols_a.insert("shared".to_string());
+        symbols_a.insert("extra".to_string());
+        let node_a = graph.add_node(EntityNode {
+            name: "A".into(),
+            entity_type: "function".into(),
+            loc: 20,
+            symbols: symbols_a,
+        });
+
+        let mut symbols_b = HashSet::new();
+        symbols_b.insert("shared".to_string());
+        symbols_b.insert("another".to_string());
+        let node_b = graph.add_node(EntityNode {
+            name: "B".into(),
+            entity_type: "function".into(),
+            loc: 18,
+            symbols: symbols_b,
+        });
+
+        graph.add_edge(
+            node_a,
+            node_b,
+            CohesionEdge {
+                similarity: 0.8,
+                shared_symbols: 2,
+            },
+        );
+
+        let mut metrics = FileDependencyMetrics::default();
+        metrics
+            .outgoing_dependencies
+            .insert(PathBuf::from("mod_a.rs"));
+        metrics.incoming_importers.insert(PathBuf::from("mod_a.rs"));
+
+        let value = analyzer
+            .calculate_split_value(120, Path::new("src/file.rs"), &graph, &metrics)
+            .unwrap();
+
+        // size_factor = min(120/50, 1) -> 1.0
+        // cycle_factor = 1/1 -> 1.0 (due to identical outgoing/incoming set)
+        // clone_factor = heavy edge (similarity >=0.75 but shared_symbols <3 so 0.0)
+        // Expected score = 0.6*1 + 0.3*1 + 0.1*0 = 0.9
+        assert!((value.score - 0.9).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_estimate_clone_factor_requires_strong_overlap() {
+        let config = create_test_config();
+        let analyzer = FileAnalyzer::new(config);
+
+        let mut graph = Graph::new_undirected();
+        let mut symbols_a = HashSet::new();
+        symbols_a.insert("alpha".to_string());
+        symbols_a.insert("beta".to_string());
+        symbols_a.insert("gamma".to_string());
+
+        let mut symbols_b = HashSet::new();
+        symbols_b.insert("alpha".to_string());
+        symbols_b.insert("beta".to_string());
+        symbols_b.insert("delta".to_string());
+
+        let node_a = graph.add_node(EntityNode {
+            name: "first".into(),
+            entity_type: "function".into(),
+            loc: 15,
+            symbols: symbols_a,
+        });
+        let node_b = graph.add_node(EntityNode {
+            name: "second".into(),
+            entity_type: "function".into(),
+            loc: 12,
+            symbols: symbols_b,
+        });
+
+        graph.add_edge(
+            node_a,
+            node_b,
+            CohesionEdge {
+                similarity: 0.78,
+                shared_symbols: 3,
+            },
+        );
+
+        let factor = analyzer.estimate_clone_factor(&graph);
+        assert!((factor - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -1497,7 +1751,7 @@ def func2():
         let config = create_test_config();
         let analyzer = FileAnalyzer::new(config);
 
-        let graph = petgraph::Graph::new_undirected();
+        let graph = Graph::new_undirected();
         let communities = analyzer.find_cohesion_communities(&graph).unwrap();
 
         assert_eq!(communities.len(), 1);
@@ -1545,6 +1799,31 @@ def func2():
         // Should find the large file but not the small one
         assert!(large_files.contains(&large_file));
         assert!(!large_files.contains(&small_file));
+    }
+
+    #[test]
+    fn test_collect_large_files_recursive_loc_threshold() {
+        let temp_dir = TempDir::new().unwrap();
+        let root_path = temp_dir.path();
+
+        // Create directory structure
+        let nested_dir = root_path.join("src");
+        std::fs::create_dir_all(&nested_dir).unwrap();
+
+        // File with many short lines to trigger huge_loc without large byte size
+        let loc_heavy_file = nested_dir.join("loc_heavy.rs");
+        let content = "fn main() {}\n".repeat(60); // > huge_loc (50)
+        fs::write(&loc_heavy_file, content).unwrap();
+
+        let config = create_test_config();
+        let analyzer = FileAnalyzer::new(config);
+
+        let mut files = Vec::new();
+        analyzer
+            .collect_large_files_recursive(root_path, &mut files)
+            .expect("collect loc-heavy file");
+
+        assert!(files.contains(&loc_heavy_file));
     }
 
     #[test]
@@ -1600,5 +1879,395 @@ def func2():
 
         // Should not find the file in node_modules
         assert!(!files.contains(&large_file_in_node_modules));
+    }
+
+    #[test]
+    fn test_collect_dependency_metrics_exports_and_import_graph() {
+        let temp_dir = TempDir::new().unwrap();
+        let root_path = temp_dir.path();
+        let main_file = root_path.join("main.py");
+        let helper_file = root_path.join("helpers.py");
+
+        fs::write(
+            &helper_file,
+            r#"
+def helper_function():
+    return 42
+
+def _private_helper():
+    return 0
+"#,
+        )
+        .unwrap();
+
+        fs::write(
+            &main_file,
+            r#"
+from helpers import helper_function
+
+def run():
+    return helper_function()
+"#,
+        )
+        .unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let graph: CohesionGraph = Graph::new_undirected();
+
+        let helper_metrics = analyzer
+            .collect_dependency_metrics(&helper_file, Some(root_path), &graph)
+            .unwrap();
+
+        assert!(
+            helper_metrics
+                .exports
+                .iter()
+                .any(|entity| entity.name == "helper_function"),
+            "expected helper_function to be recognised as an export"
+        );
+        assert!(
+            !helper_metrics
+                .exports
+                .iter()
+                .any(|entity| entity.name == "_private_helper"),
+            "private helper should not be exported"
+        );
+
+        let canonical_main = analyzer.canonicalize_path(&main_file);
+        assert!(
+            helper_metrics.incoming_importers.contains(&canonical_main),
+            "helpers.py should record main.py as an importer"
+        );
+        assert!(
+            helper_metrics.outgoing_dependencies.is_empty(),
+            "helpers.py should not list outgoing dependencies"
+        );
+
+        let main_metrics = analyzer
+            .collect_dependency_metrics(&main_file, Some(root_path), &graph)
+            .unwrap();
+
+        let canonical_helper = analyzer.canonicalize_path(&helper_file);
+        assert!(
+            main_metrics
+                .outgoing_dependencies
+                .contains(&canonical_helper),
+            "main.py should depend on helpers.py"
+        );
+        assert!(
+            main_metrics
+                .exports
+                .iter()
+                .any(|entity| entity.name == "run"),
+            "top-level run function should be exported from main.py"
+        );
+    }
+
+    #[test]
+    fn test_collect_dependency_metrics_without_project_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("module.rs");
+        fs::write(&file_path, "pub fn public_fn() {}\nfn private_fn() {}\n").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let graph: CohesionGraph = Graph::new_undirected();
+
+        let metrics = analyzer
+            .collect_dependency_metrics(&file_path, None, &graph)
+            .expect("collect metrics");
+
+        assert!(metrics
+            .exports
+            .iter()
+            .any(|entity| entity.name == "public_fn"));
+        assert!(metrics
+            .exports
+            .iter()
+            .all(|entity| entity.name != "private_fn"));
+        assert!(metrics.incoming_importers.is_empty());
+        assert!(metrics.outgoing_dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_candidate_path_prefers_existing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let module_rs = temp_dir.path().join("module.rs");
+        fs::write(&module_rs, "pub mod sample {}").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let resolved = analyzer.resolve_candidate_path(&module_rs);
+
+        assert_eq!(resolved.as_ref(), Some(&module_rs));
+    }
+
+    #[test]
+    fn test_resolve_candidate_path_uses_directory_fallback() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        let fallback = package_dir.join("mod.rs");
+        fs::write(&fallback, "pub mod inner;").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let resolved = analyzer.resolve_candidate_path(&package_dir);
+
+        assert_eq!(resolved.as_ref(), Some(&fallback));
+    }
+
+    #[test]
+    fn test_resolve_candidate_path_finds_supported_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let stem = temp_dir.path().join("component");
+        let ts_path = stem.with_extension("ts");
+        fs::write(&ts_path, "export const value = 1;").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let resolved = analyzer.resolve_candidate_path(&stem);
+
+        assert_eq!(resolved.as_ref(), Some(&ts_path));
+    }
+
+    #[test]
+    fn test_resolve_candidate_path_returns_none_when_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let candidate = temp_dir.path().join("missing_module");
+
+        assert!(analyzer.resolve_candidate_path(&candidate).is_none());
+    }
+
+    #[test]
+    fn test_directory_module_fallbacks_provide_common_files() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let dir = Path::new("pkg");
+        let fallbacks = analyzer.directory_module_fallbacks(dir);
+
+        let expected = vec![
+            dir.join("mod.rs"),
+            dir.join("lib.rs"),
+            dir.join("__init__.py"),
+            dir.join("index.ts"),
+            dir.join("index.tsx"),
+            dir.join("index.js"),
+            dir.join("index.jsx"),
+        ];
+
+        assert_eq!(fallbacks, expected);
+    }
+
+    #[test]
+    fn test_supported_extensions_includes_major_languages() {
+        let extensions = FileAnalyzer::supported_extensions();
+        assert!(extensions.contains(&"py"));
+        assert!(extensions.contains(&"ts"));
+        assert!(extensions.contains(&"rs"));
+        assert!(extensions.contains(&"go"));
+        assert!(extensions.contains(&"java"));
+    }
+
+    #[test]
+    fn test_collect_project_code_files_filters_supported_extensions() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // Supported code files
+        let rust_file = root.join("lib.rs");
+        let python_file = root.join("service").join("api.py");
+        let ts_file = root.join("web").join("component.tsx");
+
+        std::fs::create_dir_all(python_file.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(ts_file.parent().unwrap()).unwrap();
+        fs::write(&rust_file, "pub fn lib() {}").unwrap();
+        fs::write(&python_file, "def api():\n    pass").unwrap();
+        fs::write(&ts_file, "export const value = 1;").unwrap();
+
+        // Unsupported file extension should be ignored
+        fs::write(root.join("README.txt"), "not code").unwrap();
+
+        // Skipped directory should not be traversed
+        let node_modules = root.join("node_modules");
+        std::fs::create_dir_all(&node_modules).unwrap();
+        fs::write(node_modules.join("ignore.js"), "console.log('skip');").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let mut collected = analyzer
+            .collect_project_code_files(root)
+            .expect("collect project files");
+
+        collected.sort();
+
+        assert!(collected.contains(&rust_file));
+        assert!(collected.contains(&python_file));
+        assert!(collected.contains(&ts_file));
+        assert!(!collected.iter().any(|path| path.ends_with("README.txt")));
+        assert!(!collected
+            .iter()
+            .any(|path| path.components().any(|c| c.as_os_str() == "node_modules")));
+    }
+
+    #[test]
+    fn test_collect_project_code_files_skips_root_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let skip_dir = temp_dir.path().join("node_modules");
+        std::fs::create_dir_all(&skip_dir).unwrap();
+        fs::write(skip_dir.join("ignored.ts"), "export const ignored = true;").unwrap();
+
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let files = analyzer
+            .collect_project_code_files(&skip_dir)
+            .expect("collect files under skipped directory");
+
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_should_skip_directory_matches_common_patterns() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let skip_dirs = [
+            "node_modules",
+            "__pycache__",
+            "target",
+            ".git",
+            "build",
+            "dist",
+        ];
+
+        for dir in skip_dirs {
+            assert!(
+                analyzer.should_skip_directory(Path::new(dir)),
+                "expected {dir} to be skipped"
+            );
+        }
+    }
+
+    #[test]
+    fn test_should_skip_directory_allows_regular_paths() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+        let allowed = ["src", "lib", "services/backend", "packages/ui"];
+
+        for dir in allowed {
+            assert!(
+                !analyzer.should_skip_directory(Path::new(dir)),
+                "expected {dir} to be allowed"
+            );
+        }
+    }
+
+    fn build_entity(name: &str, kind: EntityKind, start_line: usize) -> ParsedEntity {
+        ParsedEntity {
+            id: format!("{}::id", name),
+            kind,
+            name: name.to_string(),
+            parent: None,
+            children: Vec::new(),
+            location: SourceLocation {
+                file_path: "test".to_string(),
+                start_line,
+                end_line: start_line,
+                start_column: 1,
+                end_column: 20,
+            },
+            metadata: std::collections::HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_is_entity_exported_handles_language_visibility() {
+        let analyzer = FileAnalyzer::new(create_test_config());
+
+        // Rust visibility comes from metadata
+        let mut rust_entity = build_entity("do_stuff", EntityKind::Function, 3);
+        rust_entity.metadata.insert(
+            "visibility".to_string(),
+            Value::String("pub(crate)".to_string()),
+        );
+        assert!(analyzer.is_entity_exported(
+            &rust_entity,
+            Path::new("lib.rs"),
+            "pub(crate) fn do_stuff() {}"
+        ));
+
+        let mut private_rust = build_entity("internal", EntityKind::Function, 5);
+        private_rust
+            .metadata
+            .insert("visibility".to_string(), Value::String("fn".to_string()));
+        assert!(!analyzer.is_entity_exported(
+            &private_rust,
+            Path::new("mod.rs"),
+            "fn internal() {}"
+        ));
+
+        // Python exports block private (underscore) names
+        let python_public = build_entity("visible", EntityKind::Function, 2);
+        assert!(analyzer.is_entity_exported(
+            &python_public,
+            Path::new("module.py"),
+            "def visible():\n    pass"
+        ));
+
+        let mut python_private = build_entity("_hidden", EntityKind::Function, 4);
+        python_private.parent = None;
+        assert!(!analyzer.is_entity_exported(
+            &python_private,
+            Path::new("module.py"),
+            "def _hidden():\n    pass"
+        ));
+
+        // Go treats uppercase identifiers as exported
+        let go_exported = build_entity("Service", EntityKind::Struct, 1);
+        assert!(analyzer.is_entity_exported(
+            &go_exported,
+            Path::new("service.go"),
+            "type Service struct {}"
+        ));
+
+        let go_internal = build_entity("impl", EntityKind::Struct, 1);
+        assert!(!analyzer.is_entity_exported(
+            &go_internal,
+            Path::new("service.go"),
+            "type impl struct {}"
+        ));
+
+        // TypeScript relies on the export keyword at the correct line
+        let ts_entity = build_entity("makeWidget", EntityKind::Function, 1);
+        assert!(analyzer.is_entity_exported(
+            &ts_entity,
+            Path::new("widget.ts"),
+            "export function makeWidget() {\n    return 1;\n}\n"
+        ));
+
+        let ts_comment = build_entity("helper", EntityKind::Function, 1);
+        assert!(!analyzer.is_entity_exported(
+            &ts_comment,
+            Path::new("widget.ts"),
+            "// export function helper() {}\nfunction helper() {}\n"
+        ));
+
+        // Java checks for explicit public keyword
+        let java_public = build_entity("Widget", EntityKind::Class, 1);
+        assert!(analyzer.is_entity_exported(
+            &java_public,
+            Path::new("Widget.java"),
+            "public class Widget {}\n"
+        ));
+
+        let java_package = build_entity("WidgetImpl", EntityKind::Class, 1);
+        assert!(!analyzer.is_entity_exported(
+            &java_package,
+            Path::new("WidgetImpl.java"),
+            "class WidgetImpl {}\n"
+        ));
+
+        // Other extensions fall back to parent-less entities
+        let mut nested_entity = build_entity("Inner", EntityKind::Class, 10);
+        nested_entity.parent = Some("Outer".to_string());
+        assert!(!analyzer.is_entity_exported(&nested_entity, Path::new("README.md"), "irrelevant"));
+
+        let top_level_unknown = build_entity("Top", EntityKind::Class, 1);
+        assert!(analyzer.is_entity_exported(
+            &top_level_unknown,
+            Path::new("README.md"),
+            "irrelevant"
+        ));
     }
 }
