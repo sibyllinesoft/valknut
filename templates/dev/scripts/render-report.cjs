@@ -636,10 +636,7 @@ function buildTemplateData(results) {
       summary: buildSummary({}),
       results: {},
       refactoring_candidates: [],
-      refactoring_candidates_by_file: [],
       file_count: 0,
-      directory_health_tree: null,
-      unified_hierarchy: [],
       coverage_packs: [],
       code_dictionary: { issues: {}, suggestions: {} },
       warnings: [],
@@ -647,19 +644,16 @@ function buildTemplateData(results) {
   }
 
   const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates);
-  const cleanedGroups = cleanGroups(results.refactoring_candidates_by_file);
-  const cleanedTree = cleanDirectoryTree(results.directory_health_tree);
   const summary = buildSummary(results);
 
   const dictionary = results.code_dictionary || { issues: {}, suggestions: {} };
-  const hierarchyWithFiles = addFilesToHierarchy(
-    Array.isArray(results.unified_hierarchy) ? results.unified_hierarchy : [],
-    cleanedGroups,
-    dictionary
-  );
-  const sortedHierarchy = sortHierarchy(hierarchyWithFiles);
-  const graphInsights = buildGraphInsights(cleanedTree);
   const cloneAnalysis = normalizeCloneAnalysis(results.clone_analysis);
+  const fileCount = new Set(cleanedCandidates.map((c) => c.file_path || c.filePath)).size;
+  const coveragePacks = Array.isArray(results.coverage_packs)
+    ? results.coverage_packs
+    : Array.isArray(results.coveragePacks)
+      ? results.coveragePacks
+      : [];
 
   return {
     generated_at: new Date().toISOString(),
@@ -670,20 +664,17 @@ function buildTemplateData(results) {
     results,
     summary,
     refactoring_candidates: cleanedCandidates,
-    refactoring_candidates_by_file: cleanedGroups,
-    file_count: cleanedGroups.length,
-    directory_health_tree: cleanedTree,
-    unified_hierarchy: cleanUnifiedHierarchy(sortedHierarchy),
-    coverage_packs: results.coverage_packs || [],
+    file_count: fileCount,
+    coverage_packs: coveragePacks,
     code_dictionary: dictionary,
     codeDictionary: dictionary,
     warnings: results.warnings || [],
     oracle_refactoring_plan: results.oracle_refactoring_plan || null,
     has_oracle_data: Boolean(results.oracle_refactoring_plan),
     health_metrics: results.health_metrics || null,
-    graph_insights: graphInsights,
     clone_analysis: cloneAnalysis,
     clone_analysis_raw: results.clone_analysis || null,
+    passes: results.passes || results.stage_results || null,
   };
 }
 

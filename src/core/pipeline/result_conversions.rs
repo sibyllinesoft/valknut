@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde_json::{self, json};
 
 use crate::core::featureset::FeatureVector;
-use crate::core::pipeline::{PipelineResults, ResultSummary};
+use crate::core::pipeline::{PipelineResults, ResultSummary, StageResultsBundle};
 use crate::core::scoring::{Priority, ScoringResult};
 
 use super::code_dictionary::{
@@ -34,8 +34,9 @@ impl AnalysisResults {
                 high_priority_issues: 0,
                 critical_issues: 0,
             },
+            normalized: None,
+            passes: StageResultsBundle::disabled(),
             refactoring_candidates: Vec::new(),
-            refactoring_candidates_by_file: Vec::new(),
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(0),
                 avg_file_processing_time: Duration::from_secs(0),
@@ -49,10 +50,8 @@ impl AnalysisResults {
                     efficiency_score: 1.0,
                 },
             },
-            directory_health_tree: None,
             clone_analysis: None,
             coverage_packs: Vec::new(),
-            unified_hierarchy: Vec::new(),
             warnings: Vec::new(),
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
@@ -157,10 +156,6 @@ impl AnalysisResults {
             .collect();
         // Created refactoring candidates
 
-        // Group refactoring candidates by file
-        let refactoring_candidates_by_file =
-            Self::group_candidates_by_file(&refactoring_candidates);
-
         // Calculate priority distribution
         let mut priority_distribution = HashMap::new();
         for result in &pipeline_results.scoring_results.files {
@@ -231,21 +226,11 @@ impl AnalysisResults {
             .map(|e| e.to_string())
             .collect();
 
-        // Build directory health tree from pipeline results
-        let directory_health_tree =
-            Self::build_directory_health_tree(&pipeline_results, &refactoring_candidates);
-
         // Convert LSH results to clone analysis results
         let clone_analysis = Self::convert_lsh_to_clone_analysis(&pipeline_results);
 
         // Extract coverage packs from pipeline results
         let coverage_packs = Self::convert_coverage_to_packs(&pipeline_results.results.coverage);
-
-        // Build unified hierarchy from refactoring candidates and directory health tree
-        let unified_hierarchy = Self::build_unified_hierarchy_with_fallback(
-            &refactoring_candidates,
-            &directory_health_tree,
-        );
 
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
 
@@ -267,15 +252,23 @@ impl AnalysisResults {
             }
         }
 
+        let passes = StageResultsBundle {
+            structure: pipeline_results.results.structure.clone(),
+            coverage: pipeline_results.results.coverage.clone(),
+            complexity: pipeline_results.results.complexity.clone(),
+            refactoring: pipeline_results.results.refactoring.clone(),
+            impact: pipeline_results.results.impact.clone(),
+            lsh: pipeline_results.results.lsh.clone(),
+        };
+
         Self {
             summary,
+            normalized: None,
+            passes,
             refactoring_candidates,
-            refactoring_candidates_by_file,
             statistics,
-            directory_health_tree: Some(directory_health_tree),
             // naming_results: None, // Will be populated by naming analysis
             clone_analysis,
-            unified_hierarchy,
             warnings,
             coverage_packs,
             health_metrics,
@@ -283,174 +276,7 @@ impl AnalysisResults {
         }
     }
 
-    /// Build unified hierarchy from refactoring candidates with directory health tree fallback
-    pub fn build_unified_hierarchy_with_fallback(
-        candidates: &[RefactoringCandidate],
-        directory_health_tree: &DirectoryHealthTree,
-    ) -> Vec<serde_json::Value> {
-        // Always use the directory health tree if available, as it has proper hierarchical structure
-        if !directory_health_tree.directories.is_empty() {
-            return Self::build_unified_hierarchy_from_directory_tree(directory_health_tree);
-        }
-
-        // Fallback to candidates-based hierarchy only if no directory health tree
-        if !candidates.is_empty() {
-            return Self::build_unified_hierarchy_from_candidates(candidates);
-        }
-        // Return empty hierarchy if no data available
-        vec![]
-    }
-
-    /// Build unified hierarchy from flat refactoring candidates list
-    fn build_unified_hierarchy_from_candidates(
-        candidates: &[RefactoringCandidate],
-    ) -> Vec<serde_json::Value> {
-        use std::collections::BTreeMap;
-        use std::path::Path;
-
-        // Group candidates by file path
-        let mut file_groups: BTreeMap<String, Vec<&RefactoringCandidate>> = BTreeMap::new();
-
-        for candidate in candidates {
-            file_groups
-                .entry(candidate.file_path.clone())
-                .or_default()
-                .push(candidate);
-        }
-
-        // Group files by directory
-        let mut dir_groups: BTreeMap<String, BTreeMap<String, Vec<&RefactoringCandidate>>> =
-            BTreeMap::new();
-
-        for (file_path, candidates) in file_groups {
-            let path = Path::new(&file_path);
-            let dir_path = path
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| ".".to_string());
-            let file_name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-
-            dir_groups
-                .entry(dir_path)
-                .or_default()
-                .insert(file_name, candidates);
-        }
-
-        // Build hierarchy structure
-        let mut hierarchy = Vec::new();
-
-        for (dir_path, files) in dir_groups {
-            let mut dir_children = Vec::new();
-
-            for (file_name, candidates) in files {
-                let mut file_children = Vec::new();
-
-                for candidate in candidates {
-                    let mut entity_children = Vec::new();
-
-                    // Add issues as children
-                    for (issue_idx, issue) in candidate.issues.iter().enumerate() {
-                        let issue_node = serde_json::json!({
-                            "id": format!("issue_{}_{}", candidate.entity_id, issue_idx),
-                            "type": "issue",
-                            "name": format!("{}: {}", issue.code, issue.category),
-                            "code": issue.code,
-                            "priority": format!("{:?}", candidate.priority),
-                            "score": issue.severity
-                        });
-                        entity_children.push(issue_node);
-                    }
-
-                    // Add suggestions as children
-                    for (suggestion_idx, suggestion) in candidate.suggestions.iter().enumerate() {
-                        let suggestion_node = serde_json::json!({
-                            "id": format!("suggestion_{}_{}", candidate.entity_id, suggestion_idx),
-                            "type": "suggestion",
-                            "name": format!("{}: {}", suggestion.code, suggestion.refactoring_type),
-                            "code": suggestion.code,
-                            "priority": format!("{:?}", candidate.priority),
-                            "refactoring_type": suggestion.refactoring_type
-                        });
-                        entity_children.push(suggestion_node);
-                    }
-
-                    let entity_node = serde_json::json!({
-                        "id": candidate.entity_id,
-                        "type": "entity",
-                        "entity_id": candidate.entity_id,
-                        "name": Self::extract_entity_name(&candidate.name),
-                        "score": candidate.score,
-                        "issue_count": candidate.issues.len(),
-                        "suggestion_count": candidate.suggestions.len(),
-                        "children": entity_children
-                    });
-
-                    file_children.push(entity_node);
-                }
-
-                let file_node = serde_json::json!({
-                    "id": format!("file_{}/{}", dir_path, file_name),
-                    "type": "file",
-                    "name": file_name,
-                    "children": file_children
-                });
-
-                dir_children.push(file_node);
-            }
-
-            // Calculate directory health score (average of all entity scores in directory)
-            let mut all_scores = Vec::new();
-            for file in &dir_children {
-                if let Some(children) = file["children"].as_array() {
-                    for entity in children {
-                        if let Some(score) = entity["score"].as_f64() {
-                            all_scores.push(score);
-                        }
-                    }
-                }
-            }
-            let health_score = if all_scores.is_empty() {
-                100.0 // Perfect health for empty directories
-            } else {
-                all_scores.iter().sum::<f64>() / all_scores.len() as f64
-            };
-
-            let dir_node = serde_json::json!({
-                "id": format!("folder_{}", dir_path),
-                "type": "folder", // Normalised label expected by the interactive tree renderer
-                "name": dir_path,
-                "health_score": health_score,
-                "children": dir_children
-            });
-
-            hierarchy.push(dir_node);
-        }
-
-        // If no candidates were processed, return a fallback root directory
-        if hierarchy.is_empty() {
-            let root_node = serde_json::json!({
-                "id": "root_directory",
-                "type": "folder",
-                "name": ".",
-                "health_score": 100.0,
-                "children": []
-            });
-            hierarchy.push(root_node);
-        }
-
-        hierarchy
-    }
-
-    /// Extract entity name from full entity ID or name
-    fn extract_entity_name(name: &str) -> String {
-        // Entity names may be in format "file_path:type:name" or just "name"
-        name.split(':').last().unwrap_or(name).to_string()
-    }
-
-    /// Calculate overall code health score
+    /// Calculate overall code health score from pipeline summary
     fn calculate_code_health_score(summary: &ResultSummary) -> f64 {
         if summary.total_entities == 0 {
             return 1.0; // No entities = perfect health (or no data)
@@ -462,513 +288,7 @@ impl AnalysisResults {
         // Adjust based on average score magnitude
         let score_penalty = (summary.avg_score.abs() / 2.0).min(0.3);
 
-        (health_score - score_penalty).max(0.0f64).min(1.0f64)
-    }
-
-    /// Build unified hierarchy from directory health tree
-    pub fn build_unified_hierarchy_from_directory_tree(
-        directory_health_tree: &DirectoryHealthTree,
-    ) -> Vec<serde_json::Value> {
-        use std::collections::HashMap;
-        use std::path::Path;
-
-        // Build a map of path -> directory info for easy lookup
-        let mut dir_map: HashMap<String, &DirectoryHealthScore> = HashMap::new();
-        for (path_buf, dir_info) in &directory_health_tree.directories {
-            let path_str = path_buf.to_string_lossy().to_string();
-            // Filter out trivial directories
-            if !Self::is_trivial_directory(&path_str) {
-                dir_map.insert(path_str, dir_info);
-            }
-        }
-
-        // Build the hierarchical structure recursively
-        fn build_node_with_children(
-            path: &str,
-            dir_info: &DirectoryHealthScore,
-            dir_map: &HashMap<String, &DirectoryHealthScore>,
-        ) -> serde_json::Value {
-            let mut children = Vec::new();
-
-            // Find ALL directories that have this directory as their parent
-            for (child_path, child_info) in dir_map {
-                if let Some(parent_path) = &child_info.parent {
-                    let parent_str = parent_path.to_string_lossy();
-                    if parent_str == path {
-                        // This directory is a child of the current directory
-                        let child_node = build_node_with_children(child_path, child_info, dir_map);
-                        children.push(child_node);
-                    }
-                }
-            }
-
-            // Sort children by name for consistent display
-            children.sort_by(|a, b| {
-                let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                name_a.cmp(name_b)
-            });
-
-            // Get just the directory name (not the full path) for display
-            let display_name = Path::new(path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| path.to_string());
-
-            serde_json::json!({
-                "id": format!("directory_{}", path.replace("/", "_").replace(".", "root")),
-                "type": "folder",
-                "name": display_name,
-                "path": path,
-                "health_score": dir_info.health_score,
-                "file_count": dir_info.file_count,
-                "entity_count": dir_info.entity_count,
-                "refactoring_needed": dir_info.refactoring_needed,
-                "children": children
-            })
-        }
-
-        // Find top-level directories (those with empty parent or parent not in our filtered set)
-        let mut top_level_dirs = Vec::new();
-        for (path, dir_info) in &dir_map {
-            // A directory is top-level if its parent is None or not in our filtered set
-            let is_top_level = match &dir_info.parent {
-                None => true, // No parent, this is a top-level directory
-                Some(parent_path) => {
-                    let parent_str = parent_path.to_string_lossy();
-                    Self::is_trivial_directory(&parent_str)
-                        || !dir_map.contains_key(parent_str.as_ref())
-                }
-            };
-
-            if is_top_level {
-                let node = build_node_with_children(path, dir_info, &dir_map);
-                top_level_dirs.push(node);
-            }
-        }
-
-        // Sort top-level directories by name
-        top_level_dirs.sort_by(|a, b| {
-            let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            name_a.cmp(name_b)
-        });
-
-        top_level_dirs
-    }
-
-    /// Check if a directory path is trivial and should be filtered out
-    fn is_trivial_directory(path: &str) -> bool {
-        match path {
-            "." | "" | "./" => true,
-            _ => false,
-        }
-    }
-
-    /// Build directory health tree from pipeline results
-    fn build_directory_health_tree(
-        pipeline_results: &PipelineResults,
-        refactoring_candidates: &[RefactoringCandidate],
-    ) -> DirectoryHealthTree {
-        use std::collections::{BTreeMap, BTreeSet};
-
-        // Group refactoring candidates by directory
-        let mut directory_data: BTreeMap<PathBuf, Vec<&RefactoringCandidate>> = BTreeMap::new();
-        let mut all_directories: BTreeSet<PathBuf> = BTreeSet::new();
-
-        // Group ALL entities by directory (not just refactoring candidates)
-        let mut directory_entity_counts: BTreeMap<PathBuf, usize> = BTreeMap::new();
-
-        // First, try to count entities from scoring results
-        for scoring_result in &pipeline_results.scoring_results.files {
-            // Each scoring result represents one entity, extract file path from entity_id
-            let entity_id_parts: Vec<&str> = scoring_result.entity_id.split(':').collect();
-            if entity_id_parts.len() >= 2 {
-                let file_path_str = entity_id_parts[0];
-                // Clean file path early
-                let clean_file_path = if file_path_str.starts_with("./") {
-                    &file_path_str[2..]
-                } else {
-                    file_path_str
-                };
-                let file_path = Path::new(clean_file_path);
-                if let Some(dir_path) = file_path.parent() {
-                    let dir_path = dir_path.to_path_buf();
-                    // Each scoring result represents one entity
-                    *directory_entity_counts.entry(dir_path.clone()).or_insert(0) += 1;
-
-                    // Add parent directories only within project bounds (not absolute paths)
-                    let mut current = Some(dir_path);
-                    while let Some(dir) = current {
-                        if !dir.as_os_str().is_empty() {
-                            all_directories.insert(dir.clone());
-                        }
-                        // Stop at project root - don't traverse beyond relative paths
-                        current = dir
-                            .parent()
-                            .filter(|p| {
-                                !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
-                            })
-                            .map(|p| p.to_path_buf());
-                    }
-                }
-            }
-        }
-
-        // FALLBACK: If no scoring results, use refactoring analysis results to build the tree
-        if directory_entity_counts.is_empty()
-            && !pipeline_results
-                .results
-                .refactoring
-                .detailed_results
-                .is_empty()
-        {
-            for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
-                // Extract file path from refactoring result
-                let file_path = Path::new(&refactoring_result.file_path);
-                if let Some(dir_path) = file_path.parent() {
-                    let dir_path = dir_path.to_path_buf();
-                    // Count the number of recommendations as entities for this file
-                    let entity_count = refactoring_result.recommendations.len().max(1); // At least 1 entity per file
-                    *directory_entity_counts.entry(dir_path.clone()).or_insert(0) += entity_count;
-
-                    // Add parent directories only within project bounds (not absolute paths)
-                    let mut current = Some(dir_path);
-                    while let Some(dir) = current {
-                        if !dir.as_os_str().is_empty() {
-                            all_directories.insert(dir.clone());
-                        }
-                        // Stop at project root - don't traverse beyond relative paths
-                        current = dir
-                            .parent()
-                            .filter(|p| {
-                                !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
-                            })
-                            .map(|p| p.to_path_buf());
-                    }
-                }
-            }
-        }
-
-        // Also track files by directory for fallback file counting
-        let mut directory_files: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
-
-        // FALLBACK: Use refactoring analysis results to track files if no candidates exist
-        if refactoring_candidates.is_empty()
-            && !pipeline_results
-                .results
-                .refactoring
-                .detailed_results
-                .is_empty()
-        {
-            for refactoring_result in &pipeline_results.results.refactoring.detailed_results {
-                let file_path = Path::new(&refactoring_result.file_path);
-                if let Some(dir_path) = file_path.parent() {
-                    let dir_path = dir_path.to_path_buf();
-                    directory_files
-                        .entry(dir_path)
-                        .or_default()
-                        .insert(refactoring_result.file_path.clone());
-                }
-            }
-        }
-
-        // Extract directories from refactoring candidates
-        for candidate in refactoring_candidates {
-            let file_path = Path::new(&candidate.file_path);
-            if let Some(dir_path) = file_path.parent() {
-                let dir_path = dir_path.to_path_buf();
-                directory_data
-                    .entry(dir_path.clone())
-                    .or_default()
-                    .push(candidate);
-
-                // Add parent directories only within project bounds (not absolute paths)
-                let mut current = Some(dir_path);
-                while let Some(dir) = current {
-                    // Only add non-empty paths
-                    if !dir.as_os_str().is_empty() {
-                        all_directories.insert(dir.clone());
-                    }
-                    // Stop at project root - don't traverse beyond relative paths
-                    current = dir
-                        .parent()
-                        .filter(|p| {
-                            !p.as_os_str().is_empty() && !p.to_string_lossy().starts_with('/')
-                        })
-                        .map(|p| p.to_path_buf());
-                }
-            }
-        }
-
-        // If no files were found, create a default root directory
-        if all_directories.is_empty() {
-            all_directories.insert(PathBuf::from("."));
-        }
-
-        // Build directory health scores
-        let mut directories: HashMap<PathBuf, DirectoryHealthScore> = HashMap::new();
-        let mut root_path = PathBuf::from(".");
-
-        // Find the actual root directory (common ancestor)
-        if let Some(first_dir) = all_directories.iter().next() {
-            let mut root_components = first_dir.components().collect::<Vec<_>>();
-            for dir in all_directories.iter().skip(1) {
-                let dir_components = dir.components().collect::<Vec<_>>();
-                let common_len = root_components
-                    .iter()
-                    .zip(dir_components.iter())
-                    .take_while(|(a, b)| a == b)
-                    .count();
-                root_components.truncate(common_len);
-            }
-
-            // Only use the computed common ancestor if it's non-empty
-            if !root_components.is_empty() {
-                let computed_root: PathBuf = root_components.into_iter().collect();
-                if !computed_root.as_os_str().is_empty() {
-                    root_path = computed_root;
-                }
-            }
-        }
-
-        // Calculate health scores for each directory
-        for dir_path in &all_directories {
-            let candidates_in_dir = directory_data.get(dir_path).cloned().unwrap_or_default();
-
-            // Count files directly in this directory (not subdirectories)
-            let file_count = if !candidates_in_dir.is_empty() {
-                // Use candidates from scoring results
-                let files_in_dir: BTreeSet<&str> = candidates_in_dir
-                    .iter()
-                    .map(|c| c.file_path.as_str())
-                    .collect();
-                files_in_dir.len()
-            } else {
-                // FALLBACK: Use files from refactoring analysis
-                directory_files
-                    .get(dir_path)
-                    .map(|files| files.len())
-                    .unwrap_or(0)
-            };
-
-            // Calculate directory statistics
-            let total_entity_count = directory_entity_counts.get(dir_path).copied().unwrap_or(0);
-            let refactoring_needed = candidates_in_dir.len(); // Number of entities that need refactoring
-            let critical_issues = candidates_in_dir
-                .iter()
-                .filter(|c| matches!(c.priority, Priority::Critical))
-                .count();
-            let high_priority_issues = candidates_in_dir
-                .iter()
-                .filter(|c| matches!(c.priority, Priority::High | Priority::Critical))
-                .count();
-
-            let avg_refactoring_score = if refactoring_needed > 0 {
-                candidates_in_dir.iter().map(|c| c.score).sum::<f64>() / refactoring_needed as f64
-            } else {
-                0.0
-            };
-
-            // Calculate health score (inverse of refactoring need)
-            if dir_path.as_os_str() == "src" {
-                println!(
-                    "DEBUG: SRC calculation - entities: {}, refactoring: {}, avg_score: {}",
-                    total_entity_count, refactoring_needed, avg_refactoring_score
-                );
-            }
-            let health_score = if total_entity_count > 0 {
-                let refactoring_ratio = refactoring_needed as f64 / total_entity_count as f64;
-                let score_penalty = (avg_refactoring_score.abs() / 4.0).min(0.4);
-                (1.0 - refactoring_ratio - score_penalty).max(0.0).min(1.0)
-            } else {
-                1.0 // No entities = perfect health
-            };
-
-            // Calculate issue categories
-            let mut issue_categories: HashMap<String, DirectoryIssueSummary> = HashMap::new();
-            for candidate in &candidates_in_dir {
-                for issue in &candidate.issues {
-                    let summary = issue_categories
-                        .entry(issue.category.clone())
-                        .or_insert_with(|| DirectoryIssueSummary {
-                            category: issue.category.clone(),
-                            affected_entities: 0,
-                            avg_severity: 0.0,
-                            max_severity: 0.0,
-                            health_impact: 0.0,
-                        });
-
-                    summary.affected_entities += 1;
-                    summary.avg_severity = (summary.avg_severity + issue.severity) / 2.0;
-                    summary.max_severity = summary.max_severity.max(issue.severity);
-                    summary.health_impact = summary.avg_severity
-                        * (summary.affected_entities as f64 / total_entity_count as f64);
-                }
-            }
-
-            // Find parent and children
-            let parent = dir_path.parent().map(|p| p.to_path_buf());
-            let children: Vec<PathBuf> = all_directories
-                .iter()
-                .filter(|other_dir| other_dir.parent() == Some(dir_path))
-                .cloned()
-                .collect();
-
-            let weight = total_entity_count as f64 + 1.0; // +1 to ensure non-zero weight
-
-            let directory_score = DirectoryHealthScore {
-                path: dir_path.clone(),
-                health_score,
-                file_count,
-                entity_count: total_entity_count,
-                refactoring_needed,
-                critical_issues,
-                high_priority_issues,
-                avg_refactoring_score,
-                weight,
-                children,
-                parent,
-                issue_categories,
-            };
-
-            directories.insert(dir_path.clone(), directory_score);
-        }
-
-        // Ensure root directory exists
-        let root = directories
-            .get(&root_path)
-            .cloned()
-            .unwrap_or_else(|| DirectoryHealthScore {
-                path: root_path.clone(),
-                health_score: 1.0,
-                file_count: 0,
-                entity_count: 0,
-                refactoring_needed: 0,
-                critical_issues: 0,
-                high_priority_issues: 0,
-                avg_refactoring_score: 0.0,
-                weight: 1.0,
-                children: directories
-                    .keys()
-                    .filter(|p| p != &&root_path)
-                    .cloned()
-                    .collect(),
-                parent: None,
-                issue_categories: HashMap::new(),
-            });
-
-        // Calculate tree statistics
-        let total_directories = directories.len();
-        let max_depth = directories
-            .keys()
-            .map(|path| path.components().count())
-            .max()
-            .unwrap_or(0);
-
-        let health_scores: Vec<f64> = directories.values().map(|d| d.health_score).collect();
-        let avg_health_score = if !health_scores.is_empty() {
-            health_scores.iter().sum::<f64>() / health_scores.len() as f64
-        } else {
-            1.0
-        };
-
-        let health_score_std_dev = if health_scores.len() > 1 {
-            let variance = health_scores
-                .iter()
-                .map(|score| (score - avg_health_score).powi(2))
-                .sum::<f64>()
-                / (health_scores.len() - 1) as f64;
-            variance.sqrt()
-        } else {
-            0.0
-        };
-
-        // Identify hotspot directories (bottom 20% or health < 0.6)
-        let hotspot_threshold = avg_health_score * 0.8; // 80% of average health
-        let mut hotspot_candidates: Vec<_> = directories
-            .values()
-            .filter(|d| d.health_score < hotspot_threshold.min(0.6))
-            .collect();
-        hotspot_candidates.sort_by(|a, b| {
-            a.health_score
-                .partial_cmp(&b.health_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let hotspot_directories: Vec<DirectoryHotspot> = hotspot_candidates
-            .iter()
-            .enumerate()
-            .map(|(rank, dir)| {
-                let primary_issue_category = dir
-                    .issue_categories
-                    .values()
-                    .max_by(|a, b| {
-                        a.health_impact
-                            .partial_cmp(&b.health_impact)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    })
-                    .map(|issue| issue.category.clone())
-                    .unwrap_or_else(|| "complexity".to_string());
-
-                let recommendation =
-                    Self::generate_hotspot_recommendation(&primary_issue_category, dir);
-
-                DirectoryHotspot {
-                    path: dir.path.clone(),
-                    health_score: dir.health_score,
-                    rank: rank + 1,
-                    primary_issue_category,
-                    recommendation,
-                }
-            })
-            .collect();
-
-        // Calculate health by depth
-        let mut health_by_depth: HashMap<usize, DepthHealthStats> = HashMap::new();
-        for dir in directories.values() {
-            let depth = dir.path.components().count();
-            let depth_stats = health_by_depth
-                .entry(depth)
-                .or_insert_with(|| DepthHealthStats {
-                    depth,
-                    directory_count: 0,
-                    avg_health_score: 0.0,
-                    min_health_score: f64::INFINITY,
-                    max_health_score: f64::NEG_INFINITY,
-                });
-
-            depth_stats.directory_count += 1;
-            depth_stats.avg_health_score += dir.health_score;
-            depth_stats.min_health_score = depth_stats.min_health_score.min(dir.health_score);
-            depth_stats.max_health_score = depth_stats.max_health_score.max(dir.health_score);
-        }
-
-        // Finalize averages
-        for stats in health_by_depth.values_mut() {
-            stats.avg_health_score /= stats.directory_count as f64;
-            if stats.min_health_score == f64::INFINITY {
-                stats.min_health_score = 0.0;
-            }
-            if stats.max_health_score == f64::NEG_INFINITY {
-                stats.max_health_score = 0.0;
-            }
-        }
-
-        let tree_statistics = TreeStatistics {
-            total_directories,
-            max_depth,
-            avg_health_score,
-            health_score_std_dev,
-            hotspot_directories,
-            health_by_depth,
-        };
-
-        DirectoryHealthTree {
-            root,
-            directories,
-            tree_statistics,
-        }
+        (health_score - score_penalty).clamp(0.0, 1.0)
     }
 
     /// Convert LSH results to CloneAnalysisResults
@@ -1049,31 +369,6 @@ impl AnalysisResults {
         packs
     }
 
-    /// Generate recommendation for a hotspot directory
-    fn generate_hotspot_recommendation(
-        primary_issue_category: &str,
-        dir: &DirectoryHealthScore,
-    ) -> String {
-        match primary_issue_category {
-            "complexity" => {
-                if dir.entity_count > 10 {
-                    "Consider breaking down complex functions and extracting smaller modules".to_string()
-                } else {
-                    "Focus on simplifying complex logic and reducing cyclomatic complexity".to_string()
-                }
-            }
-            "structure" => {
-                "Review architectural patterns and consider refactoring for better separation of concerns".to_string()
-            }
-            "graph" => {
-                "Reduce coupling between components and review dependency relationships".to_string()
-            }
-            _ => {
-                format!("Address {} issues through focused refactoring efforts", primary_issue_category)
-            }
-        }
-    }
-
     /// Get the number of files processed
     pub fn files_analyzed(&self) -> usize {
         self.summary.files_processed
@@ -1111,37 +406,6 @@ impl AnalysisResults {
         let mut issues: Vec<_> = issue_counts.into_iter().collect();
         issues.sort_by(|a, b| b.1.cmp(&a.1));
         issues.into_iter().take(count).collect()
-    }
-
-    /// Get directory hotspots (directories with low health scores)
-    pub fn get_directory_hotspots(&self) -> Vec<&DirectoryHotspot> {
-        self.directory_health_tree
-            .as_ref()
-            .map(|tree| tree.tree_statistics.hotspot_directories.iter().collect())
-            .unwrap_or_default()
-    }
-
-    /// Get the directory health score for a specific path
-    pub fn get_directory_health(&self, path: &Path) -> Option<f64> {
-        self.directory_health_tree
-            .as_ref()
-            .and_then(|tree| tree.directories.get(path))
-            .map(|dir| dir.health_score)
-    }
-
-    /// Get all directories sorted by health score (worst first)
-    pub fn get_directories_by_health(&self) -> Vec<&DirectoryHealthScore> {
-        if let Some(tree) = &self.directory_health_tree {
-            let mut dirs: Vec<_> = tree.directories.values().collect();
-            dirs.sort_by(|a, b| {
-                a.health_score
-                    .partial_cmp(&b.health_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            dirs
-        } else {
-            Vec::new()
-        }
     }
 }
 
@@ -1712,76 +976,6 @@ mod tests {
         serde_json::to_value(pack).expect("pack serializes")
     }
 
-    fn sample_directory_tree() -> DirectoryHealthTree {
-        let mut directories = HashMap::new();
-
-        let mut issue_summaries = HashMap::new();
-        issue_summaries.insert(
-            "complexity".to_string(),
-            DirectoryIssueSummary {
-                category: "complexity".to_string(),
-                affected_entities: 2,
-                avg_severity: 1.2,
-                max_severity: 2.0,
-                health_impact: 0.4,
-            },
-        );
-
-        let child = DirectoryHealthScore {
-            path: PathBuf::from("src"),
-            health_score: 0.42,
-            file_count: 2,
-            entity_count: 4,
-            refactoring_needed: 3,
-            critical_issues: 1,
-            high_priority_issues: 1,
-            avg_refactoring_score: 0.75,
-            weight: 1.0,
-            children: Vec::new(),
-            parent: Some(PathBuf::from(".")),
-            issue_categories: issue_summaries,
-        };
-
-        let root = DirectoryHealthScore {
-            path: PathBuf::from("."),
-            health_score: 0.9,
-            file_count: 0,
-            entity_count: 0,
-            refactoring_needed: 0,
-            critical_issues: 0,
-            high_priority_issues: 0,
-            avg_refactoring_score: 0.0,
-            weight: 1.0,
-            children: vec![PathBuf::from("src")],
-            parent: None,
-            issue_categories: HashMap::new(),
-        };
-
-        directories.insert(PathBuf::from("."), root.clone());
-        directories.insert(PathBuf::from("src"), child.clone());
-
-        let hotspot = DirectoryHotspot {
-            path: PathBuf::from("src"),
-            health_score: child.health_score,
-            rank: 1,
-            primary_issue_category: "complexity".to_string(),
-            recommendation: "Reduce complexity in src".to_string(),
-        };
-
-        DirectoryHealthTree {
-            root,
-            directories,
-            tree_statistics: TreeStatistics {
-                total_directories: 2,
-                max_depth: 1,
-                avg_health_score: 0.66,
-                health_score_std_dev: 0.12,
-                hotspot_directories: vec![hotspot],
-                health_by_depth: HashMap::new(),
-            },
-        }
-    }
-
     #[test]
     fn test_code_health_calculation() {
         let summary = crate::core::pipeline::ResultSummary {
@@ -1861,118 +1055,6 @@ mod tests {
     }
 
     #[test]
-    fn test_unified_hierarchy_has_id_fields() {
-        // Create a test refactoring candidate
-        let candidate = RefactoringCandidate {
-            entity_id: "test_file.rs:function:test_function".to_string(),
-            name: "test_function".to_string(),
-            file_path: "src/test_file.rs".to_string(),
-            line_range: Some((10, 20)),
-            priority: Priority::High,
-            score: 2.0,
-            confidence: 0.8,
-            issues: vec![RefactoringIssue {
-                code: "CMPLX".to_string(),
-                category: "complexity".to_string(),
-                severity: 1.5,
-                contributing_features: vec![],
-            }],
-            suggestions: vec![RefactoringSuggestion {
-                refactoring_type: "extract_method".to_string(),
-                code: "XTRMTH".to_string(),
-                priority: 0.7,
-                effort: 0.5,
-                impact: 0.8,
-            }],
-            issue_count: 1,
-            suggestion_count: 1,
-        };
-
-        let candidates = vec![candidate];
-        let hierarchy = AnalysisResults::build_unified_hierarchy_from_candidates(&candidates);
-
-        // Verify the hierarchy is not empty
-        assert!(!hierarchy.is_empty());
-
-        // Get the first directory node
-        let dir_node = &hierarchy[0];
-
-        // Verify directory node has an id
-        assert!(dir_node.get("id").is_some());
-        assert_eq!(
-            dir_node.get("type").and_then(|v| v.as_str()),
-            Some("folder")
-        );
-
-        // Get file children
-        let children = dir_node.get("children").and_then(|v| v.as_array()).unwrap();
-        assert!(!children.is_empty());
-
-        // Verify file node has an id
-        let file_node = &children[0];
-        assert!(file_node.get("id").is_some());
-        assert_eq!(file_node.get("type").and_then(|v| v.as_str()), Some("file"));
-
-        // Get entity children
-        let file_children = file_node
-            .get("children")
-            .and_then(|v| v.as_array())
-            .unwrap();
-        assert!(!file_children.is_empty());
-
-        // Verify entity node has an id
-        let entity_node = &file_children[0];
-        assert!(entity_node.get("id").is_some());
-        assert_eq!(
-            entity_node.get("type").and_then(|v| v.as_str()),
-            Some("entity")
-        );
-
-        // Get issue/suggestion children
-        let entity_children = entity_node
-            .get("children")
-            .and_then(|v| v.as_array())
-            .unwrap();
-        assert!(!entity_children.is_empty());
-
-        // Verify issue/suggestion nodes have ids
-        for child in entity_children {
-            assert!(child.get("id").is_some());
-            let node_type = child.get("type").and_then(|v| v.as_str());
-            assert!(node_type == Some("issue") || node_type == Some("suggestion"));
-        }
-    }
-
-    #[test]
-    fn test_unified_hierarchy_empty_candidates() {
-        // Test with empty candidates list
-        let candidates = vec![];
-        let hierarchy = AnalysisResults::build_unified_hierarchy_from_candidates(&candidates);
-
-        // Should return a fallback root directory
-        assert!(!hierarchy.is_empty());
-        assert_eq!(hierarchy.len(), 1);
-
-        let root_node = &hierarchy[0];
-        assert!(root_node.get("id").is_some());
-        assert_eq!(
-            root_node.get("id").and_then(|v| v.as_str()),
-            Some("root_directory")
-        );
-        assert_eq!(
-            root_node.get("type").and_then(|v| v.as_str()),
-            Some("folder")
-        );
-        assert_eq!(root_node.get("name").and_then(|v| v.as_str()), Some("."));
-
-        let children = root_node
-            .get("children")
-            .and_then(|v| v.as_array())
-            .unwrap();
-        assert!(children.is_empty());
-    }
-
-    #[test]
     fn group_candidates_by_file_sorts_by_priority_and_score() {
         let candidates = vec![
             sample_candidate("src/lib.rs", "High", Priority::High, "complexity", 2.0),
@@ -1996,97 +1078,6 @@ mod tests {
     }
 
     #[test]
-    fn build_unified_hierarchy_with_fallback_prefers_directory_tree() {
-        let tree = sample_directory_tree();
-        let candidates = vec![sample_candidate(
-            "src/lib.rs",
-            "Sample",
-            Priority::High,
-            "complexity",
-            2.0,
-        )];
-
-        let hierarchy = AnalysisResults::build_unified_hierarchy_with_fallback(&candidates, &tree);
-        assert_eq!(hierarchy.len(), 1);
-        assert_eq!(hierarchy[0]["name"], "src");
-        assert_eq!(hierarchy[0]["type"], "folder");
-    }
-
-    #[test]
-    fn build_unified_hierarchy_with_fallback_uses_candidates_when_tree_empty() {
-        let empty_tree = DirectoryHealthTree {
-            root: DirectoryHealthScore {
-                path: PathBuf::from("."),
-                health_score: 1.0,
-                file_count: 0,
-                entity_count: 0,
-                refactoring_needed: 0,
-                critical_issues: 0,
-                high_priority_issues: 0,
-                avg_refactoring_score: 0.0,
-                weight: 1.0,
-                children: Vec::new(),
-                parent: None,
-                issue_categories: HashMap::new(),
-            },
-            directories: HashMap::new(),
-            tree_statistics: TreeStatistics {
-                total_directories: 0,
-                max_depth: 0,
-                avg_health_score: 1.0,
-                health_score_std_dev: 0.0,
-                hotspot_directories: Vec::new(),
-                health_by_depth: HashMap::new(),
-            },
-        };
-
-        let candidates = vec![sample_candidate(
-            "src/lib.rs",
-            "Sample",
-            Priority::High,
-            "complexity",
-            3.1,
-        )];
-        let hierarchy =
-            AnalysisResults::build_unified_hierarchy_with_fallback(&candidates, &empty_tree);
-
-        assert_eq!(hierarchy.len(), 1);
-        assert_eq!(hierarchy[0]["name"], "src");
-    }
-
-    #[test]
-    fn build_unified_hierarchy_with_fallback_returns_empty_when_no_data() {
-        let empty_tree = DirectoryHealthTree {
-            root: DirectoryHealthScore {
-                path: PathBuf::from("."),
-                health_score: 1.0,
-                file_count: 0,
-                entity_count: 0,
-                refactoring_needed: 0,
-                critical_issues: 0,
-                high_priority_issues: 0,
-                avg_refactoring_score: 0.0,
-                weight: 1.0,
-                children: Vec::new(),
-                parent: None,
-                issue_categories: HashMap::new(),
-            },
-            directories: HashMap::new(),
-            tree_statistics: TreeStatistics {
-                total_directories: 0,
-                max_depth: 0,
-                avg_health_score: 1.0,
-                health_score_std_dev: 0.0,
-                hotspot_directories: Vec::new(),
-                health_by_depth: HashMap::new(),
-            },
-        };
-
-        let hierarchy = AnalysisResults::build_unified_hierarchy_with_fallback(&[], &empty_tree);
-        assert!(hierarchy.is_empty());
-    }
-
-    #[test]
     fn top_issues_returns_sorted_categories() {
         let mut results = AnalysisResults::empty();
         results.refactoring_candidates = vec![
@@ -2103,39 +1094,6 @@ mod tests {
     }
 
     #[test]
-    fn directory_metrics_reflect_tree_data() {
-        let mut results = AnalysisResults::empty();
-        results.summary.files_processed = 7;
-        results.summary.code_health_score = 0.78;
-        results.refactoring_candidates = vec![
-            sample_candidate("src/lib.rs", "Crit", Priority::Critical, "complexity", 3.0),
-            sample_candidate("src/utils.rs", "High", Priority::High, "structure", 1.5),
-        ];
-        results.directory_health_tree = Some(sample_directory_tree());
-
-        let hotspots = results.get_directory_hotspots();
-        assert_eq!(hotspots.len(), 1);
-        assert_eq!(hotspots[0].path, Path::new("src"));
-
-        let health = results.get_directory_health(Path::new("src"));
-        assert_eq!(health, Some(0.42));
-
-        let directories = results.get_directories_by_health();
-        assert_eq!(directories.len(), 2);
-        assert_eq!(directories[0].path, PathBuf::from("src"));
-
-        assert_eq!(results.files_analyzed(), 7);
-
-        let critical: Vec<_> = results.critical_candidates().collect();
-        assert_eq!(critical.len(), 1);
-
-        let high: Vec<_> = results.high_priority_candidates().collect();
-        assert_eq!(high.len(), 2);
-
-        assert!(!results.is_healthy());
-    }
-
-    #[test]
     fn from_pipeline_results_populates_dictionary_and_warnings() {
         let pipeline_results = pipeline_results_fixture();
         let analysis = AnalysisResults::from_pipeline_results(pipeline_results);
@@ -2147,8 +1105,6 @@ mod tests {
             .code_dictionary
             .suggestions
             .contains_key("RDCYCLEX"));
-        assert!(analysis.directory_health_tree.is_some());
-        assert!(!analysis.unified_hierarchy.is_empty());
         assert_eq!(analysis.warnings, vec!["engine warning".to_string()]);
     }
 

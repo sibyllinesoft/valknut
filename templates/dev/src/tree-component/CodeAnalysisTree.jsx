@@ -72,6 +72,68 @@ export const CodeAnalysisTree = ({ data }) => {
         }));
     }, [getPriorityRank]);
 
+    const groupCandidatesByFile = useCallback((candidates = []) => {
+        const groups = new Map();
+
+        candidates.forEach((candidate) => {
+            if (!candidate || typeof candidate !== 'object') {
+                return;
+            }
+
+            const filePath =
+                candidate.file_path ||
+                candidate.filePath ||
+                candidate.path ||
+                candidate.file ||
+                '';
+
+            if (!filePath) {
+                return;
+            }
+
+            const normalizedPath = String(filePath);
+            const existing = groups.get(normalizedPath) || [];
+            existing.push(candidate);
+            groups.set(normalizedPath, existing);
+        });
+
+        const pickHighestPriority = (entities = []) => {
+            return entities
+                .map((entity) => String(entity.priority || entity.priority_level || 'low'))
+                .reduce((best, current) => {
+                    return getPriorityRank({ priority: current }) <
+                        getPriorityRank({ priority: best || 'low' })
+                        ? current
+                        : best;
+                }, 'low');
+        };
+
+        return Array.from(groups.entries()).map(([filePath, entities]) => {
+            const fileName = filePath.split(/[\\/]/).pop() || filePath;
+            const entityCount = entities.length;
+            const totalIssues = entities.reduce(
+                (sum, entity) =>
+                    sum + (Array.isArray(entity.issues) ? entity.issues.length : 0),
+                0
+            );
+            const avgScore =
+                entityCount > 0
+                    ? entities.reduce((sum, entity) => sum + (entity.score || 0), 0) /
+                      entityCount
+                    : 0;
+
+            return {
+                filePath,
+                fileName,
+                entityCount,
+                highestPriority: pickHighestPriority(entities),
+                avgScore,
+                totalIssues,
+                entities,
+            };
+        });
+    }, [getPriorityRank]);
+
     // Build tree structure from file paths and directory health
     const aggregateTreeMetrics = useCallback((nodes) => {
         if (!Array.isArray(nodes)) {
@@ -1041,53 +1103,25 @@ export const CodeAnalysisTree = ({ data }) => {
     useEffect(() => {
         try {
             if (data && typeof data === 'object') {
-                // Use unifiedHierarchy if available, fallback to refactoringCandidatesByFile for backward compatibility
-                const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
+                const candidates = Array.isArray(data.refactoring_candidates)
+                    ? data.refactoring_candidates
+                    : Array.isArray(data.refactoringCandidates)
+                        ? data.refactoringCandidates
+                        : [];
 
-                if (data.unifiedHierarchy) {
-                    const fileGroups = Array.isArray(data.refactoringCandidatesByFile)
-                        ? data.refactoringCandidatesByFile
-                        : (Array.isArray(data.refactoring_candidates_by_file)
-                            ? data.refactoring_candidates_by_file
-                            : []);
-                    const treeStructure = buildTreeData(
-                        fileGroups,
-                        data.directoryHealthTree,
-                        data.coveragePacks || []
-                    );
-                    const baseNodes = treeStructure.length > 0 ? treeStructure : hierarchyData;
-                    const aggregatedHierarchy = aggregateTreeMetrics(baseNodes);
-                    const sortedHierarchy = sortNodesByPriority(aggregatedHierarchy);
-                    const annotated = annotateNodesWithDictionary(sortedHierarchy);
-                    const normalized = normalizeTreeData(annotated);
-                    const aggregatedNormalized = aggregateTreeMetrics(normalized);
-                    if (typeof window !== 'undefined') {
-                        window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
-                        window.__VALKNUT_TREE_AGG_DEBUG.push({
-                            source: 'unifiedHierarchy',
-                            sample: aggregatedNormalized.slice(0, 3),
-                        });
-                    }
-                    setTreeData(aggregatedNormalized);
-                } else {
-                    // Legacy format - build tree structure then normalize
-                    const treeStructure = buildTreeData(
-                        hierarchyData,
-                        data.directoryHealthTree,
-                        data.coveragePacks || []
-                    );
-                    const annotated = annotateNodesWithDictionary(treeStructure);
-                    const normalized = normalizeTreeData(annotated);
-                    const aggregatedNormalized = aggregateTreeMetrics(normalized);
-                    if (typeof window !== 'undefined') {
-                        window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
-                        window.__VALKNUT_TREE_AGG_DEBUG.push({
-                            source: 'legacy',
-                            sample: aggregatedNormalized.slice(0, 3),
-                        });
-                    }
-                    setTreeData(aggregatedNormalized);
-                }
+                const coveragePacks = Array.isArray(data.coverage_packs)
+                    ? data.coverage_packs
+                    : Array.isArray(data.coveragePacks)
+                        ? data.coveragePacks
+                        : [];
+
+                const fileGroups = groupCandidatesByFile(candidates);
+                const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
+                const annotated = annotateNodesWithDictionary(treeStructure);
+                const normalized = normalizeTreeData(annotated);
+                const aggregatedNormalized = aggregateTreeMetrics(normalized);
+                const sorted = sortNodesByPriority(aggregatedNormalized);
+                setTreeData(sorted);
             } else {
                 setTreeData([]);
             }
@@ -1095,7 +1129,15 @@ export const CodeAnalysisTree = ({ data }) => {
             console.error('❌ Failed to load tree data:', error);
             setTreeData([]);
         }
-    }, [data, buildTreeData, normalizeTreeData, annotateNodesWithDictionary, sortNodesByPriority, aggregateTreeMetrics]);
+    }, [
+        data,
+        buildTreeData,
+        normalizeTreeData,
+        annotateNodesWithDictionary,
+        sortNodesByPriority,
+        aggregateTreeMetrics,
+        groupCandidatesByFile,
+    ]);
 
     useEffect(() => {
         if (treeData.length === 0) {

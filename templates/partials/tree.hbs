@@ -12,10 +12,10 @@
 
     <script id="tree-data" type="application/json">
         {
-            "unifiedHierarchy": {{#if unified_hierarchy}}{{{json unified_hierarchy}}}{{else}}[]{{/if}},
-            "refactoringCandidatesByFile": {{#if refactoring_candidates_by_file}}{{{json refactoring_candidates_by_file}}}{{else}}[]{{/if}},
-            "directoryHealthTree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
-            "coveragePacks": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}}
+            "refactoring_candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
+            "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}},
+            "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{}{{/if}},
+            "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}}
         }
     </script>
 

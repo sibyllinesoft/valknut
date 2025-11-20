@@ -1,6 +1,7 @@
 //! Individual analysis stages for the pipeline.
 
 use futures::future;
+use async_trait::async_trait;
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::hash_map::Entry;
@@ -1305,7 +1306,7 @@ impl AnalysisStages {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl StageOrchestrator for AnalysisStages {
     async fn run_arena_analysis_with_content(
         &self,
@@ -1340,7 +1341,7 @@ impl StageOrchestrator for AnalysisStages {
 
             let coverage_future = async {
                 if config.enable_coverage_analysis {
-                    let coverage_config = (*self.valknut_config.coverage).clone();
+                    let coverage_config = self.valknut_config.coverage.clone();
                     let default_path = PathBuf::from(".");
                     let root_path = paths.first().unwrap_or(&default_path);
                     self.run_coverage_analysis(root_path, &coverage_config)

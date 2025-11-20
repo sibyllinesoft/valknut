@@ -51,9 +51,8 @@ async function openSampleReport() {
   return { browser, page };
 }
 
-test('playwright: renders analysis summary in sample report', async () => {
+async function withSampleReport(run) {
   if (playwrightUnavailable) {
-    test.skip('Playwright sandbox is unavailable in this environment');
     return;
   }
 
@@ -61,45 +60,32 @@ test('playwright: renders analysis summary in sample report', async () => {
   let page;
   try {
     ({ browser, page } = await openSampleReport());
+    await run(page);
   } catch (error) {
     if (error instanceof PlaywrightUnavailableError) {
-      test.skip('Playwright sandbox is unavailable in this environment');
+      playwrightUnavailable = true;
+      console.warn('Playwright unavailable in this environment:', error.message);
       return;
     }
     throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
+}
 
-  try {
+test('playwright: renders analysis summary in sample report', async () => {
+  await withSampleReport(async (page) => {
     await expect(await page.locator('.hero-title', { hasText: 'Valknut Analysis Report' }).isVisible()).toBe(true);
     await expect(await page.locator('.demo-metric-card h3', { hasText: 'Files Selected' }).isVisible()).toBe(true);
-  } finally {
-    await browser.close();
-  }
+  });
 });
 
 test('playwright: exposes tree container and file metadata', async () => {
-  if (playwrightUnavailable) {
-    test.skip('Playwright sandbox is unavailable in this environment');
-    return;
-  }
-
-  let browser;
-  let page;
-  try {
-    ({ browser, page } = await openSampleReport());
-  } catch (error) {
-    if (error instanceof PlaywrightUnavailableError) {
-      test.skip('Playwright sandbox is unavailable in this environment');
-      return;
-    }
-    throw error;
-  }
-
-  try {
+  await withSampleReport(async (page) => {
     await expect(await page.locator('#file-tree-container').isVisible()).toBe(true);
     const metaText = await page.locator('.analysis-subheader').first().innerText();
     expect(metaText).toContain('Score');
-  } finally {
-    await browser.close();
-  }
+  });
 });

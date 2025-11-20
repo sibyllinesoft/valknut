@@ -2404,8 +2404,7 @@ mod tests {
     use tokio::runtime::Runtime;
     use valknut_rs::api::results::{
         AnalysisResults, AnalysisStatistics, AnalysisSummary, CloneAnalysisResults,
-        FeatureContribution, FileRefactoringGroup, MemoryStats, RefactoringIssue,
-        RefactoringSuggestion,
+        FeatureContribution, MemoryStats, RefactoringIssue, RefactoringSuggestion,
     };
     use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
     use valknut_rs::core::pipeline::{
@@ -2642,7 +2641,6 @@ export function accumulate(values: number[]): number {
 
     fn sample_analysis_results() -> AnalysisResults {
         let candidate = sample_candidate("src/lib.rs", Priority::High, 2.5);
-        let file_candidate = candidate.clone();
 
         AnalysisResults {
             summary: AnalysisSummary {
@@ -2661,16 +2659,9 @@ export function accumulate(values: number[]): number {
                 high_priority_issues: 1,
                 critical_issues: 0,
             },
+            normalized: None,
+            passes: valknut_rs::api::results::StageResultsBundle::disabled(),
             refactoring_candidates: vec![candidate],
-            refactoring_candidates_by_file: vec![FileRefactoringGroup {
-                file_path: "src/lib.rs".to_string(),
-                file_name: "lib.rs".to_string(),
-                entity_count: 1,
-                highest_priority: Priority::High,
-                avg_score: 2.5,
-                total_issues: 1,
-                entities: vec![file_candidate],
-            }],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_millis(25),
                 avg_file_processing_time: Duration::from_millis(25),
@@ -2691,10 +2682,8 @@ export function accumulate(values: number[]): number {
                 complexity_score: 45.0,
                 structure_quality_score: 78.0,
             }),
-            directory_health_tree: None,
             clone_analysis: None,
             coverage_packs: Vec::new(),
-            unified_hierarchy: Vec::new(),
             warnings: Vec::new(),
             code_dictionary: CodeDictionary::default(),
         }

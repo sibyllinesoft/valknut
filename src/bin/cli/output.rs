@@ -1894,8 +1894,7 @@ mod tests {
     use tokio;
     use valknut_rs::core::pipeline::{
         AnalysisResults, AnalysisStatistics, AnalysisSummary, CodeDictionary, FeatureContribution,
-        FileRefactoringGroup, MemoryStats, RefactoringCandidate, RefactoringIssue,
-        RefactoringSuggestion,
+        MemoryStats, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
     };
     use valknut_rs::core::scoring::Priority;
 
@@ -2092,16 +2091,6 @@ mod tests {
             suggestion_count: 1,
         };
 
-        let file_group = FileRefactoringGroup {
-            file_path: "src/lib.rs".to_string(),
-            file_name: "lib.rs".to_string(),
-            entity_count: 1,
-            highest_priority: Priority::High,
-            avg_score: 0.91,
-            total_issues: 1,
-            entities: vec![candidate.clone()],
-        };
-
         AnalysisResults {
             summary: AnalysisSummary {
                 files_processed: 1,
@@ -2119,8 +2108,9 @@ mod tests {
                 high_priority_issues: 1,
                 critical_issues: 0,
             },
+            normalized: None,
+            passes: valknut_rs::api::results::StageResultsBundle::disabled(),
             refactoring_candidates: vec![candidate.clone()],
-            refactoring_candidates_by_file: vec![file_group],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(1),
                 avg_file_processing_time: Duration::from_millis(400),
@@ -2135,10 +2125,8 @@ mod tests {
                 },
             },
             health_metrics: None,
-            directory_health_tree: None,
             clone_analysis: None,
             coverage_packs: Vec::new(),
-            unified_hierarchy: vec![serde_json::json!({"id": "root", "children": []})],
             warnings: vec!["Sample warning".to_string()],
             code_dictionary: CodeDictionary::default(),
         }

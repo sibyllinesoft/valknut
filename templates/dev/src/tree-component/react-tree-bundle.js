@@ -24580,15 +24580,15 @@ Check the top-level render call using <` + parentName + ">.";
     countSeverityLevels: () => countSeverityLevels,
     CodeAnalysisTree: () => CodeAnalysisTree
   });
-  var import_react7 = __toESM(require_react());
-  var import_client = __toESM(require_client());
+  var import_react7 = __toESM(require_react(), 1);
+  var import_client = __toESM(require_client(), 1);
 
   // src/tree-component/CodeAnalysisTree.jsx
-  var import_react6 = __toESM(require_react());
+  var import_react6 = __toESM(require_react(), 1);
 
   // node_modules/@tanstack/react-virtual/dist/esm/index.js
-  var React = __toESM(require_react());
-  var import_react_dom = __toESM(require_react_dom());
+  var React = __toESM(require_react(), 1);
+  var import_react_dom = __toESM(require_react_dom(), 1);
 
   // node_modules/@tanstack/virtual-core/dist/esm/utils.js
   function memo(getDeps, fn, opts) {
@@ -25361,13 +25361,13 @@ Check the top-level render call using <` + parentName + ">.";
   }
 
   // src/tree-component/TreeNode.jsx
-  var import_react5 = __toESM(require_react());
+  var import_react5 = __toESM(require_react(), 1);
 
   // src/components/Tooltip.jsx
-  var import_react3 = __toESM(require_react());
+  var import_react3 = __toESM(require_react(), 1);
 
   // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
-  var React4 = __toESM(require_react());
+  var React4 = __toESM(require_react(), 1);
 
   // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
   function hasWindow() {
@@ -25518,8 +25518,8 @@ Check the top-level render call using <` + parentName + ">.";
   }
 
   // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
-  var React2 = __toESM(require_react());
-  var import_react = __toESM(require_react());
+  var React2 = __toESM(require_react(), 1);
+  var import_react = __toESM(require_react(), 1);
 
   // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
   var min = Math.min;
@@ -26143,8 +26143,8 @@ Check the top-level render call using <` + parentName + ">.";
   }
 
   // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
-  var import_jsx_runtime = __toESM(require_jsx_runtime());
-  var ReactDOM2 = __toESM(require_react_dom());
+  var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
+  var ReactDOM2 = __toESM(require_react_dom(), 1);
 
   // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
   function computeCoordsFromPlacement(_ref, placement, rtl) {
@@ -27257,9 +27257,9 @@ Check the top-level render call using <` + parentName + ">.";
   };
 
   // node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
-  var React3 = __toESM(require_react());
-  var import_react2 = __toESM(require_react());
-  var ReactDOM = __toESM(require_react_dom());
+  var React3 = __toESM(require_react(), 1);
+  var import_react2 = __toESM(require_react(), 1);
+  var ReactDOM = __toESM(require_react_dom(), 1);
   var isClient2 = typeof document !== "undefined";
   var noop3 = function noop4() {};
   var index2 = isClient2 ? import_react2.useLayoutEffect : noop3;
@@ -28956,7 +28956,7 @@ Check the top-level render call using <` + parentName + ">.";
   }
 
   // src/components/Tooltip.jsx
-  var jsx_dev_runtime = __toESM(require_jsx_dev_runtime());
+  var jsx_dev_runtime = __toESM(require_jsx_dev_runtime(), 1);
   var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 80 }) => {
     const arrowRef = import_react3.useRef(null);
     const [open, setOpen] = import_react3.useState(false);
@@ -30070,6 +30070,42 @@ Check the top-level render call using <` + parentName + ">.";
         children: sortNodesByPriority(node?.children || [])
       }));
     }, [getPriorityRank]);
+    const groupCandidatesByFile = import_react6.useCallback((candidates = []) => {
+      const groups = new Map;
+      candidates.forEach((candidate) => {
+        if (!candidate || typeof candidate !== "object") {
+          return;
+        }
+        const filePath = candidate.file_path || candidate.filePath || candidate.path || candidate.file || "";
+        if (!filePath) {
+          return;
+        }
+        const normalizedPath = String(filePath);
+        const existing = groups.get(normalizedPath) || [];
+        existing.push(candidate);
+        groups.set(normalizedPath, existing);
+      });
+      const pickHighestPriority = (entities = []) => {
+        return entities.map((entity) => String(entity.priority || entity.priority_level || "low")).reduce((best, current) => {
+          return getPriorityRank({ priority: current }) < getPriorityRank({ priority: best || "low" }) ? current : best;
+        }, "low");
+      };
+      return Array.from(groups.entries()).map(([filePath, entities]) => {
+        const fileName = filePath.split(/[\\/]/).pop() || filePath;
+        const entityCount = entities.length;
+        const totalIssues = entities.reduce((sum, entity) => sum + (Array.isArray(entity.issues) ? entity.issues.length : 0), 0);
+        const avgScore = entityCount > 0 ? entities.reduce((sum, entity) => sum + (entity.score || 0), 0) / entityCount : 0;
+        return {
+          filePath,
+          fileName,
+          entityCount,
+          highestPriority: pickHighestPriority(entities),
+          avgScore,
+          totalIssues,
+          entities
+        };
+      });
+    }, [getPriorityRank]);
     const aggregateTreeMetrics = import_react6.useCallback((nodes) => {
       if (!Array.isArray(nodes)) {
         return [];
@@ -30808,38 +30844,15 @@ Check the top-level render call using <` + parentName + ">.";
     import_react6.useEffect(() => {
       try {
         if (data && typeof data === "object") {
-          const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
-          if (data.unifiedHierarchy) {
-            const fileGroups = Array.isArray(data.refactoringCandidatesByFile) ? data.refactoringCandidatesByFile : Array.isArray(data.refactoring_candidates_by_file) ? data.refactoring_candidates_by_file : [];
-            const treeStructure = buildTreeData(fileGroups, data.directoryHealthTree, data.coveragePacks || []);
-            const baseNodes = treeStructure.length > 0 ? treeStructure : hierarchyData;
-            const aggregatedHierarchy = aggregateTreeMetrics(baseNodes);
-            const sortedHierarchy = sortNodesByPriority(aggregatedHierarchy);
-            const annotated = annotateNodesWithDictionary(sortedHierarchy);
-            const normalized = normalizeTreeData(annotated);
-            const aggregatedNormalized = aggregateTreeMetrics(normalized);
-            if (typeof window !== "undefined") {
-              window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
-              window.__VALKNUT_TREE_AGG_DEBUG.push({
-                source: "unifiedHierarchy",
-                sample: aggregatedNormalized.slice(0, 3)
-              });
-            }
-            setTreeData(aggregatedNormalized);
-          } else {
-            const treeStructure = buildTreeData(hierarchyData, data.directoryHealthTree, data.coveragePacks || []);
-            const annotated = annotateNodesWithDictionary(treeStructure);
-            const normalized = normalizeTreeData(annotated);
-            const aggregatedNormalized = aggregateTreeMetrics(normalized);
-            if (typeof window !== "undefined") {
-              window.__VALKNUT_TREE_AGG_DEBUG = window.__VALKNUT_TREE_AGG_DEBUG || [];
-              window.__VALKNUT_TREE_AGG_DEBUG.push({
-                source: "legacy",
-                sample: aggregatedNormalized.slice(0, 3)
-              });
-            }
-            setTreeData(aggregatedNormalized);
-          }
+          const candidates = Array.isArray(data.refactoring_candidates) ? data.refactoring_candidates : Array.isArray(data.refactoringCandidates) ? data.refactoringCandidates : [];
+          const coveragePacks = Array.isArray(data.coverage_packs) ? data.coverage_packs : Array.isArray(data.coveragePacks) ? data.coveragePacks : [];
+          const fileGroups = groupCandidatesByFile(candidates);
+          const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
+          const annotated = annotateNodesWithDictionary(treeStructure);
+          const normalized = normalizeTreeData(annotated);
+          const aggregatedNormalized = aggregateTreeMetrics(normalized);
+          const sorted = sortNodesByPriority(aggregatedNormalized);
+          setTreeData(sorted);
         } else {
           setTreeData([]);
         }
@@ -30847,7 +30860,15 @@ Check the top-level render call using <` + parentName + ">.";
         console.error("❌ Failed to load tree data:", error2);
         setTreeData([]);
       }
-    }, [data, buildTreeData, normalizeTreeData, annotateNodesWithDictionary, sortNodesByPriority, aggregateTreeMetrics]);
+    }, [
+      data,
+      buildTreeData,
+      normalizeTreeData,
+      annotateNodesWithDictionary,
+      sortNodesByPriority,
+      aggregateTreeMetrics,
+      groupCandidatesByFile
+    ]);
     import_react6.useEffect(() => {
       if (treeData.length === 0) {
         setExpandedIds(new Set);
@@ -31020,5 +31041,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=04575B624453BF3564756E2164756E21
+//# debugId=E372A4857DF324A664756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

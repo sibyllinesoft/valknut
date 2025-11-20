@@ -9,12 +9,13 @@ use super::result_types::AnalysisSummary;
 use crate::core::arena_analysis::ArenaAnalysisResult;
 use crate::core::config::ValknutConfig;
 use crate::core::errors::{Result, ValknutError};
-use crate::core::pipeline::pipeline_results::QualityGateConfig;
 use crate::core::pipeline::pipeline_results::{
     ComplexityAnalysisResults, ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics,
-    ImpactAnalysisResults, LshAnalysisResults, QualityGateResult, QualityGateViolation,
-    RefactoringAnalysisResults, StructureAnalysisResults,
+    ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
+    StructureAnalysisResults,
 };
+use crate::core::pipeline::{QualityGateResult, QualityGateViolation};
+use serde::{Deserialize, Serialize};
 
 use super::file_discovery;
 use super::pipeline_config::{AnalysisConfig, QualityGateConfig};
@@ -105,7 +106,7 @@ impl BatchedFileReader {
 }
 
 /// Aggregated results from all enabled analysis stages.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StageResultsBundle {
     pub structure: StructureAnalysisResults,
     pub coverage: CoverageAnalysisResults,
@@ -115,7 +116,66 @@ pub struct StageResultsBundle {
     pub lsh: LshAnalysisResults,
 }
 
-#[async_trait]
+impl StageResultsBundle {
+    pub fn disabled() -> Self {
+        StageResultsBundle {
+            structure: StructureAnalysisResults {
+                enabled: false,
+                directory_recommendations: Vec::new(),
+                file_splitting_recommendations: Vec::new(),
+                issues_count: 0,
+            },
+            coverage: CoverageAnalysisResults {
+                enabled: false,
+                coverage_files_used: Vec::new(),
+                coverage_gaps: Vec::new(),
+                gaps_count: 0,
+                overall_coverage_percentage: None,
+                analysis_method: "disabled".to_string(),
+            },
+            complexity: ComplexityAnalysisResults {
+                enabled: false,
+                detailed_results: Vec::new(),
+                average_cyclomatic_complexity: 0.0,
+                average_cognitive_complexity: 0.0,
+                average_technical_debt_score: 0.0,
+                average_maintainability_index: 100.0,
+                issues_count: 0,
+            },
+            refactoring: RefactoringAnalysisResults {
+                enabled: false,
+                detailed_results: Vec::new(),
+                opportunities_count: 0,
+            },
+            impact: ImpactAnalysisResults {
+                enabled: false,
+                dependency_cycles: Vec::new(),
+                chokepoints: Vec::new(),
+                clone_groups: Vec::new(),
+                issues_count: 0,
+            },
+            lsh: LshAnalysisResults {
+                enabled: false,
+                clone_pairs: Vec::new(),
+                max_similarity: 0.0,
+                avg_similarity: 0.0,
+                duplicate_count: 0,
+                apted_verification_enabled: false,
+                verification: None,
+                denoising_enabled: false,
+                tfidf_stats: None,
+            },
+        }
+    }
+}
+
+impl Default for StageResultsBundle {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+#[async_trait(?Send)]
 pub trait StageOrchestrator: Send + Sync {
     async fn run_arena_analysis_with_content(
         &self,

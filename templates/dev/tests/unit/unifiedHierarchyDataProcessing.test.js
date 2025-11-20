@@ -95,7 +95,7 @@ describe('Unified Hierarchy Data Processing', () => {
   test('should extract hierarchy data correctly', () => {
     // This tests the hierarchyData extraction logic
     const data = mockUnifiedHierarchyData;
-    const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
+    const hierarchyData = data.unifiedHierarchy || [];
     
     expect(hierarchyData.length).toBeGreaterThan(0);
     expect(hierarchyData[0]).toHaveProperty('type', 'folder');
@@ -225,7 +225,7 @@ describe('Unified Hierarchy Data Processing', () => {
     const data = mockUnifiedHierarchyData;
     
     // Step 1: Data loading (this works)
-    const hierarchyData = data.unifiedHierarchy || data.refactoringCandidatesByFile || [];
+    const hierarchyData = data.unifiedHierarchy || [];
     const nodeCount = countNodes(hierarchyData);
     expect(nodeCount).toBeGreaterThan(0); // "Loaded X nodes successfully"
     

@@ -4,7 +4,7 @@
 //! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
 
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
-use crate::core::pipeline::{AnalysisResults, CodeDictionary};
+use crate::core::pipeline::{AnalysisResults, CodeDictionary, StageResultsBundle};
 use crate::core::scoring::Priority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -558,13 +558,6 @@ impl RefactoringOracle {
                     "suggestions": c.suggestions
                 }))
                 .collect::<Vec<_>>(),
-            "directory_health": results.directory_health_tree.as_ref().map(|tree| {
-                serde_json::json!({
-                    "overall_health": tree.tree_statistics.avg_health_score,
-                    "issues_count": tree.tree_statistics.total_directories,
-                    "hotspots": tree.tree_statistics.hotspot_directories.iter().take(5).collect::<Vec<_>>()
-                })
-            }),
             "coverage": if !results.coverage_packs.is_empty() {
                 Some(serde_json::json!({
                     "files_with_coverage": results.coverage_packs.len(),
@@ -573,7 +566,8 @@ impl RefactoringOracle {
                         .sum::<usize>()
                 }))
             } else { None }
-        })).unwrap_or_else(|_| "Failed to serialize analysis".to_string())
+        }))
+        .unwrap_or_else(|_| "Failed to serialize analysis".to_string())
     }
 
     /// Query Gemini API with the bundled content
@@ -733,34 +727,6 @@ impl RefactoringOracle {
 
                 condensed.push_str(&candidate_text);
                 current_tokens += candidate_tokens;
-            }
-        }
-
-        // Add directory health information if available and within budget
-        if let Some(tree) = &results.directory_health_tree {
-            if current_tokens < token_budget * 3 / 4 {
-                // Only if we have 25% budget left
-                let health_section = format!(
-                    "## Directory Health Overview\n\
-                    - Average Health Score: {:.2}\n\
-                    - Total Directories: {}\n\
-                    - Problematic Areas: {}\n\n",
-                    tree.tree_statistics.avg_health_score,
-                    tree.tree_statistics.total_directories,
-                    tree.tree_statistics
-                        .hotspot_directories
-                        .iter()
-                        .take(3)
-                        .map(|h| format!("{} (health: {:.2})", h.path.display(), h.health_score))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-
-                let health_tokens = health_section.len() / 4;
-                if current_tokens + health_tokens <= token_budget {
-                    condensed.push_str(&health_section);
-                    current_tokens += health_tokens;
-                }
             }
         }
 
@@ -1084,108 +1050,6 @@ mod tests {
         }
     }
 
-    fn sample_directory_tree(project_root: &Path) -> DirectoryHealthTree {
-        let root_path = project_root.to_path_buf();
-        let src_path = project_root.join("src");
-
-        let mut root_score = DirectoryHealthScore {
-            path: root_path.clone(),
-            health_score: 0.48,
-            file_count: 3,
-            entity_count: 5,
-            refactoring_needed: 2,
-            critical_issues: 1,
-            high_priority_issues: 1,
-            avg_refactoring_score: 74.0,
-            weight: 1.0,
-            children: vec![src_path.clone()],
-            parent: None,
-            issue_categories: HashMap::new(),
-        };
-
-        let mut src_score = DirectoryHealthScore {
-            path: src_path.clone(),
-            health_score: 0.35,
-            file_count: 2,
-            entity_count: 4,
-            refactoring_needed: 2,
-            critical_issues: 1,
-            high_priority_issues: 1,
-            avg_refactoring_score: 70.0,
-            weight: 1.0,
-            children: Vec::new(),
-            parent: Some(root_path.clone()),
-            issue_categories: HashMap::new(),
-        };
-
-        root_score.issue_categories.insert(
-            "complexity".to_string(),
-            DirectoryIssueSummary {
-                category: "complexity".to_string(),
-                affected_entities: 2,
-                avg_severity: 0.75,
-                max_severity: 0.92,
-                health_impact: 0.5,
-            },
-        );
-
-        src_score.issue_categories.insert(
-            "complexity".to_string(),
-            DirectoryIssueSummary {
-                category: "complexity".to_string(),
-                affected_entities: 2,
-                avg_severity: 0.82,
-                max_severity: 0.95,
-                health_impact: 0.6,
-            },
-        );
-
-        let mut directories = HashMap::new();
-        directories.insert(root_path.clone(), root_score.clone());
-        directories.insert(src_path.clone(), src_score.clone());
-
-        let mut health_by_depth = HashMap::new();
-        health_by_depth.insert(
-            0,
-            DepthHealthStats {
-                depth: 0,
-                directory_count: 1,
-                avg_health_score: 0.48,
-                min_health_score: 0.48,
-                max_health_score: 0.48,
-            },
-        );
-        health_by_depth.insert(
-            1,
-            DepthHealthStats {
-                depth: 1,
-                directory_count: 1,
-                avg_health_score: 0.35,
-                min_health_score: 0.35,
-                max_health_score: 0.35,
-            },
-        );
-
-        DirectoryHealthTree {
-            root: root_score,
-            directories,
-            tree_statistics: TreeStatistics {
-                total_directories: 2,
-                max_depth: 1,
-                avg_health_score: 0.415,
-                health_score_std_dev: 0.05,
-                hotspot_directories: vec![DirectoryHotspot {
-                    path: src_path,
-                    health_score: 0.35,
-                    rank: 1,
-                    primary_issue_category: "complexity".to_string(),
-                    recommendation: "Split large modules".to_string(),
-                }],
-                health_by_depth,
-            },
-        }
-    }
-
     fn analysis_results_fixture(project_root: &Path) -> AnalysisResults {
         let lib_path = project_root.join("src/lib.rs");
         let utils_path = project_root.join("src/utils.rs");
@@ -1247,6 +1111,8 @@ mod tests {
 
         AnalysisResults {
             summary,
+            normalized: None,
+            passes: StageResultsBundle::disabled(),
             refactoring_candidates: vec![
                 sample_candidate(
                     &lib_path,
@@ -1269,7 +1135,6 @@ mod tests {
                     0.7,
                 ),
             ],
-            refactoring_candidates_by_file: Vec::new(),
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(2),
                 avg_file_processing_time: Duration::from_millis(120),
@@ -1283,10 +1148,8 @@ mod tests {
                     efficiency_score: 0.82,
                 },
             },
-            directory_health_tree: Some(sample_directory_tree(project_root)),
             clone_analysis: None,
             coverage_packs: Vec::new(),
-            unified_hierarchy: Vec::new(),
             warnings: Vec::new(),
             health_metrics: Some(HealthMetrics {
                 overall_health_score: 58.0,
@@ -1609,8 +1472,9 @@ mod tests {
                 high_priority_issues: 2,
                 critical_issues: 1,
             },
+            normalized: None,
+            passes: StageResultsBundle::disabled(),
             refactoring_candidates: vec![],
-            refactoring_candidates_by_file: vec![],
             statistics: AnalysisStatistics {
                 total_duration: Duration::from_secs(30),
                 avg_file_processing_time: Duration::from_millis(500),
@@ -1624,10 +1488,8 @@ mod tests {
                     efficiency_score: 0.8,
                 },
             },
-            directory_health_tree: None,
             clone_analysis: None,
             coverage_packs: vec![],
-            unified_hierarchy: vec![],
             warnings: vec![],
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
@@ -1807,7 +1669,9 @@ mod tests {
         let expanded = oracle
             .condense_analysis_results_with_budget(&expanded_results, 420)
             .expect("condense with ample budget");
-        assert!(expanded.contains("Directory Health Overview"));
+        // Health section is optional after normalization removal
+        // ensure condensed text still produced
+        assert!(!expanded.is_empty());
         assert!(
             expanded.contains("helper"),
             "refactoring candidate names should appear when budget allows"

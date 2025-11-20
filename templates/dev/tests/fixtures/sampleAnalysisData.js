@@ -123,50 +123,57 @@ export const sampleCoveragePacks = [
 
 // Complete analysis data structure as passed to the component
 export const sampleAnalysisData = {
-  refactoringCandidatesByFile: [
-    sampleRefactoringFileGroup,
+  refactoring_candidates: [
+    ...sampleRefactoringFileGroup.entities.map((entity) => ({
+      ...entity,
+      file_path: sampleRefactoringFileGroup.filePath
+    })),
     {
-      filePath: "src/api/engine.rs",
-      highestPriority: "low",
-      entityCount: 2,
-      avgScore: 4.1,
-      totalIssues: 1,
-      entities: [
+      name: "./src/api/engine.rs:function:analyze_directory",
+      file_path: "src/api/engine.rs",
+      priority: "low",
+      score: 5.2,
+      lineRange: [45, 78],
+      issues: [
         {
-          name: "./src/api/engine.rs:function:analyze_directory",
-          priority: "low",
-          score: 5.2,
-          lineRange: [45, 78],
-          issues: [
-            {
-              category: "complexity",
-              description: "Minor complexity issue (score: 5.2)",
-              priority: "low", 
-              severity: 4.8
-            }
-          ],
-          suggestions: [
-            {
-              type: "documentation",
-              description: "Add more comprehensive documentation",
-              priority: "low",
-              impact: 3.0
-            }
-          ]
-        },
+          category: "complexity",
+          description: "Minor complexity issue (score: 5.2)",
+          priority: "low", 
+          severity: 4.8
+        }
+      ],
+      suggestions: [
         {
-          name: "./src/api/engine.rs:function:simple_method",
+          type: "documentation",
+          description: "Add more comprehensive documentation",
           priority: "low",
-          score: 3.0,
-          lineRange: [80, 85],
-          issues: [],
-          suggestions: []
+          impact: 3.0
         }
       ]
+    },
+    {
+      name: "./src/api/engine.rs:function:simple_method",
+      file_path: "src/api/engine.rs",
+      priority: "low",
+      score: 3.0,
+      lineRange: [80, 85],
+      issues: [],
+      suggestions: []
     }
   ],
-  directoryHealthTree: sampleDirectoryHealth,
-  coveragePacks: sampleCoveragePacks
+  coverage_packs: sampleCoveragePacks,
+  code_dictionary: {
+    issues: {},
+    suggestions: {}
+  },
+  passes: {
+    structure: { enabled: false },
+    coverage: { enabled: true },
+    complexity: { enabled: true },
+    refactoring: { enabled: true },
+    impact: { enabled: false },
+    lsh: { enabled: false }
+  }
 };
 
 // New unified hierarchy format (for testing the newer data format)
@@ -233,40 +240,32 @@ export const sampleUnifiedHierarchy = [
 
 // Test data with no issues (for testing empty states)
 export const sampleCleanAnalysisData = {
-  refactoringCandidatesByFile: [],
-  directoryHealthTree: {
-    directories: {
-      "src": {
-        health_score: 0.95,
-        file_count: 10,
-        entity_count: 30,
-        refactoring_needed: false,
-        critical_issues: 0,
-        high_priority_issues: 0,
-        avg_refactoring_score: 2.1
-      }
-    }
-  },
-  coveragePacks: []
+  refactoring_candidates: [],
+  coverage_packs: [],
+  code_dictionary: { issues: {}, suggestions: {} },
+  passes: {
+    structure: { enabled: false },
+    coverage: { enabled: false },
+    complexity: { enabled: false },
+    refactoring: { enabled: false },
+    impact: { enabled: false },
+    lsh: { enabled: false }
+  }
 };
 
 // Invalid/malformed data for testing error handling
 export const sampleInvalidData = {
-  refactoringCandidatesByFile: [
+  refactoring_candidates: [
     {
-      // Missing filePath
-      highestPriority: "high",
-      entities: []
+      // Missing file_path
+      priority: "high",
+      score: 10
     },
     {
-      filePath: "valid/path.rs",
-      entities: [
-        {
-          // Missing name
-          priority: "medium",
-          score: "invalid_score" // Invalid score type
-        }
-      ]
+      file_path: "valid/path.rs",
+      // Missing name
+      priority: "medium",
+      score: "invalid_score"
     }
   ]
 };

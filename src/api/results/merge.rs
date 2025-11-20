@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::models::{
-    AnalysisResults, CloneAnalysisPerformance, CloneAnalysisResults, DirectoryHealthTree,
-    MemoryStats, PhaseFilteringStats,
+    AnalysisResults, CloneAnalysisPerformance, CloneAnalysisResults, MemoryStats,
+    PhaseFilteringStats, StageResultsBundle,
 };
 use crate::core::pipeline::HealthMetrics;
 
@@ -48,6 +48,8 @@ impl AnalysisResults {
         self.refactoring_candidates
             .extend(other.refactoring_candidates.into_iter());
 
+        self.passes = merge_stage_results(self.passes.clone(), other.passes);
+
         self.statistics.total_duration += other.statistics.total_duration;
         self.statistics.avg_file_processing_time = weighted_duration(
             self.statistics.avg_file_processing_time,
@@ -85,29 +87,8 @@ impl AnalysisResults {
             _ => {}
         }
 
-        if let Some(current_tree) = &mut self.directory_health_tree {
-            if let Some(mut new_tree) = other.directory_health_tree {
-                merge_directory_health(current_tree, &mut new_tree);
-            }
-        } else {
-            self.directory_health_tree = other.directory_health_tree;
-        }
-
         self.coverage_packs.extend(other.coverage_packs.into_iter());
-        // NOTE: Do NOT extend unified_hierarchy here - it flattens the tree structure
-        // We rebuild it properly after all merging is complete
         self.warnings.extend(other.warnings.into_iter());
-
-        self.refactoring_candidates_by_file =
-            AnalysisResults::group_candidates_by_file(&self.refactoring_candidates);
-
-        // Rebuild unified hierarchy after merge to restore proper hierarchical structure
-        if let Some(ref directory_health_tree) = self.directory_health_tree {
-            self.unified_hierarchy = Self::build_unified_hierarchy_with_fallback(
-                &self.refactoring_candidates,
-                directory_health_tree,
-            );
-        }
     }
 }
 
@@ -242,25 +223,42 @@ fn merge_count_maps(map: &mut HashMap<String, usize>, other: HashMap<String, usi
     }
 }
 
-fn merge_directory_health(current: &mut DirectoryHealthTree, incoming: &mut DirectoryHealthTree) {
-    current.directories.extend(incoming.directories.drain());
-
-    let mut combined_hotspots = current.tree_statistics.hotspot_directories.clone();
-    combined_hotspots.extend(
-        incoming
-            .tree_statistics
-            .hotspot_directories
-            .clone()
-            .into_iter(),
-    );
-
-    combined_hotspots.sort_by(|a, b| {
-        a.health_score
-            .partial_cmp(&b.health_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    combined_hotspots.dedup_by(|a, b| a.path == b.path);
-    current.tree_statistics.hotspot_directories = combined_hotspots;
+fn merge_stage_results(
+    current: StageResultsBundle,
+    incoming: StageResultsBundle,
+) -> StageResultsBundle {
+    StageResultsBundle {
+        structure: if incoming.structure.enabled {
+            incoming.structure
+        } else {
+            current.structure
+        },
+        coverage: if incoming.coverage.enabled {
+            incoming.coverage
+        } else {
+            current.coverage
+        },
+        complexity: if incoming.complexity.enabled {
+            incoming.complexity
+        } else {
+            current.complexity
+        },
+        refactoring: if incoming.refactoring.enabled {
+            incoming.refactoring
+        } else {
+            current.refactoring
+        },
+        impact: if incoming.impact.enabled {
+            incoming.impact
+        } else {
+            current.impact
+        },
+        lsh: if incoming.lsh.enabled {
+            incoming.lsh
+        } else {
+            current.lsh
+        },
+    }
 }
 
 fn weighted_average(
@@ -422,13 +420,11 @@ fn merge_health_metrics(
 mod tests {
     use super::*;
     use crate::api::results::{
-        DirectoryHealthScore, DirectoryHotspot, FeatureContribution, RefactoringCandidate,
-        RefactoringIssue, RefactoringSuggestion, TreeStatistics,
+        FeatureContribution, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
     };
     use crate::core::pipeline::CloneVerificationResults;
     use crate::core::scoring::Priority;
     use std::collections::HashMap;
-    use std::path::PathBuf;
 
     fn sample_candidate(file_path: &str, priority: Priority, score: f64) -> RefactoringCandidate {
         RefactoringCandidate {
@@ -459,51 +455,6 @@ mod tests {
             }],
             issue_count: 1,
             suggestion_count: 1,
-        }
-    }
-
-    fn sample_directory_score(path: &str, score: f64) -> DirectoryHealthScore {
-        DirectoryHealthScore {
-            path: PathBuf::from(path),
-            health_score: score,
-            file_count: 1,
-            entity_count: 1,
-            refactoring_needed: 1,
-            critical_issues: 0,
-            high_priority_issues: 0,
-            avg_refactoring_score: 0.5,
-            weight: 1.0,
-            children: Vec::new(),
-            parent: None,
-            issue_categories: HashMap::new(),
-        }
-    }
-
-    fn sample_tree(path: &str, hotspot_score: f64) -> DirectoryHealthTree {
-        let root = sample_directory_score(path, hotspot_score);
-        let mut directories = HashMap::new();
-        directories.insert(
-            PathBuf::from(path),
-            sample_directory_score(path, hotspot_score),
-        );
-
-        DirectoryHealthTree {
-            root,
-            directories,
-            tree_statistics: TreeStatistics {
-                total_directories: 1,
-                max_depth: 1,
-                avg_health_score: hotspot_score,
-                health_score_std_dev: 0.0,
-                hotspot_directories: vec![DirectoryHotspot {
-                    path: PathBuf::from(path),
-                    health_score: hotspot_score,
-                    rank: 1,
-                    primary_issue_category: "complexity".into(),
-                    recommendation: "refactor".into(),
-                }],
-                health_by_depth: HashMap::new(),
-            },
         }
     }
 
@@ -588,31 +539,6 @@ mod tests {
 
         assert!((merged.overall_health_score - 0.46).abs() < 1e-6);
         assert!((merged.structure_quality_score - 0.56).abs() < 1e-6);
-    }
-
-    #[test]
-    fn directory_health_merge_deduplicates_hotspots() {
-        let mut current = sample_tree("src", 0.6);
-        let mut incoming = sample_tree("src", 0.4);
-
-        // Add additional directory to incoming to ensure union
-        incoming
-            .directories
-            .insert(PathBuf::from("tests"), sample_directory_score("tests", 0.3));
-
-        merge_directory_health(&mut current, &mut incoming);
-
-        assert!(current.directories.contains_key(&PathBuf::from("tests")));
-        assert_eq!(
-            current
-                .tree_statistics
-                .hotspot_directories
-                .iter()
-                .filter(|hotspot| hotspot.path == PathBuf::from("src"))
-                .count(),
-            1,
-            "hotspots with the same path should deduplicate"
-        );
     }
 
     #[test]
@@ -717,13 +643,11 @@ mod tests {
             efficiency_score: 0.5,
         };
         left.clone_analysis = Some(sample_clone_analysis(4, 0.8, 0.9));
-        left.directory_health_tree = Some(sample_tree("src", 0.6));
         left.refactoring_candidates = vec![sample_candidate("src/lib.rs", Priority::High, 0.6)];
-        left.refactoring_candidates_by_file =
-            AnalysisResults::group_candidates_by_file(&left.refactoring_candidates);
         left.coverage_packs = Vec::new();
-        left.unified_hierarchy = vec![serde_json::json!({"root": "left"})];
         left.warnings.push("left warning".into());
+        left.passes.structure.enabled = true;
+        left.passes.structure.issues_count = 5;
 
         let mut right = AnalysisResults::empty();
         right.summary.files_processed = 3;
@@ -757,12 +681,11 @@ mod tests {
         if let Some(clone) = right.clone_analysis.as_mut() {
             clone.notes = vec!["right".into()];
         }
-        right.directory_health_tree = Some(sample_tree("tests", 0.3));
         right.refactoring_candidates =
             vec![sample_candidate("tests/main.rs", Priority::Medium, 0.3)];
-        right.refactoring_candidates_by_file =
-            AnalysisResults::group_candidates_by_file(&right.refactoring_candidates);
         right.warnings.push("right warning".into());
+        right.passes.coverage.enabled = true;
+        right.passes.coverage.gaps_count = 2;
 
         left.merge_in_place(right);
 
@@ -783,8 +706,8 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning == "right warning"));
-        assert_eq!(left.refactoring_candidates_by_file.len(), 2);
-        assert!(left.directory_health_tree.unwrap().directories.len() >= 2);
+        assert!(left.passes.structure.enabled);
+        assert!(left.passes.coverage.enabled);
 
         let health = left.health_metrics.unwrap();
         assert!((health.overall_health_score - 0.46).abs() < 1e-6);

@@ -4,7 +4,6 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { CodeAnalysisTree } from '../../src/tree-component/CodeAnalysisTree.jsx';
 import {
   sampleAnalysisData,
-  sampleUnifiedHierarchy,
   sampleCleanAnalysisData,
   sampleInvalidData
 } from '../fixtures/sampleAnalysisData.js';
@@ -21,36 +20,23 @@ describe('CodeAnalysisTree', () => {
     expect(screen.getByText('Your code is in excellent shape!')).toBeInTheDocument();
   });
 
-  test('renders directory health when project is clean', async () => {
-    render(<CodeAnalysisTree data={sampleCleanAnalysisData} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('treeitem', { name: /src/i })).toBeInTheDocument();
-    });
-
-    expect(screen.getByText(/Health: 95%/)).toBeInTheDocument();
-    expect(screen.getByText(/10 files/)).toBeInTheDocument();
-  });
-
-  test('renders legacy refactoring data', async () => {
+  test('renders refactoring candidates', async () => {
     render(<CodeAnalysisTree data={sampleAnalysisData} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Health: 45%/)).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /pipeline_executor\.rs/i })).toBeInTheDocument();
     });
-    expect(screen.getByText(/15 files/)).toBeInTheDocument();
-    expect(screen.getByText(/critical/i)).toBeInTheDocument();
+    expect(screen.getByText(/evaluate_quality_gates/i)).toBeInTheDocument();
   });
 
-  test('renders unified hierarchy format directly', async () => {
-    render(<CodeAnalysisTree data={{ unifiedHierarchy: sampleUnifiedHierarchy }} />);
+  test('groups flat candidates into folder hierarchy', async () => {
+    render(<CodeAnalysisTree data={sampleAnalysisData} />);
 
     await waitFor(() => {
       expect(screen.getByRole('treeitem', { name: /src/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /api/i })).toBeInTheDocument();
       expect(screen.getByRole('treeitem', { name: /pipeline_executor\.rs/i })).toBeInTheDocument();
     });
-
-    expect(screen.getByText(/evaluate_quality_gates/)).toBeInTheDocument();
   });
 
   test('ignores malformed inputs gracefully', async () => {
@@ -63,10 +49,6 @@ describe('CodeAnalysisTree', () => {
 
   test('updates when data changes', async () => {
     const { rerender } = render(<CodeAnalysisTree data={sampleCleanAnalysisData} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('treeitem', { name: /src/i })).toBeInTheDocument();
-    });
 
     rerender(<CodeAnalysisTree data={sampleAnalysisData} />);
 

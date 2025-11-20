@@ -13,10 +13,23 @@ globalThis.document = happyDom.document;
 globalThis.navigator = happyDom.navigator;
 globalThis.location = happyDom.location;
 globalThis.HTMLElement = happyDom.HTMLElement;
+globalThis.Element = happyDom.Element;
 globalThis.Node = happyDom.Node;
 globalThis.CustomEvent = happyDom.CustomEvent;
 globalThis.Event = happyDom.Event;
 globalThis.MutationObserver = happyDom.MutationObserver;
+globalThis.DOMRect = happyDom.DOMRect;
+globalThis.ResizeObserver = happyDom.ResizeObserver || class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.IntersectionObserver = happyDom.IntersectionObserver || class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.getComputedStyle = happyDom.window.getComputedStyle.bind(happyDom.window);
 
 // Set up testing environment
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

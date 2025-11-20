@@ -931,8 +931,9 @@ mod tests {
 
         AnalysisResults {
             summary,
+            normalized: None,
+            passes: valknut_rs::api::results::StageResultsBundle::disabled(),
             refactoring_candidates: vec![candidate],
-            refactoring_candidates_by_file: Vec::new(),
             statistics: valknut_rs::api::results::AnalysisStatistics {
                 total_duration: std::time::Duration::from_secs(2),
                 avg_file_processing_time: std::time::Duration::from_millis(150),
@@ -947,10 +948,8 @@ mod tests {
                 },
             },
             health_metrics: None,
-            directory_health_tree: None,
             clone_analysis: None,
             coverage_packs: Vec::new(),
-            unified_hierarchy: vec![serde_json::json!({"id": "root"})],
             warnings: Vec::new(),
             code_dictionary,
         }
