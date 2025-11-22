@@ -38,12 +38,45 @@
             </span>
         </div>
         <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Candidates Before Denoising</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.candidatesBefore}}
+                    {{clone_analysis.candidatesBefore}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card">
+            <span class="clone-metric-card__label">Quality Score</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_analysis.qualityScore}}
+                    {{format clone_analysis.qualityScore "0.2"}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card">
             <span class="clone-metric-card__label">Denoising Enabled</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.denoisingEnabled}}Yes{{else}}No{{/if}}
             </span>
         </div>
     </div>
+
+    {{#if clone_analysis.verification}}
+    <div class="clone-verification">
+        <h4>Verification</h4>
+        <ul>
+            {{#if clone_analysis.verification.method}}<li>Method: {{clone_analysis.verification.method}}</li>{{/if}}
+            {{#if clone_analysis.verification.pairs_considered}}<li>Pairs Considered: {{clone_analysis.verification.pairs_considered}}</li>{{/if}}
+            {{#if clone_analysis.verification.pairs_evaluated}}<li>Pairs Evaluated: {{clone_analysis.verification.pairs_evaluated}}</li>{{/if}}
+            {{#if clone_analysis.verification.pairs_scored}}<li>Pairs Scored: {{clone_analysis.verification.pairs_scored}}</li>{{/if}}
+            {{#if clone_analysis.verification.avg_similarity}}<li>Verification Avg Similarity: {{format clone_analysis.verification.avg_similarity "0.2"}}</li>{{/if}}
+        </ul>
+    </div>
+    {{/if}}
 
     {{#if clone_analysis.notes.length}}
     <ul class="clone-notes">

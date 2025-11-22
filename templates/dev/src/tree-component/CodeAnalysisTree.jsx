@@ -1109,6 +1109,8 @@ export const CodeAnalysisTree = ({ data }) => {
                         ? data.refactoringCandidates
                         : [];
 
+                console.info('[CodeAnalysisTree] refactoring candidates received:', candidates.length);
+
                 const coveragePacks = Array.isArray(data.coverage_packs)
                     ? data.coverage_packs
                     : Array.isArray(data.coveragePacks)
@@ -1116,11 +1118,14 @@ export const CodeAnalysisTree = ({ data }) => {
                         : [];
 
                 const fileGroups = groupCandidatesByFile(candidates);
+                console.info('[CodeAnalysisTree] file groups built:', fileGroups.length);
                 const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
+                console.info('[CodeAnalysisTree] initial tree structure size:', treeStructure.length);
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
                 const aggregatedNormalized = aggregateTreeMetrics(normalized);
                 const sorted = sortNodesByPriority(aggregatedNormalized);
+                console.info('[CodeAnalysisTree] final tree nodes:', sorted.length);
                 setTreeData(sorted);
             } else {
                 setTreeData([]);
@@ -1257,20 +1262,20 @@ export const CodeAnalysisTree = ({ data }) => {
         window.__VALKNUT_TREE_DATA_SNAPSHOT = treeData;
     }
 
-    const treeContainerProps = {
-        className: 'tree-scroll-container',
-        role: 'tree',
-        'aria-label': 'Code analysis tree',
-        style: {
-            height: 600,
-            width: '100%',
-            overflow: 'auto',
-            position: 'relative',
-            borderRadius: '8px',
-            backgroundColor: 'var(--tree-background, var(--background))',
-            color: 'var(--tree-foreground, var(--color-text))'
-        }
-    };
+  const treeContainerProps = {
+    className: 'tree-scroll-container',
+    role: 'tree',
+    'aria-label': 'Code analysis tree',
+    style: {
+      height: 600,
+      width: '100%',
+      overflow: 'auto',
+      position: 'relative',
+      borderRadius: '8px',
+      backgroundColor: 'transparent',
+      color: 'var(--tree-foreground, var(--color-text))'
+    }
+  };
 
     if (!shouldVirtualize) {
         return React.createElement('div', {

@@ -8,6 +8,8 @@ const reportsDir = path.join(__dirname, '../../../.valknut');
 const devDataDir = path.join(__dirname, '../data');
 const analysisJsonPath = path.join(devDataDir, 'analysis.json');
 const projectRoot = path.join(__dirname, '..');
+const bundleOutputPath = path.join(projectRoot, 'src', 'tree-component', 'react-tree-bundle.js');
+const assetsBundlePath = path.join(projectRoot, '..', 'assets', 'react-tree-bundle.js');
 
 let bundleProcess = null;
 
@@ -32,6 +34,8 @@ function buildBundleOnce() {
   if ((result.status ?? 0) !== 0) {
     throw new Error(`Initial bundle build failed with status ${result.status}`);
   }
+
+  copyBundleToAssets();
 }
 
 function startBundleWatch() {
@@ -68,6 +72,12 @@ function startBundleWatch() {
       console.info('[dev-server] Bundle watcher stopped.');
     }
     bundleProcess = null;
+  });
+
+  // Mirror Bun output into the assets directory for inlined templates
+  chokidar.watch(bundleOutputPath, { ignoreInitial: false }).on('all', (event, filePath) => {
+    if (event !== 'add' && event !== 'change') return;
+    copyBundleToAssets();
   });
 }
 
@@ -106,6 +116,24 @@ function copyLatestAnalysisJson() {
   } catch (error) {
     console.warn('[dev-server] Unable to copy analysis JSON:', error.message);
     return null;
+  }
+}
+
+function copyBundleToAssets() {
+  try {
+    if (!fs.existsSync(bundleOutputPath)) {
+      console.warn('[dev-server] Bundle output not found at', bundleOutputPath);
+      return;
+    }
+
+    const destDir = path.dirname(assetsBundlePath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    fs.copyFileSync(bundleOutputPath, assetsBundlePath);
+    console.log('[dev-server] Copied bundle →', assetsBundlePath);
+  } catch (error) {
+    console.warn('[dev-server] Failed to copy bundle:', error.message || error);
   }
 }
 

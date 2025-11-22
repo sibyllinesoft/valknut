@@ -2,6 +2,7 @@
 <div class="results-section">
     <h2 style="margin-bottom: 0.75rem;">Code Analysis Tree</h2>
 
+    <hr class="section-divider">
     <div id="react-tree-root" class="analysis-tree" style="min-height: 560px;">
         <noscript>
             <div class="valknut-tree-empty">
@@ -9,12 +10,17 @@
             </div>
         </noscript>
     </div>
+    <hr class="section-divider">
 
     <script id="tree-data" type="application/json">
         {
             "refactoring_candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
+            "refactoring_candidates_by_file": {{#if refactoring_candidates_by_file}}{{{json refactoring_candidates_by_file}}}{{else}}[]{{/if}},
             "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}},
             "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{}{{/if}},
+            "unified_hierarchy": {{#if unified_hierarchy}}{{{json unified_hierarchy}}}{{else}}[]{{/if}},
+            "directory_health_tree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
+            "graph_insights": {{#if graph_insights}}{{{json graph_insights}}}{{else}}{"hasInsights":false}{{/if}},
             "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}}
         }
     </script>

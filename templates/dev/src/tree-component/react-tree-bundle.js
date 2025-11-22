@@ -29056,6 +29056,20 @@ Check the top-level render call using <` + parentName + ">.";
     medium: (base.medium || 0) + (extra.medium || 0),
     low: (base.low || 0) + (extra.low || 0)
   });
+  var clampValue = (v, min2, max2) => Math.min(max2, Math.max(min2, v));
+  var fmtPct = (value) => {
+    if (value === null || value === undefined || Number.isNaN(value))
+      return null;
+    const rounded = Math.round(value);
+    return `${rounded}%`;
+  };
+  var ccPct = (value) => value != null ? value / 10 * 100 : null;
+  var cogPct = (value, lang = "default") => {
+    const base = ["c", "cpp", "c++", "objc", "objective-c"].includes((lang || "").toLowerCase()) ? 25 : 15;
+    return value != null ? value / base * 100 : null;
+  };
+  var miPct = (value) => value != null ? 60 / clampValue(value, 10, 100) * 100 : null;
+  var tdPct = (value) => value;
   var computeAggregates = (node) => {
     if (!node || typeof node !== "object") {
       return {
@@ -29488,7 +29502,7 @@ Check the top-level render call using <` + parentName + ">.";
       className: "tree-icon",
       style: { marginRight: "0.5rem" }
     }));
-    const labelText = isFolder ? `${data.name} (issues: ${aggregates.totalIssues ?? "n/a"}, avg: ${aggregates.avgScore != null ? formatDecimal(aggregates.avgScore) : "n/a"})` : data.name;
+    const labelText = data.name;
     children.push(import_react5.default.createElement("span", {
       key: "label",
       style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit" }
@@ -29537,47 +29551,36 @@ Check the top-level render call using <` + parentName + ">.";
         }
       }, priority));
     }
+    let fileSeveritySegments = null;
     if ((isFolder || isFile) && aggregates.severityCounts) {
       const counts = aggregates.severityCounts;
-      if (counts.critical > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "critical-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("critical")
+      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
+      if (total > 0) {
+        const formatPct = (value) => {
+          const pct = (value / total * 100).toFixed(1);
+          return pct.endsWith(".0") ? pct.slice(0, -2) : pct;
+        };
+        const segments = [];
+        const addSegment = (value, severity, idx) => {
+          if (!value)
+            return;
+          const color = getPriorityStyle(severity).color || "var(--text)";
+          if (segments.length > 0) {
+            segments.push(import_react5.default.createElement("span", { key: `dot-${idx}`, style: { color: "rgba(255,255,255,0.8)" } }, " · "));
           }
-        }, `${counts.critical} critical`));
-      }
-      if (counts.high > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "high-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("high")
+          segments.push(import_react5.default.createElement("span", { key: `seg-${idx}`, style: { color, fontWeight: 600, fontSize: "0.85rem" } }, value));
+        };
+        addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, "critical", 0);
+        addSegment(counts.high ? `${formatPct(counts.high)}%` : null, "high", 1);
+        addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, "medium", 2);
+        addSegment(counts.low ? `${formatPct(counts.low)}%` : null, "low", 3);
+        if (segments.length > 0) {
+          if (isFile) {
+            fileSeveritySegments = segments;
+          } else {
+            fileSeveritySegments = segments;
           }
-        }, `${counts.high} high`));
-      }
-      if (counts.medium > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "medium-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("medium")
-          }
-        }, `${counts.medium} medium`));
-      }
-      if (counts.low > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "low-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("low")
-          }
-        }, `${counts.low} low`));
+        }
       }
     }
     const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
@@ -29588,12 +29591,25 @@ Check the top-level render call using <` + parentName + ">.";
         style: { marginLeft: "0.5rem" }
       }, `Complexity: ${formattedNodeAvgScore}`));
     }
+    if (isFile && fileSeveritySegments) {
+      children.push(import_react5.default.createElement("span", {
+        key: "severity-mix",
+        style: { marginLeft: "0.5rem" }
+      }, fileSeveritySegments));
+    }
     if (isFolder && formattedNodeAvgScore !== null) {
       children.push(import_react5.default.createElement("div", {
         key: "avg-score",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
       }, `Avg Score: ${formattedNodeAvgScore}`));
+      if (fileSeveritySegments) {
+        children.push(import_react5.default.createElement("span", {
+          key: "severity-mix-folder",
+          style: { marginLeft: "0.5rem" }
+        }, fileSeveritySegments));
+        fileSeveritySegments = null;
+      }
     }
     const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
     if (isEntity && formattedEntityScore !== null) {
@@ -29612,45 +29628,32 @@ Check the top-level render call using <` + parentName + ">.";
     }
     if (isEntity && data.severityCounts) {
       const counts = data.severityCounts;
-      if (counts.critical > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "critical-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("critical")
+      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
+      if (total > 0) {
+        const formatPct = (value) => {
+          const pct = (value / total * 100).toFixed(1);
+          return pct.endsWith(".0") ? pct.slice(0, -2) : pct;
+        };
+        const segments = [];
+        const addSegment = (value, severity, idx) => {
+          if (!value)
+            return;
+          const color = getPriorityStyle(severity).color || "var(--text)";
+          if (segments.length > 0) {
+            segments.push(import_react5.default.createElement("span", { key: `dot-ent-${idx}`, style: { color: "rgba(255,255,255,0.8)" } }, " · "));
           }
-        }, `${counts.critical} critical`));
-      }
-      if (counts.high > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "high-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("high")
-          }
-        }, `${counts.high} high`));
-      }
-      if (counts.medium > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "medium-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("medium")
-          }
-        }, `${counts.medium} medium`));
-      }
-      if (counts.low > 0) {
-        children.push(import_react5.default.createElement("div", {
-          key: "low-count",
-          className: "tree-badge",
-          style: {
-            marginLeft: "0.5rem",
-            ...getPriorityStyle("low")
-          }
-        }, `${counts.low} low`));
+          segments.push(import_react5.default.createElement("span", { key: `seg-ent-${idx}`, style: { color, fontWeight: 600, fontSize: "0.85rem" } }, value));
+        };
+        addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, "critical", 0);
+        addSegment(counts.high ? `${formatPct(counts.high)}%` : null, "high", 1);
+        addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, "medium", 2);
+        addSegment(counts.low ? `${formatPct(counts.low)}%` : null, "low", 3);
+        if (segments.length > 0) {
+          children.push(import_react5.default.createElement("span", {
+            key: "severity-mix",
+            style: { marginLeft: "0.5rem" }
+          }, segments));
+        }
       }
     }
     const manualIndent = node.level * 24;
@@ -29754,6 +29757,28 @@ Check the top-level render call using <` + parentName + ">.";
         if (aggregates.avgScore != null) {
           metrics2.push({ label: "Avg Score", value: aggregates.avgScore });
         }
+        const normalized = [];
+        if (data.cyclomatic_complexity != null) {
+          const v = fmtPct(ccPct(data.cyclomatic_complexity));
+          if (v)
+            normalized.push({ label: "Cyclomatic", value: v });
+        }
+        if (data.cognitive_complexity != null) {
+          const v = fmtPct(cogPct(data.cognitive_complexity));
+          if (v)
+            normalized.push({ label: "Cognitive", value: v });
+        }
+        if (data.maintainability_index != null) {
+          const v = fmtPct(miPct(data.maintainability_index));
+          if (v)
+            normalized.push({ label: "MI", value: v });
+        }
+        if (data.technical_debt_score != null) {
+          const v = fmtPct(tdPct(data.technical_debt_score));
+          if (v)
+            normalized.push({ label: "Debt", value: v });
+        }
+        metrics2.push(...normalized);
         const categories = Array.isArray(data.issueCategories) ? data.issueCategories.slice(0, 5) : [];
         return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Directory"), renderMetrics(metrics2), categories.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Categories"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, categories.map((category, idx) => import_react5.default.createElement("li", { key: `${category.category}-${idx}` }, import_react5.default.createElement("div", { className: "issue-heading" }, `${capitalize(category.category)} · ${renderValue(category.affectedEntities)} entities`), import_react5.default.createElement("div", { className: "issue-summary" }, `Avg severity ${renderValue(category.avgSeverity)}, impact ${renderValue(category.healthImpact)}`))))));
       }
@@ -29814,6 +29839,36 @@ Check the top-level render call using <` + parentName + ">.";
         { label: "Suggestions", value: suggestions.length ?? 0 },
         { label: "Peak Severity", value: highestSeverity }
       ];
+      const featureLookup = (name) => {
+        const feats = [];
+        topIssuesRaw.forEach((issue) => {
+          const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
+          features.forEach((f) => {
+            if ((f.feature_name || "").toLowerCase() === name) {
+              feats.push(f.value);
+            }
+          });
+        });
+        return feats.length ? feats[0] : null;
+      };
+      const ccVal = featureLookup("cyclomatic_complexity");
+      const cogVal = featureLookup("cognitive_complexity");
+      const miVal = featureLookup("maintainability_index");
+      const tdVal = featureLookup("technical_debt_score");
+      const normalizedMetrics = [];
+      const ccNorm = fmtPct(ccPct(ccVal));
+      if (ccNorm)
+        normalizedMetrics.push({ label: "Cyclomatic", value: ccNorm });
+      const cogNorm = fmtPct(cogPct(cogVal));
+      if (cogNorm)
+        normalizedMetrics.push({ label: "Cognitive", value: cogNorm });
+      const miNorm = fmtPct(miPct(miVal));
+      if (miNorm)
+        normalizedMetrics.push({ label: "MI", value: miNorm });
+      const tdNorm = fmtPct(tdPct(tdVal));
+      if (tdNorm)
+        normalizedMetrics.push({ label: "Debt", value: tdNorm });
+      metrics.push(...normalizedMetrics);
       if (coverage.linesOfCode != null) {
         metrics.push({ label: "Lines of Code", value: coverage.linesOfCode });
       }
@@ -30845,13 +30900,17 @@ Check the top-level render call using <` + parentName + ">.";
       try {
         if (data && typeof data === "object") {
           const candidates = Array.isArray(data.refactoring_candidates) ? data.refactoring_candidates : Array.isArray(data.refactoringCandidates) ? data.refactoringCandidates : [];
+          console.info("[CodeAnalysisTree] refactoring candidates received:", candidates.length);
           const coveragePacks = Array.isArray(data.coverage_packs) ? data.coverage_packs : Array.isArray(data.coveragePacks) ? data.coveragePacks : [];
           const fileGroups = groupCandidatesByFile(candidates);
+          console.info("[CodeAnalysisTree] file groups built:", fileGroups.length);
           const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
+          console.info("[CodeAnalysisTree] initial tree structure size:", treeStructure.length);
           const annotated = annotateNodesWithDictionary(treeStructure);
           const normalized = normalizeTreeData(annotated);
           const aggregatedNormalized = aggregateTreeMetrics(normalized);
           const sorted = sortNodesByPriority(aggregatedNormalized);
+          console.info("[CodeAnalysisTree] final tree nodes:", sorted.length);
           setTreeData(sorted);
         } else {
           setTreeData([]);
@@ -30978,7 +31037,7 @@ Check the top-level render call using <` + parentName + ">.";
         overflow: "auto",
         position: "relative",
         borderRadius: "8px",
-        backgroundColor: "var(--tree-background, var(--background))",
+        backgroundColor: "transparent",
         color: "var(--tree-foreground, var(--color-text))"
       }
     };
@@ -31041,5 +31100,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=E372A4857DF324A664756E2164756E21
+//# debugId=F6732373DE1B8BA464756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

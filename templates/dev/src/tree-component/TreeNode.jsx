@@ -54,6 +54,21 @@ const combineSeverityCounts = (base = {}, extra = {}) => ({
     low: (base.low || 0) + (extra.low || 0),
 });
 
+// Normalized metric helpers (100% = acceptable baseline)
+const clampValue = (v, min, max) => Math.min(max, Math.max(min, v));
+const fmtPct = (value) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return null;
+    const rounded = Math.round(value);
+    return `${rounded}%`;
+};
+const ccPct = (value) => value != null ? (value / 10) * 100 : null;
+const cogPct = (value, lang = 'default') => {
+    const base = ['c', 'cpp', 'c++', 'objc', 'objective-c'].includes((lang || '').toLowerCase()) ? 25 : 15;
+    return value != null ? (value / base) * 100 : null;
+};
+const miPct = (value) => value != null ? (60 / clampValue(value, 10, 100)) * 100 : null;
+const tdPct = (value) => value; // already percent
+
 const computeAggregates = (node) => {
     if (!node || typeof node !== 'object') {
         return {
@@ -581,9 +596,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     }));
     
     // Label
-    const labelText = isFolder
-        ? `${data.name} (issues: ${aggregates.totalIssues ?? 'n/a'}, avg: ${aggregates.avgScore != null ? formatDecimal(aggregates.avgScore) : 'n/a'})`
-        : data.name;
+    const labelText = data.name;
 
     children.push(React.createElement('span', {
         key: 'label',
@@ -643,56 +656,42 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }, priority));
     }
 
-    // Severity count badges for folders and files (aggregate from children)
+    // Severity mix badge (normalized percentages)
+    let fileSeveritySegments = null;
     if ((isFolder || isFile) && aggregates.severityCounts) {
         const counts = aggregates.severityCounts;
-        
-        // Critical issues badge
-        if (counts.critical > 0) {
-            children.push(React.createElement('div', {
-                key: 'critical-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('critical')
+        const total =
+            (counts.critical || 0) +
+            (counts.high || 0) +
+            (counts.medium || 0) +
+            (counts.low || 0);
+        if (total > 0) {
+            const formatPct = (value) => {
+                const pct = ((value / total) * 100).toFixed(1);
+                return pct.endsWith('.0') ? pct.slice(0, -2) : pct;
+            };
+            const segments = [];
+            const addSegment = (value, severity, idx) => {
+                if (!value) return;
+                const color = (getPriorityStyle(severity).color) || 'var(--text)';
+                if (segments.length > 0) {
+                    segments.push(React.createElement('span', { key: `dot-${idx}`, style: { color: 'rgba(255,255,255,0.8)' } }, ' · '));
                 }
-            }, `${counts.critical} critical`));
-        }
-        
-        // High issues badge  
-        if (counts.high > 0) {
-            children.push(React.createElement('div', {
-                key: 'high-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('high')
+                segments.push(React.createElement('span', { key: `seg-${idx}`, style: { color, fontWeight: 600, fontSize: '0.85rem' } }, value));
+            };
+
+            addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, 'critical', 0);
+            addSegment(counts.high ? `${formatPct(counts.high)}%` : null, 'high', 1);
+            addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, 'medium', 2);
+            addSegment(counts.low ? `${formatPct(counts.low)}%` : null, 'low', 3);
+
+            if (segments.length > 0) {
+                if (isFile) {
+                    fileSeveritySegments = segments;
+                } else {
+                    fileSeveritySegments = segments; // reuse for folder placement after avg score
                 }
-            }, `${counts.high} high`));
-        }
-        
-        // Medium issues badge
-        if (counts.medium > 0) {
-            children.push(React.createElement('div', {
-                key: 'medium-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('medium')
-                }
-            }, `${counts.medium} medium`));
-        }
-        
-        // Low issues badge
-        if (counts.low > 0) {
-            children.push(React.createElement('div', {
-                key: 'low-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('low')
-                }
-            }, `${counts.low} low`));
+            }
         }
     }
 
@@ -706,12 +705,27 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }, `Complexity: ${formattedNodeAvgScore}`));
     }
 
+    // Append file severity mix after complexity badge
+    if (isFile && fileSeveritySegments) {
+        children.push(React.createElement('span', {
+            key: 'severity-mix',
+            style: { marginLeft: '0.5rem' }
+        }, fileSeveritySegments));
+    }
+
     if (isFolder && formattedNodeAvgScore !== null) {
         children.push(React.createElement('div', {
             key: 'avg-score',
             className: 'tree-badge tree-badge-low',
             style: { marginLeft: '0.5rem' }
         }, `Avg Score: ${formattedNodeAvgScore}`));
+        if (fileSeveritySegments) {
+            children.push(React.createElement('span', {
+                key: 'severity-mix-folder',
+                style: { marginLeft: '0.5rem' }
+            }, fileSeveritySegments));
+            fileSeveritySegments = null;
+        }
     }
 
     // Complexity score for entities
@@ -733,56 +747,40 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
     }
     
-    // Severity count badges for entities
+    // Severity mix badge for entities
     if (isEntity && data.severityCounts) {
         const counts = data.severityCounts;
-        
-        // Critical issues badge
-        if (counts.critical > 0) {
-            children.push(React.createElement('div', {
-                key: 'critical-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('critical')
+        const total =
+            (counts.critical || 0) +
+            (counts.high || 0) +
+            (counts.medium || 0) +
+            (counts.low || 0);
+        if (total > 0) {
+            const formatPct = (value) => {
+                const pct = ((value / total) * 100).toFixed(1);
+                return pct.endsWith('.0') ? pct.slice(0, -2) : pct;
+            };
+            const segments = [];
+            const addSegment = (value, severity, idx) => {
+                if (!value) return;
+                const color = (getPriorityStyle(severity).color) || 'var(--text)';
+                if (segments.length > 0) {
+                    segments.push(React.createElement('span', { key: `dot-ent-${idx}`, style: { color: 'rgba(255,255,255,0.8)' } }, ' · '));
                 }
-            }, `${counts.critical} critical`));
-        }
-        
-        // High issues badge  
-        if (counts.high > 0) {
-            children.push(React.createElement('div', {
-                key: 'high-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('high')
-                }
-            }, `${counts.high} high`));
-        }
-        
-        // Medium issues badge
-        if (counts.medium > 0) {
-            children.push(React.createElement('div', {
-                key: 'medium-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('medium')
-                }
-            }, `${counts.medium} medium`));
-        }
-        
-        // Low issues badge
-        if (counts.low > 0) {
-            children.push(React.createElement('div', {
-                key: 'low-count',
-                className: 'tree-badge',
-                style: { 
-                    marginLeft: '0.5rem',
-                    ...getPriorityStyle('low')
-                }
-            }, `${counts.low} low`));
+                segments.push(React.createElement('span', { key: `seg-ent-${idx}`, style: { color, fontWeight: 600, fontSize: '0.85rem' } }, value));
+            };
+
+            addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, 'critical', 0);
+            addSegment(counts.high ? `${formatPct(counts.high)}%` : null, 'high', 1);
+            addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, 'medium', 2);
+            addSegment(counts.low ? `${formatPct(counts.low)}%` : null, 'low', 3);
+
+            if (segments.length > 0) {
+                children.push(React.createElement('span', {
+                    key: 'severity-mix',
+                    style: { marginLeft: '0.5rem' }
+                }, segments));
+            }
         }
     }
     
@@ -881,11 +879,11 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             return value;
         };
 
-        const renderMetrics = (metrics) =>
-            React.createElement(
-                'ul',
-                { className: 'tooltip-metrics' },
-                metrics.map(({ label, value }) =>
+    const renderMetrics = (metrics) =>
+        React.createElement(
+            'ul',
+            { className: 'tooltip-metrics' },
+            metrics.map(({ label, value }) =>
                     React.createElement(
                         'li',
                         { key: label },
@@ -922,6 +920,26 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             if (aggregates.avgScore != null) {
                 metrics.push({ label: 'Avg Score', value: aggregates.avgScore });
             }
+
+            // Show normalized complexity/debt metrics if available on a folder aggregate
+            const normalized = [];
+            if (data.cyclomatic_complexity != null) {
+                const v = fmtPct(ccPct(data.cyclomatic_complexity));
+                if (v) normalized.push({ label: 'Cyclomatic', value: v });
+            }
+            if (data.cognitive_complexity != null) {
+                const v = fmtPct(cogPct(data.cognitive_complexity));
+                if (v) normalized.push({ label: 'Cognitive', value: v });
+            }
+            if (data.maintainability_index != null) {
+                const v = fmtPct(miPct(data.maintainability_index));
+                if (v) normalized.push({ label: 'MI', value: v });
+            }
+            if (data.technical_debt_score != null) {
+                const v = fmtPct(tdPct(data.technical_debt_score));
+                if (v) normalized.push({ label: 'Debt', value: v });
+            }
+            metrics.push(...normalized);
 
             const categories = Array.isArray(data.issueCategories)
                 ? data.issueCategories.slice(0, 5)
@@ -1079,6 +1097,37 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             { label: 'Suggestions', value: suggestions.length ?? 0 },
             { label: 'Peak Severity', value: highestSeverity },
         ];
+
+        // Normalized per-entity metrics if present in contributing_features
+        const featureLookup = (name) => {
+            const feats = [];
+            topIssuesRaw.forEach((issue) => {
+                const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
+                features.forEach((f) => {
+                    if ((f.feature_name || '').toLowerCase() === name) {
+                        feats.push(f.value);
+                    }
+                });
+            });
+            return feats.length ? feats[0] : null;
+        };
+
+        const ccVal = featureLookup('cyclomatic_complexity');
+        const cogVal = featureLookup('cognitive_complexity');
+        const miVal = featureLookup('maintainability_index');
+        const tdVal = featureLookup('technical_debt_score');
+
+        const normalizedMetrics = [];
+        const ccNorm = fmtPct(ccPct(ccVal));
+        if (ccNorm) normalizedMetrics.push({ label: 'Cyclomatic', value: ccNorm });
+        const cogNorm = fmtPct(cogPct(cogVal));
+        if (cogNorm) normalizedMetrics.push({ label: 'Cognitive', value: cogNorm });
+        const miNorm = fmtPct(miPct(miVal));
+        if (miNorm) normalizedMetrics.push({ label: 'MI', value: miNorm });
+        const tdNorm = fmtPct(tdPct(tdVal));
+        if (tdNorm) normalizedMetrics.push({ label: 'Debt', value: tdNorm });
+
+        metrics.push(...normalizedMetrics);
 
         if (coverage.linesOfCode != null) {
             metrics.push({ label: 'Lines of Code', value: coverage.linesOfCode });

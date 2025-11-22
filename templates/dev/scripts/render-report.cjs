@@ -145,6 +145,64 @@ function cleanRefactoringCandidates(candidates = []) {
   }));
 }
 
+function buildGroupsFromCandidates(candidates = []) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return [];
+  }
+
+  const groups = new Map();
+
+  candidates.forEach((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return;
+
+    const filePath = normalizePath(
+      candidate.file_path || candidate.filePath || candidate.path || ''
+    );
+
+    if (!filePath) return;
+
+    if (!groups.has(filePath)) {
+      groups.set(filePath, []);
+    }
+    groups.get(filePath).push(candidate);
+  });
+
+  const pickHighestPriority = (entities = []) => {
+    return entities.reduce(
+      (best, entity) => {
+        const rank = getPriorityRank({ priority: entity?.priority });
+        return rank < best.rank
+          ? { rank, label: entity?.priority || 'Low' }
+          : best;
+      },
+      { rank: Infinity, label: 'Low' }
+    ).label;
+  };
+
+  return Array.from(groups.entries()).map(([filePath, entities]) => {
+    const avgScore =
+      entities.length > 0
+        ? entities.reduce((sum, entity) => sum + (Number(entity.score) || 0), 0) /
+          entities.length
+        : 0;
+
+    const totalIssues = entities.reduce(
+      (sum, entity) => sum + (Array.isArray(entity.issues) ? entity.issues.length : 0),
+      0
+    );
+
+    return {
+      file_path: filePath,
+      file_name: path.basename(filePath) || filePath,
+      entity_count: entities.length,
+      highest_priority: pickHighestPriority(entities),
+      avg_score: avgScore,
+      total_issues: totalIssues,
+      entities,
+    };
+  });
+}
+
 function cleanGroups(groups = []) {
   return groups.map((group) => {
     const normalizedFilePath = normalizePath(group.file_path || '');
@@ -279,6 +337,7 @@ function summarizeIssueCategories(directories = {}) {
   return Array.from(totals.values())
     .map(({ totalSeverity, affectedEntities, ...rest }) => ({
       ...rest,
+      affectedEntities,
       avgSeverity:
         affectedEntities > 0 ? totalSeverity / affectedEntities : 0,
     }))
@@ -301,6 +360,7 @@ function buildGraphInsights(tree) {
   const hotspotEntries = Array.isArray(stats.hotspot_directories)
     ? stats.hotspot_directories
     : [];
+  const directoryList = Object.values(directories);
 
   const resolveDirectory = (pathValue) => {
     if (!pathValue) {
@@ -335,8 +395,39 @@ function buildGraphInsights(tree) {
       primaryIssueCategory:
         hotspot?.primary_issue_category || categoryList[0]?.category || null,
       categories: categoryList,
+      derived: false,
     };
   });
+
+  // Fallback: derive hotspots from lowest health scores if none provided
+  if (hotspots.length === 0 && directoryList.length > 0) {
+    const derivedHotspots = directoryList
+      .filter((dir) => typeof dir.health_score === 'number')
+      .sort((a, b) => a.health_score - b.health_score)
+      .slice(0, 5)
+      .map((dir, idx) => {
+        const categories = Object.values(dir.issue_categories || {}).sort(
+          (a, b) => (b.health_impact || 0) - (a.health_impact || 0)
+        );
+        const primary = categories[0]?.category || null;
+        return {
+          rank: idx + 1,
+          path: normalizePath(dir.path || dir.name || ''),
+          recommendation: 'Address the lowest health directories first (derived fallback).',
+          healthScore: dir.health_score ?? null,
+          primaryIssueCategory: primary,
+          categories: categories.map((c) => ({
+            category: c.category,
+            affectedEntities: c.affected_entities ?? 0,
+            avgSeverity: c.avg_severity ?? 0,
+            maxSeverity: c.max_severity ?? 0,
+            healthImpact: c.health_impact ?? 0,
+          })),
+          derived: true,
+        };
+      });
+    hotspots.push(...derivedHotspots);
+  }
 
   const categorySummary = summarizeIssueCategories(directories);
 
@@ -360,17 +451,48 @@ function normalizeCloneAnalysis(cloneAnalysis) {
   const avgSimilarity =
     typeof cloneAnalysis.avg_similarity === 'number'
       ? cloneAnalysis.avg_similarity
-      : null;
+      : typeof cloneAnalysis.avgSimilarity === 'number'
+        ? cloneAnalysis.avgSimilarity
+        : typeof cloneAnalysis.average_similarity === 'number'
+          ? cloneAnalysis.average_similarity
+          : null;
   const maxSimilarity =
     typeof cloneAnalysis.max_similarity === 'number'
       ? cloneAnalysis.max_similarity
-      : null;
-  const candidatesAfter = cloneAnalysis.candidates_after_denoising ?? null;
-  const candidatesBefore = cloneAnalysis.candidates_before_denoising ?? null;
+      : typeof cloneAnalysis.maxSimilarity === 'number'
+        ? cloneAnalysis.maxSimilarity
+        : null;
+  const candidatesAfter =
+    cloneAnalysis.candidates_after_denoising ??
+    cloneAnalysis.candidatesAfterDenoising ??
+    cloneAnalysis.candidates_after_filtering ??
+    cloneAnalysis.candidatesAfterFiltering ??
+    null;
+  const candidatesBefore =
+    cloneAnalysis.candidates_before_denoising ??
+    cloneAnalysis.candidatesBeforeDenoising ??
+    cloneAnalysis.candidates_before_filtering ??
+    cloneAnalysis.candidatesBeforeFiltering ??
+    null;
+
+  const hasMetrics =
+    avgSimilarity !== null ||
+    maxSimilarity !== null ||
+    candidatesAfter !== null ||
+    candidatesBefore !== null;
+  const notes = Array.isArray(cloneAnalysis.notes) ? cloneAnalysis.notes : [];
+  const verification = cloneAnalysis.verification || cloneAnalysis.verify || null;
 
   return {
-    hasData: true,
-    denoisingEnabled: Boolean(cloneAnalysis.denoising_enabled),
+    hasData: Boolean(
+      hasMetrics ||
+      notes.length > 0 ||
+      cloneAnalysis.denoising_enabled !== undefined ||
+      verification
+    ),
+    denoisingEnabled: Boolean(
+      cloneAnalysis.denoising_enabled ?? cloneAnalysis.denoisingEnabled
+    ),
     candidatesAfter,
     candidatesBefore,
     avgSimilarity,
@@ -378,8 +500,11 @@ function normalizeCloneAnalysis(cloneAnalysis) {
     qualityScore:
       typeof cloneAnalysis.quality_score === 'number'
         ? cloneAnalysis.quality_score
-        : avgSimilarity,
-    notes: Array.isArray(cloneAnalysis.notes) ? cloneAnalysis.notes : [],
+        : typeof cloneAnalysis.qualityScore === 'number'
+          ? cloneAnalysis.qualityScore
+          : avgSimilarity,
+    verification,
+    notes,
   };
 }
 
@@ -647,13 +772,41 @@ function buildTemplateData(results) {
   const summary = buildSummary(results);
 
   const dictionary = results.code_dictionary || { issues: {}, suggestions: {} };
-  const cloneAnalysis = normalizeCloneAnalysis(results.clone_analysis);
+  const rawCloneAnalysis =
+    results.clone_analysis ||
+    results.cloneAnalysis ||
+    results.clone ||
+    results.clone_stats ||
+    results.cloneStats ||
+    null;
+  const cloneAnalysis = normalizeCloneAnalysis(rawCloneAnalysis);
   const fileCount = new Set(cleanedCandidates.map((c) => c.file_path || c.filePath)).size;
   const coveragePacks = Array.isArray(results.coverage_packs)
     ? results.coverage_packs
     : Array.isArray(results.coveragePacks)
       ? results.coveragePacks
       : [];
+
+  const rawGroups = Array.isArray(results.refactoring_candidates_by_file)
+    ? results.refactoring_candidates_by_file
+    : Array.isArray(results.refactoringCandidatesByFile)
+      ? results.refactoringCandidatesByFile
+      : buildGroupsFromCandidates(cleanedCandidates);
+
+  const refactoringCandidatesByFile = cleanGroups(rawGroups);
+
+  const directoryHealthTree = cleanDirectoryTree(
+    results.directory_health_tree || results.directoryHealthTree || null
+  );
+
+  const rawHierarchy = results.unified_hierarchy || results.unifiedHierarchy || [];
+  let unifiedHierarchy = cleanUnifiedHierarchy(rawHierarchy);
+  if (!Array.isArray(unifiedHierarchy) || unifiedHierarchy.length === 0) {
+    unifiedHierarchy = addFilesToHierarchy([], refactoringCandidatesByFile, dictionary);
+  }
+  unifiedHierarchy = sortHierarchy(unifiedHierarchy);
+
+  const graphInsights = buildGraphInsights(directoryHealthTree);
 
   return {
     generated_at: new Date().toISOString(),
@@ -664,6 +817,14 @@ function buildTemplateData(results) {
     results,
     summary,
     refactoring_candidates: cleanedCandidates,
+    refactoring_candidates_by_file: refactoringCandidatesByFile,
+    refactoringCandidatesByFile: refactoringCandidatesByFile,
+    unified_hierarchy: unifiedHierarchy,
+    unifiedHierarchy,
+    directory_health_tree: directoryHealthTree,
+    directoryHealthTree: directoryHealthTree,
+    graph_insights: graphInsights,
+    graphInsights,
     file_count: fileCount,
     coverage_packs: coveragePacks,
     code_dictionary: dictionary,

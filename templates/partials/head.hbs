@@ -175,40 +175,40 @@
         }
         
         .analysis-summary {
-            background: var(--surface);
-            border: 1px solid var(--keyline);
-            border-radius: var(--radius-lg);
-            padding: var(--spacing-6);
-            margin-bottom: var(--spacing-8);
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            margin-bottom: var(--spacing-6);
         }
         
         .summary-stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: var(--spacing-4);
-            margin-top: var(--spacing-4);
+            gap: var(--spacing-2);
+            margin-top: var(--spacing-2);
         }
         
         .stat-item {
-            text-align: center;
-            padding: var(--spacing-3);
-            background: var(--panel);
-            border-radius: var(--radius);
-            border: 1px solid var(--keyline);
+            text-align: left;
+            padding: 0;
+            background: transparent;
+            border-radius: 0;
+            border: none;
         }
         
         .stat-value {
             font-size: var(--text-xl);
             font-weight: var(--font-bold);
-            color: var(--accent);
+            color: var(--text);
             font-family: var(--font-mono);
         }
         
         .stat-label {
-            font-size: var(--text-xs);
-            color: var(--muted);
+            font-size: 0.75rem;
             text-transform: uppercase;
-            letter-spacing: var(--tracking-wide);
+            letter-spacing: 0.08em;
+            color: rgba(148, 163, 184, 0.78);
             margin-top: var(--spacing-1);
         }
 
