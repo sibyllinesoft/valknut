@@ -20,7 +20,8 @@
         <div id="treemap-root" style="width: 100%; min-height: 420px;"></div>
         <script id="treemap-data" type="application/json">
             {
-                "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}}
+                "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
+                "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}}
             }
         </script>
         <script>
@@ -33,6 +34,7 @@
 
                 const payload = JSON.parse(dataEl.textContent || '{}');
                 const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+                const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
 
                 function getLinesOfCode(entity) {
                     let loc = entity.lines_of_code || entity.linesOfCode || null;
@@ -60,8 +62,34 @@
                     return Number(entity.score) || 0;
                 }
 
+                function normalizeId(id) {
+                    return String(id || '').trim().toLowerCase();
+                }
+
+                function buildCloneMap(nodeIndexById) {
+                    const map = new Map();
+                    const addLink = (a, b) => {
+                        const na = normalizeId(a);
+                        const nb = normalizeId(b);
+                        const ia = nodeIndexById.get(na);
+                        const ib = nodeIndexById.get(nb);
+                        if (ia == null || ib == null) return;
+                        if (!map.has(na)) map.set(na, new Set());
+                        if (!map.has(nb)) map.set(nb, new Set());
+                        map.get(na).add(ia); map.get(na).add(ib);
+                        map.get(nb).add(ib); map.get(nb).add(ia);
+                    };
+                    clonePairs.forEach((pair) => {
+                        const sId = pair?.source?.id || pair?.source?.entity_id || pair?.source?.name;
+                        const tId = pair?.target?.id || pair?.target?.entity_id || pair?.target?.name;
+                        if (sId && tId) addLink(sId, tId);
+                    });
+                    return map;
+                }
+
                 function buildTreemap(colorMetric, maxScale) {
                     const nodes = new Map();
+                    const custom = [];
 
                     const ensureNode = (id, label, parent = '') => {
                         if (!nodes.has(id)) {
@@ -136,13 +164,20 @@
                     const values = [];
                     const colors = [];
 
-                    nodes.forEach((node) => {
+                    const nodeIndexById = new Map();
+
+                    nodes.forEach((node, idx) => {
+                        nodeIndexById.set(normalizeId(node.id), idx);
                         ids.push(node.id);
                         labels.push(node.label);
                         parents.push(node.parent);
                         values.push(node.value);
                         colors.push(node.color);
+                        // Attach file path or id for hover -> clone highlight
+                        custom.push([node.filePath || '', node.id, normalizeId(node.id)]);
                     });
+
+                    const cloneMap = buildCloneMap(nodeIndexById);
 
                     const trace = {
                         type: 'treemap',
@@ -165,7 +200,8 @@
                             }
                         },
                         branchvalues: 'total',
-                        hovertemplate: '%{label}<br>Size: %{value}<br>Severity: %{color:.1f}<extra></extra>'
+                        hovertemplate: '%{label}<br>Size: %{value}<br>Severity: %{color:.1f}<extra></extra>',
+                        customdata: custom
                     };
 
                     Plotly.newPlot(rootEl, [trace], {
@@ -174,12 +210,40 @@
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' }
                     }, { displaylogo: false, responsive: true });
+
+                    function clearSelection() {
+                        Plotly.restyle(rootEl, { selectedpoints: [null] }, [0]);
+                    }
+
+                    rootEl.on('plotly_hover', function(ev) {
+                        const pt = ev?.points?.[0];
+                        const normId = pt?.customdata?.[2];
+                        if (!normId) { clearSelection(); return; }
+                        const matches = cloneMap.get(normId);
+                        if (!matches || matches.size === 0) { clearSelection(); return; }
+                        Plotly.restyle(rootEl, { selectedpoints: [Array.from(matches)] }, [0]);
+                    });
+
+                    rootEl.on('plotly_unhover', function() {
+                        clearSelection();
+                    });
                 }
 
                 function render() {
                     const metric = (colorSelect && colorSelect.value) || 'complexity';
                     const maxScale = Number(maxScaleInput && maxScaleInput.value) || 60;
                     buildTreemap(metric.toLowerCase(), maxScale);
+                    // hook hover after build
+                    rootEl.on('plotly_hover', function(ev) {
+                        const pt = ev?.points?.[0];
+                        const cd = pt ? pt.customdata : null;
+                        const filePath = Array.isArray(cd) ? cd[0] : null;
+                        const entityId = Array.isArray(cd) ? cd[1] : null;
+                        window.dispatchEvent(new CustomEvent('valknut-treemap-hover', { detail: { filePath, entityId }}));
+                    });
+                    rootEl.on('plotly_unhover', function() {
+                        window.dispatchEvent(new CustomEvent('valknut-treemap-hover', { detail: { filePath: null, entityId: null }}));
+                    });
                 }
 
                 if (colorSelect) colorSelect.addEventListener('change', render);
