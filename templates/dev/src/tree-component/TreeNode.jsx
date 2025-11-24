@@ -68,6 +68,58 @@ const cogPct = (value, lang = 'default') => {
 };
 const miPct = (value) => value != null ? (60 / clampValue(value, 10, 100)) * 100 : null;
 const tdPct = (value) => value; // already percent
+const THRESHOLDS = {
+    cyclomatic_complexity: 10,
+    cognitive_complexity: 15,
+    technical_debt_score: 40,
+};
+
+const getComplexityRatio = (nodeLike) => {
+    if (!nodeLike || typeof nodeLike !== 'object') return null;
+    const issues = Array.isArray(nodeLike.issues) ? nodeLike.issues : [];
+    let maxRatio = null;
+
+    issues.forEach((issue) => {
+        const feats = Array.isArray(issue.contributing_features)
+            ? issue.contributing_features
+            : [];
+        feats.forEach((feat) => {
+            const name = String(feat.feature_name || '').toLowerCase();
+            const value = Number(feat.value);
+            if (!Number.isFinite(value)) return;
+            const thresholdEntry = Object.entries(THRESHOLDS).find(([key]) =>
+                name.includes(key)
+            );
+            if (!thresholdEntry) return;
+            const [, threshold] = thresholdEntry;
+            if (threshold <= 0) return;
+            const ratio = value / threshold;
+            if (ratio > (maxRatio ?? -Infinity)) {
+                maxRatio = ratio;
+            }
+        });
+    });
+
+    return maxRatio;
+};
+
+const formatAcceptableRatio = (ratio) => {
+    if (!Number.isFinite(ratio)) return null;
+    return `${(ratio * 100).toFixed(0)}%`;
+};
+
+const getMaxComplexityRatio = (node) => {
+    let maxRatio = getComplexityRatio(node);
+    if (Array.isArray(node?.children)) {
+        node.children.forEach((child) => {
+            const childRatio = getMaxComplexityRatio(child);
+            if (childRatio != null && childRatio > (maxRatio ?? -Infinity)) {
+                maxRatio = childRatio;
+            }
+        });
+    }
+    return maxRatio;
+};
 
 const computeAggregates = (node) => {
     if (!node || typeof node !== 'object') {
@@ -490,6 +542,50 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 };
         }
     };
+
+    const buildSeverityBar = (counts, keyPrefix, options = {}) => {
+        if (!counts) return null;
+
+        const total =
+            (counts.critical || 0) +
+            (counts.high || 0) +
+            (counts.medium || 0) +
+            (counts.low || 0);
+
+        if (total <= 0) return null;
+
+        const order = ['critical', 'high', 'medium', 'low'];
+        const segments = order
+            .map((severity) => {
+                const value = counts[severity] || 0;
+                if (!value) return null;
+                const pct = (value / total) * 100;
+                const color = getPriorityStyle(severity).color || 'var(--accent)';
+                const label = `${severity.charAt(0).toUpperCase()}${severity.slice(1)} ${Math.round(pct)}% (${value})`;
+
+                return React.createElement('div', {
+                    key: `${keyPrefix}-${severity}`,
+                    className: `severity-bar__segment severity-bar__segment--${severity}`,
+                    style: { width: `${pct}%`, backgroundColor: color },
+                    title: label,
+                });
+            })
+            .filter(Boolean);
+
+        if (!segments.length) return null;
+
+        return React.createElement(
+            'div',
+            {
+                key: `${keyPrefix}-bar`,
+                className: 'severity-bar',
+                style: { marginLeft: options.marginLeft ?? '0.5rem' },
+                role: 'presentation',
+                'aria-label': 'Severity mix',
+            },
+            segments
+        );
+    };
     
     // Health score color
     const getHealthColor = (score) => {
@@ -497,6 +593,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         if (score >= 0.6) return 'var(--warning)';
         return 'var(--danger)';
     };
+
+    const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ['healthScore', 'health_score', 'health'], null);
     
     const children = [];
 
@@ -540,283 +638,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }
     }
 
-    // Expand/collapse arrow for nodes with children (but not for entities)
-    // Only show chevron for nodes that actually can expand
-    if (shouldShowChevron && hasChildren) {
-        children.push(React.createElement('span', {
-            key: 'chevron',
-            className: 'tree-chevron',
-            'data-expanded': node.isOpen ? 'true' : 'false',
-            style: { 
-                width: '16px',
-                height: '16px',
-                marginRight: '0.25rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--tree-muted, rgba(148,163,184,0.8))',
-                fontSize: '12px',
-                userSelect: 'none'
-            },
-            onClick: (e) => {
-                e.stopPropagation();
-                toggleNode(node.id);
-            },
-            role: 'presentation'
-        }, renderChevronIcon()));
-    } else {
-        // Add spacing for nodes without children to align with expandable nodes
-        children.push(React.createElement('div', {
-            key: 'spacer',
-            style: { width: '1rem', marginRight: '0.25rem' }
-        }));
-    }
-    
-    // Icon
-    let iconName = 'function-square'; // default for entities
-    let iconFallbackSymbol = '*';
-    if (isFolder) {
-        iconName = 'folder';
-        iconFallbackSymbol = '[F]';
-    } else if (isFile) {
-        iconName = 'file-code';
-        iconFallbackSymbol = '<>'; 
-    } else if (isCategory) {
-        iconName = 'layers';
-        iconFallbackSymbol = '[C]';
-    }
-
-    children.push(React.createElement('i', {
-        'data-lucide': iconName,
-        key: 'icon',
-        ref: (el) => registerIcon(el, iconFallbackSymbol),
-        className: 'tree-icon',
-        style: { marginRight: '0.5rem' }
-    }));
-    
-    // Label
-    const labelText = data.name;
-
-    children.push(React.createElement('span', {
-        key: 'label',
-        style: { flex: 1, fontWeight: (isFolder || isCategory) ? '500' : 'normal', color: 'inherit' }
-    }, labelText));
-    
-    // Health score for folders
-    if (isFolder && data.healthScore) {
-        children.push(React.createElement('div', {
-            key: 'health',
-            className: 'tree-badge',
-            style: { 
-                backgroundColor: getHealthColor(data.healthScore) + '20',
-                color: getHealthColor(data.healthScore),
-                border: `1px solid ${getHealthColor(data.healthScore)}40`,
-                marginLeft: '0.5rem'
-            }
-        }, 'Health: ' + (data.healthScore * 100).toFixed(0) + '%'));
-    }
-    
-    // File count for folders
-    if (isFolder && data.fileCount) {
-        children.push(React.createElement('div', {
-            key: 'files',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${data.fileCount} files`));
-    }
-    
-    // Entity count for folders only (remove functions badge from files)
-    if (isFolder && data.entityCount) {
-        children.push(React.createElement('div', {
-            key: 'entities',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${data.entityCount} entities`));
-    }
-
-    if (isFolder && aggregates.totalIssues > 0) {
-        children.push(React.createElement('div', {
-            key: 'issues',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${aggregates.totalIssues} issues`));
-    }
-
-    // Priority badge with color coding
-    if (data.priority || data.highestPriority) {
-        const priority = data.priority || data.highestPriority;
-        children.push(React.createElement('div', {
-            key: 'priority',
-            className: 'tree-badge',
-            style: { 
-                marginLeft: '0.5rem',
-                ...getPriorityStyle(priority)
-            }
-        }, priority));
-    }
-
-    // Severity mix badge (normalized percentages)
-    let fileSeveritySegments = null;
-    if ((isFolder || isFile) && aggregates.severityCounts) {
-        const counts = aggregates.severityCounts;
-        const total =
-            (counts.critical || 0) +
-            (counts.high || 0) +
-            (counts.medium || 0) +
-            (counts.low || 0);
-        if (total > 0) {
-            const formatPct = (value) => {
-                const pct = ((value / total) * 100).toFixed(1);
-                return pct.endsWith('.0') ? pct.slice(0, -2) : pct;
-            };
-            const segments = [];
-            const addSegment = (value, severity, idx) => {
-                if (!value) return;
-                const color = (getPriorityStyle(severity).color) || 'var(--text)';
-                if (segments.length > 0) {
-                    segments.push(React.createElement('span', { key: `dot-${idx}`, style: { color: 'rgba(255,255,255,0.8)' } }, ' · '));
-                }
-                segments.push(React.createElement('span', { key: `seg-${idx}`, style: { color, fontWeight: 600, fontSize: '0.85rem' } }, value));
-            };
-
-            addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, 'critical', 0);
-            addSegment(counts.high ? `${formatPct(counts.high)}%` : null, 'high', 1);
-            addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, 'medium', 2);
-            addSegment(counts.low ? `${formatPct(counts.low)}%` : null, 'low', 3);
-
-            if (segments.length > 0) {
-                if (isFile) {
-                    fileSeveritySegments = segments;
-                } else {
-                    fileSeveritySegments = segments; // reuse for folder placement after avg score
-                }
-            }
-        }
-    }
-
-    // Complexity score for files
-    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
-    if (isFile && formattedNodeAvgScore !== null) {
-        children.push(React.createElement('div', {
-            key: 'score',
-            className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem' }
-        }, `Complexity: ${formattedNodeAvgScore}`));
-    }
-
-    // Append file severity mix after complexity badge
-    if (isFile && fileSeveritySegments) {
-        children.push(React.createElement('span', {
-            key: 'severity-mix',
-            style: { marginLeft: '0.5rem' }
-        }, fileSeveritySegments));
-    }
-
-    if (isFolder && formattedNodeAvgScore !== null) {
-        children.push(React.createElement('div', {
-            key: 'avg-score',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `Avg Score: ${formattedNodeAvgScore}`));
-        if (fileSeveritySegments) {
-            children.push(React.createElement('span', {
-                key: 'severity-mix-folder',
-                style: { marginLeft: '0.5rem' }
-            }, fileSeveritySegments));
-            fileSeveritySegments = null;
-        }
-    }
-
-    // Complexity score for entities
-    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
-    if (isEntity && formattedEntityScore !== null) {
-        children.push(React.createElement('div', {
-            key: 'complexity',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `Complexity: ${formattedEntityScore}`));
-    }
-    
-    // Line range for entities
-    if (isEntity && data.lineRange) {
-        children.push(React.createElement('div', {
-            key: 'lines',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
-    }
-    
-    // Severity mix badge for entities
-    if (isEntity && data.severityCounts) {
-        const counts = data.severityCounts;
-        const total =
-            (counts.critical || 0) +
-            (counts.high || 0) +
-            (counts.medium || 0) +
-            (counts.low || 0);
-        if (total > 0) {
-            const formatPct = (value) => {
-                const pct = ((value / total) * 100).toFixed(1);
-                return pct.endsWith('.0') ? pct.slice(0, -2) : pct;
-            };
-            const segments = [];
-            const addSegment = (value, severity, idx) => {
-                if (!value) return;
-                const color = (getPriorityStyle(severity).color) || 'var(--text)';
-                if (segments.length > 0) {
-                    segments.push(React.createElement('span', { key: `dot-ent-${idx}`, style: { color: 'rgba(255,255,255,0.8)' } }, ' · '));
-                }
-                segments.push(React.createElement('span', { key: `seg-ent-${idx}`, style: { color, fontWeight: 600, fontSize: '0.85rem' } }, value));
-            };
-
-            addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, 'critical', 0);
-            addSegment(counts.high ? `${formatPct(counts.high)}%` : null, 'high', 1);
-            addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, 'medium', 2);
-            addSegment(counts.low ? `${formatPct(counts.low)}%` : null, 'low', 3);
-
-            if (segments.length > 0) {
-                children.push(React.createElement('span', {
-                    key: 'severity-mix',
-                    style: { marginLeft: '0.5rem' }
-                }, segments));
-            }
-        }
-    }
-    
-    // Manual indentation calculation for nested rows
-    const manualIndent = node.level * 24; // 24px per level
-
-    // Header row (clickable part with icon, label, badges)
-    const headerRow = React.createElement('div', {
-        ref: innerRef ?? undefined,
-        className: `tree-header-row${node.isSelected ? ' tree-header-row--selected' : ''}`,
-        role: 'treeitem',
-        'aria-level': (node.level ?? 0) + 1,
-        'aria-expanded': shouldShowChevron ? !!node.isOpen : undefined,
-        style: {
-            ...style,
-            display: 'flex',
-            alignItems: 'center',
-            cursor: shouldShowChevron ? 'pointer' : 'default',
-            padding: '0.5rem 0.5rem 0.5rem 0px',
-            marginLeft: `${manualIndent}px`,
-            borderRadius: '4px',
-            border: 'none',
-            backgroundColor: node.isSelected ? 'rgba(99, 102, 241, 0.18)' : 'transparent',
-            width: 'calc(100% - ' + manualIndent + 'px)',
-            minHeight: '32px',
-            gap: '0.5rem'
-        },
-        onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
-        }, ...children.filter(Boolean));
-
-    const shouldShowTooltip = isEntity || isFile || isFolder;
-
-    if (!shouldShowTooltip) {
-        return headerRow;
-    }
-
+    // Tooltip content builders (moved up so we can scope tooltip to label/icon only)
     const formatIssue = (issue = {}) => {
         const title = issue.title || issue.category || issue.code || 'Issue';
         const severity = typeof issue.severity === 'number' ? issue.severity.toFixed(1) : '—';
@@ -879,19 +701,19 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             return value;
         };
 
-    const renderMetrics = (metrics) =>
-        React.createElement(
-            'ul',
-            { className: 'tooltip-metrics' },
-            metrics.map(({ label, value }) =>
-                    React.createElement(
-                        'li',
-                        { key: label },
-                        React.createElement('span', { className: 'metric-label' }, label),
-                        React.createElement('span', { className: 'metric-value' }, renderValue(value))
+        const renderMetrics = (metrics) =>
+            React.createElement(
+                'ul',
+                { className: 'tooltip-metrics' },
+                metrics.map(({ label, value }) =>
+                        React.createElement(
+                            'li',
+                            { key: label },
+                            React.createElement('span', { className: 'metric-label' }, label),
+                            React.createElement('span', { className: 'metric-value' }, renderValue(value))
+                        )
                     )
-                )
-            );
+                );
 
         const capitalize = (value) => {
             if (!value || typeof value !== 'string') {
@@ -900,14 +722,32 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             return value.charAt(0).toUpperCase() + value.slice(1);
         };
 
+        const shouldShowTooltip = isEntity || isFile || isFolder;
+        if (!shouldShowTooltip) {
+            return null;
+        }
+
         if (isFolder) {
             const totalFolderIssues = aggregates.totalIssues ?? data.totalIssues ?? data.refactoringNeeded ?? 0;
+            const folderHealth = getHealthScore(data);
+            const folderAcceptable = formatAcceptableRatio(
+                (() => {
+                    let maxRatio = null;
+                    const visit = (n) => {
+                        const r = getComplexityRatio(n);
+                        if (r != null && r > (maxRatio ?? -Infinity)) maxRatio = r;
+                        if (Array.isArray(n?.children)) n.children.forEach(visit);
+                    };
+                    visit(data);
+                    return maxRatio;
+                })()
+            );
             const metrics = [
                 {
                     label: 'Health',
                     value:
-                        typeof data.healthScore === 'number'
-                            ? `${Math.round(data.healthScore * 100)}%`
+                        typeof folderHealth === 'number'
+                            ? `${Math.round(folderHealth * 100)}%`
                             : '—',
                 },
                 { label: 'Files', value: aggregates.fileCount ?? data.fileCount ?? 0 },
@@ -917,8 +757,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 { label: 'High Priority', value: (aggregates.severityCounts?.high || 0) + (aggregates.severityCounts?.critical || 0) },
             ];
 
-            if (aggregates.avgScore != null) {
-                metrics.push({ label: 'Avg Score', value: aggregates.avgScore });
+            if (folderAcceptable) {
+                metrics.push({ label: 'Complexity', value: folderAcceptable });
             }
 
             // Show normalized complexity/debt metrics if available on a folder aggregate
@@ -982,6 +822,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         if (isFile) {
             const severityCounts = aggregates.severityCounts || {};
             const totalIssues = aggregates.totalIssues ?? data.totalIssues ?? Object.values(severityCounts).reduce((acc, value) => acc + (value || 0), 0);
+            const fileHealth = getHealthScore(data);
             const metrics = [
                 { label: 'Priority', value: data.highestPriority || data.priority || '—' },
                 {
@@ -989,9 +830,13 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                     value: aggregates.entityCount ?? data.entityCount ??
                         (data.children ? data.children.filter((child) => child.type === 'entity').length : 0),
                 },
+                { label: 'Health', value: typeof fileHealth === 'number' ? `${Math.round(fileHealth * 100)}%` : '—' },
                 { label: 'Issues', value: totalIssues },
-                { label: 'Avg Score', value: aggregates.avgScore ?? data.avgScore ?? data.score ?? null },
             ];
+            const fileAcceptable = formatAcceptableRatio(fileComplexityRatio);
+            if (fileAcceptable) {
+                metrics.push({ label: 'Complexity', value: fileAcceptable });
+            }
 
             const severityList = [
                 { key: 'critical', label: 'Critical', value: severityCounts.critical || 0 },
@@ -1021,7 +866,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                                 React.createElement(
                                     'li',
                                     { key: item.key },
-                                    `${item.label}: ${renderValue(item.value)}`
+                                    React.createElement('div', { className: 'issue-heading' }, `${item.label} · ${item.value}`)
                                 )
                             )
                         )
@@ -1038,13 +883,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                                 React.createElement(
                                     'li',
                                     { key: entity.id },
-                                    entity.name,
-                                    entity.severityCounts &&
-                                        React.createElement(
-                                            'div',
-                                            { className: 'issue-summary' },
-                                            `${renderValue(entity.severityCounts.critical || 0)} critical · ${renderValue(entity.severityCounts.high || 0)} high`
-                                        )
+                                    React.createElement('div', { className: 'issue-heading' }, entity.name),
+                                    React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
                                 )
                             )
                         )
@@ -1052,120 +892,47 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             );
         }
 
-        const issues = Array.isArray(data.issues) ? data.issues : [];
-        const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        // Entities
+        const issues = Array.isArray(data.issues) ? data.issues.map(formatIssue) : [];
+        const suggestions = Array.isArray(data.suggestions) ? data.suggestions.map(formatSuggestion) : [];
 
-        const topIssuesRaw = issues
-            .slice()
-            .sort((a, b) => (b?.severity ?? 0) - (a?.severity ?? 0))
+        // Top issues by severity
+        const topIssues = issues
+            .filter((issue) => issue.severity !== '—')
+            .sort((a, b) => Number(b.severity) - Number(a.severity))
             .slice(0, 3);
-        const topIssues = topIssuesRaw.map(formatIssue);
 
-        const formattedSuggestions = suggestions.slice(0, 2).map(formatSuggestion);
+        // Format suggestions (limit to 3 most impactful if impact exists)
+        const formattedSuggestions = suggestions
+            .sort((a, b) => {
+                const impactA = (data.suggestions || [])[suggestions.indexOf(a)]?.impact ?? 0;
+                const impactB = (data.suggestions || [])[suggestions.indexOf(b)]?.impact ?? 0;
+                return impactB - impactA;
+            })
+            .slice(0, 3);
 
-        const featureMap = new Map();
-        topIssuesRaw.forEach((issue) => {
-            const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
-            features.forEach((feature) => {
-                const name = (feature?.feature_name || '').trim();
-                if (!name) return;
-                const normalizedName = name.replace(/_/g, ' ');
-                const value = feature?.value;
-                if (!featureMap.has(normalizedName)) {
-                    featureMap.set(normalizedName, new Set());
-                }
-                if (value != null) {
-                    featureMap.get(normalizedName).add(value);
-                }
-            });
-        });
-
-        const featureSummary = Array.from(featureMap.entries()).map(([name, values]) => ({
-            name,
-            values: Array.from(values).slice(0, 3),
-        }));
-
-        const highestSeverity = topIssuesRaw.length > 0 ? topIssuesRaw[0].severity ?? null : null;
-
-        const coverage = data.coverage || {};
-
+        const entityAcceptable = formatAcceptableRatio(getComplexityRatio(data));
         const metrics = [
             { label: 'Priority', value: data.priority || data.highestPriority || '—' },
-            { label: 'Score', value: data.score ?? formattedEntityScore },
-            { label: 'Confidence', value: data.confidence != null ? `${Math.round(data.confidence * 100)}%` : '—' },
-            { label: 'Issues', value: issues.length ?? 0 },
-            { label: 'Suggestions', value: suggestions.length ?? 0 },
-            { label: 'Peak Severity', value: highestSeverity },
+            { label: 'Complexity', value: entityAcceptable || formattedEntityScore || '—' },
+            { label: 'Issues', value: issues.length || '—' },
+            { label: 'Suggestions', value: suggestions.length || '—' },
         ];
-
-        // Normalized per-entity metrics if present in contributing_features
-        const featureLookup = (name) => {
-            const feats = [];
-            topIssuesRaw.forEach((issue) => {
-                const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
-                features.forEach((f) => {
-                    if ((f.feature_name || '').toLowerCase() === name) {
-                        feats.push(f.value);
-                    }
-                });
-            });
-            return feats.length ? feats[0] : null;
-        };
-
-        const ccVal = featureLookup('cyclomatic_complexity');
-        const cogVal = featureLookup('cognitive_complexity');
-        const miVal = featureLookup('maintainability_index');
-        const tdVal = featureLookup('technical_debt_score');
-
-        const normalizedMetrics = [];
-        const ccNorm = fmtPct(ccPct(ccVal));
-        if (ccNorm) normalizedMetrics.push({ label: 'Cyclomatic', value: ccNorm });
-        const cogNorm = fmtPct(cogPct(cogVal));
-        if (cogNorm) normalizedMetrics.push({ label: 'Cognitive', value: cogNorm });
-        const miNorm = fmtPct(miPct(miVal));
-        if (miNorm) normalizedMetrics.push({ label: 'MI', value: miNorm });
-        const tdNorm = fmtPct(tdPct(tdVal));
-        if (tdNorm) normalizedMetrics.push({ label: 'Debt', value: tdNorm });
-
-        metrics.push(...normalizedMetrics);
-
-        if (coverage.linesOfCode != null) {
-            metrics.push({ label: 'Lines of Code', value: coverage.linesOfCode });
-        }
-        if (coverage.coverageBefore != null) {
-            metrics.push({ label: 'Coverage Before', value: `${(coverage.coverageBefore * 100).toFixed(1)}%` });
-        }
-        if (coverage.coverageAfter != null) {
-            metrics.push({ label: 'Coverage After', value: `${(coverage.coverageAfter * 100).toFixed(1)}%` });
-        }
 
         return React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'tooltip-name' }, data.name || 'Function'),
-            renderMetrics(metrics),
-            featureSummary.length > 0 &&
-                React.createElement(
-                    'div',
-                    { className: 'tooltip-section' },
-                    React.createElement('h4', null, 'Signals'),
+            React.createElement('div', { className: 'tooltip-name' }, data.name || 'Entity'),
+            React.createElement('ul', { className: 'tooltip-metrics' },
+                metrics.map(({ label, value }) =>
                     React.createElement(
-                        'table',
-                        { className: 'feature-table' },
-                        React.createElement(
-                            'tbody',
-                            null,
-                            featureSummary.map(({ name, values }) =>
-                                React.createElement(
-                                    'tr',
-                                    { key: name },
-                                    React.createElement('th', null, name.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())),
-                                    React.createElement('td', null, values.length ? values.map((val) => renderValue(val)).join(', ') : '—')
-                                )
-                            )
-                        )
+                        'li',
+                        { key: label },
+                        React.createElement('span', { className: 'metric-label' }, label),
+                        React.createElement('span', { className: 'metric-value' }, renderValue(value))
                     )
-                ),
+                )
+            ),
             topIssues.length > 0 &&
                 React.createElement(
                     'div',
@@ -1206,5 +973,223 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         );
     };
 
-    return React.createElement(Tooltip, { content: tooltipContent, placement: 'bottom' }, headerRow);
+    // Expand/collapse arrow for nodes with children (but not for entities)
+    // Only show chevron for nodes that actually can expand
+    if (shouldShowChevron && hasChildren) {
+        children.push(React.createElement('span', {
+            key: 'chevron',
+            className: 'tree-chevron',
+            'data-expanded': node.isOpen ? 'true' : 'false',
+            style: { 
+                width: '16px',
+                height: '16px',
+                marginRight: '0.25rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--tree-muted, rgba(148,163,184,0.8))',
+                fontSize: '12px',
+                userSelect: 'none'
+            },
+            onClick: (e) => {
+                e.stopPropagation();
+                toggleNode(node.id);
+            },
+            role: 'presentation'
+        }, renderChevronIcon()));
+    } else {
+        // Add spacing for nodes without children to align with expandable nodes
+        children.push(React.createElement('div', {
+            key: 'spacer',
+            style: { width: '1rem', marginRight: '0.25rem' }
+        }));
+    }
+    
+    const shouldShowTooltip = isEntity || isFile || isFolder;
+
+    // Icon + label (tooltip only on this cluster)
+    let iconName = 'function-square'; // default for entities
+    let iconFallbackSymbol = '*';
+    if (isFolder) {
+        iconName = 'folder';
+        iconFallbackSymbol = '[F]';
+    } else if (isFile) {
+        iconName = 'file-code';
+        iconFallbackSymbol = '<>'; 
+    } else if (isCategory) {
+        iconName = 'layers';
+        iconFallbackSymbol = '[C]';
+    }
+
+    const iconElement = React.createElement('i', {
+        'data-lucide': iconName,
+        key: 'icon',
+        ref: (el) => registerIcon(el, iconFallbackSymbol),
+        className: 'tree-icon',
+        style: { marginRight: '0.5rem' }
+    });
+    
+    const labelText = data.name;
+
+    const labelElement = React.createElement('span', {
+        key: 'label',
+        style: { flex: 1, fontWeight: (isFolder || isCategory) ? '500' : 'normal', color: 'inherit', minWidth: 0 }
+    }, labelText);
+
+    if (shouldShowTooltip) {
+        children.push(
+            React.createElement(
+                Tooltip,
+                { key: 'label-tooltip', content: tooltipContent, placement: 'bottom' },
+                React.createElement('span', {
+                    className: 'tree-label-with-icon',
+                    style: { display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }
+                }, [iconElement, labelElement])
+            )
+        );
+    } else {
+        children.push(iconElement);
+        children.push(labelElement);
+    }
+    
+    // Health score for folders (falls back to aliased keys)
+    const folderHealth = isFolder ? getHealthScore(data) : null;
+    if (isFolder && folderHealth !== null) {
+        children.push(React.createElement('div', {
+            key: 'health',
+            className: 'tree-badge tree-badge-low complexity-score',
+            style: { marginLeft: '0.5rem', color: getHealthColor(folderHealth) }
+        }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
+    }
+
+    // Optional health score for files if present
+    const fileHealth = isFile ? getHealthScore(data) : null;
+    if (isFile && fileHealth !== null) {
+        children.push(React.createElement('div', {
+            key: 'file-health',
+            className: 'tree-badge tree-badge-low complexity-score',
+            style: { marginLeft: '0.5rem', color: getHealthColor(fileHealth) }
+        }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
+    }
+
+    if (isFolder && aggregates.totalIssues > 0) {
+        children.push(React.createElement('div', {
+            key: 'issues',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, `${aggregates.totalIssues} issues`));
+    }
+
+    // Priority badge with color coding
+    if (data.priority || data.highestPriority) {
+        const priority = data.priority || data.highestPriority;
+        children.push(React.createElement('div', {
+            key: 'priority',
+            className: 'tree-badge',
+            style: { 
+                marginLeft: '0.5rem',
+                ...getPriorityStyle(priority)
+            }
+        }, priority));
+    }
+
+    // Severity mix badge (normalized percentages)
+    let fileSeverityBar = null;
+    if ((isFolder || isFile) && aggregates.severityCounts) {
+        fileSeverityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
+    }
+
+    // Complexity score for files
+    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
+    const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
+    const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
+    if (isFile && formattedNodeAvgScore !== null) {
+        children.push(React.createElement('div', {
+            key: 'score',
+            className: 'tree-badge tree-badge-low complexity-score',
+            style: { marginLeft: '0.5rem' }
+        }, formattedNodeAcceptable ? `Complexity: ${formattedNodeAcceptable}` : `Complexity: ${formattedNodeAvgScore}`));
+    }
+
+    // Append file severity mix after complexity badge
+    if (isFile && fileSeverityBar) {
+        children.push(fileSeverityBar);
+    }
+
+    // Folder-level worst complexity ratio from descendants
+    const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
+    const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
+
+    if (isFolder && formattedNodeAvgScore !== null) {
+        children.push(React.createElement('div', {
+            key: 'avg-score',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' },
+            title: 'Average complexity score across entities in this folder'
+        }, folderAcceptable
+            ? `Complexity: ${folderAcceptable}`
+            : `Avg Score: ${formattedNodeAvgScore}`));
+        if (fileSeverityBar) {
+            children.push(fileSeverityBar);
+            fileSeverityBar = null;
+        }
+    }
+
+    // Complexity score for entities
+    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
+    const entityAcceptable = formatAcceptableRatio(getMaxComplexityRatio(data));
+    if (isEntity && formattedEntityScore !== null) {
+        children.push(React.createElement('div', {
+            key: 'complexity',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, entityAcceptable ? `Complexity: ${entityAcceptable}` : `Complexity: ${formattedEntityScore}`));
+    }
+    
+    // Line range for entities
+    if (isEntity && data.lineRange) {
+        children.push(React.createElement('div', {
+            key: 'lines',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
+    }
+    
+    // Severity mix badge for entities
+    if (isEntity && data.severityCounts) {
+        const severityBar = buildSeverityBar(data.severityCounts, `${node.id}-entity-severity`);
+        if (severityBar) {
+            children.push(severityBar);
+        }
+    }
+    
+    // Manual indentation calculation for nested rows
+    const manualIndent = node.level * 24; // 24px per level
+
+    // Header row (clickable part with icon, label, badges)
+    const headerRow = React.createElement('div', {
+        ref: innerRef ?? undefined,
+        className: `tree-header-row${node.isSelected ? ' tree-header-row--selected' : ''}`,
+        role: 'treeitem',
+        'aria-level': (node.level ?? 0) + 1,
+        'aria-expanded': shouldShowChevron ? !!node.isOpen : undefined,
+        style: {
+            ...style,
+            display: 'flex',
+            alignItems: 'center',
+            cursor: shouldShowChevron ? 'pointer' : 'default',
+            padding: '0.5rem 0.5rem 0.5rem 0px',
+            marginLeft: `${manualIndent}px`,
+            borderRadius: '4px',
+            border: 'none',
+            backgroundColor: node.isSelected ? 'rgba(99, 102, 241, 0.18)' : 'transparent',
+            width: 'calc(100% - ' + manualIndent + 'px)',
+            minHeight: '32px',
+            gap: '0.5rem'
+        },
+        onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
+        }, ...children.filter(Boolean));
+
+        return headerRow;
 };

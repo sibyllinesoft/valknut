@@ -482,6 +482,7 @@ function normalizeCloneAnalysis(cloneAnalysis) {
     candidatesBefore !== null;
   const notes = Array.isArray(cloneAnalysis.notes) ? cloneAnalysis.notes : [];
   const verification = cloneAnalysis.verification || cloneAnalysis.verify || null;
+  const cleanedNotes = notes.map((n) => abbreviateCloneNote(n));
 
   return {
     hasData: Boolean(
@@ -504,8 +505,24 @@ function normalizeCloneAnalysis(cloneAnalysis) {
           ? cloneAnalysis.qualityScore
           : avgSimilarity,
     verification,
-    notes,
+    notes: cleanedNotes,
   };
+}
+
+function abbreviateCloneNote(note) {
+  if (typeof note !== 'string') return note;
+  const lower = note.toLowerCase();
+  if (lower.includes('clone denoising')) {
+    return 'Denoising disabled; pre-filter counts unavailable.';
+  }
+  if (lower.includes('tf-idf')) {
+    return 'TF-IDF stats missing; phase breakdown omitted.';
+  }
+  const limit = 64;
+  if (note.length > limit) {
+    return `${note.slice(0, limit - 1)}…`;
+  }
+  return note;
 }
 
 function getPriorityRank(node) {
@@ -692,7 +709,6 @@ function buildDirectoryNode(dirPath, fileNodes) {
     children: fileNodes,
     entity_count: fileNodes.reduce((sum, node) => sum + (node.entity_count || node.entities?.length || 0), 0),
     file_count: fileNodes.length,
-    health_score: 0,
     refactoring_needed: fileNodes.reduce((sum, node) => sum + (node.total_issues || 0), 0),
   };
 }
@@ -780,6 +796,11 @@ function buildTemplateData(results) {
     results.cloneStats ||
     null;
   const cloneAnalysis = normalizeCloneAnalysis(rawCloneAnalysis);
+  const clonePairs =
+    (results.clone_analysis && results.clone_analysis.clone_pairs) ||
+    (results.cloneAnalysis && results.cloneAnalysis.clone_pairs) ||
+    (results.passes && results.passes.lsh && results.passes.lsh.clone_pairs) ||
+    [];
   const fileCount = new Set(cleanedCandidates.map((c) => c.file_path || c.filePath)).size;
   const coveragePacks = Array.isArray(results.coverage_packs)
     ? results.coverage_packs
@@ -801,9 +822,11 @@ function buildTemplateData(results) {
 
   const rawHierarchy = results.unified_hierarchy || results.unifiedHierarchy || [];
   let unifiedHierarchy = cleanUnifiedHierarchy(rawHierarchy);
-  if (!Array.isArray(unifiedHierarchy) || unifiedHierarchy.length === 0) {
-    unifiedHierarchy = addFilesToHierarchy([], refactoringCandidatesByFile, dictionary);
-  }
+  unifiedHierarchy = addFilesToHierarchy(
+    Array.isArray(unifiedHierarchy) ? unifiedHierarchy : [],
+    refactoringCandidatesByFile,
+    dictionary
+  );
   unifiedHierarchy = sortHierarchy(unifiedHierarchy);
 
   const graphInsights = buildGraphInsights(directoryHealthTree);
@@ -834,6 +857,7 @@ function buildTemplateData(results) {
     has_oracle_data: Boolean(results.oracle_refactoring_plan),
     health_metrics: results.health_metrics || null,
     clone_analysis: cloneAnalysis,
+    clone_pairs: clonePairs,
     clone_analysis_raw: results.clone_analysis || null,
     passes: results.passes || results.stage_results || null,
   };
@@ -907,6 +931,26 @@ function registerHelpers() {
   handlebars.registerHelper('length', (arr) => {
     if (!Array.isArray(arr)) return 0;
     return arr.length;
+  });
+
+  handlebars.registerHelper('truncate', (value, len = 80) => {
+    if (typeof value !== 'string') return value;
+    const limit = Number(len) || 80;
+    if (value.length <= limit) return value;
+    return `${value.slice(0, limit - 1)}…`;
+  });
+
+handlebars.registerHelper('basename', (value = '') => {
+  if (typeof value !== 'string') return '';
+  const parts = value.split(/[/\\]/);
+  return parts.pop() || '';
+});
+
+  handlebars.registerHelper('dirname', (value = '') => {
+    if (typeof value !== 'string') return '';
+    const parts = value.split(/[/\\]/);
+    parts.pop();
+    return parts.join('/') || '—';
   });
 
 handlebars.registerHelper('inline_css', (filePath) => inlineCss(filePath));
@@ -1035,6 +1079,9 @@ function render() {
     codeDictionary: templateData.code_dictionary,
     graphInsights: templateData.graph_insights,
     cloneAnalysis: templateData.clone_analysis,
+    clone_pairs: templateData.clone_pairs,
+    clonePairs: templateData.clone_pairs,
+    passes: templateData.passes,
   };
 
   fs.writeFileSync(OUTPUT_DATA_JSON, JSON.stringify(frontendPayload, null, 2));

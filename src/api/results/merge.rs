@@ -491,6 +491,7 @@ mod tests {
                 entities_per_second: Some(10.0),
             }),
             notes: vec!["left".into()],
+            clone_pairs: Vec::new(),
         }
     }
 
@@ -592,6 +593,7 @@ mod tests {
                 entities_per_second: Some(12.0),
             }),
             notes: vec!["right".into()],
+            clone_pairs: Vec::new(),
         };
 
         left.merge(right);

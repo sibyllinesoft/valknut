@@ -1,16 +1,18 @@
-<!-- Code Analysis Tree -->
-<div class="results-section">
-    <h2 style="margin-bottom: 0.75rem;">Code Analysis Tree</h2>
-
-    <hr class="section-divider">
-    <div id="react-tree-root" class="analysis-tree" style="min-height: 560px;">
-        <noscript>
-            <div class="valknut-tree-empty">
-                <h3>Interactive tree requires JavaScript</h3>
-            </div>
-        </noscript>
+<!-- Complexity Analysis -->
+<div class="results-section accordion">
+    <h2 class="accordion-heading" data-target="accordion-complexity" role="button" aria-expanded="true" style="margin-bottom: 0.75rem; cursor: pointer;">
+        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
+        Complexity Analysis
+    </h2>
+    <div id="accordion-complexity" class="accordion-body" style="display: block;">
+        <div id="react-tree-root" class="analysis-tree" style="min-height: 560px; border-top: 1px solid rgba(255,255,255,0.026); border-bottom: 1px solid rgba(255,255,255,0.026);">
+            <noscript>
+                <div class="valknut-tree-empty">
+                    <h3>Interactive tree requires JavaScript</h3>
+                </div>
+            </noscript>
+        </div>
     </div>
-    <hr class="section-divider">
 
     <script id="tree-data" type="application/json">
         {
@@ -21,7 +23,9 @@
             "unified_hierarchy": {{#if unified_hierarchy}}{{{json unified_hierarchy}}}{{else}}[]{{/if}},
             "directory_health_tree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
             "graph_insights": {{#if graph_insights}}{{{json graph_insights}}}{{else}}{"hasInsights":false}{{/if}},
-            "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}}
+            "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}},
+            "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
+            "clone_analysis": {{#if clone_analysis}}{{{json clone_analysis}}}{{else}}null{{/if}}
         }
     </script>
 
@@ -51,6 +55,88 @@
                 console.error('Valknut: invalid payload data');
                 container.innerHTML = '<div class="valknut-tree-empty"><h3>Tree initialization failed: invalid data</h3></div>';
                 return;
+            }
+
+            const normalizePath = (value = '') => {
+                if (typeof value !== 'string') return '';
+                let normalized = value.replace(/\\/g, '/');
+                if (normalized === '.') return '.';
+                // drop trailing slash
+                if (normalized.endsWith('/')) {
+                    normalized = normalized.slice(0, -1);
+                }
+                return normalized;
+            };
+
+            function buildHealthLookup(tree) {
+                if (!tree || !tree.directories) return { map: {}, rootPath: '' };
+
+                const rootPath = normalizePath(tree.root?.path || '');
+                const map = {};
+
+                Object.entries(tree.directories).forEach(([key, value]) => {
+                    if (!value || typeof value !== 'object') return;
+                    const normalizedKey = normalizePath(key || '');
+                    const health = typeof value.health_score === 'number' ? value.health_score : null;
+                    if (health === null) return;
+
+                    const variants = new Set();
+                    variants.add(normalizedKey);
+                    if (normalizedKey === '.') variants.add('');
+
+                    if (rootPath && normalizedKey.startsWith(rootPath)) {
+                        const relative = normalizedKey.slice(rootPath.length).replace(/^\//, '');
+                        if (relative) variants.add(relative);
+                        variants.add('./' + relative);
+                    }
+
+                    const srcIdx = normalizedKey.indexOf('/src/');
+                    if (srcIdx >= 0) {
+                        const srcSlice = normalizedKey.slice(srcIdx);
+                        variants.add(srcSlice);
+                        variants.add('./' + srcSlice.replace(/^\//, ''));
+                    }
+                    const base = normalizedKey.split('/').filter(Boolean).pop();
+                    if (base) variants.add(base);
+
+                    variants.forEach((k) => {
+                        if (!map[k]) map[k] = { health_score: health };
+                    });
+                });
+
+                return { map, rootPath };
+            }
+
+            function applyHealthToHierarchy(nodes, directoriesMap, parentPath = '', rootPath = '') {
+                if (!Array.isArray(nodes)) return;
+
+                nodes.forEach((node) => {
+                    if (!node || typeof node !== 'object') return;
+
+                    // Build a path key: prefer provided path, else derive from parent/name
+                    const explicitPath = node.path || node.file_path || node.filePath || null;
+                    let derivedPath = parentPath ? `${parentPath}/${node.name || ''}` : (node.name || '');
+                    let pathKey = normalizePath(explicitPath || derivedPath || '.');
+
+                    const altKey = pathKey.startsWith('./') ? pathKey.slice(2) : `./${pathKey}`;
+                    const base = pathKey.split('/').filter(Boolean).pop();
+                    const rootPrefixed = rootPath ? normalizePath(`${rootPath}/${pathKey}`) : null;
+
+                    const healthSource =
+                        directoriesMap[pathKey]
+                        || directoriesMap[altKey]
+                        || directoriesMap['.']
+                        || (base ? directoriesMap[base] : null)
+                        || (rootPrefixed ? directoriesMap[rootPrefixed] : null);
+                    if (healthSource && typeof healthSource.health_score === 'number') {
+                        node.healthScore = healthSource.health_score; // 0-1 range
+                        node.health_score = healthSource.health_score;
+                    }
+
+                    if (Array.isArray(node.children) && node.children.length > 0) {
+                        applyHealthToHierarchy(node.children, directoriesMap, pathKey, rootPath);
+                    }
+                });
             }
 
             function aggregateNode(node) {
@@ -242,6 +328,16 @@
 
                     if (Array.isArray(payload.unifiedHierarchy)) {
                         collectEntityDetails(payload.unifiedHierarchy);
+                        if (payload.directory_health_tree && payload.directory_health_tree.directories) {
+                            const { map: healthMap, rootPath } = buildHealthLookup(payload.directory_health_tree);
+                                window.__TREE_HEALTH_DEBUG = { healthMap, rootPath };
+                                console.warn('[TreeHealth] ACTIVE lookup sizes', Object.keys(healthMap || {}).length, 'root', rootPath);
+                                console.warn('[TreeHealth] sample keys', Object.keys(healthMap || {}).slice(0, 5));
+console.warn('[TreeHealth] ACTIVE lookup sizes', Object.keys(healthMap || {}).length, 'root', rootPath);
+                                console.warn('[TreeHealth] sample keys', Object.keys(healthMap || {}).slice(0, 5));
+
+                            applyHealthToHierarchy(payload.unifiedHierarchy, healthMap, '', rootPath);
+                        }
                         aggregateHierarchy(payload.unifiedHierarchy);
                     }
 

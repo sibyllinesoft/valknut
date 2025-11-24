@@ -1,13 +1,17 @@
 <!-- Clone & Similarity Analysis -->
-<section class="clone-section">
-    <header class="clone-section__header">
-        <h2>Clone & Similarity Analysis</h2>
-        <p>Measures of structural duplication across the codebase.</p>
-    </header>
+<section class="clone-section accordion">
+    <h2 class="accordion-heading" data-target="accordion-clone" role="button" aria-expanded="true" style="margin-bottom: 0.75rem; cursor: pointer;">
+        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
+        Clone &amp; Similarity Analysis
+    </h2>
+    <div id="accordion-clone" class="accordion-body" style="display: block;">
+        <header class="clone-section__header">
+            <p>Measures of structural duplication across the codebase.</p>
+        </header>
 
     {{#if clone_analysis.hasData}}
     <div class="clone-metric-grid">
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Average Similarity</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.avgSimilarity}}
@@ -17,7 +21,7 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Maximum Similarity</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.maxSimilarity}}
@@ -27,7 +31,7 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Candidates After Denoising</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.candidatesAfter}}
@@ -37,7 +41,7 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Candidates Before Denoising</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.candidatesBefore}}
@@ -47,7 +51,7 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Quality Score</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.qualityScore}}
@@ -57,7 +61,7 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Denoising Enabled</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.denoisingEnabled}}Yes{{else}}No{{/if}}
@@ -65,29 +69,51 @@
         </div>
     </div>
 
-    {{#if clone_analysis.verification}}
-    <div class="clone-verification">
-        <h4>Verification</h4>
-        <ul>
-            {{#if clone_analysis.verification.method}}<li>Method: {{clone_analysis.verification.method}}</li>{{/if}}
-            {{#if clone_analysis.verification.pairs_considered}}<li>Pairs Considered: {{clone_analysis.verification.pairs_considered}}</li>{{/if}}
-            {{#if clone_analysis.verification.pairs_evaluated}}<li>Pairs Evaluated: {{clone_analysis.verification.pairs_evaluated}}</li>{{/if}}
-            {{#if clone_analysis.verification.pairs_scored}}<li>Pairs Scored: {{clone_analysis.verification.pairs_scored}}</li>{{/if}}
-            {{#if clone_analysis.verification.avg_similarity}}<li>Verification Avg Similarity: {{format clone_analysis.verification.avg_similarity "0.2"}}</li>{{/if}}
-        </ul>
+    {{#if clone_pairs.length}}
+    <div class="clone-panel-block" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); border-bottom: 1px solid rgba(255,255,255,0.026); padding-top: 0.35rem; padding-bottom: 0.35rem;">
+        <script id="clone-pairs-data" type="application/json">{{{json clone_pairs}}}</script>
+        <div id="clone-pairs-root" aria-label="Clone pairs cards" style="min-height: 120px;"></div>
+        <script>
+          (function() {
+            function mountPairs() {
+              if (!window.ValknutMountClonePairs) {
+                if (!window.ReactTreeBundle || typeof window.ReactTreeBundle.mountClonePairs !== 'function') {
+                  try {
+                    {{inline_js "react-tree-bundle.js"}}
+                  } catch (bundleErr) {
+                    console.error('[Valknut] inline bundle exec failed for clone pairs', bundleErr);
+                    return;
+                  }
+                }
+              }
+              var el = document.getElementById('clone-pairs-root');
+              var dataEl = document.getElementById('clone-pairs-data');
+              if (!el || !dataEl) return;
+              try {
+                var pairs = JSON.parse(dataEl.textContent || '[]') || [];
+                if (typeof window.ValknutMountClonePairs === 'function') {
+                  window.ValknutMountClonePairs(pairs, 'clone-pairs-root');
+                } else {
+                  window.ReactTreeBundle.mountClonePairs(pairs, 'clone-pairs-root');
+                }
+              } catch (err) {
+                console.error('[Valknut] clone pairs mount failed', err);
+              }
+            }
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+              mountPairs();
+            } else {
+              document.addEventListener('DOMContentLoaded', mountPairs);
+            }
+          })();
+        </script>
     </div>
     {{/if}}
 
-    {{#if clone_analysis.notes.length}}
-    <ul class="clone-notes">
-        {{#each clone_analysis.notes}}
-        <li>{{this}}</li>
-        {{/each}}
-    </ul>
-    {{/if}}
     {{else}}
     <div class="clone-empty">
         Clone detection was not enabled for this report run.
     </div>
     {{/if}}
+    </div>
 </section>

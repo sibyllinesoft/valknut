@@ -340,6 +340,7 @@ impl AnalysisResults {
             phase_filtering_stats: None,
             performance_metrics: None,
             notes,
+            clone_pairs: lsh_results.clone_pairs.clone(),
         })
     }
 

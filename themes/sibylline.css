@@ -298,7 +298,23 @@ body {
 
 /* Results Section */
 .results-section {
-  margin-bottom: var(--spacing-12);
+  margin: 0 auto var(--spacing-12);
+  padding: 0 var(--page-padding);
+  max-width: 1200px;
+}
+
+.results-section.accordion {
+  padding: 0;
+}
+
+.analysis-summary.results-section {
+  padding: 0;
+}
+
+.analysis-summary {
+  margin: 0 auto var(--spacing-12);
+  padding: 0 var(--page-padding);
+  max-width: 1200px;
 }
 
 .results-section h2 {
@@ -316,7 +332,7 @@ body {
   background: transparent;
   border: none;
   border-radius: 12px;
-  padding: 1rem;
+  padding: 0;
   margin-top: 1rem;
   max-height: none;
   overflow: visible;
@@ -328,6 +344,19 @@ body {
 .tree-node {
   position: relative;
   margin-bottom: 0.125rem;
+}
+
+/* Accordion headings */
+.accordion-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.accordion-heading .accordion-icon {
+  width: 1em;
+  height: 1em;
 }
 
 .tree-node.has-children .tree-header {
@@ -1655,18 +1684,19 @@ body {
 }
 
 .clone-notes {
-  margin: 0;
-  padding-left: 1.1rem;
-  color: rgba(226, 232, 240, 0.78);
+  margin: 6px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  color: rgba(226, 232, 240, 0.7);
   font-size: 0.85rem;
 }
 
-.clone-notes li {
-  margin-bottom: 0.4rem;
-}
-
-.clone-notes li:last-child {
-  margin-bottom: 0;
+.clone-notes > * {
+  margin: 0;
+  padding: 0;
 }
 
 .tree-detail-row--issue {

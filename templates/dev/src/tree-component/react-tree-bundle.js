@@ -24580,7 +24580,7 @@ Check the top-level render call using <` + parentName + ">.";
     countSeverityLevels: () => countSeverityLevels,
     CodeAnalysisTree: () => CodeAnalysisTree
   });
-  var import_react7 = __toESM(require_react(), 1);
+  var import_react8 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/tree-component/CodeAnalysisTree.jsx
@@ -29070,6 +29070,54 @@ Check the top-level render call using <` + parentName + ">.";
   };
   var miPct = (value) => value != null ? 60 / clampValue(value, 10, 100) * 100 : null;
   var tdPct = (value) => value;
+  var THRESHOLDS = {
+    cyclomatic_complexity: 10,
+    cognitive_complexity: 15,
+    technical_debt_score: 40
+  };
+  var getComplexityRatio = (nodeLike) => {
+    if (!nodeLike || typeof nodeLike !== "object")
+      return null;
+    const issues = Array.isArray(nodeLike.issues) ? nodeLike.issues : [];
+    let maxRatio = null;
+    issues.forEach((issue) => {
+      const feats = Array.isArray(issue.contributing_features) ? issue.contributing_features : [];
+      feats.forEach((feat) => {
+        const name = String(feat.feature_name || "").toLowerCase();
+        const value = Number(feat.value);
+        if (!Number.isFinite(value))
+          return;
+        const thresholdEntry = Object.entries(THRESHOLDS).find(([key]) => name.includes(key));
+        if (!thresholdEntry)
+          return;
+        const [, threshold] = thresholdEntry;
+        if (threshold <= 0)
+          return;
+        const ratio = value / threshold;
+        if (ratio > (maxRatio ?? -Infinity)) {
+          maxRatio = ratio;
+        }
+      });
+    });
+    return maxRatio;
+  };
+  var formatAcceptableRatio = (ratio) => {
+    if (!Number.isFinite(ratio))
+      return null;
+    return `${(ratio * 100).toFixed(0)}%`;
+  };
+  var getMaxComplexityRatio = (node) => {
+    let maxRatio = getComplexityRatio(node);
+    if (Array.isArray(node?.children)) {
+      node.children.forEach((child) => {
+        const childRatio = getMaxComplexityRatio(child);
+        if (childRatio != null && childRatio > (maxRatio ?? -Infinity)) {
+          maxRatio = childRatio;
+        }
+      });
+    }
+    return maxRatio;
+  };
   var computeAggregates = (node) => {
     if (!node || typeof node !== "object") {
       return {
@@ -29409,6 +29457,37 @@ Check the top-level render call using <` + parentName + ">.";
           };
       }
     };
+    const buildSeverityBar = (counts, keyPrefix, options = {}) => {
+      if (!counts)
+        return null;
+      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
+      if (total <= 0)
+        return null;
+      const order = ["critical", "high", "medium", "low"];
+      const segments = order.map((severity) => {
+        const value = counts[severity] || 0;
+        if (!value)
+          return null;
+        const pct = value / total * 100;
+        const color = getPriorityStyle(severity).color || "var(--accent)";
+        const label = `${severity.charAt(0).toUpperCase()}${severity.slice(1)} ${Math.round(pct)}% (${value})`;
+        return import_react5.default.createElement("div", {
+          key: `${keyPrefix}-${severity}`,
+          className: `severity-bar__segment severity-bar__segment--${severity}`,
+          style: { width: `${pct}%`, backgroundColor: color },
+          title: label
+        });
+      }).filter(Boolean);
+      if (!segments.length)
+        return null;
+      return import_react5.default.createElement("div", {
+        key: `${keyPrefix}-bar`,
+        className: "severity-bar",
+        style: { marginLeft: options.marginLeft ?? "0.5rem" },
+        role: "presentation",
+        "aria-label": "Severity mix"
+      }, segments);
+    };
     const getHealthColor = (score) => {
       if (score >= 0.8)
         return "var(--success)";
@@ -29416,6 +29495,7 @@ Check the top-level render call using <` + parentName + ">.";
         return "var(--warning)";
       return "var(--danger)";
     };
+    const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ["healthScore", "health_score", "health"], null);
     const children = [];
     const aggregates = computeAggregates(data);
     if (typeof window !== "undefined") {
@@ -29453,235 +29533,6 @@ Check the top-level render call using <` + parentName + ">.";
           console.log("[TreeNode] folder aggregates", window.__VALKNUT_TREE_DIR_LOG[node.id]);
         }
       }
-    }
-    if (shouldShowChevron && hasChildren) {
-      children.push(import_react5.default.createElement("span", {
-        key: "chevron",
-        className: "tree-chevron",
-        "data-expanded": node.isOpen ? "true" : "false",
-        style: {
-          width: "16px",
-          height: "16px",
-          marginRight: "0.25rem",
-          cursor: "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "var(--tree-muted, rgba(148,163,184,0.8))",
-          fontSize: "12px",
-          userSelect: "none"
-        },
-        onClick: (e) => {
-          e.stopPropagation();
-          toggleNode(node.id);
-        },
-        role: "presentation"
-      }, renderChevronIcon()));
-    } else {
-      children.push(import_react5.default.createElement("div", {
-        key: "spacer",
-        style: { width: "1rem", marginRight: "0.25rem" }
-      }));
-    }
-    let iconName = "function-square";
-    let iconFallbackSymbol = "*";
-    if (isFolder) {
-      iconName = "folder";
-      iconFallbackSymbol = "[F]";
-    } else if (isFile) {
-      iconName = "file-code";
-      iconFallbackSymbol = "<>";
-    } else if (isCategory) {
-      iconName = "layers";
-      iconFallbackSymbol = "[C]";
-    }
-    children.push(import_react5.default.createElement("i", {
-      "data-lucide": iconName,
-      key: "icon",
-      ref: (el) => registerIcon(el, iconFallbackSymbol),
-      className: "tree-icon",
-      style: { marginRight: "0.5rem" }
-    }));
-    const labelText = data.name;
-    children.push(import_react5.default.createElement("span", {
-      key: "label",
-      style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit" }
-    }, labelText));
-    if (isFolder && data.healthScore) {
-      children.push(import_react5.default.createElement("div", {
-        key: "health",
-        className: "tree-badge",
-        style: {
-          backgroundColor: getHealthColor(data.healthScore) + "20",
-          color: getHealthColor(data.healthScore),
-          border: `1px solid ${getHealthColor(data.healthScore)}40`,
-          marginLeft: "0.5rem"
-        }
-      }, "Health: " + (data.healthScore * 100).toFixed(0) + "%"));
-    }
-    if (isFolder && data.fileCount) {
-      children.push(import_react5.default.createElement("div", {
-        key: "files",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${data.fileCount} files`));
-    }
-    if (isFolder && data.entityCount) {
-      children.push(import_react5.default.createElement("div", {
-        key: "entities",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${data.entityCount} entities`));
-    }
-    if (isFolder && aggregates.totalIssues > 0) {
-      children.push(import_react5.default.createElement("div", {
-        key: "issues",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${aggregates.totalIssues} issues`));
-    }
-    if (data.priority || data.highestPriority) {
-      const priority = data.priority || data.highestPriority;
-      children.push(import_react5.default.createElement("div", {
-        key: "priority",
-        className: "tree-badge",
-        style: {
-          marginLeft: "0.5rem",
-          ...getPriorityStyle(priority)
-        }
-      }, priority));
-    }
-    let fileSeveritySegments = null;
-    if ((isFolder || isFile) && aggregates.severityCounts) {
-      const counts = aggregates.severityCounts;
-      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
-      if (total > 0) {
-        const formatPct = (value) => {
-          const pct = (value / total * 100).toFixed(1);
-          return pct.endsWith(".0") ? pct.slice(0, -2) : pct;
-        };
-        const segments = [];
-        const addSegment = (value, severity, idx) => {
-          if (!value)
-            return;
-          const color = getPriorityStyle(severity).color || "var(--text)";
-          if (segments.length > 0) {
-            segments.push(import_react5.default.createElement("span", { key: `dot-${idx}`, style: { color: "rgba(255,255,255,0.8)" } }, " · "));
-          }
-          segments.push(import_react5.default.createElement("span", { key: `seg-${idx}`, style: { color, fontWeight: 600, fontSize: "0.85rem" } }, value));
-        };
-        addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, "critical", 0);
-        addSegment(counts.high ? `${formatPct(counts.high)}%` : null, "high", 1);
-        addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, "medium", 2);
-        addSegment(counts.low ? `${formatPct(counts.low)}%` : null, "low", 3);
-        if (segments.length > 0) {
-          if (isFile) {
-            fileSeveritySegments = segments;
-          } else {
-            fileSeveritySegments = segments;
-          }
-        }
-      }
-    }
-    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
-    if (isFile && formattedNodeAvgScore !== null) {
-      children.push(import_react5.default.createElement("div", {
-        key: "score",
-        className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem" }
-      }, `Complexity: ${formattedNodeAvgScore}`));
-    }
-    if (isFile && fileSeveritySegments) {
-      children.push(import_react5.default.createElement("span", {
-        key: "severity-mix",
-        style: { marginLeft: "0.5rem" }
-      }, fileSeveritySegments));
-    }
-    if (isFolder && formattedNodeAvgScore !== null) {
-      children.push(import_react5.default.createElement("div", {
-        key: "avg-score",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `Avg Score: ${formattedNodeAvgScore}`));
-      if (fileSeveritySegments) {
-        children.push(import_react5.default.createElement("span", {
-          key: "severity-mix-folder",
-          style: { marginLeft: "0.5rem" }
-        }, fileSeveritySegments));
-        fileSeveritySegments = null;
-      }
-    }
-    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
-    if (isEntity && formattedEntityScore !== null) {
-      children.push(import_react5.default.createElement("div", {
-        key: "complexity",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `Complexity: ${formattedEntityScore}`));
-    }
-    if (isEntity && data.lineRange) {
-      children.push(import_react5.default.createElement("div", {
-        key: "lines",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
-    }
-    if (isEntity && data.severityCounts) {
-      const counts = data.severityCounts;
-      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
-      if (total > 0) {
-        const formatPct = (value) => {
-          const pct = (value / total * 100).toFixed(1);
-          return pct.endsWith(".0") ? pct.slice(0, -2) : pct;
-        };
-        const segments = [];
-        const addSegment = (value, severity, idx) => {
-          if (!value)
-            return;
-          const color = getPriorityStyle(severity).color || "var(--text)";
-          if (segments.length > 0) {
-            segments.push(import_react5.default.createElement("span", { key: `dot-ent-${idx}`, style: { color: "rgba(255,255,255,0.8)" } }, " · "));
-          }
-          segments.push(import_react5.default.createElement("span", { key: `seg-ent-${idx}`, style: { color, fontWeight: 600, fontSize: "0.85rem" } }, value));
-        };
-        addSegment(counts.critical ? `${formatPct(counts.critical)}%` : null, "critical", 0);
-        addSegment(counts.high ? `${formatPct(counts.high)}%` : null, "high", 1);
-        addSegment(counts.medium ? `${formatPct(counts.medium)}%` : null, "medium", 2);
-        addSegment(counts.low ? `${formatPct(counts.low)}%` : null, "low", 3);
-        if (segments.length > 0) {
-          children.push(import_react5.default.createElement("span", {
-            key: "severity-mix",
-            style: { marginLeft: "0.5rem" }
-          }, segments));
-        }
-      }
-    }
-    const manualIndent = node.level * 24;
-    const headerRow = import_react5.default.createElement("div", {
-      ref: innerRef ?? undefined,
-      className: `tree-header-row${node.isSelected ? " tree-header-row--selected" : ""}`,
-      role: "treeitem",
-      "aria-level": (node.level ?? 0) + 1,
-      "aria-expanded": shouldShowChevron ? !!node.isOpen : undefined,
-      style: {
-        ...style,
-        display: "flex",
-        alignItems: "center",
-        cursor: shouldShowChevron ? "pointer" : "default",
-        padding: "0.5rem 0.5rem 0.5rem 0px",
-        marginLeft: `${manualIndent}px`,
-        borderRadius: "4px",
-        border: "none",
-        backgroundColor: node.isSelected ? "rgba(99, 102, 241, 0.18)" : "transparent",
-        width: "calc(100% - " + manualIndent + "px)",
-        minHeight: "32px",
-        gap: "0.5rem"
-      },
-      onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
-    }, ...children.filter(Boolean));
-    const shouldShowTooltip = isEntity || isFile || isFolder;
-    if (!shouldShowTooltip) {
-      return headerRow;
     }
     const formatIssue = (issue = {}) => {
       const title = issue.title || issue.category || issue.code || "Issue";
@@ -29741,12 +29592,29 @@ Check the top-level render call using <` + parentName + ">.";
         }
         return value.charAt(0).toUpperCase() + value.slice(1);
       };
+      const shouldShowTooltip2 = isEntity || isFile || isFolder;
+      if (!shouldShowTooltip2) {
+        return null;
+      }
       if (isFolder) {
         const totalFolderIssues = aggregates.totalIssues ?? data.totalIssues ?? data.refactoringNeeded ?? 0;
+        const folderHealth2 = getHealthScore(data);
+        const folderAcceptable2 = formatAcceptableRatio((() => {
+          let maxRatio = null;
+          const visit = (n) => {
+            const r = getComplexityRatio(n);
+            if (r != null && r > (maxRatio ?? -Infinity))
+              maxRatio = r;
+            if (Array.isArray(n?.children))
+              n.children.forEach(visit);
+          };
+          visit(data);
+          return maxRatio;
+        })());
         const metrics2 = [
           {
             label: "Health",
-            value: typeof data.healthScore === "number" ? `${Math.round(data.healthScore * 100)}%` : "—"
+            value: typeof folderHealth2 === "number" ? `${Math.round(folderHealth2 * 100)}%` : "—"
           },
           { label: "Files", value: aggregates.fileCount ?? data.fileCount ?? 0 },
           { label: "Entities", value: aggregates.entityCount ?? data.entityCount ?? 0 },
@@ -29754,8 +29622,8 @@ Check the top-level render call using <` + parentName + ">.";
           { label: "Critical Issues", value: aggregates.severityCounts?.critical ?? data.criticalIssues ?? 0 },
           { label: "High Priority", value: (aggregates.severityCounts?.high || 0) + (aggregates.severityCounts?.critical || 0) }
         ];
-        if (aggregates.avgScore != null) {
-          metrics2.push({ label: "Avg Score", value: aggregates.avgScore });
+        if (folderAcceptable2) {
+          metrics2.push({ label: "Complexity", value: folderAcceptable2 });
         }
         const normalized = [];
         if (data.cyclomatic_complexity != null) {
@@ -29785,15 +29653,20 @@ Check the top-level render call using <` + parentName + ">.";
       if (isFile) {
         const severityCounts = aggregates.severityCounts || {};
         const totalIssues = aggregates.totalIssues ?? data.totalIssues ?? Object.values(severityCounts).reduce((acc, value) => acc + (value || 0), 0);
+        const fileHealth2 = getHealthScore(data);
         const metrics2 = [
           { label: "Priority", value: data.highestPriority || data.priority || "—" },
           {
             label: "Entities",
             value: aggregates.entityCount ?? data.entityCount ?? (data.children ? data.children.filter((child) => child.type === "entity").length : 0)
           },
-          { label: "Issues", value: totalIssues },
-          { label: "Avg Score", value: aggregates.avgScore ?? data.avgScore ?? data.score ?? null }
+          { label: "Health", value: typeof fileHealth2 === "number" ? `${Math.round(fileHealth2 * 100)}%` : "—" },
+          { label: "Issues", value: totalIssues }
         ];
+        const fileAcceptable = formatAcceptableRatio(fileComplexityRatio);
+        if (fileAcceptable) {
+          metrics2.push({ label: "Complexity", value: fileAcceptable });
+        }
         const severityList = [
           { key: "critical", label: "Critical", value: severityCounts.critical || 0 },
           { key: "high", label: "High", value: severityCounts.high || 0 },
@@ -29801,86 +29674,199 @@ Check the top-level render call using <` + parentName + ">.";
           { key: "low", label: "Low", value: severityCounts.low || 0 }
         ].filter((item) => item.value > 0);
         const topEntities = (data.children || []).filter((child) => child.type === "entity").slice(0, 3);
-        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), renderMetrics(metrics2), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, `${item.label}: ${renderValue(item.value)}`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, entity.name, entity.severityCounts && import_react5.default.createElement("div", { className: "issue-summary" }, `${renderValue(entity.severityCounts.critical || 0)} critical · ${renderValue(entity.severityCounts.high || 0)} high`))))));
+        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), renderMetrics(metrics2), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", { className: "issue-heading" }, entity.name), import_react5.default.createElement("div", { className: "issue-summary" }, `Score ${renderValue(entity.score)}`))))));
       }
-      const issues = Array.isArray(data.issues) ? data.issues : [];
-      const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
-      const topIssuesRaw = issues.slice().sort((a, b) => (b?.severity ?? 0) - (a?.severity ?? 0)).slice(0, 3);
-      const topIssues = topIssuesRaw.map(formatIssue);
-      const formattedSuggestions = suggestions.slice(0, 2).map(formatSuggestion);
-      const featureMap = new Map;
-      topIssuesRaw.forEach((issue) => {
-        const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
-        features.forEach((feature) => {
-          const name = (feature?.feature_name || "").trim();
-          if (!name)
-            return;
-          const normalizedName = name.replace(/_/g, " ");
-          const value = feature?.value;
-          if (!featureMap.has(normalizedName)) {
-            featureMap.set(normalizedName, new Set);
-          }
-          if (value != null) {
-            featureMap.get(normalizedName).add(value);
-          }
-        });
-      });
-      const featureSummary = Array.from(featureMap.entries()).map(([name, values]) => ({
-        name,
-        values: Array.from(values).slice(0, 3)
-      }));
-      const highestSeverity = topIssuesRaw.length > 0 ? topIssuesRaw[0].severity ?? null : null;
-      const coverage = data.coverage || {};
+      const issues = Array.isArray(data.issues) ? data.issues.map(formatIssue) : [];
+      const suggestions = Array.isArray(data.suggestions) ? data.suggestions.map(formatSuggestion) : [];
+      const topIssues = issues.filter((issue) => issue.severity !== "—").sort((a, b) => Number(b.severity) - Number(a.severity)).slice(0, 3);
+      const formattedSuggestions = suggestions.sort((a, b) => {
+        const impactA = (data.suggestions || [])[suggestions.indexOf(a)]?.impact ?? 0;
+        const impactB = (data.suggestions || [])[suggestions.indexOf(b)]?.impact ?? 0;
+        return impactB - impactA;
+      }).slice(0, 3);
+      const entityAcceptable2 = formatAcceptableRatio(getComplexityRatio(data));
       const metrics = [
         { label: "Priority", value: data.priority || data.highestPriority || "—" },
-        { label: "Score", value: data.score ?? formattedEntityScore },
-        { label: "Confidence", value: data.confidence != null ? `${Math.round(data.confidence * 100)}%` : "—" },
-        { label: "Issues", value: issues.length ?? 0 },
-        { label: "Suggestions", value: suggestions.length ?? 0 },
-        { label: "Peak Severity", value: highestSeverity }
+        { label: "Complexity", value: entityAcceptable2 || formattedEntityScore || "—" },
+        { label: "Issues", value: issues.length || "—" },
+        { label: "Suggestions", value: suggestions.length || "—" }
       ];
-      const featureLookup = (name) => {
-        const feats = [];
-        topIssuesRaw.forEach((issue) => {
-          const features = Array.isArray(issue?.contributing_features) ? issue.contributing_features : [];
-          features.forEach((f) => {
-            if ((f.feature_name || "").toLowerCase() === name) {
-              feats.push(f.value);
-            }
-          });
-        });
-        return feats.length ? feats[0] : null;
-      };
-      const ccVal = featureLookup("cyclomatic_complexity");
-      const cogVal = featureLookup("cognitive_complexity");
-      const miVal = featureLookup("maintainability_index");
-      const tdVal = featureLookup("technical_debt_score");
-      const normalizedMetrics = [];
-      const ccNorm = fmtPct(ccPct(ccVal));
-      if (ccNorm)
-        normalizedMetrics.push({ label: "Cyclomatic", value: ccNorm });
-      const cogNorm = fmtPct(cogPct(cogVal));
-      if (cogNorm)
-        normalizedMetrics.push({ label: "Cognitive", value: cogNorm });
-      const miNorm = fmtPct(miPct(miVal));
-      if (miNorm)
-        normalizedMetrics.push({ label: "MI", value: miNorm });
-      const tdNorm = fmtPct(tdPct(tdVal));
-      if (tdNorm)
-        normalizedMetrics.push({ label: "Debt", value: tdNorm });
-      metrics.push(...normalizedMetrics);
-      if (coverage.linesOfCode != null) {
-        metrics.push({ label: "Lines of Code", value: coverage.linesOfCode });
-      }
-      if (coverage.coverageBefore != null) {
-        metrics.push({ label: "Coverage Before", value: `${(coverage.coverageBefore * 100).toFixed(1)}%` });
-      }
-      if (coverage.coverageAfter != null) {
-        metrics.push({ label: "Coverage After", value: `${(coverage.coverageAfter * 100).toFixed(1)}%` });
-      }
-      return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Function"), renderMetrics(metrics), featureSummary.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Signals"), import_react5.default.createElement("table", { className: "feature-table" }, import_react5.default.createElement("tbody", null, featureSummary.map(({ name, values }) => import_react5.default.createElement("tr", { key: name }, import_react5.default.createElement("th", null, name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())), import_react5.default.createElement("td", null, values.length ? values.map((val) => renderValue(val)).join(", ") : "—")))))), topIssues.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Issues"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topIssues.map((issue, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-heading" }, `${issue.title} (Severity ${issue.severity})`), issue.summary && import_react5.default.createElement("div", { className: "issue-summary" }, issue.summary))))), formattedSuggestions.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Suggestions"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, formattedSuggestions.map((suggestion, idx) => import_react5.default.createElement("li", { key: idx, className: "suggestion-item" }, suggestion.heading && import_react5.default.createElement("div", { className: "suggestion-summary" }, suggestion.heading), suggestion.meta && import_react5.default.createElement("div", { className: "issue-summary" }, suggestion.meta), suggestion.summary && import_react5.default.createElement("div", { className: "issue-summary" }, suggestion.summary))))));
+      return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Entity"), import_react5.default.createElement("ul", { className: "tooltip-metrics" }, metrics.map(({ label, value }) => import_react5.default.createElement("li", { key: label }, import_react5.default.createElement("span", { className: "metric-label" }, label), import_react5.default.createElement("span", { className: "metric-value" }, renderValue(value))))), topIssues.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Issues"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topIssues.map((issue, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-heading" }, `${issue.title} (Severity ${issue.severity})`), issue.summary && import_react5.default.createElement("div", { className: "issue-summary" }, issue.summary))))), formattedSuggestions.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Suggestions"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, formattedSuggestions.map((suggestion, idx) => import_react5.default.createElement("li", { key: idx, className: "suggestion-item" }, suggestion.heading && import_react5.default.createElement("div", { className: "suggestion-summary" }, suggestion.heading), suggestion.meta && import_react5.default.createElement("div", { className: "issue-summary" }, suggestion.meta), suggestion.summary && import_react5.default.createElement("div", { className: "issue-summary" }, suggestion.summary))))));
     };
-    return import_react5.default.createElement(Tooltip_default, { content: tooltipContent, placement: "bottom" }, headerRow);
+    if (shouldShowChevron && hasChildren) {
+      children.push(import_react5.default.createElement("span", {
+        key: "chevron",
+        className: "tree-chevron",
+        "data-expanded": node.isOpen ? "true" : "false",
+        style: {
+          width: "16px",
+          height: "16px",
+          marginRight: "0.25rem",
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--tree-muted, rgba(148,163,184,0.8))",
+          fontSize: "12px",
+          userSelect: "none"
+        },
+        onClick: (e) => {
+          e.stopPropagation();
+          toggleNode(node.id);
+        },
+        role: "presentation"
+      }, renderChevronIcon()));
+    } else {
+      children.push(import_react5.default.createElement("div", {
+        key: "spacer",
+        style: { width: "1rem", marginRight: "0.25rem" }
+      }));
+    }
+    const shouldShowTooltip = isEntity || isFile || isFolder;
+    let iconName = "function-square";
+    let iconFallbackSymbol = "*";
+    if (isFolder) {
+      iconName = "folder";
+      iconFallbackSymbol = "[F]";
+    } else if (isFile) {
+      iconName = "file-code";
+      iconFallbackSymbol = "<>";
+    } else if (isCategory) {
+      iconName = "layers";
+      iconFallbackSymbol = "[C]";
+    }
+    const iconElement = import_react5.default.createElement("i", {
+      "data-lucide": iconName,
+      key: "icon",
+      ref: (el) => registerIcon(el, iconFallbackSymbol),
+      className: "tree-icon",
+      style: { marginRight: "0.5rem" }
+    });
+    const labelText = data.name;
+    const labelElement = import_react5.default.createElement("span", {
+      key: "label",
+      style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit", minWidth: 0 }
+    }, labelText);
+    if (shouldShowTooltip) {
+      children.push(import_react5.default.createElement(Tooltip_default, { key: "label-tooltip", content: tooltipContent, placement: "bottom" }, import_react5.default.createElement("span", {
+        className: "tree-label-with-icon",
+        style: { display: "inline-flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: 0 }
+      }, [iconElement, labelElement])));
+    } else {
+      children.push(iconElement);
+      children.push(labelElement);
+    }
+    const folderHealth = isFolder ? getHealthScore(data) : null;
+    if (isFolder && folderHealth !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "health",
+        className: "tree-badge tree-badge-low complexity-score",
+        style: { marginLeft: "0.5rem", color: getHealthColor(folderHealth) }
+      }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
+    }
+    const fileHealth = isFile ? getHealthScore(data) : null;
+    if (isFile && fileHealth !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "file-health",
+        className: "tree-badge tree-badge-low complexity-score",
+        style: { marginLeft: "0.5rem", color: getHealthColor(fileHealth) }
+      }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
+    }
+    if (isFolder && aggregates.totalIssues > 0) {
+      children.push(import_react5.default.createElement("div", {
+        key: "issues",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" }
+      }, `${aggregates.totalIssues} issues`));
+    }
+    if (data.priority || data.highestPriority) {
+      const priority = data.priority || data.highestPriority;
+      children.push(import_react5.default.createElement("div", {
+        key: "priority",
+        className: "tree-badge",
+        style: {
+          marginLeft: "0.5rem",
+          ...getPriorityStyle(priority)
+        }
+      }, priority));
+    }
+    let fileSeverityBar = null;
+    if ((isFolder || isFile) && aggregates.severityCounts) {
+      fileSeverityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
+    }
+    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
+    const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
+    const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
+    if (isFile && formattedNodeAvgScore !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "score",
+        className: "tree-badge tree-badge-low complexity-score",
+        style: { marginLeft: "0.5rem" }
+      }, formattedNodeAcceptable ? `Complexity: ${formattedNodeAcceptable}` : `Complexity: ${formattedNodeAvgScore}`));
+    }
+    if (isFile && fileSeverityBar) {
+      children.push(fileSeverityBar);
+    }
+    const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
+    const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
+    if (isFolder && formattedNodeAvgScore !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "avg-score",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" },
+        title: "Average complexity score across entities in this folder"
+      }, folderAcceptable ? `Complexity: ${folderAcceptable}` : `Avg Score: ${formattedNodeAvgScore}`));
+      if (fileSeverityBar) {
+        children.push(fileSeverityBar);
+        fileSeverityBar = null;
+      }
+    }
+    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
+    const entityAcceptable = formatAcceptableRatio(getMaxComplexityRatio(data));
+    if (isEntity && formattedEntityScore !== null) {
+      children.push(import_react5.default.createElement("div", {
+        key: "complexity",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" }
+      }, entityAcceptable ? `Complexity: ${entityAcceptable}` : `Complexity: ${formattedEntityScore}`));
+    }
+    if (isEntity && data.lineRange) {
+      children.push(import_react5.default.createElement("div", {
+        key: "lines",
+        className: "tree-badge tree-badge-low",
+        style: { marginLeft: "0.5rem" }
+      }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
+    }
+    if (isEntity && data.severityCounts) {
+      const severityBar = buildSeverityBar(data.severityCounts, `${node.id}-entity-severity`);
+      if (severityBar) {
+        children.push(severityBar);
+      }
+    }
+    const manualIndent = node.level * 24;
+    const headerRow = import_react5.default.createElement("div", {
+      ref: innerRef ?? undefined,
+      className: `tree-header-row${node.isSelected ? " tree-header-row--selected" : ""}`,
+      role: "treeitem",
+      "aria-level": (node.level ?? 0) + 1,
+      "aria-expanded": shouldShowChevron ? !!node.isOpen : undefined,
+      style: {
+        ...style,
+        display: "flex",
+        alignItems: "center",
+        cursor: shouldShowChevron ? "pointer" : "default",
+        padding: "0.5rem 0.5rem 0.5rem 0px",
+        marginLeft: `${manualIndent}px`,
+        borderRadius: "4px",
+        border: "none",
+        backgroundColor: node.isSelected ? "rgba(99, 102, 241, 0.18)" : "transparent",
+        width: "calc(100% - " + manualIndent + "px)",
+        minHeight: "32px",
+        gap: "0.5rem"
+      },
+      onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
+    }, ...children.filter(Boolean));
+    return headerRow;
   };
 
   // src/tree-component/treeUtils.js
@@ -30899,18 +30885,54 @@ Check the top-level render call using <` + parentName + ">.";
     import_react6.useEffect(() => {
       try {
         if (data && typeof data === "object") {
-          const candidates = Array.isArray(data.refactoring_candidates) ? data.refactoring_candidates : Array.isArray(data.refactoringCandidates) ? data.refactoringCandidates : [];
-          console.info("[CodeAnalysisTree] refactoring candidates received:", candidates.length);
+          const unifiedHierarchy = Array.isArray(data.unifiedHierarchy) ? data.unifiedHierarchy : Array.isArray(data.unified_hierarchy) ? data.unified_hierarchy : [];
+          if (unifiedHierarchy.length > 0) {
+            const hierarchy = JSON.parse(JSON.stringify(unifiedHierarchy));
+            const aggregated = aggregateTreeMetrics(hierarchy);
+            const annotated2 = annotateNodesWithDictionary(aggregated);
+            const normalized2 = normalizeTreeData(annotated2);
+            const aggregatedNormalized2 = aggregateTreeMetrics(normalized2);
+            const sorted2 = sortNodesByPriority(aggregatedNormalized2);
+            console.info("[CodeAnalysisTree] using unifiedHierarchy; nodes:", sorted2.length);
+            setTreeData(sorted2);
+            return;
+          }
+          const groups = Array.isArray(data.refactoring_candidates_by_file) ? data.refactoring_candidates_by_file : Array.isArray(data.refactoringCandidatesByFile) ? data.refactoringCandidatesByFile : null;
+          const toCandidatesFromGroups = (fileGroups2) => {
+            if (!Array.isArray(fileGroups2))
+              return [];
+            const result = [];
+            fileGroups2.forEach((group) => {
+              const filePath = group.file_path || group.filePath || group.path || "";
+              (group.entities || []).forEach((entity) => {
+                result.push({
+                  ...entity,
+                  file_path: filePath,
+                  filePath
+                });
+              });
+            });
+            return result;
+          };
+          let candidates = Array.isArray(data.refactoring_candidates) ? data.refactoring_candidates : Array.isArray(data.refactoringCandidates) ? data.refactoringCandidates : [];
+          if ((!candidates || candidates.length === 0) && groups) {
+            candidates = toCandidatesFromGroups(groups);
+          }
           const coveragePacks = Array.isArray(data.coverage_packs) ? data.coverage_packs : Array.isArray(data.coveragePacks) ? data.coveragePacks : [];
-          const fileGroups = groupCandidatesByFile(candidates);
-          console.info("[CodeAnalysisTree] file groups built:", fileGroups.length);
-          const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
-          console.info("[CodeAnalysisTree] initial tree structure size:", treeStructure.length);
+          const fileGroups = Array.isArray(groups) && groups.length > 0 ? groups.map((g) => ({
+            filePath: g.file_path || g.filePath || g.path || "",
+            fileName: g.file_name || g.fileName || (g.file_path || "").split(/[\\/]/).pop() || "",
+            entityCount: g.entity_count ?? g.entityCount ?? (g.entities ? g.entities.length : 0),
+            avgScore: g.avg_score ?? g.avgScore ?? 0,
+            totalIssues: g.total_issues ?? g.totalIssues ?? 0,
+            highestPriority: g.highest_priority ?? g.highestPriority ?? "Low",
+            entities: g.entities || []
+          })) : groupCandidatesByFile(candidates);
+          const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks);
           const annotated = annotateNodesWithDictionary(treeStructure);
           const normalized = normalizeTreeData(annotated);
           const aggregatedNormalized = aggregateTreeMetrics(normalized);
           const sorted = sortNodesByPriority(aggregatedNormalized);
-          console.info("[CodeAnalysisTree] final tree nodes:", sorted.length);
           setTreeData(sorted);
         } else {
           setTreeData([]);
@@ -31030,7 +31052,7 @@ Check the top-level render call using <` + parentName + ">.";
     const treeContainerProps = {
       className: "tree-scroll-container",
       role: "tree",
-      "aria-label": "Code analysis tree",
+      "aria-label": "Complexity analysis tree",
       style: {
         height: 600,
         width: "100%",
@@ -31084,21 +31106,277 @@ Check the top-level render call using <` + parentName + ">.";
     }))));
   };
 
+  // src/tree-component/ClonePairsPanel.jsx
+  var import_react7 = __toESM(require_react(), 1);
+  var jsx_dev_runtime2 = __toESM(require_jsx_dev_runtime(), 1);
+  var chunk = (items, size4) => {
+    const rows = [];
+    for (let i = 0;i < items.length; i += size4) {
+      rows.push(items.slice(i, i + size4));
+    }
+    return rows;
+  };
+  var ClonePairsPanel = ({ pairs = [] }) => {
+    const containerRef = import_react7.useRef(null);
+    const [columns, setColumns] = import_react7.useState(3);
+    import_react7.useEffect(() => {
+      const el = containerRef.current;
+      if (!el)
+        return;
+      const compute = () => {
+        const w = el.clientWidth || window.innerWidth;
+        if (w >= 1500)
+          setColumns(3);
+        else if (w >= 1100)
+          setColumns(2);
+        else
+          setColumns(1);
+      };
+      compute();
+      const ro = new ResizeObserver(compute);
+      ro.observe(el);
+      window.addEventListener("resize", compute);
+      return () => {
+        ro.disconnect();
+        window.removeEventListener("resize", compute);
+      };
+    }, []);
+    const rows = import_react7.useMemo(() => chunk(pairs, columns), [pairs, columns]);
+    const rowVirtualizer = useVirtualizer({
+      count: rows.length,
+      getScrollElement: () => containerRef.current,
+      estimateSize: () => 140,
+      overscan: 8
+    });
+    const renderCard = (pair, key) => {
+      const colWidth = columns === 1 ? "100%" : `calc((100% - ${(columns - 1) * 8}px) / ${columns})`;
+      const pathParts = (p) => {
+        const path = p?.path || "";
+        const split = path.split(/[/\\]/);
+        return { file: split.pop() || path, dir: split.join("/") || "—" };
+      };
+      const rangeTxt = (rng) => Array.isArray(rng) && rng.length > 1 ? `${rng[0]}–${rng[1]}` : "";
+      const src = pathParts(pair.source || {});
+      const tgt = pathParts(pair.target || {});
+      const simPct = Math.round((pair.similarity ?? pair.verification?.similarity ?? 0) * 100);
+      const vSim = pair.verification?.similarity != null ? Math.round((pair.verification.similarity || 0) * 100) : null;
+      return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+        className: "clone-card",
+        style: {
+          flex: "0 0 calc(50% - 4px)",
+          minWidth: "calc(50% - 4px)",
+          boxSizing: "border-box",
+          padding: "8px 8px"
+        },
+        children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          style: {
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.026)",
+            borderRadius: 8,
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4
+          },
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+              style: {
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gridAutoRows: "auto",
+                gap: 10,
+                width: "100%",
+                marginBottom: 4
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                  style: { display: "flex", flexDirection: "column", gap: 1, minWidth: 0 },
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: "#60a5fa" },
+                      children: "Source"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { fontWeight: 700, color: "#e5e7eb", fontSize: 13, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: src.file
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { color: "#94a3b8", fontSize: 12, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: src.dir
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { color: "#cbd5e1", fontSize: 12, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: (pair.source?.name || "—") + (rangeTxt(pair.source?.range) ? ` · ${rangeTxt(pair.source.range)}` : "")
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                  style: { display: "flex", flexDirection: "column", gap: 1, minWidth: 0 },
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: "#f43f5e" },
+                      children: "Target"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { fontWeight: 700, color: "#e5e7eb", fontSize: 13, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: tgt.file
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { color: "#94a3b8", fontSize: 12, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: tgt.dir
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+                      style: { color: "#cbd5e1", fontSize: 12, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+                      children: (pair.target?.name || "—") + (rangeTxt(pair.target?.range) ? ` · ${rangeTxt(pair.target.range)}` : "")
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+              style: { display: "flex", gap: 10, flexWrap: "nowrap", fontSize: 12, color: "#94a3b8", justifyContent: "space-between", alignItems: "center" },
+              children: [
+                pair.verification?.edit_cost != null ? /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                  children: [
+                    "Edit cost: ",
+                    pair.verification.edit_cost
+                  ]
+                }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {}, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                  style: { fontWeight: 600, whiteSpace: "nowrap" },
+                  children: [
+                    "Similarity: ",
+                    simPct,
+                    "%"
+                  ]
+                }, undefined, true, undefined, this),
+                Array.isArray(pair.verification?.node_counts) ? /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                  children: [
+                    "Nodes: ",
+                    pair.verification.node_counts.join(" / ")
+                  ]
+                }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {}, undefined, false, undefined, this),
+                pair.verification?.truncated ? /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                  style: { color: "#f59e0b" },
+                  children: "Truncated AST"
+                }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {}, undefined, false, undefined, this),
+                vSim != null ? /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                  style: { fontWeight: 600, whiteSpace: "nowrap" },
+                  children: [
+                    "APTED: ",
+                    vSim,
+                    "%"
+                  ]
+                }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {}, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, undefined, true, undefined, this)
+      }, key, false, undefined, this);
+    };
+    const virtualItems = rowVirtualizer.getVirtualItems();
+    return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+      ref: containerRef,
+      style: {
+        position: "relative",
+        height: 360,
+        overflowX: "hidden",
+        overflowY: "auto",
+        background: "transparent",
+        borderRadius: 12,
+        padding: "4px 2px",
+        scrollbarWidth: "thin",
+        scrollbarColor: "rgba(148,163,184,0.45) transparent"
+      },
+      children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+        style: {
+          height: `${rowVirtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+          overflow: "hidden"
+        },
+        children: virtualItems.map((virtualRow) => {
+          const row = rows[virtualRow.index];
+          return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+            style: {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${virtualRow.start}px)`,
+              height: `${virtualRow.size}px`,
+              display: "flex",
+              gap: 6,
+              flexWrap: "nowrap",
+              overflow: "hidden",
+              paddingRight: 4
+            },
+            children: row.map((pair, idx) => renderCard(pair, `${virtualRow.index}-${idx}`))
+          }, virtualRow.key, false, undefined, this);
+        })
+      }, undefined, false, undefined, this)
+    }, undefined, false, undefined, this);
+  };
+
   // src/tree-component/index.js
   var tree_component_default = CodeAnalysisTree;
   if (typeof window !== "undefined") {
-    window.React = import_react7.default;
+    if (typeof window.ReactTreeBundle === "function") {
+      window.ReactTreeBundle = { CodeAnalysisTree: window.ReactTreeBundle };
+    } else {
+      window.ReactTreeBundle = window.ReactTreeBundle || {};
+    }
+    window.React = import_react8.default;
     window.ReactDOM = import_client.default;
     window.CodeAnalysisTree = CodeAnalysisTree;
-    window.ReactTreeBundle = CodeAnalysisTree;
+    window.ReactTreeBundle.CodeAnalysisTree = CodeAnalysisTree;
     window.transformTreeData = transformTreeData;
     window.validateTreeData = validateTreeData;
     window.getSeverityLevel = getSeverityLevel;
     window.countSeverityLevels = countSeverityLevels;
     window.generateNodeId = generateNodeId;
     window.filterBySeverity = filterBySeverity;
+    window.ReactTreeBundle.mountTree = (data, containerId = "react-tree-root") => {
+      const container = document.getElementById(containerId);
+      if (!container)
+        return;
+      const root = import_client.default.createRoot(container);
+      root.render(import_react8.default.createElement(CodeAnalysisTree, { data }));
+    };
+    window.ReactTreeBundle.mountClonePairs = (pairs, containerId = "clone-pairs-root") => {
+      const container = document.getElementById(containerId);
+      if (!container)
+        return;
+      const root = import_client.default.createRoot(container);
+      root.render(import_react8.default.createElement(ClonePairsPanel, { pairs }));
+    };
+    if (typeof window.ValknutMountClonePairs !== "function") {
+      window.ValknutMountClonePairs = (pairs, containerId = "clone-pairs-root") => {
+        const container = document.getElementById(containerId);
+        if (!container)
+          return;
+        const root = import_client.default.createRoot(container);
+        root.render(import_react8.default.createElement(ClonePairsPanel, { pairs }));
+      };
+    }
+    window.addEventListener("DOMContentLoaded", () => {
+      const pairScript = document.getElementById("clone-pairs-data");
+      const pairRoot = document.getElementById("clone-pairs-root");
+      if (pairScript && pairRoot) {
+        try {
+          const pairs = JSON.parse(pairScript.textContent || "[]") || [];
+          if (typeof window.ValknutMountClonePairs === "function") {
+            window.ValknutMountClonePairs(pairs);
+          } else {
+            window.ReactTreeBundle.mountClonePairs(pairs);
+          }
+        } catch (err) {
+          console.error("[Valknut] Failed to parse clone pairs payload", err);
+        }
+      }
+    });
   }
 })();
 
-//# debugId=F6732373DE1B8BA464756E2164756E21
+//# debugId=EA4F22C43F998BD164756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

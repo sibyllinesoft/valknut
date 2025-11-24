@@ -416,6 +416,10 @@ pub struct CloneAnalysisResults {
     /// Additional context to explain missing fields or configuration
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+
+    /// Reported clone pairs (as emitted by LSH analysis)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clone_pairs: Vec<serde_json::Value>,
 }
 
 /// Statistics for filtering performed by each denoising phase

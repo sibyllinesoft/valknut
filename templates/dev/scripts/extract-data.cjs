@@ -4,7 +4,7 @@ const cheerio = require('cheerio');
 
 // Paths relative to scripts/
 const reportsDir = path.join(__dirname, '../../../.valknut');
-const preferredReport = path.join(reportsDir, 'team_report.html');
+const preferredReport = path.join(__dirname, '../public/report-dev.html');
 const publicDataPath = path.join(__dirname, '../public/data.json');
 const localDataDir = path.join(__dirname, '../data');
 const localTreeDataPath = path.join(localDataDir, 'tree-data.json');

@@ -1,7 +1,7 @@
 //! Individual analysis stages for the pipeline.
 
-use futures::future;
 use async_trait::async_trait;
+use futures::future;
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::hash_map::Entry;
@@ -910,14 +910,23 @@ impl AnalysisStages {
             };
 
             let clone_pair_count = clone_pairs.len();
-            let clone_pairs = clone_pairs
-                .into_iter()
-                .filter_map(|pair| serde_json::to_value(pair).ok())
-                .collect();
+            let mut serialized_pairs = Vec::with_capacity(clone_pairs.len());
+
+            for pair in clone_pairs {
+                match serde_json::to_value(&pair) {
+                    Ok(value) => serialized_pairs.push(value),
+                    Err(e) => {
+                        warn!(
+                            "Failed to serialize clone pair {} -> {}: {}",
+                            pair.source.id, pair.target.id, e
+                        );
+                    }
+                }
+            }
 
             Ok(LshAnalysisResults {
                 enabled: true,
-                clone_pairs,
+                clone_pairs: serialized_pairs,
                 max_similarity,
                 avg_similarity,
                 duplicate_count: clone_pair_count,

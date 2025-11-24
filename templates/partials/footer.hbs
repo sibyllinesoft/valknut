@@ -149,6 +149,29 @@
         lucide.createIcons();
     });
 
+    // Simple accordion toggle for report sections using lucide chevrons
+    function initAccordions() {
+        const headings = document.querySelectorAll('.accordion-heading');
+        headings.forEach((heading) => {
+            heading.addEventListener('click', () => {
+                const targetId = heading.getAttribute('data-target');
+                const body = targetId ? document.getElementById(targetId) : heading.nextElementSibling;
+                if (!body) return;
+                const isOpen = body.style.display !== 'none';
+                const nextState = !isOpen;
+                body.style.display = nextState ? 'block' : 'none';
+                heading.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+                const icon = heading.querySelector('.accordion-icon');
+                if (icon) {
+                    icon.setAttribute('data-lucide', nextState ? 'chevron-down' : 'chevron-right');
+                }
+                if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                    window.lucide.createIcons();
+                }
+            });
+        });
+    }
+
     // Oracle phase toggle functionality
     function togglePhase(element) {
         const phaseCard = element.closest('.phase-card');
@@ -163,6 +186,8 @@
             chevron.setAttribute('data-expanded', 'false');
         }
     }
+
+    document.addEventListener('DOMContentLoaded', initAccordions);
 
     // Helper function to capitalize strings (for Handlebars templates that might need it)
     function capitalize(str) {

@@ -1103,13 +1103,57 @@ export const CodeAnalysisTree = ({ data }) => {
     useEffect(() => {
         try {
             if (data && typeof data === 'object') {
-                const candidates = Array.isArray(data.refactoring_candidates)
+
+                const unifiedHierarchy = Array.isArray(data.unifiedHierarchy)
+                    ? data.unifiedHierarchy
+                    : Array.isArray(data.unified_hierarchy)
+                        ? data.unified_hierarchy
+                        : [];
+
+                if (unifiedHierarchy.length > 0) {
+                    const hierarchy = JSON.parse(JSON.stringify(unifiedHierarchy));
+                    const aggregated = aggregateTreeMetrics(hierarchy);
+                    const annotated = annotateNodesWithDictionary(aggregated);
+                    const normalized = normalizeTreeData(annotated);
+                    const aggregatedNormalized = aggregateTreeMetrics(normalized);
+                    const sorted = sortNodesByPriority(aggregatedNormalized);
+                    console.info('[CodeAnalysisTree] using unifiedHierarchy; nodes:', sorted.length);
+                    setTreeData(sorted);
+                    return;
+                }
+
+                // Fallback 1: groups precomputed by backend
+                const groups = Array.isArray(data.refactoring_candidates_by_file)
+                    ? data.refactoring_candidates_by_file
+                    : Array.isArray(data.refactoringCandidatesByFile)
+                        ? data.refactoringCandidatesByFile
+                        : null;
+
+                const toCandidatesFromGroups = (fileGroups) => {
+                    if (!Array.isArray(fileGroups)) return [];
+                    const result = [];
+                    fileGroups.forEach((group) => {
+                        const filePath = group.file_path || group.filePath || group.path || '';
+                        (group.entities || []).forEach((entity) => {
+                            result.push({
+                                ...entity,
+                                file_path: filePath,
+                                filePath: filePath,
+                            });
+                        });
+                    });
+                    return result;
+                };
+
+                let candidates = Array.isArray(data.refactoring_candidates)
                     ? data.refactoring_candidates
                     : Array.isArray(data.refactoringCandidates)
                         ? data.refactoringCandidates
                         : [];
 
-                console.info('[CodeAnalysisTree] refactoring candidates received:', candidates.length);
+                if ((!candidates || candidates.length === 0) && groups) {
+                    candidates = toCandidatesFromGroups(groups);
+                }
 
                 const coveragePacks = Array.isArray(data.coverage_packs)
                     ? data.coverage_packs
@@ -1117,15 +1161,27 @@ export const CodeAnalysisTree = ({ data }) => {
                         ? data.coveragePacks
                         : [];
 
-                const fileGroups = groupCandidatesByFile(candidates);
-                console.info('[CodeAnalysisTree] file groups built:', fileGroups.length);
-                const treeStructure = buildTreeData(fileGroups, null, coveragePacks);
-                console.info('[CodeAnalysisTree] initial tree structure size:', treeStructure.length);
+                const fileGroups = Array.isArray(groups) && groups.length > 0
+                    ? groups.map((g) => ({
+                        filePath: g.file_path || g.filePath || g.path || '',
+                        fileName: g.file_name || g.fileName || (g.file_path || '').split(/[\\/]/).pop() || '',
+                        entityCount: g.entity_count ?? g.entityCount ?? (g.entities ? g.entities.length : 0),
+                        avgScore: g.avg_score ?? g.avgScore ?? 0,
+                        totalIssues: g.total_issues ?? g.totalIssues ?? 0,
+                        highestPriority: g.highest_priority ?? g.highestPriority ?? 'Low',
+                        entities: g.entities || [],
+                    }))
+                    : groupCandidatesByFile(candidates);
+
+                const treeStructure = buildTreeData(
+                    fileGroups,
+                    data.directory_health_tree || data.directoryHealthTree || null,
+                    coveragePacks
+                );
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
                 const aggregatedNormalized = aggregateTreeMetrics(normalized);
                 const sorted = sortNodesByPriority(aggregatedNormalized);
-                console.info('[CodeAnalysisTree] final tree nodes:', sorted.length);
                 setTreeData(sorted);
             } else {
                 setTreeData([]);
@@ -1262,10 +1318,10 @@ export const CodeAnalysisTree = ({ data }) => {
         window.__VALKNUT_TREE_DATA_SNAPSHOT = treeData;
     }
 
-  const treeContainerProps = {
+    const treeContainerProps = {
     className: 'tree-scroll-container',
     role: 'tree',
-    'aria-label': 'Code analysis tree',
+    'aria-label': 'Complexity analysis tree',
     style: {
       height: 600,
       width: '100%',

@@ -976,7 +976,6 @@ impl ExtractorRegistry {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::pipeline::DefaultResultAggregator;
     use super::*;
     use crate::core::config::ValknutConfig;
     use crate::core::featureset::FeatureVector;
@@ -987,6 +986,7 @@ mod tests {
         LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
     };
     use crate::core::pipeline::result_types::AnalysisSummary;
+    use crate::core::pipeline::DefaultResultAggregator;
     use crate::core::scoring::{Priority, ScoringResult};
     use crate::detectors::complexity::{
         ComplexityAnalysisResult, ComplexityIssue, ComplexityMetrics, ComplexitySeverity,
