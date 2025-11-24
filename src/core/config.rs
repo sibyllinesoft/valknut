@@ -1595,7 +1595,7 @@ impl Default for DedupeConfig {
                 "**/*.pb.rs".to_string(),
             ],
             min_function_tokens: 40,
-            min_ast_nodes: 35,
+            min_ast_nodes: 5,
             min_match_tokens: 24,
             min_match_coverage: 0.40,
             shingle_k: 9,

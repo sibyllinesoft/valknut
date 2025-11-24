@@ -103,7 +103,7 @@ impl AnalysisPipeline {
                 // Create LSH extractor with denoising configuration
                 let mut dedupe_config = DedupeConfig::default();
                 dedupe_config.min_function_tokens = valknut_config.denoise.min_function_tokens;
-                dedupe_config.min_ast_nodes = valknut_config.denoise.min_match_tokens; // Mapping to closest field
+                dedupe_config.min_ast_nodes = 5; // default minimum AST nodes for similarity
                 dedupe_config.shingle_k = valknut_config.lsh.shingle_size;
                 dedupe_config.threshold_s = valknut_config.denoise.similarity;
 
