@@ -794,7 +794,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             : [];
         const suggestionText = suggestionTexts[0] || null;
 
-        const shouldShowTooltip = isEntity || isFile || isFolder;
+        const shouldShowTooltip = isEntity || isFile;
         if (!shouldShowTooltip) {
             return null;
         }
@@ -1188,10 +1188,10 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             style: { width: '1rem', marginRight: '0.25rem' }
         }));
     }
-    
-    const shouldShowTooltip = isEntity || isFile || isFolder;
 
-    // Icon + label (tooltip only on this cluster)
+    const shouldShowTooltip = isEntity || isFile;
+
+    // Icon + label (tooltip only on entities and files, not folders)
     let iconName = 'function-square'; // default for entities
     let iconFallbackSymbol = '*';
     if (isFolder) {
