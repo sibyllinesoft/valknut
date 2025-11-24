@@ -17,8 +17,8 @@
             <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
             <input id="treemap-max-scale" type="number" value="100" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
         </div>
-        <div id="treemap-color-desc" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
-            Aggregated complexity severity per entity; higher = more complex.
+        <div id="treemap-color-desc" style="font-size: 0.85rem; color: rgba(148,163,184,0.85); margin-bottom: 0.5rem;">
+            Complexity: severity derived from cyclomatic/cognitive complexity (higher = more complex).
         </div>
         <div id="treemap-root" style="width: 100%; min-height: 420px;"></div>
         <script id="treemap-data" type="application/json">
@@ -41,11 +41,11 @@
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
 
                 const metricDescriptions = {
-                    complexity: 'Aggregated complexity severity per entity; higher = more complex.',
-                    cognitive: 'Cognitive complexity severity (hard-to-follow code).',
-                    debt: 'Technical debt severity estimate.',
-                    maintainability: 'Maintainability/MI-derived severity (lower MI → higher severity).',
-                    structure: 'Structural issue severity (modularity/organization).'
+                    complexity: 'Complexity: combined cyclomatic & cognitive complexity severities; higher = more branching/logic to simplify.',
+                    cognitive: 'Cognitive: focuses on how hard the code is to mentally follow (nesting, deep conditionals, tricky flow).',
+                    debt: 'Debt: technical debt severity derived from debt score and contributing factors; higher = more costly to fix later.',
+                    maintainability: 'Maintainability: severity inverted from maintainability index; higher = harder to sustain over time.',
+                    structure: 'Structure: severity for structural issues (coupling, cohesion, file/module organization).'
                 };
 
                 function getLinesOfCode(entity) {
