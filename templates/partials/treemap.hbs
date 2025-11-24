@@ -187,13 +187,7 @@
                         values,
                         marker: {
                             colors,
-                            colorscale: [
-                                [0, '#6b7280'],
-                                [0.5, '#8b4513'],
-                                [1, '#991b1b']
-                            ],
-                            cmin: 0,
-                            cmax: maxScale
+                            coloraxis: 'coloraxis'
                         },
                         coloraxis: 'coloraxis',
                         branchvalues: 'total',
@@ -202,24 +196,29 @@
                     };
 
                     Plotly.newPlot(rootEl, [trace], {
-                        margin: { l: 0, r: 0, t: 0, b: 60 },
+                        margin: { l: 0, r: 0, t: 0, b: 80 },
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
                         coloraxis: {
-                            colorscale: trace.marker.colorscale,
+                            colorscale: [
+                                [0, '#6b7280'],
+                                [0.5, '#8b4513'],
+                                [1, '#991b1b']
+                            ],
                             cmin: 0,
                             cmax: maxScale,
                             colorbar: {
                                 title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
                                 tickformat: '.0f',
                                 orientation: 'h',
-                                y: -0.25,
+                                y: -0.35,
                                 yanchor: 'top',
                                 x: 0.5,
                                 xanchor: 'center',
                                 len: 0.7,
-                                thickness: 12
+                                thickness: 14,
+                                bgcolor: 'rgba(0,0,0,0)'
                             }
                         }
                     }, {
