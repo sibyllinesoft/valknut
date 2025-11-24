@@ -760,7 +760,8 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                     React.createElement(
                         'li',
                         { key: label },
-                        `${label}: ${renderValue(value)}`
+                        React.createElement('span', { className: 'metric-label' }, label),
+                        React.createElement('span', { className: 'metric-value' }, renderValue(value))
                     )
                 )
             );
