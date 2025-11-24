@@ -205,11 +205,24 @@
                     };
 
                     Plotly.newPlot(rootEl, [trace], {
-                        margin: { l: 0, r: 0, t: 0, b: 0 },
+                        margin: { l: 0, r: 0, t: 0, b: 40 },
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
-                        font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' }
-                    }, { displaylogo: false, responsive: true });
+                        font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
+                        coloraxis: {
+                            colorbar: {
+                                orientation: 'h',
+                                y: -0.2,
+                                yanchor: 'top',
+                                thickness: 12,
+                                len: 0.6
+                            }
+                        }
+                    }, {
+                        displaylogo: false,
+                        responsive: true,
+                        coloraxis: { colorbar: { orientation: 'h' } }
+                    });
 
                     function clearSelection() {
                         Plotly.restyle(rootEl, { selectedpoints: [null] }, [0]);
