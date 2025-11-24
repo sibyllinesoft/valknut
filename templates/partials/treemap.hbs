@@ -152,7 +152,11 @@
                         values,
                         marker: {
                             colors,
-                            colorscale: 'YlOrRd',
+                            colorscale: [
+                                [0, '#9ca3af'],
+                                [0.5, '#f59e0b'],
+                                [1, '#ef4444']
+                            ],
                             cmin: 0,
                             cmax: maxScale,
                             colorbar: {
