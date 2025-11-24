@@ -140,7 +140,7 @@ export const ClonePairsPanel = ({ pairs = [] }) => {
       ref={containerRef}
       style={{
         position: 'relative',
-        height: 360,
+        height: 520,
         overflowX: 'hidden',
         overflowY: 'auto',
         background: 'transparent',

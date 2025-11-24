@@ -1069,6 +1069,8 @@ mod tests {
             total_issues: 4,
             high_priority_issues: 2,
             critical_issues: 1,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
 
         let mut code_dictionary = CodeDictionary::default();
@@ -1157,8 +1159,10 @@ mod tests {
                 technical_debt_ratio: 71.0,
                 complexity_score: 83.0,
                 structure_quality_score: 45.0,
-            }),
+                doc_health_score: 100.0,
+                }),
             code_dictionary,
+            documentation: None,
         }
     }
 
@@ -1471,6 +1475,8 @@ mod tests {
                 total_issues: 3,
                 high_priority_issues: 2,
                 critical_issues: 1,
+                doc_health_score: 1.0,
+                doc_issue_count: 0,
             },
             normalized: None,
             passes: StageResultsBundle::disabled(),
@@ -1493,6 +1499,7 @@ mod tests {
             warnings: vec![],
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
+            documentation: None,
         };
 
         let condensed = oracle.condense_analysis_results(&results);

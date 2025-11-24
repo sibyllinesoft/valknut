@@ -864,6 +864,8 @@ mod tests {
             total_issues: 3,
             high_priority_issues: 2,
             critical_issues: 1,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
 
         let candidate = valknut_rs::api::results::RefactoringCandidate {
@@ -952,6 +954,7 @@ mod tests {
             coverage_packs: Vec::new(),
             warnings: Vec::new(),
             code_dictionary,
+            documentation: None,
         }
     }
 

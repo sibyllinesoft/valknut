@@ -44,12 +44,34 @@ pub struct AnalysisResults {
     /// Coverage analysis results - test gap analysis with prioritized packs
     pub coverage_packs: Vec<crate::detectors::coverage::CoveragePack>,
 
+    /// Documentation analysis results (lightweight view for reports)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub documentation: Option<DocumentationResults>,
+
     /// Any warnings or issues encountered
     pub warnings: Vec<String>,
 
     /// Dictionary describing issue/suggestion codes for downstream consumers
     #[serde(default, skip_serializing_if = "CodeDictionary::is_empty")]
     pub code_dictionary: CodeDictionary,
+}
+
+/// Lightweight documentation results for public consumers
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct DocumentationResults {
+    /// Total documentation issues (doc gaps)
+    pub issues_count: usize,
+    /// Documentation health score (0-100)
+    pub doc_health_score: f64,
+    /// Per-file doc issue counts
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub file_doc_issues: HashMap<String, usize>,
+    /// Per-directory doc health (0-100)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub directory_doc_health: HashMap<String, f64>,
+    /// Per-directory doc issue counts
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub directory_doc_issues: HashMap<String, usize>,
 }
 
 /// Summary of analysis results
@@ -96,6 +118,26 @@ pub struct AnalysisSummary {
 
     /// Number of critical issues detected
     pub critical_issues: usize,
+
+    /// Documentation health score (0.0 = poor, 1.0 = excellent) - future use
+    #[serde(default)]
+    pub doc_health_score: f64,
+
+    /// Documentation issue count (files/dirs/readmes with gaps)
+    #[serde(default)]
+    pub doc_issue_count: usize,
+}
+
+impl AnalysisSummary {
+    /// Add doc issues and recompute code health based on total entities
+    pub fn apply_doc_issues(&mut self, doc_issue_count: usize) {
+        self.total_issues += doc_issue_count;
+        self.doc_issue_count += doc_issue_count;
+        if self.total_entities > 0 {
+            let penalty = (self.total_issues as f64 / self.total_entities as f64).min(1.0);
+            self.code_health_score = (1.0 - penalty).clamp(0.0, 1.0);
+        }
+    }
 }
 
 /// A candidate entity that may need refactoring
@@ -543,6 +585,14 @@ pub struct DirectoryHealthScore {
     pub parent: Option<PathBuf>,
     /// Breakdown by issue category
     pub issue_categories: HashMap<String, DirectoryIssueSummary>,
+
+    /// Documentation health score for this directory (0.0 = poor, 1.0 = excellent)
+    #[serde(default)]
+    pub doc_health_score: f64,
+
+    /// Documentation issue count in this directory
+    #[serde(default)]
+    pub doc_issue_count: usize,
 }
 
 /// Hierarchical directory health score tree
@@ -557,6 +607,31 @@ pub struct DirectoryHealthTree {
 }
 
 impl DirectoryHealthTree {
+    /// Overlay documentation health/issue data onto the tree
+    pub fn apply_doc_overlays(
+        &mut self,
+        doc_scores: &HashMap<String, f64>,
+        doc_issues: &HashMap<String, usize>,
+    ) {
+        for (path, score) in doc_scores {
+            let key = PathBuf::from(path);
+            if let Some(dir) = self.directories.get_mut(&key) {
+                dir.doc_health_score = (*score / 100.0).clamp(0.0, 1.0);
+            } else if key == self.root.path {
+                self.root.doc_health_score = (*score / 100.0).clamp(0.0, 1.0);
+            }
+        }
+
+        for (path, issues) in doc_issues {
+            let key = PathBuf::from(path);
+            if let Some(dir) = self.directories.get_mut(&key) {
+                dir.doc_issue_count = *issues;
+            } else if key == self.root.path {
+                self.root.doc_issue_count = *issues;
+            }
+        }
+    }
+
     /// Create a minimal directory health tree from refactoring candidates.
     pub fn from_candidates(candidates: &[RefactoringCandidate]) -> Self {
         let file_count = candidates.len();
@@ -568,7 +643,7 @@ impl DirectoryHealthTree {
             candidates.iter().map(|c| c.score).sum::<f64>() / candidates.len() as f64
         };
 
-        let root = DirectoryHealthScore {
+        let mut root = DirectoryHealthScore {
             path: PathBuf::from("."),
             health_score: if entity_count > 0 {
                 (1.0 - (refactoring_needed as f64 / entity_count as f64)).clamp(0.0, 1.0)
@@ -591,14 +666,88 @@ impl DirectoryHealthTree {
             children: Vec::new(),
             parent: None,
             issue_categories: HashMap::new(),
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
+        // Build per-directory aggregates
+        let mut directories: HashMap<PathBuf, DirectoryHealthScore> = HashMap::new();
+
+        for candidate in candidates {
+            let path = PathBuf::from(&candidate.file_path);
+            let dir_path = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let entry = directories
+                .entry(dir_path.clone())
+                .or_insert(DirectoryHealthScore {
+                    path: dir_path.clone(),
+                    health_score: 1.0,
+                    file_count: 0,
+                    entity_count: 0,
+                    refactoring_needed: 0,
+                    critical_issues: 0,
+                    high_priority_issues: 0,
+                    avg_refactoring_score: 0.0,
+                    weight: 0.0,
+                    children: Vec::new(),
+                    parent: None,
+                    issue_categories: HashMap::new(),
+                    doc_health_score: 1.0,
+                    doc_issue_count: 0,
+                });
+
+            entry.file_count += 1;
+            entry.entity_count += 1;
+            entry.refactoring_needed += 1;
+            entry.critical_issues += usize::from(matches!(candidate.priority, Priority::Critical));
+            entry.high_priority_issues += usize::from(matches!(
+                candidate.priority,
+                Priority::High | Priority::Critical
+            ));
+            entry.avg_refactoring_score += candidate.score;
+            entry.weight += 1.0;
+        }
+
+        // Finalize averages and parent/child links
+        for entry in directories.values_mut() {
+            if entry.entity_count > 0 {
+                entry.avg_refactoring_score /= entry.entity_count as f64;
+                entry.health_score = (1.0
+                    - (entry.refactoring_needed as f64 / entry.entity_count as f64))
+                    .clamp(0.0, 1.0);
+            } else {
+                entry.health_score = 1.0;
+            }
+
+            let parent_path = entry
+                .path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(PathBuf::from("."));
+            entry.parent = Some(parent_path.clone());
+        }
+
+        // Populate children vectors
+        let keys: Vec<PathBuf> = directories.keys().cloned().collect();
+        for dir_path in keys {
+            let parent_path = directories
+                .get(&dir_path)
+                .and_then(|d| d.parent.clone())
+                .unwrap_or(PathBuf::from("."));
+            if let Some(parent_dir) = directories.get_mut(&parent_path) {
+                parent_dir.children.push(dir_path.clone());
+            } else if parent_path == PathBuf::from(".") {
+                // Attach to root
+                root.children.push(dir_path.clone());
+            }
+        }
+
+        let total_dirs = directories.len() + 1;
 
         DirectoryHealthTree {
             root: root.clone(),
-            directories: HashMap::new(),
+            directories,
             tree_statistics: TreeStatistics {
-                total_directories: 1,
-                max_depth: 1,
+                total_directories: total_dirs,
+                max_depth: 2,
                 avg_health_score: root.health_score,
                 health_score_std_dev: 0.0,
                 hotspot_directories: Vec::new(),
@@ -608,21 +757,47 @@ impl DirectoryHealthTree {
     }
 
     /// Get the health score for a directory path, defaulting to root.
-    pub fn get_health_score(&self, _path: &Path) -> f64 {
-        self.root.health_score
+    pub fn get_health_score(&self, path: &Path) -> f64 {
+        if let Some(dir) = self.directories.get(path) {
+            dir.health_score
+        } else if path == self.root.path {
+            self.root.health_score
+        } else {
+            self.root.health_score
+        }
     }
 
     /// Get all children directories for a given path (empty in minimal tree).
-    pub fn get_children(&self, _path: &Path) -> Vec<&DirectoryHealthScore> {
-        Vec::new()
+    pub fn get_children(&self, path: &Path) -> Vec<&DirectoryHealthScore> {
+        let mut children = Vec::new();
+
+        // Match root
+        let path_buf = path.to_path_buf();
+        for dir in self.directories.values() {
+            if let Some(parent) = &dir.parent {
+                if *parent == path_buf {
+                    children.push(dir);
+                }
+            }
+        }
+
+        // If asking for root and no directory entries, return empty
+        children
     }
 
     /// Generate a simple tree representation as text.
     pub fn to_tree_string(&self) -> String {
+        let mut dirs: Vec<String> = self
+            .directories
+            .keys()
+            .map(|p| p.display().to_string())
+            .collect();
+        dirs.sort();
         format!(
-            "root: {} (health: {:.1}%)",
+            "root: {} (health: {:.1}%) dirs: {:?}",
             self.root.path.display(),
-            self.root.health_score * 100.0
+            self.root.health_score * 100.0,
+            dirs
         )
     }
 }

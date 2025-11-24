@@ -137,6 +137,10 @@ impl From<ValknutConfig> for AnalysisConfig {
 pub struct QualityGateConfig {
     /// Whether quality gates are enabled
     pub enabled: bool,
+    /// Minimum required overall health score (0-100, higher is better)
+    pub min_health_score: f64,
+    /// Minimum required documentation health score (0-100, higher is better)
+    pub min_doc_health_score: f64,
     /// Maximum allowed complexity score (0-100, lower is better)
     pub max_complexity_score: f64,
     /// Maximum allowed technical debt ratio (0-100, lower is better)
@@ -153,6 +157,8 @@ impl Default for QualityGateConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            min_health_score: 60.0,
+            min_doc_health_score: 0.0,
             max_complexity_score: 70.0,
             max_technical_debt_ratio: 50.0,
             min_maintainability_score: 60.0,

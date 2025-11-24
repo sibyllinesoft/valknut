@@ -122,6 +122,8 @@ mod tests {
                 total_issues: 0,
                 high_priority_issues: 0,
                 critical_issues: 0,
+                doc_health_score: 1.0,
+                doc_issue_count: 0,
             },
             structure: pipeline_results::StructureAnalysisResults {
                 enabled: true,
@@ -169,12 +171,14 @@ mod tests {
                 overall_coverage_percentage: None,
                 analysis_method: "none".to_string(),
             },
+            documentation: pipeline_results::DocumentationAnalysisResults::default(),
             health_metrics: pipeline_results::HealthMetrics {
                 overall_health_score: 88.0,
                 maintainability_score: 85.0,
                 technical_debt_ratio: 10.0,
                 complexity_score: 15.0,
                 structure_quality_score: 90.0,
+                doc_health_score: 100.0,
             },
         };
 

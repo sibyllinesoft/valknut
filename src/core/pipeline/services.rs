@@ -305,6 +305,8 @@ impl ResultAggregator for DefaultResultAggregator {
             total_issues,
             high_priority_issues: high_priority,
             critical_issues: critical,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         }
     }
 
@@ -342,10 +344,14 @@ impl ResultAggregator for DefaultResultAggregator {
             100.0
         };
 
-        let overall_health_score = (maintainability_score * 0.3
-            + structure_quality_score * 0.3
-            + (100.0 - complexity_score) * 0.2
-            + (100.0 - technical_debt_ratio) * 0.2)
+        // Documentation health currently treated as neutral unless populated by future doc-analysis stage.
+        let doc_health_score = 100.0;
+
+        let overall_health_score = (maintainability_score * 0.28
+            + structure_quality_score * 0.25
+            + (100.0 - complexity_score) * 0.18
+            + (100.0 - technical_debt_ratio) * 0.19
+            + doc_health_score * 0.10)
             .clamp(0.0, 100.0);
 
         HealthMetrics {
@@ -354,6 +360,7 @@ impl ResultAggregator for DefaultResultAggregator {
             technical_debt_ratio,
             complexity_score,
             structure_quality_score,
+            doc_health_score,
         }
     }
 
@@ -448,6 +455,23 @@ impl ResultAggregator for DefaultResultAggregator {
                 severity: "high".to_string(),
                 affected_files: Vec::new(),
                 recommended_actions: vec!["Focus on high-priority refactoring".to_string()],
+            });
+        }
+
+        if results.health_metrics.doc_health_score < config.min_doc_health_score {
+            violations.push(QualityGateViolation {
+                rule_name: "Minimum documentation health".to_string(),
+                description: format!(
+                    "Documentation health {:.1} is below minimum {:.1}",
+                    results.health_metrics.doc_health_score, config.min_doc_health_score
+                ),
+                current_value: results.health_metrics.doc_health_score,
+                threshold: config.min_doc_health_score,
+                severity: "medium".to_string(),
+                affected_files: Vec::new(),
+                recommended_actions: vec![
+                    "Add or update documentation for eligible files".to_string()
+                ],
             });
         }
 

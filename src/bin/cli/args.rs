@@ -112,6 +112,10 @@ pub struct QualityGateArgs {
     #[arg(long)]
     pub min_health: Option<f64>,
 
+    /// Minimum required documentation health score (0-100, higher is better)
+    #[arg(long)]
+    pub min_doc_health: Option<f64>,
+
     /// Maximum allowed technical debt ratio (0-100, lower is better) [default: 30]
     #[arg(long)]
     pub max_debt: Option<f64>,

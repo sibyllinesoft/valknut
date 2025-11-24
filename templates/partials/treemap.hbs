@@ -1,10 +1,9 @@
-<!-- Complexity Treemap -->
-<div class="results-section accordion">
-    <h2 class="accordion-heading" data-target="accordion-treemap" role="button" aria-expanded="true" style="margin-bottom: 0.75rem;">
-        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
-        Complexity Treemap
-    </h2>
-    <div id="accordion-treemap" class="accordion-body" style="display: block;">
+<!-- Health Visualization -->
+<div class="results-section tab-panel" data-tab="treemap">
+    <div class="tab-heading-row" style="display:none;">
+        <h2 class="tab-heading">Health Visualization</h2>
+    </div>
+    <div class="tab-body">
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:0.5rem;">
             <label for="treemap-color-metric" style="font-size:0.9rem;color:var(--text-secondary);">Color by:</label>
             <select id="treemap-color-metric" style="background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 10px; font-size:0.9rem;">
@@ -20,7 +19,7 @@
         <div id="treemap-color-desc" style="font-size: 0.85rem; color: rgba(148,163,184,0.85); margin-bottom: 0.5rem;">
             Complexity: severity derived from cyclomatic/cognitive complexity (higher = more complex).
         </div>
-        <div id="treemap-root" style="width: 100%; min-height: 420px;"></div>
+        <div id="treemap-root" style="width: 100%; min-height: 525px;"></div>
         <script id="treemap-data" type="application/json">
             {
                 "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
@@ -256,6 +255,14 @@
                     });
                 }
 
+                function resizePlot() {
+                    const w = (rootEl.parentElement && rootEl.parentElement.getBoundingClientRect().width) || rootEl.getBoundingClientRect().width || undefined;
+                    if (w) {
+                        Plotly.relayout(rootEl, { width: w });
+                    }
+                    Plotly.Plots.resize(rootEl);
+                }
+
                 function render() {
                     const metric = (colorSelect && colorSelect.value) || 'complexity';
                     const maxScale = Number(maxScaleInput && maxScaleInput.value) || 60;
@@ -274,6 +281,7 @@
                     rootEl.on('plotly_unhover', function() {
                         window.dispatchEvent(new CustomEvent('valknut-treemap-hover', { detail: { filePath: null, entityId: null }}));
                     });
+                    setTimeout(resizePlot, 0);
                 }
 
                 if (colorSelect) colorSelect.addEventListener('change', render);
@@ -284,6 +292,13 @@
                 } else {
                     document.addEventListener('DOMContentLoaded', render);
                 }
+
+                window.addEventListener('resize', resizePlot);
+                window.addEventListener('valknut-tab-activated', (ev) => {
+                    if (ev.detail && ev.detail.id === 'treemap') {
+                        resizePlot();
+                    }
+                });
             })();
         </script>
     </div>

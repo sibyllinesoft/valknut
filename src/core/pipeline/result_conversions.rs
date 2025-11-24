@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde_json::{self, json};
 
 use crate::core::featureset::FeatureVector;
+use crate::core::pipeline::pipeline_results::DocumentationAnalysisResults;
 use crate::core::pipeline::{PipelineResults, ResultSummary, StageResultsBundle};
 use crate::core::scoring::{Priority, ScoringResult};
 
@@ -15,6 +16,42 @@ use super::code_dictionary::{
 use super::result_types::*;
 
 impl AnalysisResults {
+    /// Build a minimal unified hierarchy; falls back to candidate-based grouping when directory data is empty.
+    pub fn build_unified_hierarchy_with_fallback(
+        candidates: &[RefactoringCandidate],
+        directory_tree: &DirectoryHealthTree,
+    ) -> Vec<serde_json::Value> {
+        // Prefer directory tree if present
+        if !directory_tree.directories.is_empty() || directory_tree.root.file_count > 0 {
+            let root_name = directory_tree.root.path.display().to_string();
+            return vec![serde_json::json!({
+                "name": root_name,
+                "type": "folder",
+                "healthScore": directory_tree.root.health_score,
+                "children": Vec::<serde_json::Value>::new(),
+            })];
+        }
+
+        // Fallback: group candidates by file
+        let mut grouped = AnalysisResults::group_candidates_by_file(candidates)
+            .into_iter()
+            .map(|group| {
+                serde_json::json!({
+                    "name": group.file_name,
+                    "path": group.file_path,
+                    "type": "file",
+                    "entityCount": group.entity_count,
+                    "avgScore": group.avg_score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        if grouped.is_empty() {
+            grouped.push(serde_json::json!({"name": "root", "type": "folder", "children": Vec::<serde_json::Value>::new()}));
+        }
+
+        grouped
+    }
     /// Create an empty analysis result placeholder
     pub fn empty() -> Self {
         AnalysisResults {
@@ -33,6 +70,8 @@ impl AnalysisResults {
                 total_issues: 0,
                 high_priority_issues: 0,
                 critical_issues: 0,
+                doc_health_score: 1.0,
+                doc_issue_count: 0,
             },
             normalized: None,
             passes: StageResultsBundle::disabled(),
@@ -55,6 +94,7 @@ impl AnalysisResults {
             warnings: Vec::new(),
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
+            documentation: None,
         }
     }
 
@@ -198,6 +238,8 @@ impl AnalysisResults {
             total_issues: base_summary.total_issues,
             high_priority_issues: base_summary.high_priority_issues,
             critical_issues: base_summary.critical_issues,
+            doc_health_score: base_summary.doc_health_score,
+            doc_issue_count: base_summary.doc_issue_count,
         };
 
         let statistics = AnalysisStatistics {
@@ -261,6 +303,26 @@ impl AnalysisResults {
             lsh: pipeline_results.results.lsh.clone(),
         };
 
+        let documentation = pipeline_results
+            .results
+            .documentation
+            .enabled
+            .then(|| DocumentationResults {
+                issues_count: pipeline_results.results.documentation.issues_count,
+                doc_health_score: pipeline_results.results.documentation.doc_health_score,
+                    file_doc_issues: pipeline_results.results.documentation.file_doc_issues.clone(),
+                directory_doc_health: pipeline_results
+                    .results
+                    .documentation
+                    .directory_doc_health
+                    .clone(),
+                directory_doc_issues: pipeline_results
+                    .results
+                    .documentation
+                    .directory_doc_issues
+                    .clone(),
+            });
+
         Self {
             summary,
             normalized: None,
@@ -273,6 +335,7 @@ impl AnalysisResults {
             coverage_packs,
             health_metrics,
             code_dictionary,
+            documentation,
         }
     }
 
@@ -786,6 +849,8 @@ mod tests {
             total_issues: 1,
             high_priority_issues: 1,
             critical_issues: 0,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
 
         let structure = StructureAnalysisResults {
@@ -840,12 +905,22 @@ mod tests {
             analysis_method: "none".to_string(),
         };
 
+        let documentation = DocumentationAnalysisResults {
+            enabled: false,
+            issues_count: 0,
+            doc_health_score: 100.0,
+            file_doc_issues: HashMap::new(),
+            directory_doc_health: HashMap::new(),
+            directory_doc_issues: HashMap::new(),
+        };
+
         let health_metrics = HealthMetrics {
             overall_health_score: 0.82,
             maintainability_score: 0.78,
             technical_debt_ratio: 0.22,
             complexity_score: 20.0,
             structure_quality_score: 0.7,
+            doc_health_score: 1.0,
         };
 
         let comprehensive = ComprehensiveAnalysisResult {
@@ -860,6 +935,7 @@ mod tests {
             impact,
             lsh,
             coverage,
+            documentation,
             health_metrics,
         };
 
@@ -1038,6 +1114,8 @@ mod tests {
             total_issues: 3,
             high_priority_issues: 2,
             critical_issues: 1,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
 
         assert_eq!(summary.files_processed, 10);

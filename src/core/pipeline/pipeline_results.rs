@@ -37,6 +37,9 @@ pub struct ComprehensiveAnalysisResult {
     pub lsh: LshAnalysisResults,
     /// Coverage analysis results
     pub coverage: CoverageAnalysisResults,
+    /// Documentation analysis results
+    #[serde(default)]
+    pub documentation: DocumentationAnalysisResults,
     /// Overall health metrics
     pub health_metrics: HealthMetrics,
 }
@@ -167,6 +170,26 @@ pub struct CoverageAnalysisResults {
     pub analysis_method: String,
 }
 
+/// Documentation analysis results (placeholder until full doc wiring is complete)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DocumentationAnalysisResults {
+    /// Whether doc analysis ran
+    pub enabled: bool,
+    /// Total documentation issues (doc gaps)
+    pub issues_count: usize,
+    /// Documentation health score (0-100)
+    pub doc_health_score: f64,
+    /// Per-file doc issue counts
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub file_doc_issues: HashMap<String, usize>,
+    /// Per-directory doc health
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub directory_doc_health: HashMap<String, f64>,
+    /// Per-directory doc issue counts
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub directory_doc_issues: HashMap<String, usize>,
+}
+
 /// Information about coverage files used in analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageFileInfo {
@@ -193,6 +216,13 @@ pub struct HealthMetrics {
     pub complexity_score: f64,
     /// Structure quality score (0-100, higher is better)
     pub structure_quality_score: f64,
+    /// Documentation health score (0-100, higher is better)
+    #[serde(default = "default_health_hundred")]
+    pub doc_health_score: f64,
+}
+
+fn default_health_hundred() -> f64 {
+    100.0
 }
 
 /// Pipeline execution results wrapper

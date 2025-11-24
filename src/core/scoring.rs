@@ -466,7 +466,10 @@ impl FeatureScorer {
             }
             name if name.contains("structure")
                 || name.contains("class")
-                || name.contains("method") =>
+                || name.contains("method")
+                || name.contains("function")
+                || name.contains("directory")
+                || name.contains("lines_of_code") =>
             {
                 ("structure".to_string(), self.weights.structure)
             }

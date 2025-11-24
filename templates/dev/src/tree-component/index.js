@@ -50,18 +50,26 @@ if (typeof window !== 'undefined') {
     window.generateNodeId = generateNodeId;
     window.filterBySeverity = filterBySeverity;
 
-    // Mount helpers
+    // Mount helpers with per-container root cache to avoid duplicate createRoot warnings
+    const getRoot = (container) => {
+        if (!container) return null;
+        if (container.__valknutRoot) return container.__valknutRoot;
+        const root = ReactDOM.createRoot(container);
+        container.__valknutRoot = root;
+        return root;
+    };
+
     window.ReactTreeBundle.mountTree = (data, containerId = 'react-tree-root') => {
         const container = document.getElementById(containerId);
-        if (!container) return;
-        const root = ReactDOM.createRoot(container);
+        const root = getRoot(container);
+        if (!root) return;
         root.render(React.createElement(CodeAnalysisTree, { data }));
     };
 
     window.ReactTreeBundle.mountClonePairs = (pairs, containerId = 'clone-pairs-root') => {
         const container = document.getElementById(containerId);
-        if (!container) return;
-        const root = ReactDOM.createRoot(container);
+        const root = getRoot(container);
+        if (!root) return;
         root.render(React.createElement(ClonePairsPanel, { pairs }));
     };
 
@@ -69,26 +77,9 @@ if (typeof window !== 'undefined') {
     if (typeof window.ValknutMountClonePairs !== 'function') {
         window.ValknutMountClonePairs = (pairs, containerId = 'clone-pairs-root') => {
             const container = document.getElementById(containerId);
-            if (!container) return;
-            const root = ReactDOM.createRoot(container);
+            const root = getRoot(container);
+            if (!root) return;
             root.render(React.createElement(ClonePairsPanel, { pairs }));
         };
     }
-
-    window.addEventListener('DOMContentLoaded', () => {
-        const pairScript = document.getElementById('clone-pairs-data');
-        const pairRoot = document.getElementById('clone-pairs-root');
-        if (pairScript && pairRoot) {
-            try {
-                const pairs = JSON.parse(pairScript.textContent || '[]') || [];
-                if (typeof window.ValknutMountClonePairs === 'function') {
-                    window.ValknutMountClonePairs(pairs);
-                } else {
-                    window.ReactTreeBundle.mountClonePairs(pairs);
-                }
-            } catch (err) {
-                console.error('[Valknut] Failed to parse clone pairs payload', err);
-            }
-        }
-    });
 }

@@ -147,16 +147,19 @@ const computeAggregates = (node) => {
         {}
     );
 
-    let totalIssues = 0;
-    if (!children.length) {
-        totalIssues += getNumericValue(node, [
-            'totalIssues',
-            'total_issues',
-            'refactoringNeeded',
-            'refactoring_needed',
-            'issueCount',
-            'issue_count',
-        ], 0) || 0;
+    const directIssues = Array.isArray(node.issues) ? node.issues.length : 0;
+    let totalIssues = getNumericValue(node, [
+        'totalIssues',
+        'total_issues',
+        'refactoringNeeded',
+        'refactoring_needed',
+        'issueCount',
+        'issue_count',
+    ], 0) || 0;
+    if (totalIssues === 0 && directIssues > 0) {
+        totalIssues = directIssues;
+    } else if (directIssues > totalIssues) {
+        totalIssues = directIssues;
     }
 
     let entityCount = 0;
@@ -640,9 +643,57 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
 
     // Tooltip content builders (moved up so we can scope tooltip to label/icon only)
     const formatIssue = (issue = {}) => {
-        const title = issue.title || issue.category || issue.code || 'Issue';
         const severity = typeof issue.severity === 'number' ? issue.severity.toFixed(1) : '—';
-        const summary = issue.summary || '';
+
+        // Pull feature helpers
+        const getFeat = (key) => {
+            const feats = Array.isArray(issue.contributing_features) ? issue.contributing_features : [];
+            const match = feats.find((f) => String(f.feature_name || '').toLowerCase().includes(key));
+            if (!match || match.value === undefined) return null;
+            const v = Number(match.value);
+            return Number.isFinite(v) ? v : null;
+        };
+
+        const category = (issue.category || issue.code || '').toString().toLowerCase();
+        let title = issue.title || issue.category || issue.code || 'Issue';
+        let summary = issue.summary || '';
+
+        const cyclo = getFeat('cyclomatic_complexity');
+        const cognitive = getFeat('cognitive_complexity');
+        const mi = getFeat('maintainability_index');
+        const debt = getFeat('technical_debt_score');
+
+        if (category.includes('debt')) {
+            title = 'Poor code organization';
+            if (!summary) {
+                summary = debt != null
+                    ? `Technical debt score ${debt.toFixed(1)} — higher means more restructuring and cleanup needed`
+                    : 'Organization/debt exceeds the acceptable baseline';
+            }
+        } else if (category.includes('maintain')) {
+            title = 'Too much code coupling';
+            if (!summary) {
+                summary = mi != null
+                    ? `Maintainability Index ${mi.toFixed(1)} — lower MI suggests tighter coupling; target ≥ 60`
+                    : 'Maintainability/coupling exceeds the acceptable baseline';
+            }
+        } else if (category.includes('cognit')) {
+            title = 'Too many code paths';
+            if (!summary && cognitive != null) {
+                summary = `Cognitive complexity ${cognitive.toFixed(0)} — target ≤ 15 (lower is better)`;
+            }
+        } else if (category.includes('complex')) {
+            title = 'Too many branch points';
+            if (!summary && cyclo != null) {
+                summary = `Cyclomatic complexity ${cyclo.toFixed(0)} — target ≤ 10 (lower is better)`;
+            }
+        } else if (category.includes('struct')) {
+            title = 'Optimize file layout';
+            if (!summary) {
+                summary = 'Large or entangled structure; consider splitting files or extracting modules';
+            }
+        }
+
         return {
             title,
             severity,
@@ -706,14 +757,13 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 'ul',
                 { className: 'tooltip-metrics' },
                 metrics.map(({ label, value }) =>
-                        React.createElement(
-                            'li',
-                            { key: label },
-                            React.createElement('span', { className: 'metric-label' }, label),
-                            React.createElement('span', { className: 'metric-value' }, renderValue(value))
-                        )
+                    React.createElement(
+                        'li',
+                        { key: label },
+                        `${label}: ${renderValue(value)}`
                     )
-                );
+                )
+            );
 
         const capitalize = (value) => {
             if (!value || typeof value !== 'string') {
@@ -721,6 +771,27 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             }
             return value.charAt(0).toUpperCase() + value.slice(1);
         };
+
+        const suggestionTexts = Array.isArray(data.suggestions)
+            ? Array.from(
+                new Set(
+                    data.suggestions
+                        .map(
+                            (s) =>
+                                s.summary ||
+                                s.explanation ||
+                                s.heading ||
+                                s.refactoring_type ||
+                                s.refactoringType ||
+                                s.title ||
+                                ''
+                        )
+                        .map((txt) => (txt || '').trim())
+                        .filter(Boolean)
+                )
+            )
+            : [];
+        const suggestionText = suggestionTexts[0] || null;
 
         const shouldShowTooltip = isEntity || isFile || isFolder;
         if (!shouldShowTooltip) {
@@ -810,7 +881,10 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                                     React.createElement(
                                         'div',
                                         { className: 'issue-summary' },
-                                        `Avg severity ${renderValue(category.avgSeverity)}, impact ${renderValue(category.healthImpact)}`
+                                        suggestionText ||
+                                            `Avg severity ${renderValue(category.avgSeverity)}, impact ${renderValue(
+                                                category.healthImpact
+                                            )}`
                                     )
                                 )
                             )
@@ -824,19 +898,11 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             const totalIssues = aggregates.totalIssues ?? data.totalIssues ?? Object.values(severityCounts).reduce((acc, value) => acc + (value || 0), 0);
             const fileHealth = getHealthScore(data);
             const metrics = [
-                { label: 'Priority', value: data.highestPriority || data.priority || '—' },
-                {
-                    label: 'Entities',
-                    value: aggregates.entityCount ?? data.entityCount ??
-                        (data.children ? data.children.filter((child) => child.type === 'entity').length : 0),
-                },
-                { label: 'Health', value: typeof fileHealth === 'number' ? `${Math.round(fileHealth * 100)}%` : '—' },
+                { label: 'Entities', value: aggregates.entityCount ?? data.entityCount ??
+                    (data.children ? data.children.filter((child) => child.type === 'entity').length : 0) },
                 { label: 'Issues', value: totalIssues },
+                { label: 'Health', value: typeof fileHealth === 'number' ? `${Math.round(fileHealth * 100)}%` : '—' },
             ];
-            const fileAcceptable = formatAcceptableRatio(fileComplexityRatio);
-            if (fileAcceptable) {
-                metrics.push({ label: 'Complexity', value: fileAcceptable });
-            }
 
             const severityList = [
                 { key: 'critical', label: 'Critical', value: severityCounts.critical || 0 },
@@ -870,102 +936,218 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                                 )
                             )
                         )
-                    ),
-                topEntities.length > 0 &&
-                    React.createElement(
-                        'div',
-                        { className: 'tooltip-section' },
-                        React.createElement('h4', null, 'Top Entities'),
+            ),
+        topEntities.length > 0 &&
+            React.createElement(
+                'div',
+                { className: 'tooltip-section' },
+                React.createElement('h4', null, 'Top Entities'),
+                React.createElement(
+                    'ul',
+                    { className: 'tooltip-section-list' },
+                    topEntities.map((entity) =>
                         React.createElement(
-                            'ul',
-                            { className: 'tooltip-section-list' },
-                            topEntities.map((entity) =>
-                                React.createElement(
-                                    'li',
-                                    { key: entity.id },
-                                    React.createElement('div', { className: 'issue-heading' }, entity.name),
-                                    React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
-                                )
-                            )
+                            'li',
+                            { key: entity.id },
+                            React.createElement('div', { className: 'issue-heading' }, entity.name),
+                            suggestionText
+                                ? React.createElement('div', { className: 'issue-summary' }, suggestionText)
+                                : React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
                         )
                     )
-            );
+                )
+            )
+    );
         }
 
         // Entities
         const issues = Array.isArray(data.issues) ? data.issues.map(formatIssue) : [];
-        const suggestions = Array.isArray(data.suggestions) ? data.suggestions.map(formatSuggestion) : [];
+        const rawSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        const suggestions = rawSuggestions.map(formatSuggestion);
 
-        // Top issues by severity
-        const topIssues = issues
+        // Show all issues sorted by severity; omit metric row for entities
+        const listedIssues = issues
             .filter((issue) => issue.severity !== '—')
-            .sort((a, b) => Number(b.severity) - Number(a.severity))
-            .slice(0, 3);
+            .sort((a, b) => Number(b.severity) - Number(a.severity));
 
-        // Format suggestions (limit to 3 most impactful if impact exists)
-        const formattedSuggestions = suggestions
-            .sort((a, b) => {
-                const impactA = (data.suggestions || [])[suggestions.indexOf(a)]?.impact ?? 0;
-                const impactB = (data.suggestions || [])[suggestions.indexOf(b)]?.impact ?? 0;
-                return impactB - impactA;
-            })
-            .slice(0, 3);
+        const metrics = [];
 
-        const entityAcceptable = formatAcceptableRatio(getComplexityRatio(data));
-        const metrics = [
-            { label: 'Priority', value: data.priority || data.highestPriority || '—' },
-            { label: 'Complexity', value: entityAcceptable || formattedEntityScore || '—' },
-            { label: 'Issues', value: issues.length || '—' },
-            { label: 'Suggestions', value: suggestions.length || '—' },
-        ];
+        // Build tagged suggestions for better matching by issue type/feature
+        const suggestionsWithTags = (() => {
+            const deriveText = (s) => {
+                const explicit =
+                    s.summary ||
+                    s.explanation ||
+                    s.heading ||
+                    s.title ||
+                    s.refactoring_type ||
+                    s.refactoringType ||
+                    s.code ||
+                    '';
+                if (explicit && explicit.trim()) return explicit.trim();
+
+                const refType = (s.refactoring_type || s.refactoringType || '').trim();
+                if (refType) {
+                    const pretty = refType.replace(/_/g, ' ');
+                    const match = refType.match(/_(\\d+(?:\\.\\d+)?)$/);
+                    if (match) {
+                        return `${pretty.replace(match[0], '').trim()} (target ${match[1]})`;
+                    }
+                    return pretty;
+                }
+                return 'Suggestion';
+            };
+
+            const tagSuggestion = (s) => {
+                const tags = new Set();
+                const text = deriveText(s);
+                const haystack = `${s.code || ''} ${s.category || ''} ${s.refactoring_type || s.refactoringType || ''} ${s.heading || ''} ${s.title || ''} ${s.summary || ''} ${s.explanation || ''}`.toLowerCase();
+
+                const add = (...items) => items.forEach((t) => t && tags.add(t));
+
+                if (haystack.match(/cognit/)) add('cognitive_complexity', 'complexity');
+                if (haystack.match(/cyclo/)) add('cyclomatic_complexity', 'complexity');
+                if (haystack.match(/maintain/)) add('maintainability');
+                if (haystack.match(/debt/)) add('technical_debt');
+                if (haystack.match(/struct/)) add('structure');
+                if (haystack.match(/clone/)) add('clone', 'similarity');
+                if (haystack.match(/complex/)) add('complexity');
+                if (haystack.match(/refactor/)) add('refactor');
+                if (haystack.match(/extract/)) add('structure', 'maintainability', 'technical_debt');
+                if (haystack.match(/class/) || haystack.match(/module/)) add('structure', 'maintainability');
+                if (haystack.match(/large/)) add('technical_debt', 'maintainability');
+
+                // Include canonical tags from code/category
+                add((s.code || '').toLowerCase(), (s.category || '').toLowerCase());
+
+                return { text, tags, raw: s };
+            };
+
+            return rawSuggestions.map(tagSuggestion);
+        })();
+
+        const suggestionFallback =
+            suggestionsWithTags[0]?.text || null;
+
+        const normalize = (v) => (v || '').toString().toLowerCase();
+
+        const canonicalizeFeature = (name = '') => {
+            const n = normalize(name);
+            if (n.includes('cogn')) return 'cognitive_complexity';
+            if (n.includes('cycl')) return 'cyclomatic_complexity';
+            if (n.includes('debt')) return 'technical_debt';
+            if (n.includes('maintain')) return 'maintainability';
+            if (n.includes('struct')) return 'structure';
+            if (n.includes('clone')) return 'clone';
+            if (n.includes('complex')) return 'complexity';
+            return n || null;
+        };
+
+        const findSuggestionForIssue = (issue) => {
+            const issueTags = new Set();
+
+            issueTags.add(canonicalizeFeature(issue.code));
+            issueTags.add(canonicalizeFeature(issue.category));
+            issueTags.add(canonicalizeFeature(issue.title));
+
+            if (Array.isArray(issue.contributing_features)) {
+                issue.contributing_features.forEach((feat) => {
+                    const tag = canonicalizeFeature(feat?.feature_name);
+                    if (tag) issueTags.add(tag);
+                });
+            }
+
+            // Prefer matches where any tag overlaps
+            for (const tag of issueTags) {
+                if (!tag) continue;
+                const match = suggestionsWithTags.find((s) => s.tags.has(tag));
+                if (match) return match.text;
+                // Broader complexity grouping
+                if (tag === 'complexity' || tag === 'cyclomatic_complexity') {
+                    const alt = suggestionsWithTags.find((s) =>
+                        s.tags.has('cyclomatic_complexity') || s.tags.has('complexity')
+                    );
+                    if (alt) return alt.text;
+                }
+                if (tag === 'cognitive_complexity') {
+                    const alt = suggestionsWithTags.find((s) =>
+                        s.tags.has('cognitive_complexity')
+                    );
+                    if (alt) return alt.text;
+                }
+            }
+
+            // Maintainability/debt fallbacks
+            const debt = suggestionsWithTags.find((s) => s.tags.has('technical_debt'));
+            if (issueTags.has('technical_debt') && debt) return debt.text;
+
+            const maintain = suggestionsWithTags.find((s) => s.tags.has('maintainability'));
+            if (issueTags.has('maintainability') && maintain) return maintain.text;
+
+            // Structure fallback
+            const structure = suggestionsWithTags.find((s) => s.tags.has('structure'));
+            if (issueTags.has('structure') && structure) return structure.text;
+
+            // If maintainability/debt need a fallback and no direct match, prefer structural/extract style fixes
+            if ((issueTags.has('maintainability') || issueTags.has('technical_debt')) && structure) {
+                return structure.text;
+            }
+            if ((issueTags.has('maintainability') || issueTags.has('technical_debt')) && maintain) {
+                return maintain.text;
+            }
+            if ((issueTags.has('maintainability') || issueTags.has('technical_debt')) && debt) {
+                return debt.text;
+            }
+
+            // Generic fallback
+            return suggestionFallback;
+        };
 
         return React.createElement(
             'div',
             null,
             React.createElement('div', { className: 'tooltip-name' }, data.name || 'Entity'),
-            React.createElement('ul', { className: 'tooltip-metrics' },
-                metrics.map(({ label, value }) =>
-                    React.createElement(
-                        'li',
-                        { key: label },
-                        React.createElement('span', { className: 'metric-label' }, label),
-                        React.createElement('span', { className: 'metric-value' }, renderValue(value))
+            metrics.length > 0 &&
+                React.createElement('ul', { className: 'tooltip-metrics' },
+                    metrics.map(({ label, value }) =>
+                        React.createElement(
+                            'li',
+                            { key: label },
+                            React.createElement('span', { className: 'metric-label' }, label),
+                            React.createElement('span', { className: 'metric-value' }, renderValue(value))
+                        )
                     )
-                )
-            ),
-            topIssues.length > 0 &&
+                ),
+            listedIssues.length > 0 &&
                 React.createElement(
                     'div',
                     { className: 'tooltip-section' },
-                    React.createElement('h4', null, 'Top Issues'),
+                    React.createElement('h4', null, 'Issues'),
                     React.createElement(
                         'ul',
                         { className: 'tooltip-section-list' },
-                        topIssues.map((issue, idx) =>
+                        listedIssues.map((issue, idx) =>
                             React.createElement(
                                 'li',
                                 { key: idx },
-                                React.createElement('div', { className: 'issue-heading' }, `${issue.title} (Severity ${issue.severity})`),
-                                issue.summary && React.createElement('div', { className: 'issue-summary' }, issue.summary)
+                                React.createElement('div', { className: 'issue-heading' }, `${issue.title} (Severity ${issue.severity})`)
                             )
                         )
                     )
                 ),
-            formattedSuggestions.length > 0 &&
+            suggestionTexts.length > 0 &&
                 React.createElement(
                     'div',
                     { className: 'tooltip-section' },
-                    React.createElement('h4', null, 'Suggestions'),
+                    React.createElement('h4', null, 'Suggested Actions'),
                     React.createElement(
                         'ul',
                         { className: 'tooltip-section-list' },
-                        formattedSuggestions.map((suggestion, idx) =>
+                        suggestionTexts.map((txt, idx) =>
                             React.createElement(
                                 'li',
-                                { key: idx, className: 'suggestion-item' },
-                                suggestion.heading && React.createElement('div', { className: 'suggestion-summary' }, suggestion.heading),
-                                suggestion.meta && React.createElement('div', { className: 'issue-summary' }, suggestion.meta),
-                                suggestion.summary && React.createElement('div', { className: 'issue-summary' }, suggestion.summary)
+                                { key: idx },
+                                React.createElement('div', { className: 'issue-summary' }, txt)
                             )
                         )
                     )
@@ -1052,75 +1234,69 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         children.push(iconElement);
         children.push(labelElement);
     }
-    
-    // Health score for folders (falls back to aliased keys)
+
+    // Pre-compute all badge data before adding to children array
     const folderHealth = isFolder ? getHealthScore(data) : null;
-    if (isFolder && folderHealth !== null) {
-        children.push(React.createElement('div', {
-            key: 'health',
-            className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem', color: getHealthColor(folderHealth) }
-        }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
-    }
-
-    // Optional health score for files if present
     const fileHealth = isFile ? getHealthScore(data) : null;
-    if (isFile && fileHealth !== null) {
+    const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
+    const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
+    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
+    const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
+    const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
+
+    // Badge ordering: Entities → Issues → Health → Complexity → Priority → Severity bar (rightmost)
+
+    // Entities badges
+    if (isFolder && (aggregates.entityCount || data.entityCount)) {
+        const count = aggregates.entityCount ?? data.entityCount ?? 0;
         children.push(React.createElement('div', {
-            key: 'file-health',
-            className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem', color: getHealthColor(fileHealth) }
-        }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
+            key: 'entities-folder',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, `${count} entities`));
+    }
+    if (isFile && (aggregates.entityCount || data.entityCount)) {
+        const count = aggregates.entityCount ?? data.entityCount ?? 0;
+        children.push(React.createElement('div', {
+            key: 'entities-file',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, `${count} entities`));
     }
 
+    // Issues badges
     if (isFolder && aggregates.totalIssues > 0) {
         children.push(React.createElement('div', {
-            key: 'issues',
+            key: 'issues-folder',
+            className: 'tree-badge tree-badge-low',
+            style: { marginLeft: '0.5rem' }
+        }, `${aggregates.totalIssues} issues`));
+    }
+    if (isFile && aggregates.totalIssues > 0) {
+        children.push(React.createElement('div', {
+            key: 'issues-file',
             className: 'tree-badge tree-badge-low',
             style: { marginLeft: '0.5rem' }
         }, `${aggregates.totalIssues} issues`));
     }
 
-    // Priority badge with color coding
-    if (data.priority || data.highestPriority) {
-        const priority = data.priority || data.highestPriority;
+    // Health badges
+    if (isFolder && folderHealth !== null) {
         children.push(React.createElement('div', {
-            key: 'priority',
-            className: 'tree-badge',
-            style: { 
-                marginLeft: '0.5rem',
-                ...getPriorityStyle(priority)
-            }
-        }, priority));
-    }
-
-    // Severity mix badge (normalized percentages)
-    let fileSeverityBar = null;
-    if ((isFolder || isFile) && aggregates.severityCounts) {
-        fileSeverityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
-    }
-
-    // Complexity score for files
-    const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
-    const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
-    const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
-    if (isFile && formattedNodeAvgScore !== null) {
-        children.push(React.createElement('div', {
-            key: 'score',
+            key: 'health-folder',
             className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem' }
-        }, formattedNodeAcceptable ? `Complexity: ${formattedNodeAcceptable}` : `Complexity: ${formattedNodeAvgScore}`));
+            style: { marginLeft: '0.5rem', color: getHealthColor(folderHealth) }
+        }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
+    }
+    if (isFile && fileHealth !== null) {
+        children.push(React.createElement('div', {
+            key: 'health-file',
+            className: 'tree-badge tree-badge-low complexity-score',
+            style: { marginLeft: '0.5rem', color: getHealthColor(fileHealth) }
+        }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
     }
 
-    // Append file severity mix after complexity badge
-    if (isFile && fileSeverityBar) {
-        children.push(fileSeverityBar);
-    }
-
-    // Folder-level worst complexity ratio from descendants
-    const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
-    const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
-
+    // Complexity badges
     if (isFolder && formattedNodeAvgScore !== null) {
         children.push(React.createElement('div', {
             key: 'avg-score',
@@ -1130,13 +1306,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
         }, folderAcceptable
             ? `Complexity: ${folderAcceptable}`
             : `Avg Score: ${formattedNodeAvgScore}`));
-        if (fileSeverityBar) {
-            children.push(fileSeverityBar);
-            fileSeverityBar = null;
-        }
     }
-
-    // Complexity score for entities
     const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
     const entityAcceptable = formatAcceptableRatio(getMaxComplexityRatio(data));
     if (isEntity && formattedEntityScore !== null) {
@@ -1145,6 +1315,37 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
             className: 'tree-badge tree-badge-low',
             style: { marginLeft: '0.5rem' }
         }, entityAcceptable ? `Complexity: ${entityAcceptable}` : `Complexity: ${formattedEntityScore}`));
+    }
+
+    // Priority badge with color coding
+    if (data.priority || data.highestPriority) {
+        const priority = data.priority || data.highestPriority;
+        children.push(React.createElement('div', {
+            key: 'priority',
+            className: 'tree-badge',
+            style: {
+                marginLeft: '0.5rem',
+                ...getPriorityStyle(priority)
+            }
+        }, priority));
+    }
+
+    // Severity mix badge (normalized percentages) — ensure last/rightmost
+    let severityBar = null;
+    if ((isFolder || isFile) && aggregates.severityCounts) {
+        severityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
+    }
+    if (severityBar) {
+        children.push(severityBar);
+    }
+
+    // Ensure severity bar is last/rightmost
+    if (severityBar) {
+        const idx = children.indexOf(severityBar);
+        if (idx >= 0 && idx !== children.length - 1) {
+            children.splice(idx, 1);
+            children.push(severityBar);
+        }
     }
     
     // Line range for entities

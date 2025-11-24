@@ -374,6 +374,7 @@ fn merge_health_metrics(
                     structure_quality_score: (a.structure_quality_score
                         + b.structure_quality_score)
                         / 2.0,
+                    doc_health_score: (a.doc_health_score + b.doc_health_score) / 2.0,
                 });
             }
 
@@ -406,6 +407,12 @@ fn merge_health_metrics(
                     a.structure_quality_score,
                     current_weight,
                     b.structure_quality_score,
+                    incoming_weight,
+                ),
+                doc_health_score: weighted_average(
+                    a.doc_health_score,
+                    current_weight,
+                    b.doc_health_score,
                     incoming_weight,
                 ),
             })
@@ -502,6 +509,7 @@ mod tests {
             technical_debt_ratio: 1.0 - score,
             complexity_score: score - 0.2,
             structure_quality_score: score + 0.1,
+            doc_health_score: 100.0,
         }
     }
 

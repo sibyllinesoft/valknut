@@ -30,6 +30,11 @@
 
 <div class="container">
     <!-- Report Metadata -->
-    <div class="meta" style="text-align: center; margin-bottom: var(--space-xl); color: var(--color-text-muted); font-size: var(--text-sm);">
-        Generated: {{generated_at}} • Version: {{version}}
+    <div class="meta" style="display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-bottom: var(--space-xl); color: var(--color-text-muted); font-size: var(--text-sm);">
+        <span>Generated: {{generated_at}} • Version: {{version}}</span>
+        <button id="debug-open" type="button" aria-label="Show raw analysis JSON"
+            style="display:inline-flex; align-items:center; gap:4px; background: transparent; border: none; color: var(--color-text); padding: 0; cursor: pointer; font-size: 0.9rem;">
+            <span data-lucide="bug" aria-hidden="true" style="width:14px;height:14px;"></span>
+            <span>JSON</span>
+        </button>
     </div>

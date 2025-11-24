@@ -1,13 +1,10 @@
-<!-- Clone & Similarity Analysis -->
-<section class="clone-section accordion">
-    <h2 class="accordion-heading" data-target="accordion-clone" role="button" aria-expanded="true" style="margin-bottom: 0.75rem; cursor: pointer;">
-        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
-        Clone &amp; Similarity Analysis
-    </h2>
-    <div id="accordion-clone" class="accordion-body" style="display: block;">
-        <header class="clone-section__header">
-            <p>Measures of structural duplication across the codebase.</p>
-        </header>
+<!-- Duplicate Code -->
+<section class="clone-section tab-panel" data-tab="clones">
+    <div class="tab-heading-row" style="display:none;">
+        <h2 class="tab-heading">Duplicate Code</h2>
+        <p class="tab-subtitle">Measures of structural duplication across the codebase.</p>
+    </div>
+    <div class="tab-body">
 
     {{#if clone_analysis.hasData}}
     <div class="clone-metric-grid">
@@ -32,7 +29,7 @@
             </span>
         </div>
         <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Candidates After Denoising</span>
+            <span class="clone-metric-card__label">Candidates</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.candidatesAfter}}
                     {{clone_analysis.candidatesAfter}}
@@ -41,38 +38,12 @@
                 {{/if}}
             </span>
         </div>
-        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Candidates Before Denoising</span>
-            <span class="clone-metric-card__value">
-                {{#if clone_analysis.candidatesBefore}}
-                    {{clone_analysis.candidatesBefore}}
-                {{else}}
-                    —
-                {{/if}}
-            </span>
-        </div>
-        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Quality Score</span>
-            <span class="clone-metric-card__value">
-                {{#if clone_analysis.qualityScore}}
-                    {{format clone_analysis.qualityScore "0.2"}}
-                {{else}}
-                    —
-                {{/if}}
-            </span>
-        </div>
-        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Denoising Enabled</span>
-            <span class="clone-metric-card__value">
-                {{#if clone_analysis.denoisingEnabled}}Yes{{else}}No{{/if}}
-            </span>
-        </div>
     </div>
 
     {{#if clone_pairs.length}}
     <div class="clone-panel-block" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); border-bottom: 1px solid rgba(255,255,255,0.026); padding-top: 0.35rem; padding-bottom: 0.35rem;">
         <script id="clone-pairs-data" type="application/json">{{{json clone_pairs}}}</script>
-        <div id="clone-pairs-root" aria-label="Clone pairs cards" style="min-height: 120px;"></div>
+        <div id="clone-pairs-root" aria-label="Clone pairs cards" style="min-height: 560px;"></div>
         <script>
           (function() {
             function mountPairs() {

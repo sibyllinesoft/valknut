@@ -14,6 +14,44 @@ use crate::core::errors::{Result, ValknutError};
 use crate::detectors::structure::StructureConfig;
 // use crate::detectors::names::NamesConfig;
 
+/// Documentation health thresholds and penalties
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocHealthConfig {
+    /// Minimum AST nodes for a function before doc is required
+    #[serde(default = "DocHealthConfig::default_min_fn_nodes")]
+    pub min_fn_nodes: usize,
+    /// Minimum AST nodes for a file before doc is required
+    #[serde(default = "DocHealthConfig::default_min_file_nodes")]
+    pub min_file_nodes: usize,
+    /// Minimum files per directory before directory-level doc penalty applies
+    #[serde(default = "DocHealthConfig::default_min_files_per_dir")]
+    pub min_files_per_dir: usize,
+}
+
+impl Default for DocHealthConfig {
+    fn default() -> Self {
+        Self {
+            min_fn_nodes: Self::default_min_fn_nodes(),
+            min_file_nodes: Self::default_min_file_nodes(),
+            min_files_per_dir: Self::default_min_files_per_dir(),
+        }
+    }
+}
+
+impl DocHealthConfig {
+    const fn default_min_fn_nodes() -> usize {
+        5
+    }
+
+    const fn default_min_file_nodes() -> usize {
+        50
+    }
+
+    const fn default_min_files_per_dir() -> usize {
+        5
+    }
+}
+
 /// Main configuration for valknut analysis engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValknutConfig {
@@ -53,6 +91,10 @@ pub struct ValknutConfig {
     #[serde(default)]
     pub coverage: CoverageConfig,
 
+    /// Documentation health configuration
+    #[serde(default)]
+    pub docs: DocHealthConfig,
+
     /// Live reachability analysis configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub live_reach: Option<LiveReachConfig>,
@@ -87,6 +129,7 @@ impl ValknutConfig {
             performance: PerformanceConfig::default(),
             structure: StructureConfig::default(),
             coverage: CoverageConfig::default(),
+            docs: DocHealthConfig::default(),
             live_reach: None,
             // names: NamesConfig::default(),
             _names_placeholder: None,
@@ -209,6 +252,8 @@ impl ValknutConfig {
 
         // Validate coverage configuration
         self.coverage.validate()?;
+
+        // Docs config: no dynamic validation yet
 
         Ok(())
     }

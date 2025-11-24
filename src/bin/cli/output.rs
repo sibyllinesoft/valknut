@@ -2107,6 +2107,8 @@ mod tests {
                 total_issues: 1,
                 high_priority_issues: 1,
                 critical_issues: 0,
+                doc_health_score: 1.0,
+                doc_issue_count: 0,
             },
             normalized: None,
             passes: valknut_rs::api::results::StageResultsBundle::disabled(),
@@ -2129,6 +2131,7 @@ mod tests {
             coverage_packs: Vec::new(),
             warnings: vec!["Sample warning".to_string()],
             code_dictionary: CodeDictionary::default(),
+            documentation: None,
         }
     }
 

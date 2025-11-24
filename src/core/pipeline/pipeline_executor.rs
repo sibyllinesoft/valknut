@@ -9,7 +9,7 @@ use uuid::Uuid;
 use walkdir;
 
 use crate::core::ast_service::AstService;
-use crate::core::config::{ScoringConfig, ValknutConfig};
+use crate::core::config::{DocHealthConfig, ScoringConfig, ValknutConfig};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::FeatureVector;
 use crate::core::scoring::{FeatureScorer, ScoringResult};
@@ -17,12 +17,15 @@ use crate::detectors::complexity::{ComplexityAnalyzer, ComplexityConfig, Complex
 use crate::detectors::coverage::{CoverageConfig as CoverageDetectorConfig, CoverageExtractor};
 use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
 use crate::detectors::structure::{StructureConfig, StructureExtractor};
+use doc_audit::{run_audit, DocAuditConfig};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
 use super::pipeline_results::{
-    ComprehensiveAnalysisResult, CoverageAnalysisResults, HealthMetrics, MemoryStats,
-    PipelineResults, PipelineStatistics, PipelineStatus, ScoringResults,
+    ComprehensiveAnalysisResult, CoverageAnalysisResults, DocumentationAnalysisResults,
+    HealthMetrics, MemoryStats, PipelineResults, PipelineStatistics, PipelineStatus,
+    ScoringResults,
 };
 use super::pipeline_stages::AnalysisStages;
 use super::services::{
@@ -260,18 +263,48 @@ impl AnalysisPipeline {
         }
 
         // Stage 8: Calculate summary and health metrics
-        let summary = self.result_aggregator.build_summary(
+        let mut summary = self.result_aggregator.build_summary(
             &files,
             &structure_results,
             &complexity_results,
             &refactoring_results,
             &impact_results,
         );
-        let health_metrics = self.result_aggregator.build_health_metrics(
+        let mut health_metrics = self.result_aggregator.build_health_metrics(
             &complexity_results,
             &structure_results,
             &impact_results,
         );
+
+        let mut documentation_results = DocumentationAnalysisResults::default();
+
+        // Compute documentation health (project-level for now)
+        if let Some((doc_score, doc_issue_count, file_issues, dir_scores, dir_issue_counts)) =
+            Self::compute_doc_health(
+            paths,
+            self.valknut_config
+                .as_ref()
+                .map(|c| &c.docs)
+                .unwrap_or(&crate::core::config::DocHealthConfig::default()),
+        ) {
+            health_metrics.doc_health_score = doc_score;
+            health_metrics.overall_health_score = (health_metrics.maintainability_score * 0.28
+                + health_metrics.structure_quality_score * 0.25
+                + (100.0 - health_metrics.complexity_score) * 0.18
+                + (100.0 - health_metrics.technical_debt_ratio) * 0.19
+                + health_metrics.doc_health_score * 0.10)
+                .clamp(0.0, 100.0);
+
+            summary.doc_health_score = (doc_score / 100.0).clamp(0.0, 1.0);
+            summary.apply_doc_issues(doc_issue_count);
+
+            documentation_results.enabled = true;
+            documentation_results.issues_count = doc_issue_count;
+            documentation_results.doc_health_score = doc_score;
+            documentation_results.file_doc_issues = file_issues;
+            documentation_results.directory_doc_health = dir_scores;
+            documentation_results.directory_doc_issues = dir_issue_counts;
+        }
 
         if let Some(ref callback) = progress_callback {
             callback("Analysis complete", 100.0);
@@ -301,8 +334,113 @@ impl AnalysisPipeline {
             impact: impact_results,
             lsh: lsh_results,
             coverage: coverage_results,
+            documentation: documentation_results,
             health_metrics,
         })
+    }
+
+    /// Compute documentation health using doc_audit with directory-aware aggregation and eligibility thresholds.
+    /// Returns (score 0-100, doc_issue_count, per-file issues, per-directory scores).
+    fn compute_doc_health(
+        paths: &[PathBuf],
+        cfg: &DocHealthConfig,
+    ) -> Option<(
+        f64,
+        usize,
+        HashMap<String, usize>,
+        HashMap<String, f64>,
+        HashMap<String, usize>,
+    )> {
+        let root = paths.iter().find(|p| p.is_dir())?.clone();
+        let audit_cfg = DocAuditConfig::new(root);
+        let result = run_audit(&audit_cfg).ok()?;
+
+        // Per-file issue counts
+        let mut file_gaps: HashMap<PathBuf, usize> = HashMap::new();
+        for issue in result.documentation_issues.iter() {
+            *file_gaps.entry(issue.path.clone()).or_insert(0) += 1;
+        }
+
+        let mut file_issue_out: HashMap<String, usize> = HashMap::new();
+
+        // Aggregate per-file eligibility and scores
+        let mut eligible_files = 0usize;
+        let mut files_with_gaps = 0usize;
+
+        // Directory aggregation buckets
+        let mut dir_eligible: HashMap<PathBuf, usize> = HashMap::new();
+        let mut dir_gaps: HashMap<PathBuf, usize> = HashMap::new();
+
+        for (path, gaps) in file_gaps.iter() {
+            let loc = std::fs::read_to_string(path)
+                .map(|c| c.lines().count())
+                .unwrap_or(0);
+            if loc < cfg.min_file_nodes {
+                continue;
+            }
+            eligible_files += 1;
+            if *gaps > 0 {
+                files_with_gaps += 1;
+            }
+
+            file_issue_out.insert(path.display().to_string(), *gaps);
+
+            let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            *dir_eligible.entry(dir.clone()).or_insert(0) += 1;
+            if *gaps > 0 {
+                *dir_gaps.entry(dir.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // README gaps counted as project-level penalties
+        let readme_gap_files = result.missing_readmes.len() + result.stale_readmes.len();
+        eligible_files += readme_gap_files;
+        files_with_gaps += readme_gap_files;
+        let total_doc_issues = files_with_gaps;
+
+        // Directory-level doc health (only if enough files)
+        let mut dir_scores = Vec::new();
+        let mut dir_score_map: HashMap<String, f64> = HashMap::new();
+        let mut dir_issue_map: HashMap<String, usize> = HashMap::new();
+        for (dir, eligible) in dir_eligible.iter() {
+            if *eligible < cfg.min_files_per_dir {
+                dir_scores.push(100.0);
+                dir_score_map.insert(dir.display().to_string(), 100.0);
+                dir_issue_map.insert(dir.display().to_string(), 0);
+                continue;
+            }
+            let gaps = *dir_gaps.get(dir).unwrap_or(&0);
+            let coverage = 1.0 - (gaps as f64 / *eligible as f64);
+            let score = (coverage * 100.0).clamp(0.0, 100.0);
+            dir_scores.push(score);
+            dir_score_map.insert(dir.display().to_string(), score);
+            dir_issue_map.insert(dir.display().to_string(), gaps);
+        }
+
+        // Project score preference: directory weighted average if any eligible dirs; else file coverage; else 100.
+        if !dir_scores.is_empty() {
+            let avg = dir_scores.iter().sum::<f64>() / dir_scores.len() as f64;
+            return Some((
+                avg.clamp(0.0, 100.0),
+                total_doc_issues,
+                file_issue_out,
+                dir_score_map,
+                dir_issue_map,
+            ));
+        }
+
+        if eligible_files == 0 {
+            return Some((100.0, 0, file_issue_out, dir_score_map, dir_issue_map));
+        }
+
+        let coverage = 1.0 - (files_with_gaps as f64 / eligible_files as f64);
+        Some((
+            (coverage * 100.0).clamp(0.0, 100.0),
+            total_doc_issues,
+            file_issue_out,
+            dir_score_map,
+            dir_issue_map,
+        ))
     }
 
     /// Discover files to analyze using git-aware file discovery
@@ -467,6 +605,8 @@ impl AnalysisPipeline {
             total_issues: priority_counts,
             high_priority_issues: high_priority,
             critical_issues,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
         };
 
         let placeholder = ComprehensiveAnalysisResult {
@@ -521,6 +661,7 @@ impl AnalysisPipeline {
                 overall_coverage_percentage: None,
                 analysis_method: "disabled".to_string(),
             },
+            documentation: DocumentationAnalysisResults::default(),
             health_metrics,
         };
 
@@ -597,6 +738,7 @@ impl AnalysisPipeline {
                 technical_debt_ratio: 0.0,
                 complexity_score: 0.0,
                 structure_quality_score: 100.0,
+                doc_health_score: 100.0,
             };
         }
 
@@ -611,6 +753,7 @@ impl AnalysisPipeline {
         let technical_debt = (avg_abs_score * 25.0).clamp(0.0, 100.0);
         let complexity = (avg_abs_score * 30.0).clamp(0.0, 100.0);
         let structure_quality = (100.0 - avg_abs_score * 12.0).clamp(0.0, 100.0);
+        let doc_health_score = 100.0; // placeholder until doc analysis contributes
 
         HealthMetrics {
             overall_health_score: overall_health,
@@ -618,6 +761,7 @@ impl AnalysisPipeline {
             technical_debt_ratio: technical_debt,
             complexity_score: complexity,
             structure_quality_score: structure_quality,
+            doc_health_score,
         }
     }
 
@@ -800,6 +944,98 @@ impl AnalysisPipeline {
         results: &ComprehensiveAnalysisResult,
     ) -> Vec<FeatureVector> {
         let mut feature_vectors = Vec::new();
+
+        // Helper: logistic mapping that trends to 1.0 as value grows past mid
+        fn logistic_over(value: f64, mid: f64, steepness: f64) -> f64 {
+            let k = if steepness <= 0.0 { 1.0 } else { steepness };
+            let exponent = -((value - mid) / k);
+            let denom = 1.0 + exponent.exp();
+            (1.0 / denom).clamp(0.0, 1.0)
+        }
+
+        // Collect per-file aggregates for structure metrics
+        use std::collections::HashSet;
+        let mut files: HashSet<String> = HashSet::new();
+        let mut func_counts: HashMap<String, usize> = HashMap::new();
+        let mut class_counts: HashMap<String, usize> = HashMap::new();
+
+        for c in &results.complexity.detailed_results {
+            files.insert(c.file_path.clone());
+            match c.entity_type.as_str() {
+                "function" => *func_counts.entry(c.file_path.clone()).or_insert(0) += 1,
+                "class" => *class_counts.entry(c.file_path.clone()).or_insert(0) += 1,
+                _ => {}
+            }
+        }
+        for r in &results.refactoring.detailed_results {
+            files.insert(r.file_path.clone());
+        }
+
+        // LOC per file from disk (best-effort)
+        let mut file_loc: HashMap<String, f64> = HashMap::new();
+        for file in &files {
+            let loc = std::fs::read_to_string(file)
+                .map(|c| c.lines().count() as f64)
+                .unwrap_or(0.0);
+            file_loc.insert(file.clone(), loc);
+        }
+
+        // Files per directory
+        let mut files_per_dir: HashMap<String, usize> = HashMap::new();
+        for file in &files {
+            let dir = std::path::Path::new(file)
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| ".".to_string());
+            *files_per_dir.entry(dir).or_insert(0) += 1;
+        }
+
+        // Create per-file feature vectors with normalized structure metrics
+        for file in &files {
+            let loc = *file_loc.get(file).unwrap_or(&0.0);
+            let funcs = *func_counts.get(file).unwrap_or(&0) as f64;
+            let classes = *class_counts.get(file).unwrap_or(&0) as f64;
+            let dir = std::path::Path::new(file)
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| ".".to_string());
+            let dir_files = *files_per_dir.get(&dir).unwrap_or(&1) as f64;
+
+            let mut feature_vector = FeatureVector::new(format!("{}:file", file));
+            feature_vector.add_feature("lines_of_code", loc);
+            feature_vector.add_feature("functions_per_file", funcs);
+            feature_vector.add_feature("classes_per_file", classes);
+            feature_vector.add_feature("files_per_directory", dir_files);
+
+            // Normalized severities (higher is worse)
+            feature_vector.normalized_features.insert(
+                "lines_of_code".to_string(),
+                logistic_over(loc, 300.0, 75.0),
+            );
+            feature_vector.normalized_features.insert(
+                "functions_per_file".to_string(),
+                logistic_over(funcs, 12.0, 4.0),
+            );
+            feature_vector.normalized_features.insert(
+                "classes_per_file".to_string(),
+                logistic_over(classes, 2.0, 1.0),
+            );
+            feature_vector.normalized_features.insert(
+                "files_per_directory".to_string(),
+                logistic_over(dir_files, 7.0, 2.0),
+            );
+
+            feature_vector.add_metadata(
+                "entity_type",
+                serde_json::Value::String("file".to_string()),
+            );
+            feature_vector.add_metadata(
+                "file_path",
+                serde_json::Value::String(file.clone()),
+            );
+
+            feature_vectors.push(feature_vector);
+        }
 
         // Create feature vectors from complexity analysis results
         for complexity_result in &results.complexity.detailed_results {
@@ -1058,6 +1294,8 @@ mod tests {
             total_issues: 6,
             high_priority_issues: 4,
             critical_issues: 3,
+            doc_health_score: 1.0,
+                    doc_issue_count: 0,
         };
 
         ComprehensiveAnalysisResult {
@@ -1117,12 +1355,14 @@ mod tests {
                 overall_coverage_percentage: Some(74.0),
                 analysis_method: "lcov".to_string(),
             },
+            documentation: DocumentationAnalysisResults::default(),
             health_metrics: HealthMetrics {
                 overall_health_score: 58.0,
                 maintainability_score: 52.0,
                 technical_debt_ratio: 71.0,
                 complexity_score: 83.0,
                 structure_quality_score: 45.0,
+                doc_health_score: 100.0,
             },
         }
     }

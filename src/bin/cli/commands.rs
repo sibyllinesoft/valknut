@@ -2169,6 +2169,8 @@ async fn handle_quality_gates(
 fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     let mut config = QualityGateConfig {
         enabled: args.quality_gate.quality_gate || args.quality_gate.fail_on_issues,
+        min_health_score: QualityGateConfig::default().min_health_score,
+        min_doc_health_score: QualityGateConfig::default().min_doc_health_score,
         ..Default::default()
     };
 
@@ -2178,6 +2180,10 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     }
     if let Some(min_health) = args.quality_gate.min_health {
         config.min_maintainability_score = min_health;
+        config.min_health_score = min_health;
+    }
+    if let Some(min_doc_health) = args.quality_gate.min_doc_health {
+        config.min_doc_health_score = min_doc_health;
     }
     if let Some(max_debt) = args.quality_gate.max_debt {
         config.max_technical_debt_ratio = max_debt;
@@ -2435,12 +2441,16 @@ mod tests {
         let mut buffer = Vec::new();
         {
             let _color_guard = ColorOverrideGuard::new();
-            let mut redirect = BufferRedirect::stdout().expect("redirect stdout");
-            action();
-            std::io::stdout().flush().expect("flush stdout");
-            redirect
-                .read_to_end(&mut buffer)
-                .expect("read captured stdout");
+            if let Ok(mut redirect) = BufferRedirect::stdout() {
+                action();
+                std::io::stdout().flush().expect("flush stdout");
+                redirect
+                    .read_to_end(&mut buffer)
+                    .expect("read captured stdout");
+            } else {
+                // If stdout is already redirected (rare in concurrent tests), just run the action.
+                action();
+            }
         }
         String::from_utf8(buffer).expect("stdout should be valid utf8")
     }
@@ -2491,6 +2501,7 @@ mod tests {
                 fail_on_issues: false,
                 max_complexity: None,
                 min_health: None,
+                min_doc_health: None,
                 max_debt: None,
                 min_maintainability: None,
                 max_issues: None,
@@ -2643,16 +2654,18 @@ export function accumulate(values: number[]): number {
                 refactoring_needed: 1,
                 high_priority: 1,
                 critical: 0,
-                avg_refactoring_score: 0.75,
-                code_health_score: 0.65,
-                total_files: 1,
-                total_entities: 1,
-                total_lines_of_code: 120,
-                languages: vec!["Rust".to_string()],
-                total_issues: 1,
-                high_priority_issues: 1,
-                critical_issues: 0,
-            },
+            avg_refactoring_score: 0.75,
+            code_health_score: 0.65,
+            total_files: 1,
+            total_entities: 1,
+            total_lines_of_code: 120,
+            languages: vec!["Rust".to_string()],
+            total_issues: 1,
+            high_priority_issues: 1,
+            critical_issues: 0,
+            doc_health_score: 1.0,
+            doc_issue_count: 0,
+        },
             normalized: None,
             passes: valknut_rs::api::results::StageResultsBundle::disabled(),
             refactoring_candidates: vec![candidate],
@@ -2675,11 +2688,13 @@ export function accumulate(values: number[]): number {
                 technical_debt_ratio: 25.0,
                 complexity_score: 45.0,
                 structure_quality_score: 78.0,
+                doc_health_score: 100.0,
             }),
             clone_analysis: None,
             coverage_packs: Vec::new(),
             warnings: Vec::new(),
             code_dictionary: CodeDictionary::default(),
+            documentation: None,
         }
     }
 
@@ -2933,10 +2948,13 @@ export function accumulate(values: number[]): number {
             metrics.complexity_score = 88.0;
             metrics.technical_debt_ratio = 65.0;
             metrics.maintainability_score = 52.0;
+            metrics.doc_health_score = 10.0;
         }
 
         let config = QualityGateConfig {
             enabled: true,
+            min_health_score: QualityGateConfig::default().min_health_score,
+            min_doc_health_score: 50.0,
             max_complexity_score: 55.0,
             max_technical_debt_ratio: 25.0,
             min_maintainability_score: 85.0,
@@ -2976,6 +2994,8 @@ export function accumulate(values: number[]): number {
 
         let config = QualityGateConfig {
             enabled: true,
+            min_health_score: QualityGateConfig::default().min_health_score,
+            min_doc_health_score: 0.0,
             max_complexity_score: 90.0,
             max_technical_debt_ratio: 90.0,
             min_maintainability_score: 10.0,
@@ -3996,6 +4016,7 @@ export function accumulate(values: number[]): number {
             phase_filtering_stats: None,
             performance_metrics: None,
             notes: vec!["Filtered duplicates".to_string()],
+            clone_pairs: Vec::new(),
         });
 
         result.warnings = vec!["Sample warning".to_string()];

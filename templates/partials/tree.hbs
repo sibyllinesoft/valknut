@@ -1,10 +1,9 @@
-<!-- Complexity Analysis -->
-<div class="results-section accordion">
-    <h2 class="accordion-heading" data-target="accordion-complexity" role="button" aria-expanded="true" style="margin-bottom: 0.75rem; cursor: pointer;">
-        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
-        Complexity Analysis
-    </h2>
-    <div id="accordion-complexity" class="accordion-body" style="display: block;">
+<!-- Files -->
+<div class="results-section tab-panel" data-tab="complexity">
+    <div class="tab-heading-row" style="display:none;">
+        <h2 class="tab-heading">Files</h2>
+    </div>
+    <div class="tab-body">
         <div id="react-tree-root" class="analysis-tree" style="min-height: 560px; border-top: 1px solid rgba(255,255,255,0.026); border-bottom: 1px solid rgba(255,255,255,0.026);">
             <noscript>
                 <div class="valknut-tree-empty">
@@ -145,7 +144,13 @@
                 }
 
                 const children = Array.isArray(node.children) ? node.children : [];
+                const directIssues = Array.isArray(node.issues) ? node.issues.length : 0;
                 let totalIssues = Number(node.totalIssues ?? node.total_issues ?? node.refactoringNeeded ?? node.refactoring_needed ?? node.issueCount ?? node.issue_count ?? 0) || 0;
+                if (totalIssues === 0 && directIssues > 0) {
+                    totalIssues = directIssues;
+                } else if (directIssues > totalIssues) {
+                    totalIssues = directIssues;
+                }
                 let entityCount = Number(node.entityCount ?? node.entity_count ?? 0) || 0;
                 let fileCount = Number(node.fileCount ?? node.file_count ?? 0) || 0;
                 const severityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
@@ -312,6 +317,36 @@
                     aggregateNode(node);
                     if (Array.isArray(node.children)) {
                         aggregateHierarchy(node.children);
+                    }
+                    // push aggregates upward: if a folder/file has children, sum their counts
+                    if (node.type === 'file' && Array.isArray(node.children)) {
+                        const childIssues = node.children.reduce((sum, c) => sum + (c.totalIssues || c.total_issues || (Array.isArray(c.issues) ? c.issues.length : 0) || 0), 0);
+                        if ((node.totalIssues || node.total_issues || 0) < childIssues) {
+                            node.totalIssues = childIssues;
+                            node.total_issues = childIssues;
+                        }
+                        const childEntities = node.children.reduce((sum, c) => sum + (c.entityCount || c.entity_count || (c.type === 'entity' ? 1 : 0)), 0);
+                        if ((node.entityCount || node.entity_count || 0) < childEntities) {
+                            node.entityCount = childEntities;
+                            node.entity_count = childEntities;
+                        }
+                    }
+                    if (node.type === 'folder' && Array.isArray(node.children)) {
+                        const childIssues = node.children.reduce((sum, c) => sum + (c.totalIssues || c.total_issues || (Array.isArray(c.issues) ? c.issues.length : 0) || 0), 0);
+                        if ((node.totalIssues || node.total_issues || 0) < childIssues) {
+                            node.totalIssues = childIssues;
+                            node.total_issues = childIssues;
+                        }
+                        const childEntities = node.children.reduce((sum, c) => sum + (c.entityCount || c.entity_count || (c.type === 'entity' ? 1 : 0)), 0);
+                        if ((node.entityCount || node.entity_count || 0) < childEntities) {
+                            node.entityCount = childEntities;
+                            node.entity_count = childEntities;
+                        }
+                        const childFiles = node.children.reduce((sum, c) => sum + (c.fileCount || c.file_count || (c.type === 'file' ? 1 : 0)), 0);
+                        if ((node.fileCount || node.file_count || 0) < childFiles) {
+                            node.fileCount = childFiles;
+                            node.file_count = childFiles;
+                        }
                     }
                 });
             }

@@ -1,10 +1,22 @@
-    <!-- Raw Data for Debugging -->
-    <div class="raw-data">
-        <details>
-            <summary>Raw Analysis Data (Debug)</summary>
-            <pre>{{#if results}}{{json results}}{{else}}No debug data available{{/if}}</pre>
-        </details>
+    <div id="debug-modal" style="display:none;">
+        <div class="debug-backdrop"></div>
+        <div class="debug-dialog">
+            <div class="debug-dialog__header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span data-lucide="database" aria-hidden="true"></span>
+                    <span>Raw Analysis Data</span>
+                </div>
+                <button id="debug-close" aria-label="Close debug modal" style="background:none;border:none;color:inherit;cursor:pointer;">
+                    <span data-lucide="x"></span>
+                </button>
+            </div>
+            <div class="debug-dialog__body">
+                <pre id="debug-json" class="json-pre">Loading…</pre>
+            </div>
+        </div>
     </div>
+
+    <script id="raw-analysis-json" type="application/json">{{#if results}}{{{json results}}}{{else}}{}{{/if}}</script>
 </div>
 
 <script>
@@ -144,45 +156,221 @@
         }
     }
     
-    // Initialize Lucide icons when DOM is loaded
+    // Tab styles to match headers + debug modal styles
     document.addEventListener('DOMContentLoaded', function() {
+        const styleEl = document.createElement('style');
+        styleEl.textContent = `
+        .tabs {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin: 0 0 0.75rem 0;
+        }
+        .tab-button {
+            background: transparent;
+            border: none;
+            color: var(--color-text);
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font: inherit;
+        }
+        .tab-button:not(.tab-active) { color: rgba(229, 231, 235, 0.35); }
+        .tab-button:focus { outline: none; box-shadow: none; }
+        .tab-button .tab-heading {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: inherit;
+        }
+        .tab-button.tab-active { color: var(--color-text); }
+
+        /* Debug modal */
+        #debug-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        #debug-modal.open { display: flex; }
+        .debug-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            backdrop-filter: blur(6px);
+        }
+        .debug-dialog {
+            position: relative;
+            background: rgba(30,30,30,0.7);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: var(--shadow-lg);
+            border-radius: 12px;
+            padding: 12px;
+            width: min(960px, 90vw);
+            max-height: 80vh;
+            backdrop-filter: blur(16px);
+        }
+        .debug-dialog__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--color-text);
+            font-weight: 600;
+            padding: 6px 4px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .debug-dialog__body {
+            padding: 10px 4px 6px;
+            overflow: auto;
+            max-height: 70vh;
+        }
+        .json-pre {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 12px;
+            color: var(--color-text);
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            white-space: pre;
+            overflow: auto;
+        }
+        .json-pre .key { color: #93c5fd; }
+        .json-pre .string { color: #a7f3d0; }
+        .json-pre .number { color: #fca5a5; }
+        .json-pre .bool { color: #fcd34d; }
+        .json-pre .null { color: #c084fc; }
+
+        /* Tooltip list bullets → horizontal bars */
+        .tooltip-section-list {
+            list-style: none;
+            margin: 0.35rem 0 0;
+            padding: 0;
+            display: grid;
+            gap: 0.35rem;
+        }
+        .tooltip-section-list li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .tooltip-section-list li::before {
+            content: '';
+            display: inline-block;
+            width: 16px;
+            height: 3px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.28);
+            flex-shrink: 0;
+        }
+        .tooltip-section-list .issue-heading,
+        .tooltip-section-list .issue-summary {
+            color: var(--color-text);
+            font-weight: 400;
+            font-size: 0.9rem;
+        }
+        .tooltip-name {
+            text-align: center;
+            width: 100%;
+        }
+        .valknut-tooltip hr {
+            display: none !important;
+        }
+        .valknut-tooltip .tooltip-name {
+            text-align: center;
+            width: 100%;
+            margin: 0 0 4px 0;
+        }
+        .valknut-tooltip .tooltip-section {
+            margin-top: 14px;
+            padding-top: 0;
+            border-top: none;
+        }
+        .valknut-tooltip .tooltip-section h4 {
+            margin: 6px 0 4px 0;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .valknut-tooltip .tooltip-section-list {
+            margin-top: 4px;
+        }
+        .valknut-tooltip .tooltip-metrics {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 6px 0;
+            color: rgba(229, 231, 235, 0.78);
+        }
+        .valknut-tooltip .tooltip-metrics li {
+            display: block;
+            font-size: 0.95rem;
+            line-height: 1.25;
+        }
+        .valknut-tooltip .tooltip-metrics .metric-label,
+        .valknut-tooltip .tooltip-metrics .metric-value {
+            display: inline;
+            line-height: inherit;
+        }
+        .valknut-tooltip .tooltip-metrics .metric-label::after {
+            content: ': ';
+        }
+        `;
+        document.head.appendChild(styleEl);
         lucide.createIcons();
     });
 
-    // Simple accordion toggle for report sections using lucide chevrons + smooth height animation
-    function initAccordions() {
-        const headings = document.querySelectorAll('.accordion-heading');
-        headings.forEach((heading) => {
-            const targetId = heading.getAttribute('data-target');
-            const body = targetId ? document.getElementById(targetId) : heading.nextElementSibling;
-            if (!body) return;
-            body.style.overflow = 'hidden';
-            if (body.style.display === 'none') {
-                body.style.display = 'block';
-                body.style.maxHeight = '0px';
-            } else {
-                body.style.display = 'block';
-                body.style.maxHeight = body.scrollHeight + 'px';
-            }
-            body.style.transition = 'max-height 240ms ease';
+    // Simple tabs (replace accordion behavior)
+    function initTabs() {
+        const panels = Array.from(document.querySelectorAll('.tab-panel'));
+        if (!panels.length) return;
 
-            heading.addEventListener('click', () => {
-                const isOpen = body.style.maxHeight && body.style.maxHeight !== '0px';
-                if (isOpen) {
-                    body.style.maxHeight = body.scrollHeight + 'px'; // ensure current height
-                    requestAnimationFrame(() => body.style.maxHeight = '0px');
-                } else {
-                    body.style.maxHeight = body.scrollHeight + 'px';
-                }
-                heading.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-                const icon = heading.querySelector('.accordion-icon');
-                if (icon) {
-                    icon.setAttribute('data-lucide', isOpen ? 'chevron-right' : 'chevron-down');
-                }
-                if (window.lucide && typeof window.lucide.createIcons === 'function') {
-                    window.lucide.createIcons();
-                }
+        const tabsContainer = document.createElement('div');
+        tabsContainer.className = 'tabs';
+
+        const tabButtons = panels.map((panel, idx) => {
+            const id = panel.getAttribute('data-tab') || `tab-${idx}`;
+            panel.setAttribute('data-tab', id);
+            const heading = panel.querySelector('.tab-heading');
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'tab-button';
+            btn.dataset.tabTarget = id;
+
+            // Render the original heading element inside the button for matching style
+            const btnHeading = document.createElement('h2');
+            btnHeading.className = 'tab-heading';
+            btnHeading.textContent = heading ? heading.textContent.trim() : `Tab ${idx + 1}`;
+            btn.appendChild(btnHeading);
+
+            tabsContainer.appendChild(btn);
+            return { btn, panel, heading };
+        });
+
+        // Insert tabs container ahead of the first panel
+        panels[0].parentNode.insertBefore(tabsContainer, panels[0]);
+
+        function activate(id) {
+            tabButtons.forEach(({ btn, panel }) => {
+                const active = panel.getAttribute('data-tab') === id;
+                panel.classList.toggle('tab-active', active);
+                panel.style.display = active ? 'block' : 'none';
+                btn.classList.toggle('tab-active', active);
             });
+            window.dispatchEvent(new CustomEvent('valknut-tab-activated', { detail: { id } }));
+        }
+
+        const defaultId = panels[0].getAttribute('data-tab');
+        activate(defaultId);
+
+        tabButtons.forEach(({ btn }) => {
+            btn.addEventListener('click', () => activate(btn.dataset.tabTarget));
         });
     }
 
@@ -201,13 +389,63 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', initAccordions);
+    document.addEventListener('DOMContentLoaded', initTabs);
 
     // Helper function to capitalize strings (for Handlebars templates that might need it)
     function capitalize(str) {
         if (!str) return '';
         return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
     }
+
+    // Debug modal wiring
+    (function setupDebugModal() {
+        const debugBtn = document.getElementById('debug-open');
+        const debugModal = document.getElementById('debug-modal');
+        const debugClose = document.getElementById('debug-close');
+        const debugJsonEl = document.getElementById('debug-json');
+        const rawDataEl = document.getElementById('raw-analysis-json');
+
+        function highlight(jsonText) {
+            return jsonText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"(\\w+)":/g, '"<span class="key">$1</span>":')
+                .replace(/: "(.*?)"/g, ': "<span class="string">$1</span>"')
+                .replace(/: (\\d+\\.\\d+|\\d+)/g, ': <span class="number">$1</span>')
+                .replace(/: (true|false)/g, ': <span class="bool">$1</span>')
+                .replace(/: null/g, ': <span class="null">null</span>');
+        }
+
+        function openDebug() {
+            if (!debugModal) return;
+            if (rawDataEl && debugJsonEl) {
+                try {
+                    const parsed = JSON.parse(rawDataEl.textContent || '{}');
+                    const pretty = JSON.stringify(parsed, null, 2);
+                    debugJsonEl.innerHTML = highlight(pretty);
+                } catch (err) {
+                    debugJsonEl.textContent = 'Failed to parse analysis JSON';
+                }
+            }
+            debugModal.classList.add('open');
+            if (window.lucide) window.lucide.createIcons();
+        }
+
+        function closeDebug() {
+            if (debugModal) debugModal.classList.remove('open');
+        }
+
+        if (debugBtn) debugBtn.addEventListener('click', openDebug);
+        if (debugClose) debugClose.addEventListener('click', closeDebug);
+        if (debugModal) {
+            debugModal.addEventListener('click', (e) => {
+                if (e.target === debugModal || e.target.classList.contains('debug-backdrop')) {
+                    closeDebug();
+                }
+            });
+        }
+    })();
 
     </script>
     {{#if enable_animation}}

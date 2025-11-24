@@ -1,22 +1,36 @@
 <!-- Analysis Summary -->
 <div class="analysis-summary results-section">
     <h2>Analysis Summary</h2>
-    <div class="summary-stats">
-        <div class="stat-item">
-            <div class="stat-value">{{summary.files_processed}}</div>
-            <div class="stat-label">Files Analyzed</div>
+    <div class="summary-stats clone-metric-grid" style="margin-top: 0.5rem;">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Files Analyzed</span>
+            <span class="clone-metric-card__value">{{summary.files_processed}}</span>
         </div>
-        <div class="stat-item">
-            <div class="stat-value">{{summary.entities_analyzed}}</div>
-            <div class="stat-label">Code Entities</div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Code Entities</span>
+            <span class="clone-metric-card__value">{{summary.entities_analyzed}}</span>
         </div>
-        <div class="stat-item">
-            <div class="stat-value">{{summary.refactoring_needed}}</div>
-            <div class="stat-label">Need Refactoring</div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Need Refactoring</span>
+            <span class="clone-metric-card__value">{{summary.refactoring_needed}}</span>
         </div>
-        <div class="stat-item">
-            <div class="stat-value">{{#if summary.code_health_score}}{{percentage summary.code_health_score "1"}}%{{else}}N/A{{/if}}</div>
-            <div class="stat-label">Health Score</div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Health Score</span>
+            <span class="clone-metric-card__value">
+                {{#if summary.code_health_score}}{{percentage summary.code_health_score "1"}}%{{else}}N/A{{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Doc Health</span>
+            <span class="clone-metric-card__value">
+                {{#if summary.doc_health_score}}{{percentage summary.doc_health_score "1"}}%{{else}}N/A{{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Doc Issues</span>
+            <span class="clone-metric-card__value">
+                {{#if summary.doc_issue_count}}{{summary.doc_issue_count}}{{else}}0{{/if}}
+            </span>
         </div>
     </div>
 </div>
