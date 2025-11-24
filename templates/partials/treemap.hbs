@@ -196,7 +196,7 @@
                     };
 
                     Plotly.newPlot(rootEl, [trace], {
-                        margin: { l: 0, r: 0, t: 0, b: 60 },
+                        margin: { l: 0, r: 0, t: 0, b: 40 },
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
@@ -212,7 +212,7 @@
                                 title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
                                 tickformat: '.0f',
                                 orientation: 'h',
-                                y: -0.22,
+                                y: -0.15,
                                 yanchor: 'top',
                                 x: 0.5,
                                 xanchor: 'center',
