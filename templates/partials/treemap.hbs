@@ -17,6 +17,9 @@
             <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
             <input id="treemap-max-scale" type="number" value="100" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
         </div>
+        <div id="treemap-color-desc" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+            Aggregated complexity severity per entity; higher = more complex.
+        </div>
         <div id="treemap-root" style="width: 100%; min-height: 420px;"></div>
         <script id="treemap-data" type="application/json">
             {
@@ -30,11 +33,20 @@
                 const colorSelect = document.getElementById('treemap-color-metric');
                 const maxScaleInput = document.getElementById('treemap-max-scale');
                 const rootEl = document.getElementById('treemap-root');
+                const descEl = document.getElementById('treemap-color-desc');
                 if (!dataEl || !rootEl) return;
 
                 const payload = JSON.parse(dataEl.textContent || '{}');
                 const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
+
+                const metricDescriptions = {
+                    complexity: 'Aggregated complexity severity per entity; higher = more complex.',
+                    cognitive: 'Cognitive complexity severity (hard-to-follow code).',
+                    debt: 'Technical debt severity estimate.',
+                    maintainability: 'Maintainability/MI-derived severity (lower MI → higher severity).',
+                    structure: 'Structural issue severity (modularity/organization).'
+                };
 
                 function getLinesOfCode(entity) {
                     let loc = entity.lines_of_code || entity.linesOfCode || null;
@@ -247,6 +259,9 @@
                 function render() {
                     const metric = (colorSelect && colorSelect.value) || 'complexity';
                     const maxScale = Number(maxScaleInput && maxScaleInput.value) || 60;
+                    if (descEl) {
+                        descEl.textContent = metricDescriptions[metric] || '';
+                    }
                     buildTreemap(metric.toLowerCase(), maxScale);
                     // hook hover after build
                     rootEl.on('plotly_hover', function(ev) {

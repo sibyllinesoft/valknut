@@ -149,21 +149,35 @@
         lucide.createIcons();
     });
 
-    // Simple accordion toggle for report sections using lucide chevrons
+    // Simple accordion toggle for report sections using lucide chevrons + smooth height animation
     function initAccordions() {
         const headings = document.querySelectorAll('.accordion-heading');
         headings.forEach((heading) => {
+            const targetId = heading.getAttribute('data-target');
+            const body = targetId ? document.getElementById(targetId) : heading.nextElementSibling;
+            if (!body) return;
+            body.style.overflow = 'hidden';
+            if (body.style.display === 'none') {
+                body.style.display = 'block';
+                body.style.maxHeight = '0px';
+            } else {
+                body.style.display = 'block';
+                body.style.maxHeight = body.scrollHeight + 'px';
+            }
+            body.style.transition = 'max-height 240ms ease';
+
             heading.addEventListener('click', () => {
-                const targetId = heading.getAttribute('data-target');
-                const body = targetId ? document.getElementById(targetId) : heading.nextElementSibling;
-                if (!body) return;
-                const isOpen = body.style.display !== 'none';
-                const nextState = !isOpen;
-                body.style.display = nextState ? 'block' : 'none';
-                heading.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+                const isOpen = body.style.maxHeight && body.style.maxHeight !== '0px';
+                if (isOpen) {
+                    body.style.maxHeight = body.scrollHeight + 'px'; // ensure current height
+                    requestAnimationFrame(() => body.style.maxHeight = '0px');
+                } else {
+                    body.style.maxHeight = body.scrollHeight + 'px';
+                }
+                heading.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
                 const icon = heading.querySelector('.accordion-icon');
                 if (icon) {
-                    icon.setAttribute('data-lucide', nextState ? 'chevron-down' : 'chevron-right');
+                    icon.setAttribute('data-lucide', isOpen ? 'chevron-right' : 'chevron-down');
                 }
                 if (window.lucide && typeof window.lucide.createIcons === 'function') {
                     window.lucide.createIcons();
