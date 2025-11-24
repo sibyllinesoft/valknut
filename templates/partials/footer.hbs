@@ -227,19 +227,33 @@
         }
         .debug-dialog__body {
             padding: 10px 4px 6px;
-            overflow: auto;
-            max-height: 70vh;
         }
         .json-pre {
             background: rgba(255,255,255,0.03);
             border: 1px solid rgba(255,255,255,0.06);
             border-radius: 8px;
-            padding: 12px;
+            padding: 20px;
             color: var(--color-text);
             font-family: var(--font-mono);
             font-size: 0.9rem;
             white-space: pre;
             overflow: auto;
+            max-height: 65vh;
+        }
+        /* Custom scrollbar for JSON container - hide track */
+        .json-pre::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .json-pre::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .json-pre::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .json-pre::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
         .json-pre .key { color: #93c5fd; }
         .json-pre .string { color: #a7f3d0; }

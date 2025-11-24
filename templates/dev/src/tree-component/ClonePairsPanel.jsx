@@ -141,14 +141,13 @@ export const ClonePairsPanel = ({ pairs = [] }) => {
       style={{
         position: 'relative',
         height: 520,
-        overflowX: 'hidden',
-        overflowY: 'auto',
         background: 'transparent',
         borderRadius: 12,
-        padding: '4px 2px',
+        padding: '12px 10px',
         scrollbarWidth: 'thin',
         scrollbarColor: 'rgba(148,163,184,0.45) transparent',
       }}
+      className="json-scroll-container"
     >
       <div
         style={{
