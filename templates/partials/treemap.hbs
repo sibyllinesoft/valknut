@@ -193,35 +193,38 @@
                                 [1, '#991b1b']
                             ],
                             cmin: 0,
-                            cmax: maxScale,
-                            colorbar: {
-                                title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
-                                tickformat: '.0f'
-                            }
+                            cmax: maxScale
                         },
+                        coloraxis: 'coloraxis',
                         branchvalues: 'total',
                         hovertemplate: '%{label}<br>Size: %{value}<br>Severity: %{color:.1f}<extra></extra>',
                         customdata: custom
                     };
 
                     Plotly.newPlot(rootEl, [trace], {
-                        margin: { l: 0, r: 0, t: 0, b: 40 },
+                        margin: { l: 0, r: 0, t: 0, b: 60 },
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
                         coloraxis: {
+                            colorscale: trace.marker.colorscale,
+                            cmin: 0,
+                            cmax: maxScale,
                             colorbar: {
+                                title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
+                                tickformat: '.0f',
                                 orientation: 'h',
-                                y: -0.2,
+                                y: -0.25,
                                 yanchor: 'top',
-                                thickness: 12,
-                                len: 0.6
+                                x: 0.5,
+                                xanchor: 'center',
+                                len: 0.7,
+                                thickness: 12
                             }
                         }
                     }, {
                         displaylogo: false,
-                        responsive: true,
-                        coloraxis: { colorbar: { orientation: 'h' } }
+                        responsive: true
                     });
 
                     function clearSelection() {
