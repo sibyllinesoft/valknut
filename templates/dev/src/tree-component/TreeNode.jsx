@@ -896,14 +896,6 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
 
         if (isFile) {
             const severityCounts = aggregates.severityCounts || {};
-            const totalIssues = aggregates.totalIssues ?? data.totalIssues ?? Object.values(severityCounts).reduce((acc, value) => acc + (value || 0), 0);
-            const fileHealth = getHealthScore(data);
-            const metrics = [
-                { label: 'Entities', value: aggregates.entityCount ?? data.entityCount ??
-                    (data.children ? data.children.filter((child) => child.type === 'entity').length : 0) },
-                { label: 'Issues', value: totalIssues },
-                { label: 'Health', value: typeof fileHealth === 'number' ? `${Math.round(fileHealth * 100)}%` : '—' },
-            ];
 
             const severityList = [
                 { key: 'critical', label: 'Critical', value: severityCounts.critical || 0 },
@@ -920,7 +912,6 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                 'div',
                 null,
                 React.createElement('div', { className: 'tooltip-name' }, data.name || 'File'),
-                renderMetrics(metrics),
                 severityList.length > 0 &&
                     React.createElement(
                         'div',
