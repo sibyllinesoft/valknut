@@ -18,6 +18,12 @@ analysis:
     - "*/target/*"
     - "*/__pycache__/*"
     - "*.min.js"
+    - "templates/assets/**"
+    - "templates/dev/assets/**"
+    - "templates/dev/debug_with_unminified_bundle.js"
+    - "templates/dev/public/**"
+    - "templates/dev/src/tree-component/react-tree-bundle.js"
+    - "templates/dev/src/tree-component/test-bundle.js"
   include_patterns:
     - "**/*"
 
@@ -51,7 +57,7 @@ graph:
 
 # LSH and similarity detection configuration
 lsh:
-  num_hashes: 128
+  num_hashes: 120
   num_bands: 20
   shingle_size: 3
   similarity_threshold: 0.8
@@ -157,6 +163,8 @@ performance:
 
 # Coverage analysis configuration
 coverage:
+  auto_discover: false
+  max_age_days: 0
   enabled: true
   report_paths:
     - "coverage.lcov"

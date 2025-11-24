@@ -4,6 +4,7 @@
 //! seamless merging of default configurations, configuration files, and CLI overrides.
 
 use anyhow;
+use std::path::PathBuf;
 
 use crate::cli::args::AnalyzeArgs;
 use valknut_rs::api::config_types as api_config;
@@ -74,7 +75,17 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
     let mut api_config = api_config::AnalysisConfig::default();
     let mut file_config: Option<ValknutConfig> = None;
 
-    if let Some(config_path) = &args.config {
+    // Prefer an explicit --config, otherwise look for local defaults (.valknut.yml/.yaml)
+    let implicit_config_path = if args.config.is_none() {
+        [".valknut.yml", ".valknut.yaml"]
+            .iter()
+            .map(PathBuf::from)
+            .find(|p| p.exists())
+    } else {
+        None
+    };
+
+    if let Some(config_path) = args.config.as_ref().or(implicit_config_path.as_ref()) {
         let loaded_config = ValknutConfig::from_yaml_file(config_path).map_err(|e| {
             anyhow::anyhow!(
                 "Failed to load configuration from {}: {}",

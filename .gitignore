@@ -143,6 +143,9 @@ trefoil-animation.js
 templates/assets/dist/
 templates/dev/src/tree-component/react-tree-bundle.debug.js
 templates/dev/src/tree-component/react-tree-bundle.debug.js.map
+# Bundled UI artifacts for dev reports
+templates/dev/assets/react-tree-bundle.js
+templates/dev/assets/react-tree-bundle.js.map
 
 # Cache directories
 .cache/
