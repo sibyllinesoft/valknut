@@ -1,0 +1,160 @@
+<!-- Complexity Treemap -->
+<div class="results-section accordion">
+    <h2 class="accordion-heading" data-target="accordion-treemap" role="button" aria-expanded="true" style="margin-bottom: 0.75rem;">
+        <span class="accordion-icon" data-lucide="chevron-down" aria-hidden="true"></span>
+        Complexity Treemap
+    </h2>
+    <div id="accordion-treemap" class="accordion-body" style="display: block;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:0.5rem;">
+            <label for="treemap-color-metric" style="font-size:0.9rem;color:var(--text-secondary);">Color by:</label>
+            <select id="treemap-color-metric" style="background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 10px; font-size:0.9rem;">
+                <option value="complexity" selected>Complexity</option>
+                <option value="cognitive">Cognitive</option>
+                <option value="debt">Debt</option>
+                <option value="maintainability">Maintainability</option>
+                <option value="structure">Structure</option>
+            </select>
+            <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
+            <input id="treemap-max-scale" type="number" value="60" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
+        </div>
+        <div id="treemap-root" style="width: 100%; min-height: 420px;"></div>
+        <script id="treemap-data" type="application/json">
+            {
+                "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}}
+            }
+        </script>
+        <script>
+            (function() {
+                const dataEl = document.getElementById('treemap-data');
+                const colorSelect = document.getElementById('treemap-color-metric');
+                const maxScaleInput = document.getElementById('treemap-max-scale');
+                const rootEl = document.getElementById('treemap-root');
+                if (!dataEl || !rootEl) return;
+
+                const payload = JSON.parse(dataEl.textContent || '{}');
+                const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+
+                function getLinesOfCode(entity) {
+                    let loc = entity.lines_of_code || entity.linesOfCode || null;
+                    if (loc) return loc;
+                    const issues = Array.isArray(entity.issues) ? entity.issues : [];
+                    for (const issue of issues) {
+                        const feats = Array.isArray(issue.contributing_features) ? issue.contributing_features : [];
+                        for (const f of feats) {
+                            if (String(f.feature_name || '').toLowerCase() === 'lines_of_code') {
+                                return Number(f.value) || Number(f.contribution) || 1;
+                            }
+                        }
+                    }
+                    return 1;
+                }
+
+                function severityForCategory(entity, category) {
+                    const issues = Array.isArray(entity.issues) ? entity.issues : [];
+                    for (const issue of issues) {
+                        const cat = String(issue.category || '').toLowerCase();
+                        if (cat === category) {
+                            return Number(issue.severity) || 0;
+                        }
+                    }
+                    return Number(entity.score) || 0;
+                }
+
+                function buildTreemap(colorMetric, maxScale) {
+                    const labels = [];
+                    const parents = [];
+                    const values = [];
+                    const colors = [];
+                    const ids = [];
+
+                    const addNode = (id, label, parent, value, color) => {
+                        ids.push(id);
+                        labels.push(label);
+                        parents.push(parent);
+                        values.push(value);
+                        colors.push(color);
+                    };
+
+                    const ensurePath = (pathParts) => {
+                        let parent = 'Project';
+                        if (!idSet.has(parent)) {
+                            addNode(parent, 'Project', '', 0, 0);
+                            idSet.add(parent);
+                        }
+                        let current = '';
+                        for (const part of pathParts) {
+                            current = current ? current + '/' + part : part;
+                            const id = 'dir:' + current;
+                            if (!idSet.has(id)) {
+                                addNode(id, part || 'root', parent, 0, 0);
+                                idSet.add(id);
+                            }
+                            parent = id;
+                        }
+                        return parent;
+                    };
+
+                    const idSet = new Set();
+
+                    candidates.forEach((entity) => {
+                        const filePath = String(entity.file_path || entity.filePath || '').replace(/\\/g, '/');
+                        const parts = filePath.split('/').filter(Boolean);
+                        const fileName = parts.pop() || filePath || 'file';
+                        const dirParent = ensurePath(parts);
+                        const fileId = 'file:' + filePath;
+                        if (!idSet.has(fileId)) {
+                            addNode(fileId, fileName, dirParent || 'Project', 0, 0);
+                            idSet.add(fileId);
+                        }
+                        const leafId = 'entity:' + (entity.entity_id || entity.name || Math.random());
+                        const loc = getLinesOfCode(entity);
+                        const colorVal = severityForCategory(entity, colorMetric);
+                        addNode(leafId, entity.name || fileName, fileId, loc, Math.min(colorVal, maxScale));
+                    });
+
+                    const trace = {
+                        type: 'treemap',
+                        ids,
+                        labels,
+                        parents,
+                        values,
+                        marker: {
+                            colors,
+                            colorscale: 'YlOrRd',
+                            cmin: 0,
+                            cmax: maxScale,
+                            colorbar: {
+                                title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
+                                tickformat: '.0f'
+                            }
+                        },
+                        branchvalues: 'total',
+                        hovertemplate: '%{label}<br>Size: %{value}<br>Severity: %{color:.1f}<extra></extra>'
+                    };
+
+                    Plotly.newPlot(rootEl, [trace], {
+                        margin: { l: 0, r: 0, t: 0, b: 0 },
+                        paper_bgcolor: 'transparent',
+                        plot_bgcolor: 'transparent',
+                        font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' }
+                    }, { displaylogo: false, responsive: true });
+                }
+
+                function render() {
+                    const metric = (colorSelect && colorSelect.value) || 'complexity';
+                    const maxScale = Number(maxScaleInput && maxScaleInput.value) || 60;
+                    buildTreemap(metric.toLowerCase(), maxScale);
+                }
+
+                if (colorSelect) colorSelect.addEventListener('change', render);
+                if (maxScaleInput) maxScaleInput.addEventListener('change', render);
+
+                if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                    render();
+                } else {
+                    document.addEventListener('DOMContentLoaded', render);
+                }
+            })();
+        </script>
+    </div>
+</div>
