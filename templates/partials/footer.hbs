@@ -410,9 +410,9 @@
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/"(\\w+)":/g, '"<span class="key">$1</span>":')
+                .replace(/"(\w+)":/g, '"<span class="key">$1</span>":')
                 .replace(/: "(.*?)"/g, ': "<span class="string">$1</span>"')
-                .replace(/: (\\d+\\.\\d+|\\d+)/g, ': <span class="number">$1</span>')
+                .replace(/: (\d+\.\d+|\d+)/g, ': <span class="number">$1</span>')
                 .replace(/: (true|false)/g, ': <span class="bool">$1</span>')
                 .replace(/: null/g, ': <span class="null">null</span>');
         }
