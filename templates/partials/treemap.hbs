@@ -61,55 +61,87 @@
                 }
 
                 function buildTreemap(colorMetric, maxScale) {
-                    const labels = [];
-                    const parents = [];
-                    const values = [];
-                    const colors = [];
-                    const ids = [];
+                    const nodes = new Map();
 
-                    const addNode = (id, label, parent, value, color) => {
-                        ids.push(id);
-                        labels.push(label);
-                        parents.push(parent);
-                        values.push(value);
-                        colors.push(color);
-                    };
-
-                    const ensurePath = (pathParts) => {
-                        let parent = 'Project';
-                        if (!idSet.has(parent)) {
-                            addNode(parent, 'Project', '', 0, 0);
-                            idSet.add(parent);
-                        }
-                        let current = '';
-                        for (const part of pathParts) {
-                            current = current ? current + '/' + part : part;
-                            const id = 'dir:' + current;
-                            if (!idSet.has(id)) {
-                                addNode(id, part || 'root', parent, 0, 0);
-                                idSet.add(id);
+                    const ensureNode = (id, label, parent = '') => {
+                        if (!nodes.has(id)) {
+                            nodes.set(id, { id, label, parent, children: [], value: 0, color: 0 });
+                            if (parent && nodes.has(parent)) {
+                                nodes.get(parent).children.push(id);
                             }
-                            parent = id;
                         }
-                        return parent;
+                        return nodes.get(id);
                     };
 
-                    const idSet = new Set();
+                    // Root
+                    ensureNode('Project', 'Project', '');
+
+                    const severityCache = new Map();
+
+                    const getSeverity = (entity, metric) => {
+                        const key = (entity.entity_id || entity.name || '') + '|' + metric;
+                        if (severityCache.has(key)) return severityCache.get(key);
+                        const val = severityForCategory(entity, metric);
+                        severityCache.set(key, val);
+                        return val;
+                    };
 
                     candidates.forEach((entity) => {
                         const filePath = String(entity.file_path || entity.filePath || '').replace(/\\/g, '/');
                         const parts = filePath.split('/').filter(Boolean);
                         const fileName = parts.pop() || filePath || 'file';
-                        const dirParent = ensurePath(parts);
+                        let parentId = 'Project';
+                        let pathSoFar = '';
+                        parts.forEach((part) => {
+                            pathSoFar = pathSoFar ? pathSoFar + '/' + part : part;
+                            const dirId = 'dir:' + pathSoFar;
+                            ensureNode(dirId, part, parentId);
+                            parentId = dirId;
+                        });
                         const fileId = 'file:' + filePath;
-                        if (!idSet.has(fileId)) {
-                            addNode(fileId, fileName, dirParent || 'Project', 0, 0);
-                            idSet.add(fileId);
-                        }
+                        ensureNode(fileId, fileName, parentId);
+
                         const leafId = 'entity:' + (entity.entity_id || entity.name || Math.random());
                         const loc = getLinesOfCode(entity);
-                        const colorVal = severityForCategory(entity, colorMetric);
-                        addNode(leafId, entity.name || fileName, fileId, loc, Math.min(colorVal, maxScale));
+                        const colorVal = Math.min(getSeverity(entity, colorMetric), maxScale);
+                        const leaf = ensureNode(leafId, entity.name || fileName, fileId);
+                        leaf.value = loc;
+                        leaf.color = colorVal;
+                    });
+
+                    // Aggregate values and colors up the tree
+                    const aggregate = (id) => {
+                        const node = nodes.get(id);
+                        if (!node.children.length) {
+                            return { value: node.value, colorSum: node.color * node.value, weight: node.value || 1 };
+                        }
+                        let total = 0;
+                        let colorSum = 0;
+                        let weight = 0;
+                        node.children.forEach((childId) => {
+                            const res = aggregate(childId);
+                            total += res.value;
+                            colorSum += res.colorSum;
+                            weight += res.weight;
+                        });
+                        node.value = total;
+                        node.color = weight ? colorSum / weight : 0;
+                        return { value: node.value, colorSum: node.color * node.value, weight: node.value || weight || 1 };
+                    };
+                    aggregate('Project');
+
+                    const ids = [];
+                    const labels = [];
+                    const parents = [];
+                    const values = [];
+                    const colors = [];
+
+                    nodes.forEach((node) => {
+                        ids.push(node.id);
+                        labels.push(node.label);
+                        parents.push(node.parent);
+                        values.push(node.value);
+                        colors.push(node.color);
                     });
 
                     const trace = {
