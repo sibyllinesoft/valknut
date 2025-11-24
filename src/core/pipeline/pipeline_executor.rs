@@ -95,88 +95,68 @@ impl AnalysisPipeline {
             valknut_config.analysis.enable_coverage_analysis,
         );
 
-        let stage_runner: Arc<dyn StageOrchestrator> =
-            if valknut_config.denoise.enabled && analysis_config.enable_lsh_analysis {
-                use crate::detectors::lsh::config::DedupeConfig;
-                use crate::detectors::lsh::LshExtractor;
+        let stage_runner: Arc<dyn StageOrchestrator> = if analysis_config.enable_lsh_analysis {
+            use crate::detectors::lsh::config::DedupeConfig;
+            use crate::detectors::lsh::LshExtractor;
 
-                // Create LSH extractor with denoising configuration
-                let mut dedupe_config = DedupeConfig::default();
-                dedupe_config.min_function_tokens = valknut_config.denoise.min_function_tokens;
-                dedupe_config.min_ast_nodes = valknut_config.dedupe.min_ast_nodes; // honor dedupe default (20) unless overridden
-                dedupe_config.shingle_k = valknut_config.lsh.shingle_size;
-                dedupe_config.threshold_s = valknut_config.denoise.similarity;
+            // Build a single LSH extractor; always honor dedupe thresholds, toggle denoise flag
+            let mut dedupe_config = DedupeConfig::default();
+            dedupe_config.min_function_tokens = valknut_config.denoise.min_function_tokens;
+            dedupe_config.min_ast_nodes = valknut_config.dedupe.min_ast_nodes; // honor dedupe default (20) unless overridden
+            dedupe_config.min_match_tokens = valknut_config.denoise.min_match_tokens;
+            dedupe_config.require_distinct_blocks = valknut_config.denoise.require_blocks;
+            dedupe_config.shingle_k = valknut_config.lsh.shingle_size;
+            dedupe_config.threshold_s = valknut_config.denoise.similarity;
 
-                let lsh_extractor = LshExtractor::with_dedupe_config(dedupe_config)
-                    .with_lsh_config(valknut_config.lsh.clone().into())
-                    .with_denoise_enabled(true);
+            let lsh_extractor = LshExtractor::with_dedupe_config(dedupe_config)
+                .with_lsh_config(valknut_config.lsh.clone().into())
+                .with_denoise_enabled(valknut_config.denoise.enabled);
 
-                info!(
-                    "LSH extractor configured with denoising enabled (k={})",
-                    valknut_config.lsh.shingle_size
+            info!(
+                    "LSH extractor configured (denoise: {}, k={}, min_ast_nodes={}, min_tokens={}, similarity={:.2})",
+                    valknut_config.denoise.enabled,
+                    valknut_config.lsh.shingle_size,
+                    valknut_config.dedupe.min_ast_nodes,
+                    valknut_config.denoise.min_function_tokens,
+                    valknut_config.denoise.similarity
                 );
 
-                let structure_extractor = StructureExtractor::with_config(structure_config.clone());
-                let complexity_analyzer =
-                    ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-                let refactoring_analyzer =
-                    RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-                let coverage_extractor =
-                    CoverageExtractor::new(coverage_detector_config.clone(), ast_service.clone());
+            let structure_extractor = StructureExtractor::with_config(structure_config.clone());
+            let complexity_analyzer =
+                ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            let refactoring_analyzer =
+                RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
+            let coverage_extractor =
+                CoverageExtractor::new(coverage_detector_config.clone(), ast_service.clone());
 
-                Arc::new(AnalysisStages::new_with_lsh(
-                    structure_extractor,
-                    complexity_analyzer,
-                    refactoring_analyzer,
-                    lsh_extractor,
-                    coverage_extractor,
-                    ast_service.clone(),
-                    Arc::clone(&config_arc),
-                ))
-            } else if analysis_config.enable_lsh_analysis {
-                use crate::detectors::lsh::LshExtractor;
+            Arc::new(AnalysisStages::new_with_lsh(
+                structure_extractor,
+                complexity_analyzer,
+                refactoring_analyzer,
+                lsh_extractor,
+                coverage_extractor,
+                ast_service.clone(),
+                Arc::clone(&config_arc),
+            ))
+        } else {
+            // No LSH analysis
+            let structure_extractor = StructureExtractor::with_config(structure_config);
+            let complexity_analyzer =
+                ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            let refactoring_analyzer =
+                RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
+            let coverage_extractor =
+                CoverageExtractor::new(coverage_detector_config, ast_service.clone());
 
-                // Create LSH extractor without denoising
-                let lsh_extractor =
-                    LshExtractor::new().with_lsh_config(valknut_config.lsh.clone().into());
-                info!("LSH extractor configured without denoising");
-
-                let structure_extractor = StructureExtractor::with_config(structure_config.clone());
-                let complexity_analyzer =
-                    ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-                let refactoring_analyzer =
-                    RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-                let coverage_extractor =
-                    CoverageExtractor::new(coverage_detector_config.clone(), ast_service.clone());
-
-                Arc::new(AnalysisStages::new_with_lsh(
-                    structure_extractor,
-                    complexity_analyzer,
-                    refactoring_analyzer,
-                    lsh_extractor,
-                    coverage_extractor,
-                    ast_service.clone(),
-                    Arc::clone(&config_arc),
-                ))
-            } else {
-                // No LSH analysis
-                let structure_extractor = StructureExtractor::with_config(structure_config);
-                let complexity_analyzer =
-                    ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-                let refactoring_analyzer =
-                    RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-                let coverage_extractor =
-                    CoverageExtractor::new(coverage_detector_config, ast_service.clone());
-
-                Arc::new(AnalysisStages::new(
-                    structure_extractor,
-                    complexity_analyzer,
-                    refactoring_analyzer,
-                    coverage_extractor,
-                    ast_service,
-                    Arc::clone(&config_arc),
-                ))
-            };
+            Arc::new(AnalysisStages::new(
+                structure_extractor,
+                complexity_analyzer,
+                refactoring_analyzer,
+                coverage_extractor,
+                ast_service,
+                Arc::clone(&config_arc),
+            ))
+        };
 
         let scoring_config = valknut_config.scoring.clone();
         let feature_scorer = FeatureScorer::new(scoring_config);

@@ -683,6 +683,15 @@ impl AnalysisStages {
                     }
 
                     for entity in extracted_entities {
+                        // Apply fragment thresholds (tokens, AST nodes, blocks, stop motifs)
+                        if !lsh_extractor
+                            .entity_passes_thresholds(&entity)
+                            .await
+                            .unwrap_or(false)
+                        {
+                            continue;
+                        }
+
                         entity_index.insert(entity.id.clone(), entity.clone());
                         entities.push(entity);
                     }
@@ -736,6 +745,11 @@ impl AnalysisStages {
             }
 
             let candidate_limit = lsh_extractor.max_candidates();
+            let min_ast_nodes = lsh_extractor.min_ast_nodes_threshold().unwrap_or(0);
+            info!(
+                min_ast_nodes,
+                "LSH clone pair filter min_ast_nodes threshold"
+            );
 
             let mut clone_pairs = Vec::new();
             let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
@@ -866,12 +880,48 @@ impl AnalysisStages {
                         range: candidate_entity.line_range,
                     };
 
+                    // Skip extremely small verified pairs when a min_ast_nodes threshold is configured
+                    if let Some(ref detail) = verification_detail {
+                        if let Some(ref counts) = detail.node_counts {
+                            let observed_min = counts.0.min(counts.1);
+                            if min_ast_nodes > 0 && observed_min < min_ast_nodes {
+                                debug!(
+                                    "Skipping clone pair below min_ast_nodes (min {}): {} -> {} ({:?})",
+                                    min_ast_nodes,
+                                    entity.id,
+                                    candidate_entity.id,
+                                    counts
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
                     clone_pairs.push(ClonePairReport {
                         source: source_endpoint,
                         target: target_endpoint,
                         similarity,
                         verification: verification_detail,
                     });
+                }
+            }
+
+            if min_ast_nodes > 0 {
+                let before = clone_pairs.len();
+                clone_pairs.retain(|pair| {
+                    if let Some(ref ver) = pair.verification {
+                        if let Some(counts) = ver.node_counts {
+                            return counts.0.min(counts.1) >= min_ast_nodes;
+                        }
+                    }
+                    true
+                });
+                let filtered = before.saturating_sub(clone_pairs.len());
+                if filtered > 0 {
+                    info!(
+                        filtered,
+                        min_ast_nodes, "Filtered clone pairs below min_ast_nodes"
+                    );
                 }
             }
 
@@ -911,10 +961,29 @@ impl AnalysisStages {
 
             let clone_pair_count = clone_pairs.len();
             let mut serialized_pairs = Vec::with_capacity(clone_pairs.len());
+            // Enforce the configured min_ast_nodes (0 means no filter)
+            let min_ast_nodes_cfg = min_ast_nodes;
 
             for pair in clone_pairs {
                 match serde_json::to_value(&pair) {
-                    Ok(value) => serialized_pairs.push(value),
+                    Ok(value) => {
+                        // Final defensive filter so UI never sees sub-threshold clones.
+                        if min_ast_nodes_cfg > 0 {
+                            if let Some(ver) = value.get("verification") {
+                                if let Some(counts) = ver.get("node_counts") {
+                                    if let (Some(a), Some(b)) = (
+                                        counts.get(0).and_then(|v| v.as_u64()),
+                                        counts.get(1).and_then(|v| v.as_u64()),
+                                    ) {
+                                        if std::cmp::min(a, b) < min_ast_nodes_cfg as u64 {
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        serialized_pairs.push(value);
+                    }
                     Err(e) => {
                         warn!(
                             "Failed to serialize clone pair {} -> {}: {}",

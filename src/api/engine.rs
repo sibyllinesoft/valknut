@@ -51,6 +51,27 @@ impl ValknutEngine {
         })
     }
 
+    /// Create a new engine directly from a fully-populated ValknutConfig.
+    ///
+    /// This avoids lossy round-trips through the public API config when we need
+    /// to preserve advanced settings like denoising and dedupe thresholds.
+    pub async fn new_from_valknut_config(valknut_config: ValknutConfig) -> Result<Self> {
+        info!("Initializing Valknut analysis engine (direct config)");
+
+        valknut_config.validate()?;
+
+        let config_arc = Arc::new(valknut_config.clone());
+        let analysis_config = PipelineAnalysisConfig::from(valknut_config.clone());
+        let pipeline = AnalysisPipeline::new_with_config(analysis_config, valknut_config);
+
+        info!("Valknut engine initialized successfully");
+
+        Ok(Self {
+            pipeline,
+            config: config_arc,
+        })
+    }
+
     /// Analyze a directory of code files
     pub async fn analyze_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<AnalysisResults> {
         let path = path.as_ref();

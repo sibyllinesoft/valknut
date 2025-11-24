@@ -271,6 +271,11 @@ impl LshExtractor {
         }
     }
 
+    /// Minimum AST nodes required for a fragment (if dedupe thresholds are enabled)
+    pub fn min_ast_nodes_threshold(&self) -> Option<usize> {
+        self.dedupe_config.as_ref().map(|cfg| cfg.min_ast_nodes)
+    }
+
     /// Obtain the cached similarity context when available
     pub fn similarity_context(
         &self,
@@ -2607,7 +2612,7 @@ fn long_enough() {\n    let mut total = 0;\n    for value in 0..5 {\n        tot
 
         let mut config = DedupeConfig::default();
         config.min_function_tokens = 5;
-        config.min_ast_nodes = 2;
+        config.min_ast_nodes = 20;
         config.require_distinct_blocks = 1;
 
         let extractor = LshExtractor::with_dedupe_config(config.clone());

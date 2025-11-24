@@ -10,6 +10,7 @@ const ASSETS_DIR = path.join(TEMPLATE_ROOT, 'assets');
 const OUTPUT_DIR = path.join(ROOT_DIR, 'public');
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const ANALYSIS_JSON = path.join(DATA_DIR, 'analysis.json');
+const ANALYSIS_RESULTS_JSON = path.join(DATA_DIR, 'analysis-results.json');
 const OUTPUT_HTML = path.join(OUTPUT_DIR, 'report-dev.html');
 const OUTPUT_DATA_JSON = path.join(OUTPUT_DIR, 'data.json');
 const WEB_ASSETS_DIR = path.join(ASSETS_DIR, 'webpage_files');
@@ -1029,14 +1030,26 @@ function registerPartials() {
 }
 
 function loadAnalysisData() {
-  if (fs.existsSync(ANALYSIS_JSON)) {
-    const data = readJson(ANALYSIS_JSON);
-    if (data) {
-      return data;
+  const candidates = [
+    { path: ANALYSIS_RESULTS_JSON, label: 'analysis-results.json' },
+    { path: ANALYSIS_JSON, label: 'analysis.json' },
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate.path)) {
+      const data = readJson(candidate.path);
+      if (data) {
+        return data;
+      }
+      console.warn(
+        `[render-report] ${candidate.label} present but invalid JSON, trying next fallback.`
+      );
     }
   }
 
-  console.warn('[render-report] analysis.json not found or invalid, using fallback stub data.');
+  console.warn(
+    '[render-report] analysis JSON not found; rendering with stub data. Run `valknut analyze --format json --out templates/dev/data ...` first.'
+  );
   return {
     summary: {
       files_processed: 0,

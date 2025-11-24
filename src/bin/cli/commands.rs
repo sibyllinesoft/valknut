@@ -399,11 +399,8 @@ async fn run_comprehensive_analysis_with_progress(
         main_progress.set_style(style.progress_chars("##-"));
     }
 
-    // Convert to API config
-    let api_config = ApiAnalysisConfig::from_valknut_config(config)?;
-
-    // Create engine and run analysis
-    let mut engine = ValknutEngine::new(api_config)
+    // Create engine and run analysis using the full ValknutConfig to preserve clone settings
+    let mut engine = ValknutEngine::new_from_valknut_config(config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create analysis engine: {}", e))?;
 
@@ -453,11 +450,8 @@ async fn run_comprehensive_analysis_without_progress(
     config: ValknutConfig,
     _args: &AnalyzeArgs,
 ) -> anyhow::Result<AnalysisResults> {
-    // Convert to API config
-    let api_config = ApiAnalysisConfig::from_valknut_config(config)?;
-
-    // Create engine and run analysis
-    let mut engine = ValknutEngine::new(api_config)
+    // Create engine and run analysis using the full ValknutConfig to preserve clone settings
+    let mut engine = ValknutEngine::new_from_valknut_config(config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create analysis engine: {}", e))?;
 
@@ -1545,7 +1539,7 @@ pub async fn run_analysis_with_progress(
     }
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = args.clone_detection.denoise;
+    let denoise_enabled = true; // force denoise defaults on when semantic clones are requested
     let auto_enabled = !args.advanced_clone.no_auto;
 
     if args.advanced_clone.no_apted_verify {
@@ -1759,7 +1753,7 @@ pub async fn run_analysis_without_progress(
     valknut_config.analysis.enable_coverage_analysis = true;
 
     // Apply CLI args to denoise configuration (enabled by default)
-    let denoise_enabled = args.clone_detection.denoise;
+    let denoise_enabled = true; // force denoise defaults on when semantic clones are requested
     let auto_enabled = !args.advanced_clone.no_auto;
 
     if args.advanced_clone.no_apted_verify {

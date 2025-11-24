@@ -377,13 +377,17 @@ impl ConfigMerge<CoverageConfig> for CoverageConfig {
 
 impl ConfigMerge<DenoiseConfig> for DenoiseConfig {
     fn merge_with(&mut self, other: DenoiseConfig) {
-        if !other.enabled {
-            self.enabled = false;
+        let default = DenoiseConfig::default();
+
+        // Only override when the incoming value differs from the default; this prevents
+        // the CLI default (false) from unintentionally disabling file-configured denoise.
+        if other.enabled != default.enabled {
+            self.enabled = other.enabled;
         }
-        if !other.auto {
-            self.auto = false;
+        if other.auto != default.auto {
+            self.auto = other.auto;
         }
-        if other.dry_run {
+        if other.dry_run != default.dry_run && other.dry_run {
             self.dry_run = true;
         }
 
