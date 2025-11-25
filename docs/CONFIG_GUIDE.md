@@ -295,6 +295,34 @@ valknut analyze --config ci-examples/.valknut-ci.json ./src
 valknut analyze --config .valknut-prod.json ./src
 ```
 
+## Documentation Health (docs)
+
+The `docs` section controls when documentation gaps are penalized and how scores are surfaced.
+
+```json
+{
+  "docs": {
+    "min_fn_nodes": 5,
+    "min_file_nodes": 50,
+    "min_files_per_dir": 5
+  }
+}
+```
+
+- Files/functions smaller than the thresholds are ignored to avoid noisy penalties.
+- Outputs:
+  - `documentation.doc_health_score` — project score (0–100).
+  - `documentation.file_doc_health` — per-file score (0–100); treemap “Docs” severity = `100 - score`.
+  - `documentation.file_doc_issues`, `documentation.directory_doc_health`, `documentation.directory_doc_issues`.
+
+## Impact / Force Graph Output
+
+When `analysis.enable_graph_analysis` is true, the JSON includes `passes.impact.module_force_graph`:
+- `nodes`: `id`, `label`, `path`, `functions`, `fan_in`, `fan_out`, `chokepoint_score`, `in_cycle`, optional `size`, `x`, `y`.
+- `links`: `source`, `target`, `weight`.
+- `metadata`: `layout`, `node_count`, `edge_count`, `pruned_nodes`.
+The HTML report renders this in the **Dependencies** tab; you can also feed it to custom Plotly/vis.js/D3 consumers.
+
 ## Tips and Best Practices
 
 1. **Start with defaults**: Use `valknut init-config` to generate a baseline

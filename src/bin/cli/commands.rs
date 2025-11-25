@@ -9,7 +9,7 @@ use crate::cli::args::{
     OutputFormat, PerformanceProfile, QualityGateArgs, SurveyVerbosity, ValidateConfigArgs,
 };
 use crate::cli::config_layer::build_layered_valknut_config;
-use anyhow;
+use anyhow::{self, Context};
 use chrono;
 use console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -23,6 +23,7 @@ use tabled::{settings::Style as TableStyle, Table, Tabled};
 use tracing::{info, warn};
 
 // Import comprehensive analysis pipeline
+use serde::Deserialize;
 use valknut_rs::api::config_types::AnalysisConfig as ApiAnalysisConfig;
 use valknut_rs::api::engine::ValknutEngine;
 use valknut_rs::api::results::{AnalysisResults, RefactoringCandidate};
@@ -41,6 +42,7 @@ use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Determines whether CLI output should be suppressed for the given args.
 fn is_quiet(args: &AnalyzeArgs) -> bool {
     args.quiet || args.format.is_machine_readable()
 }
@@ -194,7 +196,15 @@ pub async fn analyze_command(
     Ok(())
 }
 
-/// Build comprehensive ValknutConfig from CLI arguments
+/// Load doc-audit settings from a YAML file.
+fn load_doc_audit_config_file(path: &Path) -> anyhow::Result<DocAuditConfigFile> {
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read doc audit config at {}", path.display()))?;
+    serde_yaml::from_str(&contents)
+        .with_context(|| format!("Failed to parse doc audit config {}", path.display()))
+}
+
+/// Build comprehensive ValknutConfig from CLI arguments.
 async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
     // Use the new layered configuration approach
     let mut config = build_layered_valknut_config(args)?;
@@ -205,7 +215,7 @@ async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfi
     Ok(config)
 }
 
-/// Apply performance profile optimizations to the configuration
+/// Apply performance profile optimizations to the configuration.
 fn apply_performance_profile(config: &mut ValknutConfig, profile: &PerformanceProfile) {
     match profile {
         PerformanceProfile::Fast => {
@@ -385,7 +395,7 @@ fn display_analysis_config_summary(config: &ValknutConfig) {
     }
 }
 
-/// Run comprehensive analysis with progress tracking
+/// Run comprehensive analysis with progress tracking.
 async fn run_comprehensive_analysis_with_progress(
     paths: &[PathBuf],
     config: ValknutConfig,
@@ -444,7 +454,7 @@ async fn run_comprehensive_analysis_with_progress(
     Ok(combined_result)
 }
 
-/// Run comprehensive analysis without progress tracking  
+/// Run comprehensive analysis without progress tracking.
 async fn run_comprehensive_analysis_without_progress(
     paths: &[PathBuf],
     config: ValknutConfig,
@@ -782,7 +792,7 @@ fn display_analysis_summary(result: &AnalysisResults) {
     }
 }
 
-/// Display quality gate failures
+/// Display quality gate failures and recommended remediation steps.
 fn display_quality_failures(result: &QualityGateResult) {
     for violation in &result.violations {
         println!(
@@ -809,6 +819,7 @@ fn display_quality_failures(result: &QualityGateResult) {
     }
 }
 
+/// Assigns a severity string when a metric exceeds its threshold.
 fn severity_for_excess(current: f64, threshold: f64) -> &'static str {
     let delta = current - threshold;
     if threshold == 0.0 {
@@ -828,6 +839,7 @@ fn severity_for_excess(current: f64, threshold: f64) -> &'static str {
     }
 }
 
+/// Assigns a severity string when a metric falls short of its threshold.
 fn severity_for_shortfall(current: f64, threshold: f64) -> &'static str {
     let delta = threshold - current;
     if delta >= 20.0 {
@@ -839,6 +851,7 @@ fn severity_for_shortfall(current: f64, threshold: f64) -> &'static str {
     }
 }
 
+/// Returns a ranked list of issue file paths filtered by the provided predicate.
 fn top_issue_files<F>(result: &AnalysisResults, filter: F, limit: usize) -> Vec<PathBuf>
 where
     F: Fn(&RefactoringCandidate) -> bool,
@@ -874,6 +887,7 @@ where
     files
 }
 
+/// Human-friendly label for a `Priority` value.
 fn priority_label(priority: Priority) -> &'static str {
     match priority {
         Priority::None => "none",
@@ -884,7 +898,7 @@ fn priority_label(priority: Priority) -> &'static str {
     }
 }
 
-/// Generate output reports in various formats with optional Oracle results
+/// Generate output reports in various formats with optional Oracle results.
 async fn generate_reports_with_oracle(
     result: &AnalysisResults,
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
@@ -1061,6 +1075,7 @@ pub async fn init_config(args: InitConfigArgs) -> anyhow::Result<()> {
         "🔧 Key settings you can customize:".bright_blue().bold()
     );
 
+    /// Row type for the configuration tips table.
     #[derive(Tabled)]
     struct CustomizationRow {
         setting: String,
@@ -1142,6 +1157,7 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
         println!("{}", "🔧 Detailed Settings".bright_blue().bold());
         println!();
 
+        /// Row used when printing verbose configuration details.
         #[derive(Tabled)]
         struct DetailRow {
             setting: String,
@@ -1175,7 +1191,7 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Run MCP server over stdio for IDE integration
+/// Run MCP server over stdio for IDE integration.
 ///
 /// This command starts a full JSON-RPC 2.0 MCP (Model Context Protocol) server
 /// that exposes valknut's code analysis capabilities over stdin/stdout.
@@ -1219,7 +1235,7 @@ pub async fn mcp_stdio_command(
     Ok(())
 }
 
-/// Generate MCP manifest JSON
+/// Generate MCP manifest JSON.
 pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
     let manifest = serde_json::json!({
         "name": "valknut",
@@ -1301,7 +1317,7 @@ pub async fn mcp_manifest_command(args: McpManifestArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// List supported programming languages and their status
+/// List supported programming languages and their status.
 pub async fn list_languages() -> anyhow::Result<()> {
     println!(
         "{}",
@@ -1311,6 +1327,7 @@ pub async fn list_languages() -> anyhow::Result<()> {
     println!("   Found {} supported languages", languages.len());
     println!();
 
+    /// Table row for language listing output.
     #[derive(Tabled)]
     struct LanguageRow {
         language: String,
@@ -1360,6 +1377,21 @@ pub async fn list_languages() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Deserialize)]
+/// Optional YAML configuration for the standalone doc-audit command.
+struct DocAuditConfigFile {
+    root: Option<PathBuf>,
+    complexity_threshold: Option<usize>,
+    max_readme_commits: Option<usize>,
+    #[serde(default)]
+    ignore_dir: Vec<String>,
+    #[serde(default)]
+    ignore_suffix: Vec<String>,
+    #[serde(default)]
+    ignore: Vec<String>,
+}
+
+/// Run the standalone documentation audit command.
 pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
     let DocAuditArgs {
         root,
@@ -1369,17 +1401,41 @@ pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
         format,
         ignore_dir,
         ignore_suffix,
+        ignore,
+        config,
     } = args;
 
-    if !root.exists() {
+    let implicit_config = [".valknut.docaudit.yml", ".valknut.docaudit.yaml"]
+        .iter()
+        .map(PathBuf::from)
+        .find(|p| p.exists());
+    let file_config = match config.or(implicit_config) {
+        Some(path) => Some(load_doc_audit_config_file(&path)?),
+        None => None,
+    };
+
+    let root_override = if root != PathBuf::from(".") {
+        root.clone()
+    } else {
+        file_config
+            .as_ref()
+            .and_then(|c| c.root.clone())
+            .unwrap_or_else(|| root.clone())
+    };
+
+    if !root_override.exists() {
         return Err(anyhow::anyhow!(
             "Audit root does not exist: {}",
-            root.display()
+            root_override.display()
         ));
     }
 
-    let root_path = std::fs::canonicalize(&root).map_err(|err| {
-        anyhow::anyhow!("Failed to resolve audit root {}: {}", root.display(), err)
+    let root_path = std::fs::canonicalize(&root_override).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to resolve audit root {}: {}",
+            root_override.display(),
+            err
+        )
     })?;
 
     if !root_path.is_dir() {
@@ -1390,6 +1446,31 @@ pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
     }
 
     let mut config = doc_audit::DocAuditConfig::new(root_path);
+
+    if let Some(file_cfg) = file_config {
+        if let Some(threshold) = file_cfg.complexity_threshold {
+            config.complexity_threshold = threshold;
+        }
+        if let Some(commits) = file_cfg.max_readme_commits {
+            config.max_readme_commits = commits;
+        }
+        for dir in file_cfg.ignore_dir {
+            if !dir.trim().is_empty() {
+                config.ignore_dirs.insert(dir);
+            }
+        }
+        for suffix in file_cfg.ignore_suffix {
+            if !suffix.trim().is_empty() {
+                config.ignore_suffixes.insert(suffix);
+            }
+        }
+        for glob in file_cfg.ignore {
+            if !glob.trim().is_empty() {
+                config.ignore_globs.push(glob);
+            }
+        }
+    }
+
     config.complexity_threshold = complexity_threshold;
     config.max_readme_commits = max_readme_commits;
 
@@ -1402,6 +1483,12 @@ pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
     for suffix in ignore_suffix {
         if !suffix.trim().is_empty() {
             config.ignore_suffixes.insert(suffix);
+        }
+    }
+
+    for glob in ignore {
+        if !glob.trim().is_empty() {
+            config.ignore_globs.push(glob);
         }
     }
 
@@ -1433,6 +1520,7 @@ pub fn print_header() {
     println!();
 }
 
+/// Build the stylized header lines to fit the given terminal width.
 fn header_lines_for_width(width: u16) -> Vec<String> {
     if width >= 80 {
         vec![
@@ -1469,6 +1557,7 @@ fn header_lines_for_width(width: u16) -> Vec<String> {
 /// Display configuration summary in a formatted table
 pub fn display_config_summary(config: &StructureConfig) {
     #[derive(Tabled)]
+    /// Single row shown in the configuration summary table.
     struct ConfigRow {
         setting: String,
         value: String,
@@ -1507,8 +1596,8 @@ pub fn display_config_summary(config: &StructureConfig) {
     println!();
 }
 
-/// Run comprehensive analysis with detailed progress tracking
 #[allow(dead_code)]
+/// Run comprehensive analysis with detailed progress tracking.
 pub async fn run_analysis_with_progress(
     paths: &[PathBuf],
     _config: StructureConfig,
@@ -1737,8 +1826,8 @@ pub async fn run_analysis_with_progress(
     Ok(result_json)
 }
 
-/// Run analysis without progress bars for quiet mode
 #[allow(dead_code)]
+/// Run analysis without progress bars for quiet mode.
 pub async fn run_analysis_without_progress(
     paths: &[PathBuf],
     _config: StructureConfig,
@@ -1915,8 +2004,8 @@ pub async fn run_analysis_without_progress(
     Ok(result_json)
 }
 
-/// Create denoise cache directories if they don't exist
 #[allow(dead_code)]
+/// Create denoise cache directories if they don't exist.
 async fn create_denoise_cache_directories() -> anyhow::Result<()> {
     let cache_base = std::path::Path::new(".valknut/cache/denoise");
 
@@ -1979,6 +2068,7 @@ pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<St
 }
 
 // Helper functions
+/// Convert an `OutputFormat` to the lowercase string used in reports.
 pub fn format_to_string(format: &OutputFormat) -> &str {
     match format {
         OutputFormat::Jsonl => "jsonl",
@@ -1993,6 +2083,7 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
     }
 }
 
+/// Emit console warnings when disabled/unsupported languages are detected.
 fn warn_for_unsupported_languages(config: &ValknutConfig, quiet_mode: bool) {
     use owo_colors::OwoColorize;
 
@@ -2024,8 +2115,8 @@ fn warn_for_unsupported_languages(config: &ValknutConfig, quiet_mode: bool) {
     }
 }
 
-/// Handle quality gate evaluation
 #[allow(dead_code)]
+/// Handle quality gate evaluation for JSON results emitted by tests.
 async fn handle_quality_gates(
     args: &AnalyzeArgs,
     result: &serde_json::Value,
@@ -2210,8 +2301,8 @@ fn build_quality_gate_config(args: &AnalyzeArgs) -> QualityGateConfig {
     config
 }
 
-/// Display quality gate violations in a user-friendly format
 #[allow(dead_code)]
+/// Display quality gate violations in a user-friendly format.
 fn display_quality_gate_violations(result: &QualityGateResult) {
     println!();
     println!("{}", "❌ Quality Gate Failed".red().bold());
@@ -2382,8 +2473,8 @@ async fn run_oracle_analysis(
     }
 }
 
-/// Generate output reports in various formats (legacy version for compatibility)
 #[allow(dead_code)]
+/// Generate output reports in various formats (legacy version for compatibility).
 async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
     generate_reports_with_oracle(result, &None, args).await
 }
@@ -2566,6 +2657,8 @@ mod tests {
             format: DocAuditFormat::Text,
             ignore_dir: vec![],
             ignore_suffix: vec![],
+            ignore: vec![],
+            config: None,
         }
     }
 
@@ -2654,18 +2747,18 @@ export function accumulate(values: number[]): number {
                 refactoring_needed: 1,
                 high_priority: 1,
                 critical: 0,
-            avg_refactoring_score: 0.75,
-            code_health_score: 0.65,
-            total_files: 1,
-            total_entities: 1,
-            total_lines_of_code: 120,
-            languages: vec!["Rust".to_string()],
-            total_issues: 1,
-            high_priority_issues: 1,
-            critical_issues: 0,
-            doc_health_score: 1.0,
-            doc_issue_count: 0,
-        },
+                avg_refactoring_score: 0.75,
+                code_health_score: 0.65,
+                total_files: 1,
+                total_entities: 1,
+                total_lines_of_code: 120,
+                languages: vec!["Rust".to_string()],
+                total_issues: 1,
+                high_priority_issues: 1,
+                critical_issues: 0,
+                doc_health_score: 1.0,
+                doc_issue_count: 0,
+            },
             normalized: None,
             passes: valknut_rs::api::results::StageResultsBundle::disabled(),
             refactoring_candidates: vec![candidate],

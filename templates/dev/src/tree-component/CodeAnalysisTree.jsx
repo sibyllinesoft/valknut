@@ -345,10 +345,11 @@ export const CodeAnalysisTree = ({ data }) => {
         return cleanup(aggregated);
     }, []);
 
-    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
+    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap) => {
         const folderMap = new Map();
         const result = [];
         const directoryLookup = (directoryHealth && directoryHealth.directories) || {};
+        const docIssues = docIssuesMap || {};
 
         const formatIssueCategories = (categories) => {
             if (!categories || typeof categories !== 'object') {
@@ -715,6 +716,21 @@ export const CodeAnalysisTree = ({ data }) => {
                     }
                 });
 
+                // Look up doc issues for this file path
+                const lookupDocIssues = (filePath) => {
+                    const normalizedPath = filePath.replace(/^\.?\/+/, '');
+                    // Try exact match first
+                    if (docIssues[normalizedPath] !== undefined) return docIssues[normalizedPath];
+                    if (docIssues[filePath] !== undefined) return docIssues[filePath];
+                    // Try matching by filename suffix
+                    for (const [key, value] of Object.entries(docIssues)) {
+                        if (normalizedPath.endsWith(key) || key.endsWith(normalizedPath)) {
+                            return value;
+                        }
+                    }
+                    return null;
+                };
+
                 const fileNode = {
                     id: fileNodeId,
                     name: String(fileName),
@@ -725,6 +741,7 @@ export const CodeAnalysisTree = ({ data }) => {
                     avgScore: typeof fileGroup.avgScore === 'number' ? fileGroup.avgScore : 0,
                     totalIssues: typeof fileGroup.totalIssues === 'number' ? fileGroup.totalIssues : Object.values(fileSeverityCounts).reduce((acc, value) => acc + (value || 0), 0),
                     severityCounts: fileSeverityCounts,
+                    docIssues: lookupDocIssues(fileGroup.filePath),
                     children: fileChildren
                 };
                 
@@ -1099,6 +1116,53 @@ export const CodeAnalysisTree = ({ data }) => {
         return nodes.map(annotate).filter(Boolean);
     }, [codeDictionary]);
 
+    // Annotate file nodes with documentation issues from the doc issues map
+    const annotateDocIssues = useCallback((nodes, docIssuesMap) => {
+        if (!Array.isArray(nodes) || !docIssuesMap || typeof docIssuesMap !== 'object') {
+            return nodes;
+        }
+
+        const lookupDocIssues = (filePath) => {
+            if (!filePath) return null;
+            const normalizedPath = filePath.replace(/^\.?\/+/, '');
+            // Try exact match first
+            if (docIssuesMap[normalizedPath] !== undefined) return docIssuesMap[normalizedPath];
+            if (docIssuesMap[filePath] !== undefined) return docIssuesMap[filePath];
+            // Try matching by filename suffix
+            for (const [key, value] of Object.entries(docIssuesMap)) {
+                if (normalizedPath.endsWith(key) || key.endsWith(normalizedPath)) {
+                    return value;
+                }
+            }
+            return null;
+        };
+
+        const annotate = (node) => {
+            if (!node || typeof node !== 'object') {
+                return node;
+            }
+
+            const clone = { ...node };
+
+            if (Array.isArray(clone.children)) {
+                clone.children = clone.children.map(annotate).filter(Boolean);
+            }
+
+            // Attach doc issues to file nodes
+            if (clone.type === 'file') {
+                const filePath = clone.filePath || clone.file_path || clone.path || '';
+                const docIssueCount = lookupDocIssues(filePath);
+                if (docIssueCount != null) {
+                    clone.docIssues = docIssueCount;
+                }
+            }
+
+            return clone;
+        };
+
+        return nodes.map(annotate).filter(Boolean);
+    }, []);
+
     // Load data from props
     useEffect(() => {
         try {
@@ -1116,7 +1180,12 @@ export const CodeAnalysisTree = ({ data }) => {
                     const annotated = annotateNodesWithDictionary(aggregated);
                     const normalized = normalizeTreeData(annotated);
                     const aggregatedNormalized = aggregateTreeMetrics(normalized);
-                    const sorted = sortNodesByPriority(aggregatedNormalized);
+                    // Annotate with doc issues from documentation data
+                    const docIssuesMap = data.documentation?.file_doc_issues
+                        || data.documentation?.fileDocIssues
+                        || {};
+                    const withDocIssues = annotateDocIssues(aggregatedNormalized, docIssuesMap);
+                    const sorted = sortNodesByPriority(withDocIssues);
                     console.info('[CodeAnalysisTree] using unifiedHierarchy; nodes:', sorted.length);
                     setTreeData(sorted);
                     return;
@@ -1173,10 +1242,16 @@ export const CodeAnalysisTree = ({ data }) => {
                     }))
                     : groupCandidatesByFile(candidates);
 
+                // Extract doc issues map from documentation
+                const docIssuesMap = data.documentation?.file_doc_issues
+                    || data.documentation?.fileDocIssues
+                    || {};
+
                 const treeStructure = buildTreeData(
                     fileGroups,
                     data.directory_health_tree || data.directoryHealthTree || null,
-                    coveragePacks
+                    coveragePacks,
+                    docIssuesMap
                 );
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
@@ -1195,6 +1270,7 @@ export const CodeAnalysisTree = ({ data }) => {
         buildTreeData,
         normalizeTreeData,
         annotateNodesWithDictionary,
+        annotateDocIssues,
         sortNodesByPriority,
         aggregateTreeMetrics,
         groupCandidatesByFile,

@@ -29696,6 +29696,7 @@ Check the top-level render call using <` + parentName + ">.";
       }
       if (isFile) {
         const severityCounts = aggregates.severityCounts || {};
+        const docIssueCount = data.docIssues;
         const severityList = [
           { key: "critical", label: "Critical", value: severityCounts.critical || 0 },
           { key: "high", label: "High", value: severityCounts.high || 0 },
@@ -29703,7 +29704,7 @@ Check the top-level render call using <` + parentName + ">.";
           { key: "low", label: "Low", value: severityCounts.low || 0 }
         ].filter((item) => item.value > 0);
         const topEntities = (data.children || []).filter((child) => child.type === "entity").slice(0, 3);
-        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", { className: "issue-heading" }, entity.name), suggestionText ? import_react5.default.createElement("div", { className: "issue-summary" }, suggestionText) : import_react5.default.createElement("div", { className: "issue-summary" }, `Score ${renderValue(entity.score)}`))))));
+        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), docIssueCount != null && docIssueCount > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Documentation"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, import_react5.default.createElement("li", { key: "doc-issues" }, import_react5.default.createElement("div", { className: "issue-heading" }, `${docIssueCount} undocumented items`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", { className: "issue-heading" }, entity.name), suggestionText ? import_react5.default.createElement("div", { className: "issue-summary" }, suggestionText) : import_react5.default.createElement("div", { className: "issue-summary" }, `Score ${renderValue(entity.score)}`))))));
       }
       const issues = Array.isArray(data.issues) ? data.issues.map(formatIssue) : [];
       const rawSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
@@ -30466,10 +30467,11 @@ Check the top-level render call using <` + parentName + ">.";
       const aggregated = bubble(cloneNodes);
       return cleanup(aggregated);
     }, []);
-    const buildTreeData = import_react6.useCallback((refactoringFiles, directoryHealth, coveragePacks) => {
+    const buildTreeData = import_react6.useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap) => {
       const folderMap = new Map;
       const result = [];
       const directoryLookup = directoryHealth && directoryHealth.directories || {};
+      const docIssues = docIssuesMap || {};
       const formatIssueCategories = (categories) => {
         if (!categories || typeof categories !== "object") {
           return [];
@@ -30745,6 +30747,19 @@ Check the top-level render call using <` + parentName + ">.";
               });
             }
           });
+          const lookupDocIssues = (filePath) => {
+            const normalizedPath = filePath.replace(/^\.?\/+/, "");
+            if (docIssues[normalizedPath] !== undefined)
+              return docIssues[normalizedPath];
+            if (docIssues[filePath] !== undefined)
+              return docIssues[filePath];
+            for (const [key, value] of Object.entries(docIssues)) {
+              if (normalizedPath.endsWith(key) || key.endsWith(normalizedPath)) {
+                return value;
+              }
+            }
+            return null;
+          };
           const fileNode = {
             id: fileNodeId,
             name: String(fileName),
@@ -30755,6 +30770,7 @@ Check the top-level render call using <` + parentName + ">.";
             avgScore: typeof fileGroup.avgScore === "number" ? fileGroup.avgScore : 0,
             totalIssues: typeof fileGroup.totalIssues === "number" ? fileGroup.totalIssues : Object.values(fileSeverityCounts).reduce((acc, value) => acc + (value || 0), 0),
             severityCounts: fileSeverityCounts,
+            docIssues: lookupDocIssues(fileGroup.filePath),
             children: fileChildren
           };
           parentFolder.push(fileNode);
@@ -31037,6 +31053,44 @@ Check the top-level render call using <` + parentName + ">.";
       };
       return nodes.map(annotate).filter(Boolean);
     }, [codeDictionary]);
+    const annotateDocIssues = import_react6.useCallback((nodes, docIssuesMap) => {
+      if (!Array.isArray(nodes) || !docIssuesMap || typeof docIssuesMap !== "object") {
+        return nodes;
+      }
+      const lookupDocIssues = (filePath) => {
+        if (!filePath)
+          return null;
+        const normalizedPath = filePath.replace(/^\.?\/+/, "");
+        if (docIssuesMap[normalizedPath] !== undefined)
+          return docIssuesMap[normalizedPath];
+        if (docIssuesMap[filePath] !== undefined)
+          return docIssuesMap[filePath];
+        for (const [key, value] of Object.entries(docIssuesMap)) {
+          if (normalizedPath.endsWith(key) || key.endsWith(normalizedPath)) {
+            return value;
+          }
+        }
+        return null;
+      };
+      const annotate = (node) => {
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        const clone = { ...node };
+        if (Array.isArray(clone.children)) {
+          clone.children = clone.children.map(annotate).filter(Boolean);
+        }
+        if (clone.type === "file") {
+          const filePath = clone.filePath || clone.file_path || clone.path || "";
+          const docIssueCount = lookupDocIssues(filePath);
+          if (docIssueCount != null) {
+            clone.docIssues = docIssueCount;
+          }
+        }
+        return clone;
+      };
+      return nodes.map(annotate).filter(Boolean);
+    }, []);
     import_react6.useEffect(() => {
       try {
         if (data && typeof data === "object") {
@@ -31047,7 +31101,9 @@ Check the top-level render call using <` + parentName + ">.";
             const annotated2 = annotateNodesWithDictionary(aggregated);
             const normalized2 = normalizeTreeData(annotated2);
             const aggregatedNormalized2 = aggregateTreeMetrics(normalized2);
-            const sorted2 = sortNodesByPriority(aggregatedNormalized2);
+            const docIssuesMap2 = data.documentation?.file_doc_issues || data.documentation?.fileDocIssues || {};
+            const withDocIssues = annotateDocIssues(aggregatedNormalized2, docIssuesMap2);
+            const sorted2 = sortNodesByPriority(withDocIssues);
             console.info("[CodeAnalysisTree] using unifiedHierarchy; nodes:", sorted2.length);
             setTreeData(sorted2);
             return;
@@ -31083,7 +31139,8 @@ Check the top-level render call using <` + parentName + ">.";
             highestPriority: g.highest_priority ?? g.highestPriority ?? "Low",
             entities: g.entities || []
           })) : groupCandidatesByFile(candidates);
-          const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks);
+          const docIssuesMap = data.documentation?.file_doc_issues || data.documentation?.fileDocIssues || {};
+          const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks, docIssuesMap);
           const annotated = annotateNodesWithDictionary(treeStructure);
           const normalized = normalizeTreeData(annotated);
           const aggregatedNormalized = aggregateTreeMetrics(normalized);
@@ -31101,6 +31158,7 @@ Check the top-level render call using <` + parentName + ">.";
       buildTreeData,
       normalizeTreeData,
       annotateNodesWithDictionary,
+      annotateDocIssues,
       sortNodesByPriority,
       aggregateTreeMetrics,
       groupCandidatesByFile
@@ -31525,5 +31583,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=CB306C53D4C1913264756E2164756E21
+//# debugId=8F776B29F2C708BA64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

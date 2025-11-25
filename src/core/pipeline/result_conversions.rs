@@ -303,25 +303,35 @@ impl AnalysisResults {
             lsh: pipeline_results.results.lsh.clone(),
         };
 
-        let documentation = pipeline_results
-            .results
-            .documentation
-            .enabled
-            .then(|| DocumentationResults {
-                issues_count: pipeline_results.results.documentation.issues_count,
-                doc_health_score: pipeline_results.results.documentation.doc_health_score,
-                    file_doc_issues: pipeline_results.results.documentation.file_doc_issues.clone(),
-                directory_doc_health: pipeline_results
-                    .results
-                    .documentation
-                    .directory_doc_health
-                    .clone(),
-                directory_doc_issues: pipeline_results
-                    .results
-                    .documentation
-                    .directory_doc_issues
-                    .clone(),
-            });
+        let documentation =
+            pipeline_results
+                .results
+                .documentation
+                .enabled
+                .then(|| DocumentationResults {
+                    issues_count: pipeline_results.results.documentation.issues_count,
+                    doc_health_score: pipeline_results.results.documentation.doc_health_score,
+                    file_doc_health: pipeline_results
+                        .results
+                        .documentation
+                        .file_doc_health
+                        .clone(),
+                    file_doc_issues: pipeline_results
+                        .results
+                        .documentation
+                        .file_doc_issues
+                        .clone(),
+                    directory_doc_health: pipeline_results
+                        .results
+                        .documentation
+                        .directory_doc_health
+                        .clone(),
+                    directory_doc_issues: pipeline_results
+                        .results
+                        .documentation
+                        .directory_doc_issues
+                        .clone(),
+                });
 
         Self {
             summary,
@@ -880,6 +890,7 @@ mod tests {
             enabled: true,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
+            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };
@@ -909,6 +920,7 @@ mod tests {
             enabled: false,
             issues_count: 0,
             doc_health_score: 100.0,
+            file_doc_health: HashMap::new(),
             file_doc_issues: HashMap::new(),
             directory_doc_health: HashMap::new(),
             directory_doc_issues: HashMap::new(),

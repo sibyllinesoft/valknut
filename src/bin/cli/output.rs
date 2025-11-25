@@ -162,6 +162,7 @@ pub fn display_analysis_results(result: &serde_json::Value) {
     println!();
 
     #[derive(Tabled)]
+    /// Row used when printing the basic stats table.
     struct StatsRow {
         metric: String,
         value: String,
@@ -321,6 +322,7 @@ pub fn display_completion_summary(
 }
 
 // Report generation functions
+/// Render the analysis result as a Markdown string.
 pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut content = String::new();
     content.push_str("# Valknut Analysis Report\n\n");
@@ -537,6 +539,7 @@ pub async fn generate_markdown_report(result: &serde_json::Value) -> anyhow::Res
 }
 
 #[allow(dead_code)]
+/// Render the analysis result as an interactive HTML document.
 pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let total_issues = result["summary"]["total_issues"].as_u64().unwrap_or(0);
     let total_files = result["summary"]["total_files"].as_u64().unwrap_or(0);
@@ -1150,6 +1153,7 @@ pub async fn generate_html_report(result: &serde_json::Value) -> anyhow::Result<
     ))
 }
 
+/// Render the analysis result as SonarQube JSON.
 pub async fn generate_sonar_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut issues = Vec::new();
 
@@ -1284,6 +1288,7 @@ pub async fn generate_sonar_report(result: &serde_json::Value) -> anyhow::Result
     Ok(serde_json::to_string_pretty(&sonar_format)?)
 }
 
+/// Render the analysis result as CSV rows.
 pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let mut content = String::new();
     content.push_str("File,Issue Type,Severity,Description,Line,Impact,Effort\n");
@@ -1450,6 +1455,7 @@ pub async fn generate_csv_report(result: &serde_json::Value) -> anyhow::Result<S
 }
 
 #[allow(dead_code)]
+/// Render a concise JSON summary suitable for CI systems.
 pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::Result<String> {
     let summary = &result["summary"];
     let health_metrics = &result["health_metrics"];
@@ -1495,6 +1501,7 @@ pub async fn generate_ci_summary_report(result: &serde_json::Value) -> anyhow::R
 
 // Human-readable output functions
 #[allow(dead_code)]
+/// Pretty-print analysis results for interactive terminal use.
 pub fn print_human_readable_results(results: &serde_json::Value) {
     println!(
         "{}",
@@ -1565,6 +1572,7 @@ pub fn print_human_readable_results(results: &serde_json::Value) {
 }
 
 #[allow(dead_code)]
+/// Pretty multi-section renderer for comprehensive analysis results.
 pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
     println!(
         "{}",
@@ -1869,6 +1877,7 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
 
 // Helper function
 #[allow(dead_code)]
+/// Map an `OutputFormat` to its CLI/output string representation.
 pub fn format_to_string(format: &OutputFormat) -> &str {
     match format {
         OutputFormat::Jsonl => "jsonl",

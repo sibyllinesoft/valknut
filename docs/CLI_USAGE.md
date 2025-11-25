@@ -30,7 +30,7 @@ Available across all commands:
 | Option | Description |
 |--------|-------------|
 | `-v, --verbose` | Enable verbose logging for debugging |
-| `--survey` | Enable/disable usage analytics collection (default: enabled) |
+| `--survey` | Opt in to usage analytics collection (disabled by default) |
 | `--survey-verbosity LEVEL` | Set survey invitation verbosity level [low, medium, high, maximum] |
 
 ## Commands
@@ -50,9 +50,29 @@ valknut analyze [OPTIONS] <PATHS>...
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `-c, --config <FILE>` | PATH | - | Configuration file path |
-| `-o, --out <DIR>` | PATH | `out` | Output directory for reports |
+| `-o, --out <DIR>` | PATH | `.valknut` | Output directory for reports |
 | `-f, --format <FORMAT>` | ENUM | `jsonl` | Output format |
 | `-q, --quiet` | FLAG | - | Suppress non-essential output |
+| `--profile <fast\|balanced\|thorough\|extreme>` | ENUM | `fast` | Pre-tuned performance/accuracy presets (tunes file limits & LSH precision) |
+
+#### Module Toggles & Coverage
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--no-complexity` | FLAG | false | Disable complexity scoring |
+| `--no-structure` | FLAG | false | Disable structure analysis |
+| `--no-refactoring` | FLAG | false | Disable refactoring analysis |
+| `--no-impact` | FLAG | false | Disable dependency/impact graph (cycles, chokepoints, force graph) |
+| `--no-lsh` | FLAG | false | Disable LSH clone detection |
+| `--no-coverage` | FLAG | false | Disable coverage analysis |
+| `--coverage-file <PATH>` | PATH | auto-discover | Force a specific coverage file (lcov/xml/json) |
+| `--no-coverage-auto-discover` | FLAG | false | Skip searching for coverage files |
+
+#### Oracle & Documentation
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--oracle` | FLAG | off | Run Gemini-powered refactoring oracle (needs `GEMINI_API_KEY`) |
+| `--oracle-max-tokens <N>` | INT | 500000 | Cap tokens sent to the oracle |
+| `doc-audit --root <PATH>` | PATH | `.` | Standalone documentation audit; same engine powers doc health in `analyze` |
 
 #### Clone Detection Options
 | Option | Type | Default | Description |
@@ -108,6 +128,16 @@ valknut analyze --config custom.yml --format markdown ./src
 
 # Benchmark clone verification (default path = .)
 make bench-clone-verification BENCH_CLONE_PATH=../path/to/project
+
+# Force dependency graph & docs surfaced in HTML/JSON
+valknut analyze src crates --format html --semantic-clones --denoise --coverage-file coverage/lcov.info
+```
+
+## Output Fields (JSON / HTML)
+- `passes.impact.module_force_graph`: nodes (id,label,path,fan_in,fan_out,chokepoint_score,in_cycle,size,x,y) and links (source,target,weight) for the new Dependencies tab.
+- `documentation.file_doc_health`: per-file doc health (0-100); Treemap “Docs” color uses severity = 100 - score.
+- `documentation.file_doc_issues`, `directory_doc_health`, `directory_doc_issues`: granular doc gap counts and directory health.
+- `clone_analysis.clone_pairs` & `coverage_packs`: remain unchanged; shown in Clones and Coverage tabs.
 ```
 
 ### Configuration Commands
@@ -180,12 +210,16 @@ valknut doc-audit [OPTIONS]
 | `--format <FORMAT>` | ENUM | `text` | Output format (`text`, `json`) |
 | `--ignore-dir <NAME>` | STRING | - | Additional directory name to ignore (repeatable) |
 | `--ignore-suffix <SUFFIX>` | STRING | - | Additional file suffix to ignore (repeatable) |
+| `--ignore <GLOB>` | STRING | test globs preloaded | Glob patterns to ignore (repeatable) |
+| `--config <FILE>` | PATH | auto-discover `.valknut.docaudit.yml` | Load doc-audit settings from a YAML file |
 
 Example strict audit with JSON output:
 
 ```bash
 valknut doc-audit --strict --format json --ignore-dir node_modules
 ```
+
+Doc audits ship with sensible defaults that skip common test paths (e.g., `**/tests/**`, `**/*_test.*`); add more with `--ignore` or a config file when needed.
 
 ### Integration Commands
 

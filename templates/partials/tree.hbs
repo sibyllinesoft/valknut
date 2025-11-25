@@ -21,6 +21,7 @@
             "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{}{{/if}},
             "unified_hierarchy": {{#if unified_hierarchy}}{{{json unified_hierarchy}}}{{else}}[]{{/if}},
             "directory_health_tree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
+            "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}},
             "graph_insights": {{#if graph_insights}}{{{json graph_insights}}}{{else}}{"hasInsights":false}{{/if}},
             "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}},
             "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
@@ -67,39 +68,51 @@
                 return normalized;
             };
 
-            function buildHealthLookup(tree) {
-                if (!tree || !tree.directories) return { map: {}, rootPath: '' };
-
-                const rootPath = normalizePath(tree.root?.path || '');
+            function buildHealthLookup(tree, fileHealth = {}) {
                 const map = {};
+                let rootPath = '';
+                if (tree && tree.directories) {
+                    rootPath = normalizePath(tree.root?.path || '');
 
-                Object.entries(tree.directories).forEach(([key, value]) => {
-                    if (!value || typeof value !== 'object') return;
-                    const normalizedKey = normalizePath(key || '');
-                    const health = typeof value.health_score === 'number' ? value.health_score : null;
-                    if (health === null) return;
+                    Object.entries(tree.directories).forEach(([key, value]) => {
+                        if (!value || typeof value !== 'object') return;
+                        const normalizedKey = normalizePath(key || '');
+                        const health = typeof value.health_score === 'number' ? value.health_score : null;
+                        if (health === null) return;
 
-                    const variants = new Set();
-                    variants.add(normalizedKey);
-                    if (normalizedKey === '.') variants.add('');
+                        const variants = new Set();
+                        variants.add(normalizedKey);
+                        if (normalizedKey === '.') variants.add('');
 
-                    if (rootPath && normalizedKey.startsWith(rootPath)) {
-                        const relative = normalizedKey.slice(rootPath.length).replace(/^\//, '');
-                        if (relative) variants.add(relative);
-                        variants.add('./' + relative);
-                    }
+                        if (rootPath && normalizedKey.startsWith(rootPath)) {
+                            const relative = normalizedKey.slice(rootPath.length).replace(/^\//, '');
+                            if (relative) variants.add(relative);
+                            variants.add('./' + relative);
+                        }
 
-                    const srcIdx = normalizedKey.indexOf('/src/');
-                    if (srcIdx >= 0) {
-                        const srcSlice = normalizedKey.slice(srcIdx);
-                        variants.add(srcSlice);
-                        variants.add('./' + srcSlice.replace(/^\//, ''));
-                    }
-                    const base = normalizedKey.split('/').filter(Boolean).pop();
-                    if (base) variants.add(base);
+                        const srcIdx = normalizedKey.indexOf('/src/');
+                        if (srcIdx >= 0) {
+                            const srcSlice = normalizedKey.slice(srcIdx);
+                            variants.add(srcSlice);
+                            variants.add('./' + srcSlice.replace(/^\//, ''));
+                        }
+                        const base = normalizedKey.split('/').filter(Boolean).pop();
+                        if (base) variants.add(base);
 
+                        variants.forEach((k) => {
+                            if (!map[k]) map[k] = { health_score: health };
+                        });
+                    });
+                }
+
+                // File-level doc health overrides/augments map
+                Object.entries(fileHealth || {}).forEach(([path, score]) => {
+                    const normalized = normalizePath(path);
+                    const variants = [normalized, normalized.replace(/^\.\//, ''), normalized.split('/').pop()];
                     variants.forEach((k) => {
-                        if (!map[k]) map[k] = { health_score: health };
+                        if (!k) return;
+                        if (!map[k]) map[k] = {};
+                        map[k].doc_health = score;
                     });
                 });
 
@@ -130,6 +143,10 @@
                     if (healthSource && typeof healthSource.health_score === 'number') {
                         node.healthScore = healthSource.health_score; // 0-1 range
                         node.health_score = healthSource.health_score;
+                    }
+                    if (healthSource && typeof healthSource.doc_health === 'number') {
+                        node.docHealth = healthSource.doc_health;
+                        node.doc_health = healthSource.doc_health;
                     }
 
                     if (Array.isArray(node.children) && node.children.length > 0) {
@@ -364,7 +381,10 @@
                     if (Array.isArray(payload.unifiedHierarchy)) {
                         collectEntityDetails(payload.unifiedHierarchy);
                         if (payload.directory_health_tree && payload.directory_health_tree.directories) {
-                            const { map: healthMap, rootPath } = buildHealthLookup(payload.directory_health_tree);
+                            const { map: healthMap, rootPath } = buildHealthLookup(
+                                payload.directory_health_tree,
+                                (payload.documentation && payload.documentation.file_doc_health) || {}
+                            );
                                 window.__TREE_HEALTH_DEBUG = { healthMap, rootPath };
                                 console.warn('[TreeHealth] ACTIVE lookup sizes', Object.keys(healthMap || {}).length, 'root', rootPath);
                                 console.warn('[TreeHealth] sample keys', Object.keys(healthMap || {}).slice(0, 5));

@@ -151,6 +151,7 @@ impl StageResultsBundle {
                 enabled: false,
                 dependency_cycles: Vec::new(),
                 chokepoints: Vec::new(),
+                module_force_graph: None,
                 clone_groups: Vec::new(),
                 issues_count: 0,
             },

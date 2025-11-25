@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, FixedOffset, TimeZone};
 use git2::{DiffOptions, Oid, Repository};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,13 +51,24 @@ static README_CANDIDATES: [&str; 6] = [
 
 static TODO_MARKERS: [&str; 3] = ["TODO", "FIXME", "TBD"];
 
-#[derive(Clone, Debug)]
+static DEFAULT_IGNORED_GLOBS: Lazy<Vec<&'static str>> = Lazy::new(|| {
+    vec![
+        "**/tests/**",
+        "**/*_test.*",
+        "**/*-test.*",
+        "**/*Test.*",
+        "**/*Tests.*",
+    ]
+});
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct DocAuditConfig {
     pub root: PathBuf,
     pub complexity_threshold: usize,
     pub max_readme_commits: usize,
     pub ignore_dirs: HashSet<String>,
     pub ignore_suffixes: HashSet<String>,
+    pub ignore_globs: Vec<String>,
 }
 
 impl DocAuditConfig {
@@ -72,6 +84,10 @@ impl DocAuditConfig {
             ignore_suffixes: DEFAULT_IGNORED_SUFFIXES
                 .iter()
                 .map(|item| item.to_string())
+                .collect(),
+            ignore_globs: DEFAULT_IGNORED_GLOBS
+                .iter()
+                .map(|g| g.to_string())
                 .collect(),
         }
     }
@@ -115,8 +131,9 @@ struct DirectoryInfo {
 }
 
 pub fn run_audit(config: &DocAuditConfig) -> Result<AuditResult> {
-    let (dir_info, files) = walk_repository(config)?;
-    let documentation_issues = scan_documentation(&files, config);
+    let globset = build_ignore_globset(&config.ignore_globs)?;
+    let (dir_info, files) = walk_repository(config, &globset)?;
+    let documentation_issues = scan_documentation(&files, config, &globset);
     let complexity_map = compute_complexities(&dir_info);
     let (missing_readmes, readme_index) = detect_missing_readmes(&complexity_map, config);
     let git_helper = GitHelper::new(&config.root);
@@ -192,8 +209,21 @@ pub fn render_json(result: &AuditResult) -> Result<String> {
     serde_json::to_string_pretty(result).context("Failed to serialize audit results to JSON")
 }
 
+fn build_ignore_globset(patterns: &[String]) -> Result<GlobSet> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        let glob = Glob::new(pattern)
+            .with_context(|| format!("Invalid glob pattern in doc audit ignore list: {pattern}"))?;
+        builder.add(glob);
+    }
+    builder
+        .build()
+        .context("Failed to build globset for doc audit ignores")
+}
+
 fn walk_repository(
     config: &DocAuditConfig,
+    globset: &GlobSet,
 ) -> Result<(HashMap<PathBuf, DirectoryInfo>, Vec<PathBuf>)> {
     let mut directories: HashMap<PathBuf, DirectoryInfo> = HashMap::new();
     let mut files = Vec::new();
@@ -215,12 +245,15 @@ fn walk_repository(
                 .with_context(|| format!("Failed to determine file type for {}", path.display()))?;
 
             if file_type.is_dir() {
-                if should_ignore_dir(&path, config) {
+                if should_ignore_dir(&path, config, globset) {
                     continue;
                 }
                 dir_subdirs.push(path.clone());
                 stack.push(path);
             } else if file_type.is_file() {
+                if should_ignore_file(&path, config, globset) {
+                    continue;
+                }
                 dir_files.push(path.clone());
                 files.push(path);
             }
@@ -238,19 +271,26 @@ fn walk_repository(
     Ok((directories, files))
 }
 
-fn should_ignore_dir(path: &Path, config: &DocAuditConfig) -> bool {
-    if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-        config.ignore_dirs.contains(name)
-    } else {
-        false
+fn should_ignore_dir(path: &Path, config: &DocAuditConfig, globset: &GlobSet) -> bool {
+    let rel = relative_path(path, &config.root);
+    if globset.is_match(&rel) {
+        return true;
     }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| config.ignore_dirs.contains(name))
+        .unwrap_or(false)
 }
 
-fn scan_documentation(files: &[PathBuf], config: &DocAuditConfig) -> Vec<DocIssue> {
+fn scan_documentation(
+    files: &[PathBuf],
+    config: &DocAuditConfig,
+    globset: &GlobSet,
+) -> Vec<DocIssue> {
     let mut issues = Vec::new();
 
     for file_path in files {
-        if should_ignore_file(file_path, config) {
+        if should_ignore_file(file_path, config, globset) {
             continue;
         }
 
@@ -314,7 +354,13 @@ fn scan_documentation(files: &[PathBuf], config: &DocAuditConfig) -> Vec<DocIssu
     issues
 }
 
-fn should_ignore_file(path: &Path, config: &DocAuditConfig) -> bool {
+fn should_ignore_file(path: &Path, config: &DocAuditConfig, globset: &GlobSet) -> bool {
+    let rel = relative_path(path, &config.root);
+
+    if globset.is_match(&rel) {
+        return true;
+    }
+
     let path_str = path.to_string_lossy();
     config
         .ignore_suffixes
@@ -838,15 +884,109 @@ mod rust {
     pub fn scan_rust(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
         let lines: Vec<&str> = source.lines().collect();
         let mut issues = Vec::new();
+        let mut pending_attrs: Vec<String> = Vec::new();
+        let mut trimmed_local: Option<String> = None;
+        let mut index = 0usize;
 
-        for index in 0..lines.len() {
+        while index < lines.len() {
+            trimmed_local = None;
             let line = lines[index];
             let trimmed = line.trim_start();
-            if trimmed.starts_with("mod ") {
-                if trimmed.ends_with(';') {
+
+            if trimmed.is_empty() {
+                index += 1;
+                continue;
+            }
+
+            if trimmed.starts_with("#[") {
+                pending_attrs.push(trimmed.to_string());
+
+                // Handle combined attribute + item on the same line (e.g., #[cfg(test)] mod tests { … })
+                if let Some(pos) = trimmed.rfind(']') {
+                    let remainder = trimmed[pos + 1..].trim_start();
+                    if remainder.is_empty() {
+                        index += 1;
+                        continue;
+                    } else {
+                        // Re-run the loop logic with the remainder as the effective line
+                        let trimmed = remainder;
+                        let has_test_attr = pending_attrs
+                            .iter()
+                            .any(|attr| attr.contains("cfg(test)") || attr.contains("test"));
+
+                        if trimmed.starts_with("mod ") {
+                            pending_attrs.clear();
+                            if has_test_attr {
+                                if let Some(end) = skip_block(&lines, index) {
+                                    index = end + 1;
+                                    continue;
+                                }
+                                index += 1;
+                                continue;
+                            }
+                            if trimmed.ends_with(';') {
+                                index += 1;
+                                continue;
+                            }
+                        if let Some(name) = extract_identifier(&trimmed, "mod") {
+                                if is_doc_missing(&lines, index) {
+                                    push_issue(
+                                        &mut issues,
+                                        path,
+                                        root,
+                                        index + 1,
+                                        Some(&name),
+                                        "undocumented_rust_module",
+                                        format!("Module '{}' lacks module-level docs", name),
+                                    );
+                                }
+                            }
+                            index += 1;
+                            continue;
+                        }
+
+                        // Fall through to normal processing for other items on the same line
+                        trimmed_local = Some(trimmed.to_string());
+                    }
+                } else {
+                    index += 1;
                     continue;
                 }
-                if let Some(name) = extract_identifier(trimmed, "mod") {
+            } else {
+                trimmed_local = Some(trimmed.to_string());
+            }
+
+            let trimmed = if let Some(t) = trimmed_local.take() {
+                t
+            } else {
+                index += 1;
+                continue;
+            };
+
+            if trimmed.starts_with("///") || trimmed.starts_with("//!") {
+                index += 1;
+                continue;
+            }
+
+            let has_test_attr = pending_attrs
+                .iter()
+                .any(|attr| attr.contains("cfg(test)") || attr.contains("test"));
+
+            if trimmed.starts_with("mod ") {
+                pending_attrs.clear();
+                if has_test_attr {
+                    if let Some(end) = skip_block(&lines, index) {
+                        index = end + 1;
+                        continue;
+                    }
+                    index += 1;
+                    continue;
+                }
+                if trimmed.ends_with(';') {
+                    index += 1;
+                    continue;
+                }
+                if let Some(name) = extract_identifier(&trimmed, "mod") {
                     if is_doc_missing(&lines, index) {
                         push_issue(
                             &mut issues,
@@ -859,7 +999,13 @@ mod rust {
                         );
                     }
                 }
-            } else if let Some(name) = detect_function_name(trimmed) {
+                index += 1;
+            } else if let Some(name) = detect_function_name(&trimmed) {
+                pending_attrs.clear();
+                if has_test_attr {
+                    index += 1;
+                    continue;
+                }
                 if let Some(doc) = extract_comment_text(&lines, index) {
                     if is_incomplete_doc(&doc) {
                         push_issue(
@@ -883,7 +1029,13 @@ mod rust {
                         format!("Function '{}' lacks rustdoc", name),
                     );
                 }
-            } else if let Some((kind, name)) = detect_type(trimmed) {
+                index += 1;
+            } else if let Some((kind, name)) = detect_type(&trimmed) {
+                pending_attrs.clear();
+                if has_test_attr {
+                    index += 1;
+                    continue;
+                }
                 if let Some(doc) = extract_comment_text(&lines, index) {
                     if is_incomplete_doc(&doc) {
                         push_issue(
@@ -907,7 +1059,13 @@ mod rust {
                         format!("{} '{}' lacks rustdoc", kind, name),
                     );
                 }
-            } else if let Some(target) = detect_impl(trimmed) {
+                index += 1;
+            } else if let Some(target) = detect_impl(&trimmed) {
+                pending_attrs.clear();
+                if has_test_attr {
+                    index += 1;
+                    continue;
+                }
                 if let Some(doc) = extract_comment_text(&lines, index) {
                     if is_incomplete_doc(&doc) {
                         push_issue(
@@ -931,10 +1089,26 @@ mod rust {
                         format!("impl block for '{}' lacks overview docs", target),
                     );
                 }
+                index += 1;
+            } else {
+                pending_attrs.clear();
+                index += 1;
             }
         }
 
         issues
+    }
+
+    fn skip_block(lines: &[&str], start: usize) -> Option<usize> {
+        let mut depth: isize = 0;
+        for (idx, line) in lines.iter().enumerate().skip(start) {
+            depth += line.chars().filter(|c| *c == '{').count() as isize;
+            depth -= line.chars().filter(|c| *c == '}').count() as isize;
+            if depth == 0 && idx >= start {
+                return Some(idx);
+            }
+        }
+        None
     }
 
     fn push_issue(
@@ -1468,10 +1642,27 @@ mod tests {
         let mut config = DocAuditConfig::new(root.clone());
         config.ignore_suffixes.insert(".ignore-me".into());
 
-        let ignored = should_ignore_file(&root.join("bundle.ignore-me"), &config);
-        let tracked = should_ignore_file(&root.join("lib.rs"), &config);
+        let globset = build_ignore_globset(&config.ignore_globs).unwrap();
+        let ignored = should_ignore_file(&root.join("bundle.ignore-me"), &config, &globset);
+        let tracked = should_ignore_file(&root.join("lib.rs"), &config, &globset);
 
         assert!(ignored);
+        assert!(!tracked);
+    }
+
+    #[test]
+    fn should_ignore_file_respects_glob_configuration() {
+        let root = PathBuf::from("/tmp/project");
+        let mut config = DocAuditConfig::new(root.clone());
+        config.ignore_globs = vec!["**/tests/**".into(), "**/*_test.rs".into()];
+
+        let globset = build_ignore_globset(&config.ignore_globs).unwrap();
+        let ignored = should_ignore_file(&root.join("tests/utils.rs"), &config, &globset);
+        let also_ignored = should_ignore_file(&root.join("svc/api_test.rs"), &config, &globset);
+        let tracked = should_ignore_file(&root.join("src/lib.rs"), &config, &globset);
+
+        assert!(ignored);
+        assert!(also_ignored);
         assert!(!tracked);
     }
 

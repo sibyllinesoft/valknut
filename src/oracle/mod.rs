@@ -1160,7 +1160,7 @@ mod tests {
                 complexity_score: 83.0,
                 structure_quality_score: 45.0,
                 doc_health_score: 100.0,
-                }),
+            }),
             code_dictionary,
             documentation: None,
         }

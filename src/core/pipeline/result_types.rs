@@ -63,6 +63,9 @@ pub struct DocumentationResults {
     pub issues_count: usize,
     /// Documentation health score (0-100)
     pub doc_health_score: f64,
+    /// Per-file documentation health
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub file_doc_health: HashMap<String, f64>,
     /// Per-file doc issue counts
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub file_doc_issues: HashMap<String, usize>,

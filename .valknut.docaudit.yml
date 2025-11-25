@@ -1,0 +1,7 @@
+root: .
+ignore:
+  - "**/tests/**"
+  - "**/*_test.*"
+  - "**/*-test.*"
+  - "**/*Test.*"
+  - "**/*Tests.*"

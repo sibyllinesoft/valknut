@@ -9,6 +9,7 @@ use std::path::PathBuf;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// AI-Powered Code Analysis & Refactoring Assistant
+/// Top-level CLI entrypoint and global flags.
 #[derive(Parser)]
 #[command(name = "valknut")]
 #[command(version = VERSION)]
@@ -42,6 +43,7 @@ Common Usage:
 
 Learn more: https://github.com/nathanricedev/valknut
 ")]
+/// CLI entrypoint options.
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -50,15 +52,16 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Enable/disable usage analytics collection (default: enabled)
+    /// Toggle usage analytics collection (off by default for privacy)
     #[arg(long, global = true)]
     pub survey: bool,
 
-    /// Set survey invitation verbosity level
+    /// How often to show survey prompts when --survey is enabled
     #[arg(long, global = true, value_enum, default_value = "maximum")]
     pub survey_verbosity: SurveyVerbosity,
 }
 
+/// Supported subcommands for Valknut.
 #[derive(Subcommand)]
 pub enum Commands {
     /// Analyze code repositories for refactorability
@@ -245,9 +248,12 @@ pub struct AdvancedCloneArgs {
     pub min_rarity_gain: Option<f64>,
 }
 
+/// Output formats available for the documentation audit command.
 #[derive(Clone, Debug, ValueEnum)]
 pub enum DocAuditFormat {
+    /// Plain-text findings (human friendly)
     Text,
+    /// JSON payload for automation
     Json,
 }
 
@@ -281,6 +287,14 @@ pub struct DocAuditArgs {
     /// Additional file suffixes to ignore (repeatable)
     #[arg(long)]
     pub ignore_suffix: Vec<String>,
+
+    /// Glob patterns to ignore (repeatable)
+    #[arg(long, value_name = "GLOB")]
+    pub ignore: Vec<String>,
+
+    /// Optional YAML file with doc-audit configuration
+    #[arg(long)]
+    pub config: Option<PathBuf>,
 }
 
 /// Coverage analysis configuration
@@ -339,13 +353,14 @@ pub struct AIFeaturesArgs {
     pub oracle_max_tokens: Option<usize>,
 }
 
+/// Arguments for the primary `analyze` command
 #[derive(Args)]
 pub struct AnalyzeArgs {
     /// One or more directories or files to analyze (defaults to current directory)
     #[arg(default_value = ".")]
     pub paths: Vec<PathBuf>,
 
-    /// Configuration file path
+    /// Configuration file path (auto-discovers .valknut.yml/.yaml when omitted)
     #[arg(short, long)]
     pub config: Option<PathBuf>,
 
@@ -384,6 +399,7 @@ pub struct AnalyzeArgs {
     pub ai_features: AIFeaturesArgs,
 }
 
+/// Initialize a configuration file with default values
 #[derive(Args)]
 pub struct InitConfigArgs {
     /// Output configuration file name
@@ -395,6 +411,7 @@ pub struct InitConfigArgs {
     pub force: bool,
 }
 
+/// Validate an existing configuration file
 #[derive(Args)]
 pub struct ValidateConfigArgs {
     /// Path to configuration file to validate
@@ -406,6 +423,7 @@ pub struct ValidateConfigArgs {
     pub verbose: bool,
 }
 
+/// Start MCP server over stdio for IDE integrations
 #[derive(Args)]
 pub struct McpStdioArgs {
     /// Configuration file
@@ -413,6 +431,7 @@ pub struct McpStdioArgs {
     pub config: Option<PathBuf>,
 }
 
+/// Generate an MCP manifest JSON file
 #[derive(Args)]
 pub struct McpManifestArgs {
     /// Output file (default: stdout)
@@ -420,6 +439,8 @@ pub struct McpManifestArgs {
     pub output: Option<PathBuf>,
 }
 
+/// Available output formats for analysis reports
+/// Report serialization options for the `analyze` command.
 #[derive(Clone, ValueEnum)]
 pub enum OutputFormat {
     /// Line-delimited JSON format
@@ -442,8 +463,10 @@ pub enum OutputFormat {
     Pretty,
 }
 
+/// Utilities for working with output formats.
 impl OutputFormat {
     #[must_use]
+    /// Returns true when the format is suited for machine parsing.
     pub fn is_machine_readable(&self) -> bool {
         matches!(
             self,
@@ -457,11 +480,16 @@ impl OutputFormat {
     }
 }
 
+/// Verbosity levels for optional survey prompts
 #[derive(Debug, Clone, ValueEnum)]
 pub enum SurveyVerbosity {
+    /// Never prompt unless explicitly requested
     Low,
+    /// Rare prompts in longer runs
     Medium,
+    /// Occasional prompts for engaged users
     High,
+    /// Show full survey invites (default)
     Maximum,
 }
 
@@ -470,7 +498,7 @@ pub enum SurveyVerbosity {
 pub enum PerformanceProfile {
     /// Fast mode - minimal analysis, optimized for speed
     Fast,
-    /// Balanced mode - good balance of speed and thoroughness (default)
+    /// Balanced mode - good balance of speed and thoroughness
     Balanced,
     /// Thorough mode - comprehensive analysis, optimized for accuracy
     Thorough,

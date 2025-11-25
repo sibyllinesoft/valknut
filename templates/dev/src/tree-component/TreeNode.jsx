@@ -896,6 +896,7 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
 
         if (isFile) {
             const severityCounts = aggregates.severityCounts || {};
+            const docIssueCount = data.docIssues;
 
             const severityList = [
                 { key: 'critical', label: 'Critical', value: severityCounts.critical || 0 },
@@ -928,28 +929,43 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
                                 )
                             )
                         )
-            ),
-        topEntities.length > 0 &&
-            React.createElement(
-                'div',
-                { className: 'tooltip-section' },
-                React.createElement('h4', null, 'Top Entities'),
-                React.createElement(
-                    'ul',
-                    { className: 'tooltip-section-list' },
-                    topEntities.map((entity) =>
+                    ),
+                docIssueCount != null && docIssueCount > 0 &&
+                    React.createElement(
+                        'div',
+                        { className: 'tooltip-section' },
+                        React.createElement('h4', null, 'Documentation'),
                         React.createElement(
-                            'li',
-                            { key: entity.id },
-                            React.createElement('div', { className: 'issue-heading' }, entity.name),
-                            suggestionText
-                                ? React.createElement('div', { className: 'issue-summary' }, suggestionText)
-                                : React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
+                            'ul',
+                            { className: 'tooltip-section-list' },
+                            React.createElement(
+                                'li',
+                                { key: 'doc-issues' },
+                                React.createElement('div', { className: 'issue-heading' }, `${docIssueCount} undocumented items`)
+                            )
+                        )
+                    ),
+                topEntities.length > 0 &&
+                    React.createElement(
+                        'div',
+                        { className: 'tooltip-section' },
+                        React.createElement('h4', null, 'Top Entities'),
+                        React.createElement(
+                            'ul',
+                            { className: 'tooltip-section-list' },
+                            topEntities.map((entity) =>
+                                React.createElement(
+                                    'li',
+                                    { key: entity.id },
+                                    React.createElement('div', { className: 'issue-heading' }, entity.name),
+                                    suggestionText
+                                        ? React.createElement('div', { className: 'issue-summary' }, suggestionText)
+                                        : React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
+                                )
+                            )
                         )
                     )
-                )
-            )
-    );
+            );
         }
 
         // Entities

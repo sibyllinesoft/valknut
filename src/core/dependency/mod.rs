@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use petgraph::algo::kosaraju_scc;
 use petgraph::graph::{Graph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
 use crate::core::errors::Result;
@@ -171,17 +172,48 @@ pub struct Chokepoint {
     pub score: f64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ModuleGraph {
+    pub nodes: Vec<ModuleGraphNode>,
+    pub edges: Vec<ModuleGraphEdge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleGraphNode {
+    pub id: String,
+    pub path: PathBuf,
+    pub functions: usize,
+    pub fan_in: usize,
+    pub fan_out: usize,
+    pub chokepoint_score: f64,
+    pub in_cycle: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleGraphEdge {
+    pub source: usize,
+    pub target: usize,
+    pub weight: usize,
+}
+
 #[derive(Debug, Default)]
 pub struct ProjectDependencyAnalysis {
     nodes: HashMap<EntityKey, FunctionNode>,
     metrics: HashMap<EntityKey, DependencyMetrics>,
     cycles: Vec<Vec<FunctionNode>>,
     chokepoints: Vec<Chokepoint>,
+    module_graph: ModuleGraph,
 }
 
 impl ProjectDependencyAnalysis {
     pub fn empty() -> Self {
-        Self::default()
+        Self {
+            nodes: HashMap::new(),
+            metrics: HashMap::new(),
+            cycles: Vec::new(),
+            chokepoints: Vec::new(),
+            module_graph: ModuleGraph::default(),
+        }
     }
 
     pub fn analyze(files: &[PathBuf]) -> Result<Self> {
@@ -209,12 +241,14 @@ impl ProjectDependencyAnalysis {
         let (cycles, cycle_members) = identify_cycles(&graph, &index_map, &nodes);
         mark_cycle_members(&mut metrics, &cycle_members);
         let chokepoints = compute_chokepoints(&metrics, &nodes, 10);
+        let module_graph = build_module_graph(&graph, &nodes, &metrics);
 
         Ok(Self {
             nodes,
             metrics,
             cycles,
             chokepoints,
+            module_graph,
         })
     }
 
@@ -247,6 +281,10 @@ impl ProjectDependencyAnalysis {
 
     pub fn chokepoints(&self) -> &[Chokepoint] {
         &self.chokepoints
+    }
+
+    pub fn module_graph(&self) -> &ModuleGraph {
+        &self.module_graph
     }
 
     pub fn metrics_iter(&self) -> impl Iterator<Item = (&EntityKey, &DependencyMetrics)> {
@@ -678,6 +716,116 @@ fn compute_chokepoints(
         })
         .take(limit)
         .collect()
+}
+
+fn build_module_graph(
+    graph: &DependencyGraph,
+    nodes: &HashMap<EntityKey, FunctionNode>,
+    metrics: &HashMap<EntityKey, DependencyMetrics>,
+) -> ModuleGraph {
+    if nodes.is_empty() {
+        return ModuleGraph::default();
+    }
+
+    #[derive(Clone)]
+    struct ModuleAgg {
+        path: String,
+        functions: usize,
+        fan_in: usize,
+        fan_out: usize,
+        chokepoint_score: f64,
+        in_cycle: bool,
+    }
+
+    let mut modules: HashMap<String, ModuleAgg> = HashMap::with_capacity(nodes.len() / 2 + 1);
+
+    for (key, func) in nodes {
+        let path_str = normalize_path_string(&func.file_path);
+        let entry = modules.entry(path_str.clone()).or_insert(ModuleAgg {
+            path: path_str.clone(),
+            functions: 0,
+            fan_in: 0,
+            fan_out: 0,
+            chokepoint_score: 0.0,
+            in_cycle: false,
+        });
+
+        entry.functions += 1;
+
+        if let Some(metric) = metrics.get(key) {
+            if metric.choke_score > entry.chokepoint_score {
+                entry.chokepoint_score = metric.choke_score;
+            }
+            entry.in_cycle |= metric.in_cycle;
+        }
+    }
+
+    let mut edge_weights: HashMap<(String, String), usize> = HashMap::new();
+    for edge in graph.edge_references() {
+        let Some(src_key) = graph.node_weight(edge.source()) else {
+            continue;
+        };
+        let Some(dst_key) = graph.node_weight(edge.target()) else {
+            continue;
+        };
+        let Some(src_node) = nodes.get(src_key) else {
+            continue;
+        };
+        let Some(dst_node) = nodes.get(dst_key) else {
+            continue;
+        };
+
+        let src_path = normalize_path_string(&src_node.file_path);
+        let dst_path = normalize_path_string(&dst_node.file_path);
+
+        *edge_weights.entry((src_path, dst_path)).or_insert(0) += 1;
+    }
+
+    let mut module_vec: Vec<ModuleAgg> = modules.into_values().collect();
+    module_vec.sort_by(|a, b| a.path.cmp(&b.path));
+
+    let mut index_lookup: HashMap<String, usize> = HashMap::with_capacity(module_vec.len());
+    for (idx, module) in module_vec.iter().enumerate() {
+        index_lookup.insert(module.path.clone(), idx);
+    }
+
+    let mut edges: Vec<ModuleGraphEdge> = Vec::with_capacity(edge_weights.len());
+    for ((src_path, dst_path), weight) in edge_weights {
+        if let (Some(&source), Some(&target)) =
+            (index_lookup.get(&src_path), index_lookup.get(&dst_path))
+        {
+            edges.push(ModuleGraphEdge {
+                source,
+                target,
+                weight,
+            });
+            if let Some(module) = module_vec.get_mut(source) {
+                module.fan_out = module.fan_out.saturating_add(weight);
+            }
+            if let Some(module) = module_vec.get_mut(target) {
+                module.fan_in = module.fan_in.saturating_add(weight);
+            }
+        }
+    }
+
+    let nodes = module_vec
+        .into_iter()
+        .map(|module| ModuleGraphNode {
+            id: module.path.clone(),
+            path: PathBuf::from(&module.path),
+            functions: module.functions,
+            fan_in: module.fan_in,
+            fan_out: module.fan_out,
+            chokepoint_score: module.chokepoint_score,
+            in_cycle: module.in_cycle,
+        })
+        .collect();
+
+    ModuleGraph { nodes, edges }
+}
+
+fn normalize_path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 pub fn canonicalize_path(path: &Path) -> PathBuf {

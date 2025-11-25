@@ -309,6 +309,14 @@ body {
 
 .analysis-summary.results-section {
   padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+.results-section.tab-panel {
+  padding: 0;
+  margin: 0;
+  max-width: none;
 }
 
 .analysis-summary {
@@ -1633,7 +1641,7 @@ body {
 
 .clone-metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.85rem;
   margin-bottom: 1.25rem;
 }

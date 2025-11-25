@@ -861,6 +861,7 @@ function buildTemplateData(results) {
     clone_pairs: clonePairs,
     clone_analysis_raw: results.clone_analysis || null,
     passes: results.passes || results.stage_results || null,
+    documentation: results.documentation || null,
   };
 }
 
@@ -1095,6 +1096,7 @@ function render() {
     clone_pairs: templateData.clone_pairs,
     clonePairs: templateData.clone_pairs,
     passes: templateData.passes,
+    documentation: templateData.documentation,
   };
 
   fs.writeFileSync(OUTPUT_DATA_JSON, JSON.stringify(frontendPayload, null, 2));

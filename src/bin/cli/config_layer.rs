@@ -22,6 +22,7 @@ pub trait FromCliArgs<T> {
     fn from_cli_args(args: &T) -> Self;
 }
 
+/// Merge language-specific options while preserving file-level metadata.
 fn merge_language_settings(
     target: &mut ValknutConfig,
     source: &ValknutConfig,
@@ -57,6 +58,7 @@ fn merge_language_settings(
     }
 }
 
+/// Copy advanced tuning sections from file config back into the merged config.
 fn apply_advanced_sections_from_file(target: &mut ValknutConfig, source: &ValknutConfig) {
     target.scoring = source.scoring.clone();
     target.graph = source.graph.clone();
@@ -121,7 +123,9 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
     Ok(config)
 }
 
+/// Merge higher-priority ValknutConfig values into an existing config.
 impl ConfigMerge<ValknutConfig> for ValknutConfig {
+    /// Merge another ValknutConfig, giving precedence to the incoming config.
     fn merge_with(&mut self, other: ValknutConfig) {
         self.coverage.merge_with(other.coverage);
         self.denoise.merge_with(other.denoise);
@@ -282,7 +286,9 @@ mod tests {
     }
 }
 
+/// Merge API-layer analysis configuration, giving precedence to the incoming config.
 impl ConfigMerge<api_config::AnalysisConfig> for api_config::AnalysisConfig {
+    /// Merge another AnalysisConfig, preferring the incoming values.
     fn merge_with(&mut self, other: api_config::AnalysisConfig) {
         let default_modules = api_config::AnalysisModules::default();
 
@@ -371,7 +377,9 @@ impl ConfigMerge<api_config::AnalysisConfig> for api_config::AnalysisConfig {
     }
 }
 
+/// Merge coverage configuration while honoring explicit overrides.
 impl ConfigMerge<CoverageConfig> for CoverageConfig {
+    /// Merge another CoverageConfig, keeping explicit overrides intact.
     fn merge_with(&mut self, other: CoverageConfig) {
         if other.coverage_file.is_some() {
             self.coverage_file = other.coverage_file;
@@ -386,7 +394,9 @@ impl ConfigMerge<CoverageConfig> for CoverageConfig {
     }
 }
 
+/// Merge denoise configuration values with priority to the newer settings.
 impl ConfigMerge<DenoiseConfig> for DenoiseConfig {
+    /// Merge another DenoiseConfig, prioritizing non-default incoming values.
     fn merge_with(&mut self, other: DenoiseConfig) {
         let default = DenoiseConfig::default();
 
@@ -453,7 +463,9 @@ impl ConfigMerge<DenoiseConfig> for DenoiseConfig {
     }
 }
 
+/// Build a partial ValknutConfig from CLI arguments.
 impl FromCliArgs<AnalyzeArgs> for ValknutConfig {
+    /// Convert CLI args into a ValknutConfig overlay.
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
         let mut config = ValknutConfig::default();
         config.coverage = CoverageConfig::from_cli_args(args);
@@ -473,7 +485,9 @@ impl FromCliArgs<AnalyzeArgs> for ValknutConfig {
     }
 }
 
+/// Build API-facing analysis config from CLI arguments.
 impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
+    /// Convert CLI args into API-facing AnalysisConfig overrides.
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
         let mut config = api_config::AnalysisConfig::default();
 
@@ -517,7 +531,9 @@ impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
     }
 }
 
+/// Build coverage configuration overrides from CLI arguments.
 impl FromCliArgs<AnalyzeArgs> for CoverageConfig {
+    /// Convert CLI args into coverage configuration overrides.
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
         CoverageConfig {
             coverage_file: args.coverage.coverage_file.clone(),
@@ -528,7 +544,9 @@ impl FromCliArgs<AnalyzeArgs> for CoverageConfig {
     }
 }
 
+/// Build denoise configuration overrides from CLI arguments.
 impl FromCliArgs<AnalyzeArgs> for DenoiseConfig {
+    /// Convert CLI args into denoise configuration overrides.
     fn from_cli_args(args: &AnalyzeArgs) -> Self {
         DenoiseConfig {
             enabled: args.clone_detection.denoise,

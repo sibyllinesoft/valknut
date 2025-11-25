@@ -149,6 +149,7 @@ mod tests {
                 enabled: true,
                 dependency_cycles: vec![],
                 chokepoints: vec![],
+                module_force_graph: None,
                 clone_groups: vec![],
                 issues_count: 0,
             },

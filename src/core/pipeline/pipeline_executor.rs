@@ -279,9 +279,16 @@ impl AnalysisPipeline {
         let mut documentation_results = DocumentationAnalysisResults::default();
 
         // Compute documentation health (project-level for now)
-        if let Some((doc_score, doc_issue_count, file_issues, dir_scores, dir_issue_counts)) =
-            Self::compute_doc_health(
+        if let Some((
+            doc_score,
+            doc_issue_count,
+            file_issues,
+            dir_scores,
+            dir_issue_counts,
+            file_health,
+        )) = Self::compute_doc_health(
             paths,
+            &files,
             self.valknut_config
                 .as_ref()
                 .map(|c| &c.docs)
@@ -302,6 +309,7 @@ impl AnalysisPipeline {
             documentation_results.issues_count = doc_issue_count;
             documentation_results.doc_health_score = doc_score;
             documentation_results.file_doc_issues = file_issues;
+            documentation_results.file_doc_health = file_health;
             documentation_results.directory_doc_health = dir_scores;
             documentation_results.directory_doc_issues = dir_issue_counts;
         }
@@ -340,9 +348,10 @@ impl AnalysisPipeline {
     }
 
     /// Compute documentation health using doc_audit with directory-aware aggregation and eligibility thresholds.
-    /// Returns (score 0-100, doc_issue_count, per-file issues, per-directory scores).
+    /// Returns (score 0-100, doc_issue_count, per-file issues, per-directory scores, per-directory issue counts, per-file health scores).
     fn compute_doc_health(
         paths: &[PathBuf],
+        analyzed_files: &[PathBuf],
         cfg: &DocHealthConfig,
     ) -> Option<(
         f64,
@@ -350,6 +359,7 @@ impl AnalysisPipeline {
         HashMap<String, usize>,
         HashMap<String, f64>,
         HashMap<String, usize>,
+        HashMap<String, f64>,
     )> {
         let root = paths.iter().find(|p| p.is_dir())?.clone();
         let audit_cfg = DocAuditConfig::new(root);
@@ -372,7 +382,13 @@ impl AnalysisPipeline {
         let mut dir_gaps: HashMap<PathBuf, usize> = HashMap::new();
 
         for (path, gaps) in file_gaps.iter() {
-            let loc = std::fs::read_to_string(path)
+            // Paths from doc_audit are relative to audit root, so join them
+            let full_path = if path.is_absolute() {
+                path.clone()
+            } else {
+                audit_cfg.root.join(path)
+            };
+            let loc = std::fs::read_to_string(&full_path)
                 .map(|c| c.lines().count())
                 .unwrap_or(0);
             if loc < cfg.min_file_nodes {
@@ -402,6 +418,7 @@ impl AnalysisPipeline {
         let mut dir_scores = Vec::new();
         let mut dir_score_map: HashMap<String, f64> = HashMap::new();
         let mut dir_issue_map: HashMap<String, usize> = HashMap::new();
+        let mut file_health_map: HashMap<String, f64> = HashMap::new();
         for (dir, eligible) in dir_eligible.iter() {
             if *eligible < cfg.min_files_per_dir {
                 dir_scores.push(100.0);
@@ -417,6 +434,94 @@ impl AnalysisPipeline {
             dir_issue_map.insert(dir.display().to_string(), gaps);
         }
 
+        // Helper to insert path variants into file_health_map
+        let insert_path_variants =
+            |file_health_map: &mut HashMap<String, f64>, path: &Path, score: f64| {
+                let abs = if path.is_absolute() {
+                    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+                } else {
+                    let joined = audit_cfg.root.join(path);
+                    joined.canonicalize().unwrap_or(joined)
+                };
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let rel_cwd = abs
+                    .strip_prefix(&cwd)
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|_| abs.clone());
+                let rel_root = abs
+                    .strip_prefix(&audit_cfg.root)
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|_| rel_cwd.clone());
+
+                let mut keys: Vec<PathBuf> = Vec::new();
+                keys.push(abs.clone());
+                keys.push(rel_cwd.clone());
+                keys.push(rel_root.clone());
+                if abs.starts_with(&audit_cfg.root) {
+                    let rel_to_root = abs.strip_prefix(&audit_cfg.root).unwrap_or(&abs);
+                    keys.push(rel_to_root.to_path_buf());
+                }
+                if rel_root.starts_with("src") {
+                    if let Ok(stripped) = rel_root.strip_prefix("src") {
+                        keys.push(stripped.to_path_buf());
+                        keys.push(PathBuf::from("src").join(stripped));
+                    }
+                }
+                keys.push(PathBuf::from("src").join(rel_root.clone()));
+                if let Some(file_name) = abs.file_name() {
+                    keys.push(PathBuf::from(file_name));
+                }
+
+                for k in keys {
+                    let kstr = k.to_string_lossy().replace('\\', "/");
+                    file_health_map.insert(kstr.clone(), score);
+                    if !kstr.starts_with("./") {
+                        file_health_map.insert(format!("./{}", kstr), score);
+                    }
+                }
+            };
+
+        // File-level doc health: files with issues get scaled score, files without issues get 100
+        // Use logarithmic scaling so files with many issues don't all collapse to 0
+        // Formula: health = 100 * (1 - log10(gaps + 1) / log10(max_gaps + 1))
+        // This gives a gentler curve: 1 issue ~= 85, 10 issues ~= 50, 100 issues ~= 15
+        let max_gaps = file_gaps.values().copied().max().unwrap_or(1).max(1) as f64;
+        let log_max = (max_gaps + 1.0).log10();
+
+        for (path, gaps) in file_gaps.iter() {
+            let score = if *gaps == 0 {
+                100.0
+            } else {
+                let log_gaps = (*gaps as f64 + 1.0).log10();
+                let scaled = 1.0 - (log_gaps / log_max);
+                (scaled * 100.0).clamp(0.0, 100.0)
+            };
+            insert_path_variants(&mut file_health_map, path, score);
+        }
+
+        // Then add all analyzed source files that don't have issues (score = 100.0)
+        // We need to normalize paths before comparing since file_gaps paths may differ
+        // file_gaps paths are relative to audit_cfg.root, so we need to join them
+        let file_gaps_canonical: std::collections::HashSet<PathBuf> = file_gaps
+            .keys()
+            .filter_map(|p| {
+                let full_path = if p.is_absolute() {
+                    p.clone()
+                } else {
+                    audit_cfg.root.join(p)
+                };
+                full_path.canonicalize().ok()
+            })
+            .collect();
+        for path in analyzed_files.iter() {
+            if path.is_file() {
+                let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+                if !file_gaps_canonical.contains(&canonical) {
+                    insert_path_variants(&mut file_health_map, path, 100.0);
+                }
+            }
+        }
+
         // Project score preference: directory weighted average if any eligible dirs; else file coverage; else 100.
         if !dir_scores.is_empty() {
             let avg = dir_scores.iter().sum::<f64>() / dir_scores.len() as f64;
@@ -426,11 +531,19 @@ impl AnalysisPipeline {
                 file_issue_out,
                 dir_score_map,
                 dir_issue_map,
+                file_health_map,
             ));
         }
 
         if eligible_files == 0 {
-            return Some((100.0, 0, file_issue_out, dir_score_map, dir_issue_map));
+            return Some((
+                100.0,
+                0,
+                file_issue_out,
+                dir_score_map,
+                dir_issue_map,
+                file_health_map,
+            ));
         }
 
         let coverage = 1.0 - (files_with_gaps as f64 / eligible_files as f64);
@@ -440,6 +553,7 @@ impl AnalysisPipeline {
             file_issue_out,
             dir_score_map,
             dir_issue_map,
+            file_health_map,
         ))
     }
 
@@ -639,6 +753,7 @@ impl AnalysisPipeline {
                 enabled: false,
                 dependency_cycles: Vec::new(),
                 chokepoints: Vec::new(),
+                module_force_graph: None,
                 clone_groups: Vec::new(),
                 issues_count: 0,
             },
@@ -1008,10 +1123,9 @@ impl AnalysisPipeline {
             feature_vector.add_feature("files_per_directory", dir_files);
 
             // Normalized severities (higher is worse)
-            feature_vector.normalized_features.insert(
-                "lines_of_code".to_string(),
-                logistic_over(loc, 300.0, 75.0),
-            );
+            feature_vector
+                .normalized_features
+                .insert("lines_of_code".to_string(), logistic_over(loc, 300.0, 75.0));
             feature_vector.normalized_features.insert(
                 "functions_per_file".to_string(),
                 logistic_over(funcs, 12.0, 4.0),
@@ -1025,14 +1139,9 @@ impl AnalysisPipeline {
                 logistic_over(dir_files, 7.0, 2.0),
             );
 
-            feature_vector.add_metadata(
-                "entity_type",
-                serde_json::Value::String("file".to_string()),
-            );
-            feature_vector.add_metadata(
-                "file_path",
-                serde_json::Value::String(file.clone()),
-            );
+            feature_vector
+                .add_metadata("entity_type", serde_json::Value::String("file".to_string()));
+            feature_vector.add_metadata("file_path", serde_json::Value::String(file.clone()));
 
             feature_vectors.push(feature_vector);
         }
@@ -1295,7 +1404,7 @@ mod tests {
             high_priority_issues: 4,
             critical_issues: 3,
             doc_health_score: 1.0,
-                    doc_issue_count: 0,
+            doc_issue_count: 0,
         };
 
         ComprehensiveAnalysisResult {
@@ -1328,6 +1437,7 @@ mod tests {
                 enabled: true,
                 dependency_cycles: vec![json!({"module": "core", "depth": 3})],
                 chokepoints: vec![],
+                module_force_graph: None,
                 clone_groups: vec![],
                 issues_count: 1,
             },
@@ -1636,6 +1746,7 @@ mod tests {
             enabled: false,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
+            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };
@@ -1699,6 +1810,7 @@ mod tests {
             enabled: false,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
+            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };

@@ -12,6 +12,7 @@
                 <option value="debt">Debt</option>
                 <option value="maintainability">Maintainability</option>
                 <option value="structure">Structure</option>
+                <option value="docs">Docs</option>
             </select>
             <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
             <input id="treemap-max-scale" type="number" value="100" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
@@ -23,7 +24,8 @@
         <script id="treemap-data" type="application/json">
             {
                 "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
-                "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}}
+                "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
+                "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}}
             }
         </script>
         <script>
@@ -38,13 +40,15 @@
                 const payload = JSON.parse(dataEl.textContent || '{}');
                 const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
+                const docHealthMap = payload.documentation?.file_doc_health || {};
 
                 const metricDescriptions = {
                     complexity: 'Complexity: combined cyclomatic & cognitive complexity severities; higher = more branching/logic to simplify.',
                     cognitive: 'Cognitive: focuses on how hard the code is to mentally follow (nesting, deep conditionals, tricky flow).',
                     debt: 'Debt: technical debt severity derived from debt score and contributing factors; higher = more costly to fix later.',
                     maintainability: 'Maintainability: severity inverted from maintainability index; higher = harder to sustain over time.',
-                    structure: 'Structure: severity for structural issues (coupling, cohesion, file/module organization).'
+                    structure: 'Structure: severity for structural issues (coupling, cohesion, file/module organization).',
+                    docs: 'Docs: severity derived from documentation health (lower health = higher severity).'
                 };
 
                 function getLinesOfCode(entity) {
@@ -64,6 +68,23 @@
 
                 function severityForCategory(entity, category) {
                     const issues = Array.isArray(entity.issues) ? entity.issues : [];
+                    if (category === 'docs') {
+                        const raw = String(entity.file_path || entity.filePath || '').replace(/\\\\/g, '/');
+                        const variants = [
+                            raw,
+                            raw.replace(/^[.][/]/, ''),
+                            raw.replace(/^.*?src[/]/, 'src/'),
+                            raw.split('/').slice(-2).join('/'),
+                            raw.split('/').pop() || raw,
+                        ];
+                        for (const v of variants) {
+                            const docScore = Number(docHealthMap[v]);
+                            if (Number.isFinite(docScore)) {
+                                return Math.max(0, 100 - docScore);
+                            }
+                        }
+                        return 100; // treat missing doc data as worst severity
+                    }
                     for (const issue of issues) {
                         const cat = String(issue.category || '').toLowerCase();
                         if (cat === category) {
