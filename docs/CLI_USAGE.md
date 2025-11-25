@@ -61,7 +61,7 @@ valknut analyze [OPTIONS] <PATHS>...
 | `--no-complexity` | FLAG | false | Disable complexity scoring |
 | `--no-structure` | FLAG | false | Disable structure analysis |
 | `--no-refactoring` | FLAG | false | Disable refactoring analysis |
-| `--no-impact` | FLAG | false | Disable dependency/impact graph (cycles, chokepoints, force graph) |
+| `--no-impact` | FLAG | false | Disable dependency/impact analysis (cycles, chokepoints) |
 | `--no-lsh` | FLAG | false | Disable LSH clone detection |
 | `--no-coverage` | FLAG | false | Disable coverage analysis |
 | `--coverage-file <PATH>` | PATH | auto-discover | Force a specific coverage file (lcov/xml/json) |
@@ -134,7 +134,6 @@ valknut analyze src crates --format html --semantic-clones --denoise --coverage-
 ```
 
 ## Output Fields (JSON / HTML)
-- `passes.impact.module_force_graph`: nodes (id,label,path,fan_in,fan_out,chokepoint_score,in_cycle,size,x,y) and links (source,target,weight) for the new Dependencies tab.
 - `documentation.file_doc_health`: per-file doc health (0-100); Treemap “Docs” color uses severity = 100 - score.
 - `documentation.file_doc_issues`, `directory_doc_health`, `directory_doc_issues`: granular doc gap counts and directory health.
 - `clone_analysis.clone_pairs` & `coverage_packs`: remain unchanged; shown in Clones and Coverage tabs.

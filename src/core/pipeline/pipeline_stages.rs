@@ -15,8 +15,8 @@ use tree_sitter::Node as TsNode;
 use super::pipeline_config::AnalysisConfig;
 use super::pipeline_results::{
     CloneVerificationResults, ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo,
-    ForceGraph, ForceGraphLink, ForceGraphMetadata, ForceGraphNode, ImpactAnalysisResults,
-    LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
+    ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
+    StructureAnalysisResults,
 };
 use crate::core::arena_analysis::{ArenaAnalysisResult, ArenaBatchAnalyzer, ArenaFileAnalyzer};
 use crate::core::ast_service::{AstService, CachedTree};
@@ -546,7 +546,6 @@ impl AnalysisStages {
                 enabled: false,
                 dependency_cycles: Vec::new(),
                 chokepoints: Vec::new(),
-                module_force_graph: None,
                 clone_groups: Vec::new(),
                 issues_count: 0,
             });
@@ -559,7 +558,6 @@ impl AnalysisStages {
                 enabled: false,
                 dependency_cycles: Vec::new(),
                 chokepoints: Vec::new(),
-                module_force_graph: None,
                 clone_groups: Vec::new(),
                 issues_count: 0,
             });
@@ -596,130 +594,15 @@ impl AnalysisStages {
             })
             .collect::<Vec<_>>();
 
-        let module_force_graph = Self::build_module_force_graph(analysis.module_graph());
-
         let issues_count = dependency_cycles.len() + chokepoints.len();
 
         Ok(ImpactAnalysisResults {
             enabled: true,
             dependency_cycles,
             chokepoints,
-            module_force_graph: Some(module_force_graph),
             clone_groups: Vec::new(),
             issues_count,
         })
-    }
-
-    /// Convert dependency module graph into a front-end-ready force-directed payload.
-    fn build_module_force_graph(module_graph: &ModuleGraph) -> ForceGraph {
-        if module_graph.nodes.is_empty() {
-            return ForceGraph::default();
-        }
-
-        const MAX_NODES: usize = 200;
-        let mut scored: Vec<(usize, f64)> = module_graph
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(idx, node)| {
-                let degree = (node.fan_in + node.fan_out) as f64;
-                let size = (node.functions as f64).sqrt();
-                let choke = node.chokepoint_score;
-                let cycle = if node.in_cycle { 2.0 } else { 0.0 };
-                (idx, degree + choke + size + cycle)
-            })
-            .collect();
-
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        let keep_count = scored.len().min(MAX_NODES);
-        let mut keep_indices: Vec<usize> = scored
-            .into_iter()
-            .take(keep_count)
-            .map(|(idx, _)| idx)
-            .collect();
-        keep_indices.sort_unstable();
-
-        if keep_indices.is_empty() {
-            return ForceGraph::default();
-        }
-
-        let pruned_nodes = module_graph.nodes.len().saturating_sub(keep_indices.len());
-
-        let mut index_remap: HashMap<usize, usize> = HashMap::with_capacity(keep_indices.len());
-        for (new_idx, old_idx) in keep_indices.iter().enumerate() {
-            index_remap.insert(*old_idx, new_idx);
-        }
-
-        let mut nodes: Vec<ForceGraphNode> = Vec::with_capacity(keep_indices.len());
-        for old_idx in &keep_indices {
-            let module = &module_graph.nodes[*old_idx];
-            let id = module.id.clone();
-            let label = module
-                .path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&id)
-                .to_string();
-            let size = ((module.fan_in + module.fan_out + module.functions) as f64)
-                .sqrt()
-                .max(1.0);
-
-            nodes.push(ForceGraphNode {
-                id,
-                label,
-                path: module.path.to_string_lossy().replace('\\', "/"),
-                functions: module.functions,
-                fan_in: module.fan_in,
-                fan_out: module.fan_out,
-                chokepoint_score: module.chokepoint_score,
-                in_cycle: module.in_cycle,
-                size: Some(size),
-                x: None,
-                y: None,
-            });
-        }
-
-        let mut edge_tuples: Vec<(usize, usize, f64)> = Vec::new();
-        for edge in &module_graph.edges {
-            if edge.source == edge.target {
-                continue;
-            }
-            if let (Some(&src), Some(&dst)) =
-                (index_remap.get(&edge.source), index_remap.get(&edge.target))
-            {
-                edge_tuples.push((src, dst, edge.weight as f64));
-            }
-        }
-
-        let layout = Self::force_directed_layout(nodes.len(), &edge_tuples);
-        for (node, (x, y)) in nodes.iter_mut().zip(layout.into_iter()) {
-            node.x = Some(x);
-            node.y = Some(y);
-        }
-
-        let id_lookup: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
-        let links: Vec<ForceGraphLink> = edge_tuples
-            .into_iter()
-            .map(|(src, dst, weight)| ForceGraphLink {
-                source: id_lookup[src].clone(),
-                target: id_lookup[dst].clone(),
-                weight: weight.round() as usize,
-            })
-            .collect();
-
-        let edge_count = links.len();
-
-        ForceGraph {
-            nodes,
-            links,
-            metadata: Some(ForceGraphMetadata {
-                layout: "force-directed".to_string(),
-                node_count: id_lookup.len(),
-                edge_count,
-                pruned_nodes,
-            }),
-        }
     }
 
     /// Lightweight Fruchterman–Reingold layout tuned for up to a few hundred nodes.
@@ -1672,7 +1555,6 @@ impl StageOrchestrator for AnalysisStages {
                         enabled: false,
                         dependency_cycles: Vec::new(),
                         chokepoints: Vec::new(),
-                        module_force_graph: None,
                         clone_groups: Vec::new(),
                         issues_count: 0,
                     })
@@ -2036,122 +1918,6 @@ end_of_record\n";
             gap_count, 0,
             "unknown coverage formats should be ignored without contributing gaps"
         );
-    }
-
-    #[tokio::test]
-    async fn run_impact_analysis_returns_disabled_when_inputs_empty() {
-        let stages = build_test_stages();
-        let impact = stages
-            .run_impact_analysis(&[])
-            .await
-            .expect("impact analysis");
-        assert!(
-            !impact.enabled,
-            "no files means the dependency analysis should be disabled"
-        );
-        assert_eq!(impact.issues_count, 0);
-        assert!(
-            impact.module_force_graph.is_none(),
-            "disabled impact should not emit a module graph"
-        );
-    }
-
-    #[tokio::test]
-    async fn run_impact_analysis_handles_files_without_functions() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let path = tmp.path().join("values.py");
-        fs::write(&path, "VALUE = 3\n").expect("write python module");
-
-        let impact = stages
-            .run_impact_analysis(&[path.clone()])
-            .await
-            .expect("impact analysis");
-
-        assert!(
-            !impact.enabled,
-            "modules with no functions should not produce dependency results"
-        );
-        assert_eq!(impact.issues_count, 0);
-        assert!(
-            impact.module_force_graph.is_none(),
-            "impact disabled should omit module graph payload"
-        );
-    }
-
-    #[tokio::test]
-    async fn run_impact_analysis_enables_when_functions_present() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let path = tmp.path().join("mod.py");
-        let source = r#"
-def helper():
-    return 1
-
-def caller():
-    return helper()
-"#;
-        fs::write(&path, source).expect("write python module");
-
-        let impact = stages
-            .run_impact_analysis(&[path.clone()])
-            .await
-            .expect("impact analysis");
-
-        assert!(
-            impact.enabled,
-            "a module with functions should enable results"
-        );
-        assert_eq!(impact.issues_count, 0);
-        assert!(
-            impact.dependency_cycles.is_empty(),
-            "simple single-module graph should not produce cycles"
-        );
-        let graph = impact
-            .module_force_graph
-            .as_ref()
-            .expect("module graph should be present when impact is enabled");
-        assert_eq!(graph.nodes.len(), 1);
-        assert!(graph.links.is_empty());
-        assert!(graph
-            .nodes
-            .iter()
-            .all(|node| node.x.is_some() && node.y.is_some()));
-    }
-
-    #[tokio::test]
-    async fn run_impact_analysis_builds_module_force_graph() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let file_a = tmp.path().join("a.py");
-        let file_b = tmp.path().join("b.py");
-
-        fs::write(
-            &file_a,
-            "from b import callee\n\ndef caller():\n    return callee()\n",
-        )
-        .expect("write a.py");
-        fs::write(&file_b, "def callee():\n    return 1\n").expect("write b.py");
-
-        let impact = stages
-            .run_impact_analysis(&[file_a.clone(), file_b.clone()])
-            .await
-            .expect("impact analysis");
-
-        assert!(impact.enabled, "impact should enable with callable modules");
-        let graph = impact
-            .module_force_graph
-            .as_ref()
-            .expect("force graph should be produced");
-        assert!(graph.nodes.len() >= 2, "graph should contain both modules");
-        assert!(
-            graph.links.iter().any(|link| link.weight > 0),
-            "graph should include at least one dependency link"
-        );
-        assert!(graph
-            .nodes
-            .iter()
-            .all(|node| node.x.is_some() && node.y.is_some()));
     }
 
     #[tokio::test]

@@ -31,7 +31,7 @@ pub struct ComprehensiveAnalysisResult {
     pub complexity: ComplexityAnalysisResults,
     /// Refactoring analysis results
     pub refactoring: RefactoringAnalysisResults,
-    /// Impact analysis results  
+    /// Impact analysis results
     pub impact: ImpactAnalysisResults,
     /// LSH analysis results for clone detection
     pub lsh: LshAnalysisResults,
@@ -96,79 +96,10 @@ pub struct ImpactAnalysisResults {
     pub dependency_cycles: Vec<serde_json::Value>,
     /// Chokepoint modules
     pub chokepoints: Vec<serde_json::Value>,
-    /// Force-directed module dependency graph (nodes + links with layout)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub module_force_graph: Option<ForceGraph>,
     /// Clone groups
     pub clone_groups: Vec<serde_json::Value>,
     /// Impact issues count
     pub issues_count: usize,
-}
-
-/// Force-directed graph payload for module-level dependency visualization
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ForceGraph {
-    /// Graph nodes with layout coordinates
-    pub nodes: Vec<ForceGraphNode>,
-    /// Graph edges/links between nodes
-    pub links: Vec<ForceGraphLink>,
-    /// Graph metadata (layout, pruning, counts)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ForceGraphMetadata>,
-}
-
-/// Node entry for a force-directed module graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForceGraphNode {
-    /// Stable identifier (path-based)
-    pub id: String,
-    /// Short display label (e.g., file name)
-    pub label: String,
-    /// Full module path
-    pub path: String,
-    /// Number of functions contained in the module
-    pub functions: usize,
-    /// Aggregate incoming dependency weight
-    pub fan_in: usize,
-    /// Aggregate outgoing dependency weight
-    pub fan_out: usize,
-    /// Max chokepoint/betweenness score among contained entities
-    pub chokepoint_score: f64,
-    /// Whether any contained entity participates in a cycle
-    pub in_cycle: bool,
-    /// Optional size hint for front-end scaling
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub size: Option<f64>,
-    /// X coordinate from force-directed layout (normalized -1..1)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub x: Option<f64>,
-    /// Y coordinate from force-directed layout (normalized -1..1)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub y: Option<f64>,
-}
-
-/// Edge/link entry for a force-directed module graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForceGraphLink {
-    /// Source node id
-    pub source: String,
-    /// Target node id
-    pub target: String,
-    /// Weighted edge count between modules
-    pub weight: usize,
-}
-
-/// Metadata for a force-directed graph payload
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForceGraphMetadata {
-    /// Layout algorithm label
-    pub layout: String,
-    /// Nodes included in the payload
-    pub node_count: usize,
-    /// Links included in the payload
-    pub edge_count: usize,
-    /// Nodes omitted during pruning (if any)
-    pub pruned_nodes: usize,
 }
 
 /// LSH analysis results for clone detection

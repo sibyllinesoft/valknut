@@ -753,7 +753,6 @@ impl AnalysisPipeline {
                 enabled: false,
                 dependency_cycles: Vec::new(),
                 chokepoints: Vec::new(),
-                module_force_graph: None,
                 clone_groups: Vec::new(),
                 issues_count: 0,
             },
@@ -1437,7 +1436,6 @@ mod tests {
                 enabled: true,
                 dependency_cycles: vec![json!({"module": "core", "depth": 3})],
                 chokepoints: vec![],
-                module_force_graph: None,
                 clone_groups: vec![],
                 issues_count: 1,
             },
@@ -1746,7 +1744,6 @@ mod tests {
             enabled: false,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
-            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };
@@ -1810,7 +1807,6 @@ mod tests {
             enabled: false,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
-            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };

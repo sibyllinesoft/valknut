@@ -274,6 +274,13 @@ impl AnalysisResults {
         // Extract coverage packs from pipeline results
         let coverage_packs = Self::convert_coverage_to_packs(&pipeline_results.results.coverage);
 
+        // Convert coverage packs to refactoring candidates so they appear in treemap
+        let coverage_candidates = Self::convert_coverage_to_candidates(&coverage_packs);
+
+        // Merge coverage candidates into refactoring candidates
+        let mut refactoring_candidates = refactoring_candidates;
+        refactoring_candidates.extend(coverage_candidates);
+
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
 
         let mut code_dictionary = CodeDictionary::default();
@@ -292,6 +299,20 @@ impl AnalysisResults {
                         suggestion_definition_for_kind(&suggestion.refactoring_type)
                     });
             }
+        }
+
+        // Add ADDTEST suggestion definition to dictionary if coverage candidates exist
+        if !coverage_packs.is_empty() {
+            code_dictionary
+                .suggestions
+                .entry("ADDTEST".to_string())
+                .or_insert_with(|| CodeDefinition {
+                    code: "ADDTEST".to_string(),
+                    title: "Add Test Coverage".to_string(),
+                    summary: "Write tests to cover this untested code path and improve safety."
+                        .to_string(),
+                    category: Some("coverage".to_string()),
+                });
         }
 
         let passes = StageResultsBundle {
@@ -441,6 +462,115 @@ impl AnalysisResults {
         }
 
         packs
+    }
+
+    /// Convert coverage packs to refactoring candidates with coverage issues
+    /// This allows coverage gaps to be displayed alongside other code issues in the treemap
+    fn convert_coverage_to_candidates(
+        coverage_packs: &[crate::detectors::coverage::CoveragePack],
+    ) -> Vec<RefactoringCandidate> {
+        use crate::detectors::coverage::CoveragePack;
+
+        let mut candidates = Vec::new();
+
+        for pack in coverage_packs {
+            // Create a candidate for each coverage gap in the pack
+            for gap in &pack.gaps {
+                // Build entity_id from file path and line range
+                let file_path = gap.path.display().to_string();
+                let clean_path = if file_path.starts_with("./") {
+                    file_path[2..].to_string()
+                } else {
+                    file_path.clone()
+                };
+
+                // Determine entity name from symbols or fall back to line range
+                let entity_name = if let Some(symbol) = gap.symbols.first() {
+                    symbol.name.clone()
+                } else {
+                    format!("lines_{}-{}", gap.span.start, gap.span.end)
+                };
+
+                let entity_id = format!("{}:coverage:{}", clean_path, entity_name);
+
+                // Calculate severity based on gap score (0.0-1.0 → scale to match other issues)
+                // Higher score means higher priority coverage gap
+                let severity = gap.score * 2.0; // Scale to roughly match other issue severities
+
+                // Determine priority based on score and features
+                let priority = if gap.score >= 0.8 || gap.features.exports_touched {
+                    Priority::Critical
+                } else if gap.score >= 0.6 || gap.features.fan_in_gap >= 5 {
+                    Priority::High
+                } else if gap.score >= 0.3 {
+                    Priority::Low
+                } else {
+                    Priority::Low
+                };
+
+                // Build contributing features from gap features
+                let contributing_features = vec![
+                    FeatureContribution {
+                        feature_name: "uncovered_lines".to_string(),
+                        value: gap.features.gap_loc as f64,
+                        normalized_value: (gap.features.gap_loc as f64
+                            / gap.file_loc.max(1) as f64)
+                            .min(1.0),
+                        contribution: gap.features.gap_loc as f64 * 0.1,
+                    },
+                    FeatureContribution {
+                        feature_name: "cyclomatic_in_gap".to_string(),
+                        value: gap.features.cyclomatic_in_gap,
+                        normalized_value: (gap.features.cyclomatic_in_gap / 20.0).min(1.0),
+                        contribution: gap.features.cyclomatic_in_gap * 0.05,
+                    },
+                    FeatureContribution {
+                        feature_name: "cognitive_in_gap".to_string(),
+                        value: gap.features.cognitive_in_gap,
+                        normalized_value: (gap.features.cognitive_in_gap / 30.0).min(1.0),
+                        contribution: gap.features.cognitive_in_gap * 0.05,
+                    },
+                    FeatureContribution {
+                        feature_name: "fan_in_gap".to_string(),
+                        value: gap.features.fan_in_gap as f64,
+                        normalized_value: (gap.features.fan_in_gap as f64 / 10.0).min(1.0),
+                        contribution: gap.features.fan_in_gap as f64 * 0.1,
+                    },
+                ];
+
+                let issue = RefactoringIssue {
+                    code: issue_code_for_category("coverage"),
+                    category: "coverage".to_string(),
+                    severity,
+                    contributing_features,
+                };
+
+                // Generate suggestion for adding tests
+                let suggestion = RefactoringSuggestion {
+                    refactoring_type: format!("add_test_coverage_{}", gap.features.gap_loc),
+                    code: "ADDTEST".to_string(),
+                    priority: gap.score,
+                    effort: (gap.features.gap_loc as f64 / 50.0).min(1.0), // Effort based on LOC
+                    impact: gap.score, // Impact mirrors the gap score
+                };
+
+                candidates.push(RefactoringCandidate {
+                    entity_id,
+                    name: entity_name,
+                    file_path: clean_path,
+                    line_range: Some((gap.span.start, gap.span.end)),
+                    priority,
+                    score: gap.score * 100.0, // Scale to percentage
+                    confidence: 0.85,         // Coverage analysis is fairly reliable
+                    issues: vec![issue],
+                    suggestions: vec![suggestion],
+                    issue_count: 1,
+                    suggestion_count: 1,
+                });
+            }
+        }
+
+        candidates
     }
 
     /// Get the number of files processed
@@ -890,7 +1020,6 @@ mod tests {
             enabled: true,
             dependency_cycles: Vec::new(),
             chokepoints: Vec::new(),
-            module_force_graph: None,
             clone_groups: Vec::new(),
             issues_count: 0,
         };
