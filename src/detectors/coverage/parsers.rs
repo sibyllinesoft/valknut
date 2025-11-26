@@ -25,6 +25,7 @@ pub fn parse_report(path: &Path) -> Result<(CoverageFormat, Vec<FileCoverage>)> 
         CoverageFormat::JaCoCo => parse_jacoco_xml(&bytes),
         CoverageFormat::Lcov => parse_lcov(&bytes),
         CoverageFormat::IstanbulJson => parse_istanbul_json(&bytes),
+        CoverageFormat::Tarpaulin => parse_tarpaulin_json(&bytes),
         CoverageFormat::Unknown => Err(ValknutError::validation(format!(
             "Unsupported or unknown coverage report format: {}",
             path.display()
@@ -40,7 +41,13 @@ fn detect_format(path: &Path, bytes: &[u8]) -> CoverageFormat {
         let ext_lower = ext.to_ascii_lowercase();
         match ext_lower.as_str() {
             "info" => return CoverageFormat::Lcov,
-            "json" => return CoverageFormat::IstanbulJson,
+            "json" => {
+                // For JSON files, we need to detect between Istanbul and Tarpaulin
+                if let Some(format) = detect_json_format(bytes) {
+                    return format;
+                }
+                return CoverageFormat::IstanbulJson;
+            }
             "xml" => { /* fall through to content-based detection */ }
             _ => {}
         }
@@ -50,6 +57,10 @@ fn detect_format(path: &Path, bytes: &[u8]) -> CoverageFormat {
     let trimmed = snippet.trim_start();
 
     if trimmed.starts_with('{') {
+        // Content-based JSON detection
+        if let Some(format) = detect_json_format(bytes) {
+            return format;
+        }
         return CoverageFormat::IstanbulJson;
     }
 
@@ -478,6 +489,127 @@ fn attribute_value(tag: &BytesStart<'_>, name: &[u8]) -> Option<String> {
         .and_then(|attr| String::from_utf8(attr.value.into_owned()).ok())
 }
 
+/// Detect JSON coverage format by inspecting the structure.
+/// Returns Some(format) if detected, None to fall back to default.
+fn detect_json_format(bytes: &[u8]) -> Option<CoverageFormat> {
+    // Quick heuristic check using early patterns in the file
+    // Note: Tarpaulin files include full source code as "content" which can be very large,
+    // so "traces" may not appear until much later in the file. Instead, detect by:
+    // 1. Presence of "files" array with "path" as an array (unique to tarpaulin)
+    // 2. Look at first ~1KB which should contain the structure indicators
+    let snippet = String::from_utf8_lossy(&bytes[..bytes.len().min(1024)]);
+
+    // Tarpaulin has "files":[{"path":[ - path as array is distinctive
+    // Istanbul has "path":"string" (path as string)
+    if snippet.contains("\"files\"") && snippet.contains("\"path\":[") {
+        return Some(CoverageFormat::Tarpaulin);
+    }
+
+    // Also check for larger window with traces for files where content is small
+    let larger_snippet = String::from_utf8_lossy(&bytes[..bytes.len().min(65536)]);
+    if larger_snippet.contains("\"files\"") && larger_snippet.contains("\"traces\"") {
+        return Some(CoverageFormat::Tarpaulin);
+    }
+
+    None
+}
+
+/// Parse Tarpaulin JSON coverage format.
+/// Structure:
+/// {
+///   "files": [
+///     {
+///       "path": ["/", "home", "user", "project", "src", "lib.rs"],
+///       "content": "...",
+///       "traces": [
+///         {"line": 10, "address": [...], "length": 1, "stats": {"Line": 5}},
+///         {"line": 12, "address": [...], "length": 1, "stats": null}
+///       ],
+///       "covered": 10,
+///       "coverable": 20
+///     }
+///   ]
+/// }
+fn parse_tarpaulin_json(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
+    let root: Value = serde_json::from_slice(bytes).map_err(|err| ValknutError::Serialization {
+        message: format!("Failed to parse Tarpaulin JSON coverage: {}", err),
+        data_type: Some("tarpaulin_json".to_string()),
+        source: Some(Box::new(err)),
+    })?;
+
+    let mut files: HashMap<PathBuf, BTreeMap<usize, LineCoverage>> = HashMap::new();
+
+    if let Some(files_array) = root.get("files").and_then(|v| v.as_array()) {
+        for file_entry in files_array {
+            // Path can be an array of path segments or a string
+            let path = extract_tarpaulin_path(file_entry);
+            if path.is_none() {
+                continue;
+            }
+            let path = path.unwrap();
+
+            // Parse traces array
+            if let Some(traces) = file_entry.get("traces").and_then(|v| v.as_array()) {
+                for trace in traces {
+                    if let Some(line_number) = trace.get("line").and_then(|v| v.as_u64()) {
+                        let line_number = line_number as usize;
+
+                        // stats can be null (uncovered) or {"Line": hits}
+                        let hits = trace
+                            .get("stats")
+                            .and_then(|s| s.get("Line"))
+                            .and_then(|h| h.as_u64())
+                            .unwrap_or(0) as usize;
+
+                        insert_line(
+                            &mut files,
+                            path.clone(),
+                            LineCoverage {
+                                line_number,
+                                hits,
+                                is_covered: hits > 0,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(finalize_files_map(files))
+}
+
+/// Extract path from Tarpaulin file entry.
+/// Path can be an array of segments or a string.
+fn extract_tarpaulin_path(file_entry: &Value) -> Option<PathBuf> {
+    if let Some(path_array) = file_entry.get("path").and_then(|v| v.as_array()) {
+        // Path is array of segments: ["/", "home", "user", "project", "src", "lib.rs"]
+        let segments: Vec<&str> = path_array
+            .iter()
+            .filter_map(|s| s.as_str())
+            .collect();
+
+        if segments.is_empty() {
+            return None;
+        }
+
+        // Join segments into path
+        let path_str = if segments[0] == "/" {
+            // Absolute path
+            format!("/{}", segments[1..].join("/"))
+        } else {
+            segments.join("/")
+        };
+
+        Some(normalize_report_path(&path_str))
+    } else if let Some(path_str) = file_entry.get("path").and_then(|v| v.as_str()) {
+        // Path is a string
+        Some(normalize_report_path(path_str))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -743,5 +875,125 @@ mod tests {
         let (format, files) = parse_report(&path).unwrap();
         assert_eq!(format, CoverageFormat::JaCoCo);
         assert_eq!(files.len(), 1);
+    }
+
+    #[test]
+    fn test_detect_tarpaulin_format() {
+        let tarpaulin_json = br#"{"files":[{"path":["src","lib.rs"],"traces":[]}]}"#;
+        assert_eq!(
+            detect_format(Path::new("tarpaulin-report.json"), tarpaulin_json),
+            CoverageFormat::Tarpaulin
+        );
+
+        // Istanbul format should not be detected as Tarpaulin
+        let istanbul_json = br#"{"src/app.js":{"path":"src/app.js","l":{"1":0}}}"#;
+        assert_eq!(
+            detect_format(Path::new("coverage.json"), istanbul_json),
+            CoverageFormat::IstanbulJson
+        );
+    }
+
+    #[test]
+    fn test_parse_tarpaulin_json_basic() {
+        let json = r#"{
+            "files": [
+                {
+                    "path": ["src", "lib.rs"],
+                    "traces": [
+                        {"line": 10, "stats": {"Line": 5}},
+                        {"line": 12, "stats": null},
+                        {"line": 15, "stats": {"Line": 0}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let files = parse_tarpaulin_json(json.as_bytes()).unwrap();
+        assert_eq!(files.len(), 1);
+
+        let coverage = &files[0];
+        assert_eq!(coverage.path, PathBuf::from("src/lib.rs"));
+        assert_eq!(coverage.lines.len(), 3);
+
+        // Line 10 is covered with 5 hits
+        assert!(coverage
+            .lines
+            .iter()
+            .any(|line| line.line_number == 10 && line.hits == 5 && line.is_covered));
+
+        // Line 12 has null stats = uncovered
+        assert!(coverage
+            .lines
+            .iter()
+            .any(|line| line.line_number == 12 && line.hits == 0 && !line.is_covered));
+
+        // Line 15 has 0 hits = uncovered
+        assert!(coverage
+            .lines
+            .iter()
+            .any(|line| line.line_number == 15 && line.hits == 0 && !line.is_covered));
+    }
+
+    #[test]
+    fn test_parse_tarpaulin_absolute_path() {
+        let json = r#"{
+            "files": [
+                {
+                    "path": ["/", "home", "user", "project", "src", "main.rs"],
+                    "traces": [
+                        {"line": 1, "stats": {"Line": 1}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let files = parse_tarpaulin_json(json.as_bytes()).unwrap();
+        assert_eq!(files.len(), 1);
+        // Absolute path normalized - leading slash removed by normalize_report_path
+        let path = &files[0].path;
+        assert!(path.to_string_lossy().contains("home/user/project/src/main.rs"));
+    }
+
+    #[test]
+    fn test_parse_tarpaulin_string_path() {
+        // Tarpaulin can also use string paths
+        let json = r#"{
+            "files": [
+                {
+                    "path": "src/lib.rs",
+                    "traces": [
+                        {"line": 5, "stats": {"Line": 2}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let files = parse_tarpaulin_json(json.as_bytes()).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, PathBuf::from("src/lib.rs"));
+        assert_eq!(files[0].lines[0].hits, 2);
+    }
+
+    #[test]
+    fn test_parse_report_handles_tarpaulin_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("tarpaulin-report.json");
+        let json = r#"{
+            "files": [
+                {
+                    "path": ["src", "main.rs"],
+                    "traces": [
+                        {"line": 1, "stats": {"Line": 1}},
+                        {"line": 2, "stats": null}
+                    ]
+                }
+            ]
+        }"#;
+        fs::write(&path, json).unwrap();
+
+        let (format, files) = parse_report(&path).unwrap();
+        assert_eq!(format, CoverageFormat::Tarpaulin);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].lines.len(), 2);
     }
 }

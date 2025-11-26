@@ -274,12 +274,9 @@ impl AnalysisResults {
         // Extract coverage packs from pipeline results
         let coverage_packs = Self::convert_coverage_to_packs(&pipeline_results.results.coverage);
 
-        // Convert coverage packs to refactoring candidates so they appear in treemap
-        let coverage_candidates = Self::convert_coverage_to_candidates(&coverage_packs);
-
-        // Merge coverage candidates into refactoring candidates
+        // Annotate existing candidates with coverage percentages (instead of creating fake entities)
         let mut refactoring_candidates = refactoring_candidates;
-        refactoring_candidates.extend(coverage_candidates);
+        Self::annotate_candidates_with_coverage(&mut refactoring_candidates, &coverage_packs);
 
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
 
@@ -464,113 +461,106 @@ impl AnalysisResults {
         packs
     }
 
-    /// Convert coverage packs to refactoring candidates with coverage issues
-    /// This allows coverage gaps to be displayed alongside other code issues in the treemap
-    fn convert_coverage_to_candidates(
+    /// Build a coverage map from coverage packs for annotating existing candidates.
+    /// Returns a map of (file_path, line_start, line_end) -> coverage_percentage
+    /// Also returns file-level coverage percentages.
+    fn build_coverage_map(
         coverage_packs: &[crate::detectors::coverage::CoveragePack],
-    ) -> Vec<RefactoringCandidate> {
-        use crate::detectors::coverage::CoveragePack;
-
-        let mut candidates = Vec::new();
+    ) -> (
+        std::collections::HashMap<String, f64>,                          // file -> coverage %
+        std::collections::HashMap<(String, usize, usize), f64>,          // (file, start, end) -> coverage %
+    ) {
+        let mut file_coverage: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        let mut entity_coverage: std::collections::HashMap<(String, usize, usize), f64> = std::collections::HashMap::new();
 
         for pack in coverage_packs {
-            // Create a candidate for each coverage gap in the pack
+            let file_path = pack.path.display().to_string();
+            let clean_path = if file_path.starts_with("./") {
+                file_path[2..].to_string()
+            } else {
+                file_path.clone()
+            };
+
+            // File-level coverage from pack.file_info
+            let file_cov_pct = pack.file_info.coverage_before * 100.0;
+            file_coverage.insert(clean_path.clone(), file_cov_pct);
+
+            // For each gap, calculate coverage for symbols that overlap with it
             for gap in &pack.gaps {
-                // Build entity_id from file path and line range
-                let file_path = gap.path.display().to_string();
-                let clean_path = if file_path.starts_with("./") {
-                    file_path[2..].to_string()
-                } else {
-                    file_path.clone()
-                };
+                for symbol in &gap.symbols {
+                    let symbol_loc = symbol.line_end.saturating_sub(symbol.line_start) + 1;
+                    if symbol_loc == 0 {
+                        continue;
+                    }
 
-                // Determine entity name from symbols or fall back to line range
-                let entity_name = if let Some(symbol) = gap.symbols.first() {
-                    symbol.name.clone()
-                } else {
-                    format!("lines_{}-{}", gap.span.start, gap.span.end)
-                };
+                    // Calculate how much of this symbol is uncovered
+                    // The gap may only partially overlap the symbol
+                    let overlap_start = gap.span.start.max(symbol.line_start);
+                    let overlap_end = gap.span.end.min(symbol.line_end);
+                    let uncovered_lines = if overlap_end >= overlap_start {
+                        overlap_end - overlap_start + 1
+                    } else {
+                        0
+                    };
 
-                let entity_id = format!("{}:coverage:{}", clean_path, entity_name);
+                    let coverage_pct = 100.0 * (1.0 - (uncovered_lines as f64 / symbol_loc as f64));
 
-                // Calculate severity based on gap score (0.0-1.0 → scale to match other issues)
-                // Higher score means higher priority coverage gap
-                let severity = gap.score * 2.0; // Scale to roughly match other issue severities
-
-                // Determine priority based on score and features
-                let priority = if gap.score >= 0.8 || gap.features.exports_touched {
-                    Priority::Critical
-                } else if gap.score >= 0.6 || gap.features.fan_in_gap >= 5 {
-                    Priority::High
-                } else if gap.score >= 0.3 {
-                    Priority::Low
-                } else {
-                    Priority::Low
-                };
-
-                // Build contributing features from gap features
-                let contributing_features = vec![
-                    FeatureContribution {
-                        feature_name: "uncovered_lines".to_string(),
-                        value: gap.features.gap_loc as f64,
-                        normalized_value: (gap.features.gap_loc as f64
-                            / gap.file_loc.max(1) as f64)
-                            .min(1.0),
-                        contribution: gap.features.gap_loc as f64 * 0.1,
-                    },
-                    FeatureContribution {
-                        feature_name: "cyclomatic_in_gap".to_string(),
-                        value: gap.features.cyclomatic_in_gap,
-                        normalized_value: (gap.features.cyclomatic_in_gap / 20.0).min(1.0),
-                        contribution: gap.features.cyclomatic_in_gap * 0.05,
-                    },
-                    FeatureContribution {
-                        feature_name: "cognitive_in_gap".to_string(),
-                        value: gap.features.cognitive_in_gap,
-                        normalized_value: (gap.features.cognitive_in_gap / 30.0).min(1.0),
-                        contribution: gap.features.cognitive_in_gap * 0.05,
-                    },
-                    FeatureContribution {
-                        feature_name: "fan_in_gap".to_string(),
-                        value: gap.features.fan_in_gap as f64,
-                        normalized_value: (gap.features.fan_in_gap as f64 / 10.0).min(1.0),
-                        contribution: gap.features.fan_in_gap as f64 * 0.1,
-                    },
-                ];
-
-                let issue = RefactoringIssue {
-                    code: issue_code_for_category("coverage"),
-                    category: "coverage".to_string(),
-                    severity,
-                    contributing_features,
-                };
-
-                // Generate suggestion for adding tests
-                let suggestion = RefactoringSuggestion {
-                    refactoring_type: format!("add_test_coverage_{}", gap.features.gap_loc),
-                    code: "ADDTEST".to_string(),
-                    priority: gap.score,
-                    effort: (gap.features.gap_loc as f64 / 50.0).min(1.0), // Effort based on LOC
-                    impact: gap.score, // Impact mirrors the gap score
-                };
-
-                candidates.push(RefactoringCandidate {
-                    entity_id,
-                    name: entity_name,
-                    file_path: clean_path,
-                    line_range: Some((gap.span.start, gap.span.end)),
-                    priority,
-                    score: gap.score * 100.0, // Scale to percentage
-                    confidence: 0.85,         // Coverage analysis is fairly reliable
-                    issues: vec![issue],
-                    suggestions: vec![suggestion],
-                    issue_count: 1,
-                    suggestion_count: 1,
-                });
+                    // Store by (file, start, end) - use symbol's range
+                    let key = (clean_path.clone(), symbol.line_start, symbol.line_end);
+                    // If we already have coverage for this symbol, take the minimum (worst case)
+                    entity_coverage
+                        .entry(key)
+                        .and_modify(|existing| *existing = existing.min(coverage_pct))
+                        .or_insert(coverage_pct);
+                }
             }
         }
 
-        candidates
+        (file_coverage, entity_coverage)
+    }
+
+    /// Annotate existing candidates with coverage data from coverage packs.
+    /// This modifies candidates in-place to add coverage_percentage field.
+    fn annotate_candidates_with_coverage(
+        candidates: &mut [RefactoringCandidate],
+        coverage_packs: &[crate::detectors::coverage::CoveragePack],
+    ) {
+        let (file_coverage, entity_coverage) = Self::build_coverage_map(coverage_packs);
+
+        for candidate in candidates.iter_mut() {
+            // Try to find exact entity coverage match by line range
+            if let Some((start, end)) = candidate.line_range {
+                let key = (candidate.file_path.clone(), start, end);
+                if let Some(&cov_pct) = entity_coverage.get(&key) {
+                    candidate.coverage_percentage = Some(cov_pct);
+                    continue;
+                }
+
+                // Try fuzzy match - find any symbol range that overlaps significantly
+                for ((file, sym_start, sym_end), &cov_pct) in &entity_coverage {
+                    if file == &candidate.file_path {
+                        // Check for significant overlap (at least 50%)
+                        let overlap_start = start.max(*sym_start);
+                        let overlap_end = end.min(*sym_end);
+                        if overlap_end >= overlap_start {
+                            let overlap = overlap_end - overlap_start + 1;
+                            let candidate_len = end - start + 1;
+                            if overlap * 2 >= candidate_len {
+                                candidate.coverage_percentage = Some(cov_pct);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fall back to file-level coverage if no entity match
+            if candidate.coverage_percentage.is_none() {
+                if let Some(&file_cov) = file_coverage.get(&candidate.file_path) {
+                    candidate.coverage_percentage = Some(file_cov);
+                }
+            }
+        }
     }
 
     /// Get the number of files processed
@@ -721,6 +711,7 @@ impl RefactoringCandidate {
             suggestion_count: suggestions.len(),
             issues,
             suggestions,
+            coverage_percentage: None,
         }
     }
 
@@ -970,6 +961,7 @@ mod tests {
             suggestions: Vec::new(),
             issue_count: 1,
             suggestion_count: 0,
+            coverage_percentage: None,
         }
     }
 

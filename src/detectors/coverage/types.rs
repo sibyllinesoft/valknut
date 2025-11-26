@@ -9,6 +9,7 @@ pub enum CoverageFormat {
     Cobertura,
     JaCoCo,
     IstanbulJson,
+    Tarpaulin,
     Unknown,
 }
 

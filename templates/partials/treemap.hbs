@@ -40,7 +40,9 @@
                 const descEl = document.getElementById('treemap-color-desc');
                 if (!dataEl || !rootEl) return;
 
-                const payload = JSON.parse(dataEl.textContent || '{}');
+                const rawText = dataEl.textContent || '{}';
+                const payload = JSON.parse(rawText);
+
                 const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
                 const docHealthMap = payload.documentation?.file_doc_health || {};
@@ -115,6 +117,14 @@
                         return 100; // treat missing doc data as worst severity
                     }
                     if (category === 'coverage') {
+                        // First, check if entity has coverage_percentage directly
+                        const entityCov = entity.coverage_percentage;
+                        if (typeof entityCov === 'number' && Number.isFinite(entityCov)) {
+                            // Invert: 0% coverage = 100 severity, 100% coverage = 0 severity
+                            return Math.max(0, 100 - entityCov);
+                        }
+
+                        // Fall back to file-level coverage map
                         const raw = String(entity.file_path || entity.filePath || '').replace(/\\/g, '/');
                         const variants = [
                             raw,

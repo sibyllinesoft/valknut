@@ -558,6 +558,7 @@ mod tests {
             }],
             issue_count: 1,
             suggestion_count: 1,
+            coverage_percentage: None,
         };
 
         let mut code_dictionary = CodeDictionary::default();

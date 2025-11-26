@@ -178,6 +178,10 @@ pub struct RefactoringCandidate {
 
     /// Count of suggestions (for React-safe templates)
     pub suggestion_count: usize,
+
+    /// Test coverage percentage (0-100), if coverage data available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage_percentage: Option<f64>,
 }
 
 /// A specific refactoring issue within an entity
@@ -283,6 +287,7 @@ mod tests {
             }],
             issue_count: 1,
             suggestion_count: 1,
+            coverage_percentage: None,
         }
     }
 

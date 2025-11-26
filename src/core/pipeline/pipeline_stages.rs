@@ -1203,8 +1203,8 @@ impl AnalysisStages {
                     // LCOV format
                     total_gaps += self.analyze_lcov_coverage(&coverage_file.path).await?;
                 }
-                CoverageFormat::IstanbulJson => {
-                    // JSON format
+                CoverageFormat::IstanbulJson | CoverageFormat::Tarpaulin => {
+                    // JSON format (Istanbul or Tarpaulin)
                     total_gaps += self.analyze_json_coverage(&coverage_file.path).await?;
                 }
                 CoverageFormat::Unknown => {

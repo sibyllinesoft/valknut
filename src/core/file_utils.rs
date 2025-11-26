@@ -145,6 +145,7 @@ pub enum CoverageFormat {
     Cobertura,     // Cobertura XML format
     JaCoCo,        // JaCoCo XML format
     IstanbulJson,  // Istanbul JSON format
+    Tarpaulin,     // Tarpaulin JSON format (Rust coverage)
     Unknown,
 }
 
@@ -168,7 +169,8 @@ impl CoverageFormat {
         }
 
         if filename.ends_with(".json") {
-            return Ok(Self::IstanbulJson);
+            // For JSON files, need to check content to distinguish Istanbul vs Tarpaulin
+            return Self::detect_json_by_content(file_path);
         }
 
         // If filename detection fails, try content-based detection
@@ -213,6 +215,32 @@ impl CoverageFormat {
         } else {
             Ok(Self::Unknown)
         }
+    }
+
+    /// Detect JSON coverage format by examining file content.
+    /// Distinguishes between Istanbul and Tarpaulin formats.
+    fn detect_json_by_content(file_path: &Path) -> Result<Self> {
+        let content = std::fs::read_to_string(file_path).map_err(|e| {
+            ValknutError::io("Failed to read coverage file for format detection", e)
+        })?;
+
+        // Only need to check the first ~1KB for structure indicators
+        let first_kb: String = content.chars().take(1024).collect();
+
+        // Tarpaulin has "files":[{"path":[ - path as array is distinctive
+        // Istanbul has "path":"string" (path as string)
+        if first_kb.contains("\"files\"") && first_kb.contains("\"path\":[") {
+            return Ok(Self::Tarpaulin);
+        }
+
+        // Also check a larger window for files where the structure might be delayed
+        let first_64kb: String = content.chars().take(65536).collect();
+        if first_64kb.contains("\"files\"") && first_64kb.contains("\"traces\"") {
+            return Ok(Self::Tarpaulin);
+        }
+
+        // Default to Istanbul for other JSON files
+        Ok(Self::IstanbulJson)
     }
 }
 
