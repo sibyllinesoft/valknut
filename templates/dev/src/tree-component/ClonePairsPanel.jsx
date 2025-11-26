@@ -20,7 +20,7 @@ export const ClonePairsPanel = ({ pairs = [] }) => {
     const compute = () => {
       const w = el.clientWidth || window.innerWidth;
       if (w >= 1500) setColumns(3);
-      else if (w >= 1100) setColumns(2);
+      else if (w >= 875) setColumns(2);
       else setColumns(1);
     };
 
@@ -68,8 +68,8 @@ export const ClonePairsPanel = ({ pairs = [] }) => {
         key={key}
         className="clone-card"
         style={{
-          flex: '0 0 calc(50% - 4px)',
-          minWidth: 'calc(50% - 4px)',
+          flex: `0 0 ${colWidth}`,
+          minWidth: colWidth,
           boxSizing: 'border-box',
           padding: '8px 8px',
         }}

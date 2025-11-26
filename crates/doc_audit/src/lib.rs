@@ -928,7 +928,7 @@ mod rust {
                                 index += 1;
                                 continue;
                             }
-                        if let Some(name) = extract_identifier(&trimmed, "mod") {
+                            if let Some(name) = extract_identifier(&trimmed, "mod") {
                                 if is_doc_missing(&lines, index) {
                                     push_issue(
                                         &mut issues,

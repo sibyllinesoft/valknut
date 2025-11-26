@@ -31340,7 +31340,7 @@ Check the top-level render call using <` + parentName + ">.";
         const w = el.clientWidth || window.innerWidth;
         if (w >= 1500)
           setColumns(3);
-        else if (w >= 1100)
+        else if (w >= 875)
           setColumns(2);
         else
           setColumns(1);
@@ -31376,8 +31376,8 @@ Check the top-level render call using <` + parentName + ">.";
       return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
         className: "clone-card",
         style: {
-          flex: "0 0 calc(50% - 4px)",
-          minWidth: "calc(50% - 4px)",
+          flex: `0 0 ${colWidth}`,
+          minWidth: colWidth,
           boxSizing: "border-box",
           padding: "8px 8px"
         },
@@ -31583,5 +31583,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=8F776B29F2C708BA64756E2164756E21
+//# debugId=8BEFD0D7C301C34464756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

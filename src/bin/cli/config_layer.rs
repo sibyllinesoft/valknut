@@ -116,6 +116,15 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
     let cli_overrides = ValknutConfig::from_cli_args(args);
     config.merge_with(cli_overrides);
 
+    // Ensure coverage analysis is enabled/disabled based on CLI flags
+    // This is needed because ValknutConfig::merge_with doesn't merge analysis settings
+    if args.coverage.no_coverage {
+        config.analysis.enable_coverage_analysis = false;
+    } else {
+        // Default to enabled, especially if coverage_file is provided
+        config.analysis.enable_coverage_analysis = true;
+    }
+
     config
         .validate()
         .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;

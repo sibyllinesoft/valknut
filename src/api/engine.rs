@@ -93,12 +93,7 @@ impl ValknutEngine {
         }
 
         // Run the pipeline
-        println!("🔍 ENGINE DEBUG: Calling pipeline.analyze_directory");
         let pipeline_results = self.pipeline.analyze_directory(path).await?;
-        println!(
-            "🔍 ENGINE DEBUG: Pipeline returned {} scoring files",
-            pipeline_results.scoring_results.files.len()
-        );
 
         // Convert to public API format
         let results = AnalysisResults::from_pipeline_results(pipeline_results);

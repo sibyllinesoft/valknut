@@ -131,5 +131,26 @@
         </div>
         {{/each}}
     </div>
+
+    <script>
+        function toggleTreeNode(element) {
+            const treeNode = element.closest('.tree-node');
+            if (!treeNode) return;
+
+            const children = treeNode.querySelector('.tree-children');
+            if (!children) return;
+
+            const isExpanded = children.classList.contains('expanded');
+            if (isExpanded) {
+                children.classList.remove('expanded');
+                children.classList.add('collapsed');
+                element.setAttribute('aria-expanded', 'false');
+            } else {
+                children.classList.remove('collapsed');
+                children.classList.add('expanded');
+                element.setAttribute('aria-expanded', 'true');
+            }
+        }
+    </script>
 </div>
 {{/if}}

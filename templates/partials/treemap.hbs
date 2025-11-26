@@ -13,6 +13,7 @@
                 <option value="maintainability">Maintainability</option>
                 <option value="structure">Structure</option>
                 <option value="docs">Docs</option>
+                <option value="coverage">Coverage</option>
             </select>
             <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
             <input id="treemap-max-scale" type="number" value="100" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
@@ -21,11 +22,13 @@
             Complexity: severity derived from cyclomatic/cognitive complexity (higher = more complex).
         </div>
         <div id="treemap-root" style="width: 100%; min-height: 525px;"></div>
+        <div id="treemap-tooltip" class="valknut-tooltip" style="display:none; position:fixed; pointer-events:none; z-index:9999;"></div>
         <script id="treemap-data" type="application/json">
             {
                 "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
                 "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
-                "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}}
+                "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}},
+                "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}}
             }
         </script>
         <script>
@@ -41,6 +44,31 @@
                 const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
                 const docHealthMap = payload.documentation?.file_doc_health || {};
+                const coveragePacks = Array.isArray(payload.coverage_packs) ? payload.coverage_packs : [];
+
+                // Build file-level coverage map from coverage_packs
+                const fileCoverageMap = {};
+                coveragePacks.forEach((pack) => {
+                    const path = String(pack.path || '').replace(/\\/g, '/');
+                    const coverageBefore = pack.file_info?.coverage_before;
+                    if (path && typeof coverageBefore === 'number') {
+                        // Coverage is 0-1 range, convert to percentage
+                        const coveragePct = coverageBefore <= 1 ? coverageBefore * 100 : coverageBefore;
+                        // Store with multiple path variants for matching
+                        fileCoverageMap[path] = coveragePct;
+                        // Without leading ./
+                        if (path.startsWith('./')) {
+                            fileCoverageMap[path.slice(2)] = coveragePct;
+                        } else {
+                            fileCoverageMap['./' + path] = coveragePct;
+                        }
+                        // Also store just filename for fallback
+                        const filename = path.split('/').pop();
+                        if (filename && !fileCoverageMap[filename]) {
+                            fileCoverageMap[filename] = coveragePct;
+                        }
+                    }
+                });
 
                 const metricDescriptions = {
                     complexity: 'Complexity: combined cyclomatic & cognitive complexity severities; higher = more branching/logic to simplify.',
@@ -48,7 +76,8 @@
                     debt: 'Debt: technical debt severity derived from debt score and contributing factors; higher = more costly to fix later.',
                     maintainability: 'Maintainability: severity inverted from maintainability index; higher = harder to sustain over time.',
                     structure: 'Structure: severity for structural issues (coupling, cohesion, file/module organization).',
-                    docs: 'Docs: severity derived from documentation health (lower health = higher severity).'
+                    docs: 'Docs: severity derived from documentation health (lower health = higher severity).',
+                    coverage: 'Coverage: severity derived from test coverage (lower coverage = higher severity / more red).'
                 };
 
                 function getLinesOfCode(entity) {
@@ -84,6 +113,25 @@
                             }
                         }
                         return 100; // treat missing doc data as worst severity
+                    }
+                    if (category === 'coverage') {
+                        const raw = String(entity.file_path || entity.filePath || '').replace(/\\/g, '/');
+                        const variants = [
+                            raw,
+                            raw.replace(/^[.][/]/, ''),
+                            raw.replace(/^.*?src[/]/, 'src/'),
+                            raw.split('/').slice(-2).join('/'),
+                            raw.split('/').pop() || raw,
+                        ];
+                        for (const v of variants) {
+                            const coveragePct = fileCoverageMap[v];
+                            if (typeof coveragePct === 'number' && Number.isFinite(coveragePct)) {
+                                // Invert: 0% coverage = 100 severity, 100% coverage = 0 severity
+                                return Math.max(0, 100 - coveragePct);
+                            }
+                        }
+                        // No coverage data - assume neutral (50% severity)
+                        return 50;
                     }
                     for (const issue of issues) {
                         const cat = String(issue.category || '').toLowerCase();
@@ -123,9 +171,9 @@
                     const nodes = new Map();
                     const custom = [];
 
-                    const ensureNode = (id, label, parent = '') => {
+                    const ensureNode = (id, label, parent = '', entity = null) => {
                         if (!nodes.has(id)) {
-                            nodes.set(id, { id, label, parent, children: [], value: 0, color: 0 });
+                            nodes.set(id, { id, label, parent, children: [], value: 0, color: 0, entity, entities: [] });
                             if (parent && nodes.has(parent)) {
                                 nodes.get(parent).children.push(id);
                             }
@@ -159,14 +207,17 @@
                             parentId = dirId;
                         });
                         const fileId = 'file:' + filePath;
-                        ensureNode(fileId, fileName, parentId);
+                        const fileNode = ensureNode(fileId, fileName, parentId);
+                        fileNode.entities.push(entity);
+                        fileNode.filePath = filePath;
 
                         const leafId = 'entity:' + (entity.entity_id || entity.name || Math.random());
                         const loc = getLinesOfCode(entity);
                         const colorVal = Math.min(getSeverity(entity, colorMetric), maxScale);
-                        const leaf = ensureNode(leafId, entity.name || fileName, fileId);
+                        const leaf = ensureNode(leafId, entity.name || fileName, fileId, entity);
                         leaf.value = loc;
                         leaf.color = colorVal;
+                        leaf.filePath = filePath;
                     });
 
                     // Aggregate values and colors up the tree
@@ -197,19 +248,176 @@
                     const colors = [];
 
                     const nodeIndexById = new Map();
+                    const nodeDataById = new Map();
 
                     nodes.forEach((node, idx) => {
                         nodeIndexById.set(normalizeId(node.id), idx);
+                        nodeDataById.set(node.id, node);
                         ids.push(node.id);
                         labels.push(node.label);
                         parents.push(node.parent);
                         values.push(node.value);
                         colors.push(node.color);
-                        // Attach file path or id for hover -> clone highlight
+                        // Attach node id for lookup
                         custom.push([node.filePath || '', node.id, normalizeId(node.id)]);
                     });
 
                     const cloneMap = buildCloneMap(nodeIndexById);
+                    const tooltipEl = document.getElementById('treemap-tooltip');
+
+                    // Tooltip rendering helpers
+                    const renderValue = (v) => {
+                        if (v === null || v === undefined || v === '') return '—';
+                        const num = Number(v);
+                        if (Number.isFinite(num)) {
+                            const rounded = num.toFixed(1);
+                            return rounded.endsWith('.0') ? rounded.slice(0, -2) : rounded;
+                        }
+                        return v;
+                    };
+
+                    const formatIssue = (issue = {}) => {
+                        const severity = typeof issue.severity === 'number' ? issue.severity.toFixed(1) : '—';
+                        const category = (issue.category || issue.code || '').toString().toLowerCase();
+                        let title = issue.title || issue.category || issue.code || 'Issue';
+                        let summary = issue.summary || '';
+
+                        const feats = Array.isArray(issue.contributing_features) ? issue.contributing_features : [];
+                        const getFeat = (key) => {
+                            const m = feats.find(f => String(f.feature_name || '').toLowerCase().includes(key));
+                            return m && m.value !== undefined ? Number(m.value) : null;
+                        };
+
+                        const cyclo = getFeat('cyclomatic');
+                        const cognitive = getFeat('cognitive');
+
+                        if (category.includes('debt')) {
+                            title = 'Poor code organization';
+                        } else if (category.includes('maintain')) {
+                            title = 'Too much code coupling';
+                        } else if (category.includes('cognit')) {
+                            title = 'Too many code paths';
+                            if (!summary && cognitive != null) summary = `Cognitive complexity ${cognitive.toFixed(0)}`;
+                        } else if (category.includes('complex')) {
+                            title = 'Too many branch points';
+                            if (!summary && cyclo != null) summary = `Cyclomatic complexity ${cyclo.toFixed(0)}`;
+                        } else if (category.includes('struct')) {
+                            title = 'Optimize file layout';
+                        } else if (category.includes('coverage')) {
+                            title = 'Missing test coverage';
+                            if (!summary) summary = 'Add tests for this code path';
+                        }
+
+                        return { title, severity, summary };
+                    };
+
+                    const buildTooltipHtml = (nodeId, colorVal) => {
+                        const node = nodeDataById.get(nodeId);
+                        if (!node) return '';
+
+                        const isEntity = nodeId.startsWith('entity:');
+                        const isFile = nodeId.startsWith('file:');
+                        const isDir = nodeId.startsWith('dir:');
+
+                        let html = '<div class="tooltip-name">' + (node.label || 'Unknown') + '</div>';
+
+                        if (isEntity && node.entity) {
+                            const entity = node.entity;
+                            const issues = Array.isArray(entity.issues) ? entity.issues : [];
+                            const suggestions = Array.isArray(entity.suggestions) ? entity.suggestions : [];
+
+                            // Metrics
+                            html += '<ul class="tooltip-metrics">';
+                            html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
+                            html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
+                            if (entity.line_range) {
+                                html += '<li><span class="metric-label">Range</span><span class="metric-value">' + entity.line_range[0] + '–' + entity.line_range[1] + '</span></li>';
+                            }
+                            html += '</ul>';
+
+                            // Issues
+                            if (issues.length > 0) {
+                                html += '<div class="tooltip-section"><h4>Issues</h4><ul class="tooltip-section-list">';
+                                issues.slice(0, 3).forEach(issue => {
+                                    const fmt = formatIssue(issue);
+                                    html += '<li><div class="issue-heading">' + fmt.title + ' · ' + fmt.severity + '</div>';
+                                    if (fmt.summary) html += '<div class="issue-summary">' + fmt.summary + '</div>';
+                                    html += '</li>';
+                                });
+                                html += '</ul></div>';
+                            }
+
+                            // Suggestions
+                            if (suggestions.length > 0) {
+                                html += '<div class="tooltip-section"><h4>Suggestions</h4><ul class="tooltip-section-list">';
+                                suggestions.slice(0, 2).forEach(sug => {
+                                    const code = sug.code || '';
+                                    const title = sug.title || sug.refactoring_type || code || 'Suggestion';
+                                    html += '<li><div class="issue-heading">' + (code ? code + ' · ' : '') + title + '</div></li>';
+                                });
+                                html += '</ul></div>';
+                            }
+                        } else if (isFile && node.entities.length > 0) {
+                            // File-level: aggregate severity breakdown
+                            const severityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+                            node.entities.forEach(e => {
+                                (e.issues || []).forEach(issue => {
+                                    const sev = issue.severity || 0;
+                                    if (sev >= 2) severityCounts.critical++;
+                                    else if (sev >= 1.5) severityCounts.high++;
+                                    else if (sev >= 1) severityCounts.medium++;
+                                    else severityCounts.low++;
+                                });
+                            });
+
+                            html += '<ul class="tooltip-metrics">';
+                            html += '<li><span class="metric-label">Entities</span><span class="metric-value">' + node.entities.length + '</span></li>';
+                            html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
+                            html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
+                            html += '</ul>';
+
+                            const severityList = [
+                                { key: 'critical', label: 'Critical', value: severityCounts.critical },
+                                { key: 'high', label: 'High', value: severityCounts.high },
+                                { key: 'medium', label: 'Medium', value: severityCounts.medium },
+                                { key: 'low', label: 'Low', value: severityCounts.low },
+                            ].filter(item => item.value > 0);
+
+                            if (severityList.length > 0) {
+                                html += '<div class="tooltip-section"><h4>Severity Breakdown</h4><ul class="tooltip-section-list">';
+                                severityList.forEach(item => {
+                                    html += '<li><div class="issue-heading">' + item.label + ' · ' + item.value + '</div></li>';
+                                });
+                                html += '</ul></div>';
+                            }
+
+                            // Top entities
+                            const topEntities = node.entities.slice(0, 3);
+                            if (topEntities.length > 0) {
+                                html += '<div class="tooltip-section"><h4>Top Entities</h4><ul class="tooltip-section-list">';
+                                topEntities.forEach(entity => {
+                                    const score = entity.score != null ? renderValue(entity.score) : '—';
+                                    html += '<li><div class="issue-heading">' + (entity.name || 'Entity') + '</div>';
+                                    html += '<div class="issue-summary">Score ' + score + '</div></li>';
+                                });
+                                html += '</ul></div>';
+                            }
+                        } else if (isDir) {
+                            // Directory: just show basic stats
+                            html += '<ul class="tooltip-metrics">';
+                            html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
+                            html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
+                            html += '</ul>';
+                        } else {
+                            // Root or unknown
+                            html += '<ul class="tooltip-metrics">';
+                            html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
+                            html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
+                            html += '</ul>';
+                        }
+
+                        return html;
+                    };
 
                     const trace = {
                         type: 'treemap',
@@ -223,7 +431,7 @@
                         },
                         coloraxis: 'coloraxis',
                         branchvalues: 'total',
-                        hovertemplate: '%{label}<br>Size: %{value}<br>Severity: %{color:.1f}<extra></extra>',
+                        hoverinfo: 'none',
                         customdata: custom
                     };
 
@@ -262,9 +470,42 @@
                         Plotly.restyle(rootEl, { selectedpoints: [null] }, [0]);
                     }
 
+                    let lastMouseX = 0, lastMouseY = 0;
+                    rootEl.addEventListener('mousemove', (e) => {
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                    });
+
+                    const showTooltip = (nodeId, colorVal) => {
+                        if (!tooltipEl) return;
+                        const html = buildTooltipHtml(nodeId, colorVal);
+                        if (!html) { tooltipEl.style.display = 'none'; return; }
+                        tooltipEl.innerHTML = html;
+                        tooltipEl.style.display = 'block';
+                        // Position near mouse but avoid edges
+                        const rect = tooltipEl.getBoundingClientRect();
+                        let x = lastMouseX + 15;
+                        let y = lastMouseY + 15;
+                        if (x + rect.width > window.innerWidth - 10) x = lastMouseX - rect.width - 15;
+                        if (y + rect.height > window.innerHeight - 10) y = lastMouseY - rect.height - 15;
+                        tooltipEl.style.left = x + 'px';
+                        tooltipEl.style.top = y + 'px';
+                    };
+
+                    const hideTooltip = () => {
+                        if (tooltipEl) tooltipEl.style.display = 'none';
+                    };
+
                     rootEl.on('plotly_hover', function(ev) {
                         const pt = ev?.points?.[0];
+                        const nodeId = pt?.customdata?.[1];
                         const normId = pt?.customdata?.[2];
+                        const colorVal = pt?.color;
+
+                        // Show custom tooltip
+                        if (nodeId) showTooltip(nodeId, colorVal);
+
+                        // Clone highlighting
                         if (!normId) { clearSelection(); return; }
                         const matches = cloneMap.get(normId);
                         if (!matches || matches.size === 0) { clearSelection(); return; }
@@ -273,6 +514,7 @@
 
                     rootEl.on('plotly_unhover', function() {
                         clearSelection();
+                        hideTooltip();
                     });
                 }
 
