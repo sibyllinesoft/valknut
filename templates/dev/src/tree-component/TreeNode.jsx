@@ -32,6 +32,34 @@ const formatDecimal = (value, decimals = 1) => {
     return numeric.toFixed(decimals);
 };
 
+// Build VS Code link for file/entity
+const buildVSCodeLink = (filePath, lineRange, projectRoot, lineNumber) => {
+    if (!filePath) return null;
+    // Build absolute path using projectRoot if path is relative
+    let absPath;
+    if (filePath.startsWith('/')) {
+        absPath = filePath;
+    } else if (projectRoot) {
+        // Join projectRoot with relative path
+        absPath = projectRoot.endsWith('/')
+            ? `${projectRoot}${filePath}`
+            : `${projectRoot}/${filePath}`;
+    } else {
+        absPath = `/${filePath}`;
+    }
+    // Encode the path for URI (but keep slashes unencoded)
+    const encodedPath = absPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    let uri = `vscode://file${encodedPath}`;
+    // Add line number if available - check lineRange array first, then fallback to lineNumber
+    if (Array.isArray(lineRange) && lineRange.length > 0 && lineRange[0] > 0) {
+        uri += `:${lineRange[0]}`;
+    } else if (typeof lineNumber === 'number' && lineNumber > 0) {
+        uri += `:${lineNumber}`;
+    }
+    console.log('[VSCode Link]', { filePath, projectRoot, absPath, lineNumber, uri });
+    return uri;
+};
+
 const getNumericValue = (source, keys, fallback = null) => {
     if (!source || typeof source !== 'object') {
         return fallback;
@@ -229,7 +257,7 @@ const computeAggregates = (node) => {
     return aggregates;
 };
 
-export const TreeNode = ({ node, style, innerRef, tree }) => {
+export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     if (!node || !node.data) {
         throw new Error('TreeNode props missing data');
     }
@@ -1222,10 +1250,32 @@ export const TreeNode = ({ node, style, innerRef, tree }) => {
     
     const labelText = data.name;
 
-    const labelElement = React.createElement('span', {
-        key: 'label',
-        style: { flex: 1, fontWeight: (isFolder || isCategory) ? '500' : 'normal', color: 'inherit', minWidth: 0 }
-    }, labelText);
+    // Build VS Code link for files and entities
+    const filePath = data.file_path || data.filePath || data.path;
+    const lineRange = data.line_range || data.lineRange;
+    // Also check for line_number/start_line fields (common in code_dictionary entities)
+    const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
+    const vscodeLink = (isFile || isEntity) ? buildVSCodeLink(filePath, lineRange, projectRoot, lineNumber) : null;
+
+    const labelElement = vscodeLink
+        ? React.createElement('a', {
+            key: 'label',
+            href: vscodeLink,
+            onClick: (e) => e.stopPropagation(), // Don't toggle node when clicking link
+            style: {
+                flex: 1,
+                fontWeight: (isFolder || isCategory) ? '500' : 'normal',
+                color: 'inherit',
+                minWidth: 0,
+                textDecoration: 'none',
+                cursor: 'pointer'
+            },
+            title: `Open in VS Code: ${filePath || data.name}`
+        }, labelText)
+        : React.createElement('span', {
+            key: 'label',
+            style: { flex: 1, fontWeight: (isFolder || isCategory) ? '500' : 'normal', color: 'inherit', minWidth: 0 }
+        }, labelText);
 
     if (shouldShowTooltip) {
         children.push(

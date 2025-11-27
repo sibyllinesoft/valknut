@@ -1,13 +1,15 @@
 /* Valknut Report Theme - Sibylline Design System Integration */
 /* Professional minimalist design system adapted from webpage.html */
 
+@import url('https://fonts.googleapis.com/css2?family=Michroma&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sunflower:wght@300;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=SF+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* Font families - matching webpage.html */
-  --font-family-default: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-family-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* Font families */
+  --font-family-default: 'Sunflower', sans-serif;
+  --font-family-display: 'Michroma', sans-serif;
   --font-family-monospace: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
   
   /* Sophisticated graphite palette - from webpage.html */
@@ -204,6 +206,10 @@ body {
   font-feature-settings: 'tnum' 1; /* Tabular numbers */
 }
 
+h1, h2 {
+  font-family: var(--font-family-display);
+}
+
 /* Container and Layout */
 .container {
   max-width: 1400px;
@@ -309,7 +315,7 @@ body {
 
 .analysis-summary.results-section {
   padding: 0;
-  margin: 0;
+  margin: 0 0 32px 0;
   max-width: none;
 }
 
@@ -1480,10 +1486,20 @@ body {
   left: -5px;
 }
 
-.insights-section,
-.clone-section {
+.insights-section {
   max-width: 1200px;
   margin: 0 auto var(--spacing-12);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--tree-foreground);
+}
+
+.clone-section {
+  max-width: 1200px;
+  margin: 0 auto;
   padding: 0;
   background: transparent;
   border: none;
@@ -1680,6 +1696,20 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   color: #e2e8f0;
+}
+
+.clone-panel-block::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.clone-panel-block::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.clone-panel-block::-webkit-scrollbar-thumb {
+  background: var(--keyline);
+  border-radius: 3px;
 }
 
 .clone-empty {

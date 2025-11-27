@@ -29035,6 +29035,27 @@ Check the top-level render call using <` + parentName + ">.";
     }
     return numeric.toFixed(decimals);
   };
+  var buildVSCodeLink = (filePath, lineRange, projectRoot, lineNumber) => {
+    if (!filePath)
+      return null;
+    let absPath;
+    if (filePath.startsWith("/")) {
+      absPath = filePath;
+    } else if (projectRoot) {
+      absPath = projectRoot.endsWith("/") ? `${projectRoot}${filePath}` : `${projectRoot}/${filePath}`;
+    } else {
+      absPath = `/${filePath}`;
+    }
+    const encodedPath = absPath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+    let uri = `vscode://file${encodedPath}`;
+    if (Array.isArray(lineRange) && lineRange.length > 0 && lineRange[0] > 0) {
+      uri += `:${lineRange[0]}`;
+    } else if (typeof lineNumber === "number" && lineNumber > 0) {
+      uri += `:${lineNumber}`;
+    }
+    console.log("[VSCode Link]", { filePath, projectRoot, absPath, lineNumber, uri });
+    return uri;
+  };
   var getNumericValue = (source, keys, fallback = null) => {
     if (!source || typeof source !== "object") {
       return fallback;
@@ -29205,7 +29226,7 @@ Check the top-level render call using <` + parentName + ">.";
     node.__aggregateCache = aggregates;
     return aggregates;
   };
-  var TreeNode = ({ node, style, innerRef, tree }) => {
+  var TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     if (!node || !node.data) {
       throw new Error("TreeNode props missing data");
     }
@@ -29880,7 +29901,24 @@ Check the top-level render call using <` + parentName + ">.";
       style: { marginRight: "0.5rem" }
     });
     const labelText = data.name;
-    const labelElement = import_react5.default.createElement("span", {
+    const filePath = data.file_path || data.filePath || data.path;
+    const lineRange = data.line_range || data.lineRange;
+    const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
+    const vscodeLink = isFile || isEntity ? buildVSCodeLink(filePath, lineRange, projectRoot, lineNumber) : null;
+    const labelElement = vscodeLink ? import_react5.default.createElement("a", {
+      key: "label",
+      href: vscodeLink,
+      onClick: (e) => e.stopPropagation(),
+      style: {
+        flex: 1,
+        fontWeight: isFolder || isCategory ? "500" : "normal",
+        color: "inherit",
+        minWidth: 0,
+        textDecoration: "none",
+        cursor: "pointer"
+      },
+      title: `Open in VS Code: ${filePath || data.name}`
+    }, labelText) : import_react5.default.createElement("span", {
       key: "label",
       style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit", minWidth: 0 }
     }, labelText);
@@ -30215,6 +30253,7 @@ Check the top-level render call using <` + parentName + ">.";
     const SHOW_ENTITY_DETAIL_ROWS = false;
     const [treeData, setTreeData] = import_react6.useState([]);
     const [expandedIds, setExpandedIds] = import_react6.useState(new Set);
+    const [projectRoot, setProjectRoot] = import_react6.useState("");
     const codeDictionary = import_react6.useMemo(() => {
       const source = data && typeof data === "object" ? data.code_dictionary || data.codeDictionary || {} : {};
       return {
@@ -31094,6 +31133,9 @@ Check the top-level render call using <` + parentName + ">.";
     import_react6.useEffect(() => {
       try {
         if (data && typeof data === "object") {
+          if (data.projectRoot) {
+            setProjectRoot(data.projectRoot);
+          }
           const unifiedHierarchy = Array.isArray(data.unifiedHierarchy) ? data.unifiedHierarchy : Array.isArray(data.unified_hierarchy) ? data.unified_hierarchy : [];
           if (unifiedHierarchy.length > 0) {
             const hierarchy = JSON.parse(JSON.stringify(unifiedHierarchy));
@@ -31257,7 +31299,8 @@ Check the top-level render call using <` + parentName + ">.";
         height: "100%"
       },
       innerRef: undefined,
-      tree: treeApi
+      tree: treeApi,
+      projectRoot
     });
     if (typeof window !== "undefined") {
       window.__VALKNUT_TREE_DATA_SNAPSHOT = treeData;
@@ -31492,7 +31535,8 @@ Check the top-level render call using <` + parentName + ">.";
       ref: containerRef,
       style: {
         position: "relative",
-        height: 520,
+        maxHeight: 520,
+        overflow: "auto",
         background: "transparent",
         borderRadius: 12,
         padding: "12px 10px",
@@ -31583,5 +31627,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=8BEFD0D7C301C34464756E2164756E21
+//# debugId=43DA62DCC91480C764756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

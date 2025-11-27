@@ -133,17 +133,69 @@ function simplifyEntityName(name = '') {
   return parts[parts.length - 1] || name;
 }
 
-function cleanRefactoringCandidates(candidates = []) {
-  return candidates.map((candidate) => ({
-    ...candidate,
-    entity_id: normalizeEntityId(candidate.entity_id || ''),
-    name: simplifyEntityName(candidate.name || candidate.entity_id || ''),
-    file_path: normalizePath(candidate.file_path || ''),
-    filePath: normalizePath(candidate.file_path || ''),
-    line_range: candidate.line_range ?? candidate.lineRange ?? null,
-    lineRange: candidate.line_range ?? candidate.lineRange ?? null,
-    score: roundTo(candidate.score ?? 0),
-  }));
+// Build a lookup map from entity_id to line number from passes.complexity.detailed_results
+function buildLineNumberLookup(results) {
+  const lookup = new Map();
+  const detailedResults = results?.passes?.complexity?.detailed_results || [];
+
+  detailedResults.forEach((item) => {
+    const lineNum = item.line_number ?? item.start_line;
+    if (!lineNum) return;
+
+    // Index by entity_id
+    if (item.entity_id) {
+      lookup.set(item.entity_id, lineNum);
+      const normalized = normalizeEntityId(item.entity_id);
+      if (normalized !== item.entity_id) {
+        lookup.set(normalized, lineNum);
+      }
+    }
+
+    // Also index by file_path + entity_name (for matching different entity_id formats)
+    if (item.file_path && item.entity_name) {
+      const filePath = normalizePath(item.file_path);
+      const key = `${filePath}:${item.entity_name}`;
+      lookup.set(key, lineNum);
+    }
+  });
+
+  return lookup;
+}
+
+// Extract entity name from entity_id like "path:class:anonymous_class_206" or "path:function:validate"
+function extractEntityNameFromId(entityId) {
+  if (!entityId) return null;
+  const parts = entityId.split(':');
+  // Entity name is the last part
+  return parts[parts.length - 1] || null;
+}
+
+function cleanRefactoringCandidates(candidates = [], lineNumberLookup = new Map()) {
+  return candidates.map((candidate) => {
+    const entityId = normalizeEntityId(candidate.entity_id || '');
+    const filePath = normalizePath(candidate.file_path || '');
+    const entityName = extractEntityNameFromId(entityId) || simplifyEntityName(candidate.name || candidate.entity_id || '');
+
+    // Try to find line number from the lookup (from passes.complexity.detailed_results)
+    // Try multiple lookup strategies
+    let lineFromLookup = lineNumberLookup.get(entityId)
+      || lineNumberLookup.get(candidate.entity_id)
+      || lineNumberLookup.get(`${filePath}:${entityName}`);
+
+    return {
+      ...candidate,
+      entity_id: entityId,
+      name: simplifyEntityName(candidate.name || candidate.entity_id || ''),
+      file_path: filePath,
+      filePath: filePath,
+      line_range: candidate.line_range ?? candidate.lineRange ?? null,
+      lineRange: candidate.line_range ?? candidate.lineRange ?? null,
+      // Add line_number from lookup if not already present
+      line_number: candidate.line_number ?? candidate.start_line ?? lineFromLookup ?? null,
+      start_line: candidate.start_line ?? candidate.line_number ?? lineFromLookup ?? null,
+      score: roundTo(candidate.score ?? 0),
+    };
+  });
 }
 
 function buildGroupsFromCandidates(candidates = []) {
@@ -659,6 +711,9 @@ function buildEntityNode(entity, codeDictionary, severityCounts) {
     name: entity.name || simplifyEntityName(entity.entity_id || ''),
     lineRange: entity.lineRange ?? entity.line_range ?? null,
     line_range: entity.line_range ?? entity.lineRange ?? null,
+    // Explicitly include line_number/start_line for VS Code links
+    line_number: entity.line_number ?? entity.start_line ?? null,
+    start_line: entity.start_line ?? entity.line_number ?? null,
     score: entityScore,
     issues: issueDetails,
     suggestions: suggestionDetails,
@@ -750,12 +805,16 @@ function buildSummary(results) {
   const entitiesAnalyzed = summary.entities_analyzed ?? summary.total_entities ?? 0;
   const refactoringNeeded = summary.refactoring_needed ?? results?.refactoring_candidates?.length ?? 0;
   const codeHealth = summary.code_health_score ?? 0;
+  const docHealth = summary.doc_health_score ?? null;
+  const docIssueCount = summary.doc_issue_count ?? 0;
 
   return {
     files_processed: filesProcessed,
     entities_analyzed: entitiesAnalyzed,
     refactoring_needed: refactoringNeeded,
     code_health_score: codeHealth,
+    doc_health_score: docHealth,
+    doc_issue_count: docIssueCount,
     total_files: summary.total_files ?? filesProcessed,
     total_issues: summary.total_issues ?? refactoringNeeded,
     high_priority: summary.high_priority ?? 0,
@@ -785,7 +844,9 @@ function buildTemplateData(results) {
     };
   }
 
-  const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates);
+  // Build line number lookup from passes.complexity.detailed_results
+  const lineNumberLookup = buildLineNumberLookup(results);
+  const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates, lineNumberLookup);
   const summary = buildSummary(results);
 
   const dictionary = results.code_dictionary || { issues: {}, suggestions: {} };
@@ -840,6 +901,7 @@ function buildTemplateData(results) {
     enable_animation: true,
     results,
     summary,
+    project_root: PROJECT_ROOT,
     refactoring_candidates: cleanedCandidates,
     refactoring_candidates_by_file: refactoringCandidatesByFile,
     refactoringCandidatesByFile: refactoringCandidatesByFile,
@@ -1085,6 +1147,7 @@ function render() {
   console.log(`[render-report] Rendered report to ${OUTPUT_HTML}`);
 
   const frontendPayload = {
+    projectRoot: PROJECT_ROOT,
     unifiedHierarchy: templateData.unified_hierarchy,
     refactoringCandidatesByFile: templateData.refactoring_candidates_by_file,
     directoryHealthTree: templateData.directory_health_tree,

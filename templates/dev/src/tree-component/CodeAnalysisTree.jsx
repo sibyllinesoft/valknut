@@ -11,6 +11,7 @@ export const CodeAnalysisTree = ({ data }) => {
     const SHOW_ENTITY_DETAIL_ROWS = false;
     const [treeData, setTreeData] = useState([]);
     const [expandedIds, setExpandedIds] = useState(new Set());
+    const [projectRoot, setProjectRoot] = useState('');
 
     const codeDictionary = useMemo(() => {
         const source = (data && typeof data === 'object')
@@ -1167,6 +1168,10 @@ export const CodeAnalysisTree = ({ data }) => {
     useEffect(() => {
         try {
             if (data && typeof data === 'object') {
+                // Store project root for VS Code links
+                if (data.projectRoot) {
+                    setProjectRoot(data.projectRoot);
+                }
 
                 const unifiedHierarchy = Array.isArray(data.unifiedHierarchy)
                     ? data.unifiedHierarchy
@@ -1387,7 +1392,8 @@ export const CodeAnalysisTree = ({ data }) => {
                 height: '100%'
             },
             innerRef: undefined,
-            tree: treeApi
+            tree: treeApi,
+            projectRoot: projectRoot
         });
 
     if (typeof window !== 'undefined') {

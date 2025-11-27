@@ -41,9 +41,9 @@
     </div>
 
     {{#if clone_pairs.length}}
-    <div class="clone-panel-block" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); border-bottom: 1px solid rgba(255,255,255,0.026); padding-top: 0.35rem; padding-bottom: 0.35rem;">
+    <div class="clone-panel-block" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); padding-top: 0.35rem; max-height: 600px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--keyline) transparent;">
         <script id="clone-pairs-data" type="application/json">{{{json clone_pairs}}}</script>
-        <div id="clone-pairs-root" aria-label="Clone pairs cards" style="min-height: 560px;"></div>
+        <div id="clone-pairs-root" aria-label="Clone pairs cards"></div>
         <script>
           (function() {
             function mountPairs() {

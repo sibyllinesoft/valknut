@@ -15,6 +15,7 @@
 
     <script id="tree-data" type="application/json">
         {
+            "projectRoot": {{#if project_root}}"{{{project_root}}}"{{else}}""{{/if}},
             "refactoring_candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
             "refactoring_candidates_by_file": {{#if refactoring_candidates_by_file}}{{{json refactoring_candidates_by_file}}}{{else}}[]{{/if}},
             "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}},
