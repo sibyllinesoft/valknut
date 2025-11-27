@@ -162,6 +162,35 @@ function buildLineNumberLookup(results) {
   return lookup;
 }
 
+// Build a lookup map from entity_id to metrics (including max_nesting_depth) from passes.complexity.detailed_results
+function buildMetricsLookup(results) {
+  const lookup = new Map();
+  const detailedResults = results?.passes?.complexity?.detailed_results || [];
+
+  detailedResults.forEach((item) => {
+    const metrics = item.metrics;
+    if (!metrics) return;
+
+    // Index by entity_id
+    if (item.entity_id) {
+      lookup.set(item.entity_id, metrics);
+      const normalized = normalizeEntityId(item.entity_id);
+      if (normalized !== item.entity_id) {
+        lookup.set(normalized, metrics);
+      }
+    }
+
+    // Also index by file_path + entity_name
+    if (item.file_path && item.entity_name) {
+      const filePath = normalizePath(item.file_path);
+      const key = `${filePath}:${item.entity_name}`;
+      lookup.set(key, metrics);
+    }
+  });
+
+  return lookup;
+}
+
 // Extract entity name from entity_id like "path:class:anonymous_class_206" or "path:function:validate"
 function extractEntityNameFromId(entityId) {
   if (!entityId) return null;
@@ -662,13 +691,50 @@ function priorityBucket(priority) {
   return 'low';
 }
 
-function buildEntityNode(entity, codeDictionary, severityCounts) {
+// Extract maintainability_index from entity issues' contributing_features
+function extractMaintainabilityIndex(entity) {
+  const issues = entity.issues || [];
+  for (const issue of issues) {
+    const features = issue.contributing_features || [];
+    const miFeat = features.find(f => f.feature_name === 'maintainability_index');
+    if (miFeat && miFeat.value != null && Number.isFinite(miFeat.value)) {
+      return miFeat.value;
+    }
+  }
+  return null;
+}
+
+function buildEntityNode(entity, codeDictionary, severityCounts, metricsLookup = new Map()) {
   const entityScore = roundTo(entity.score ?? 0);
+  // Extract maintainability_index before processing issues
+  const maintainabilityIndex = entity.maintainability_index ?? extractMaintainabilityIndex(entity);
+
+  // Look up metrics from passes.complexity.detailed_results
+  const entityId = entity.entity_id || '';
+  const filePath = normalizePath(entity.file_path || '');
+  const entityName = extractEntityNameFromId(entityId) || simplifyEntityName(entity.name || entityId || '');
+  const metrics = metricsLookup.get(entityId)
+    || metricsLookup.get(normalizeEntityId(entityId))
+    || metricsLookup.get(`${filePath}:${entityName}`)
+    || {};
+
   const issueDetails = (entity.issues || []).map((issue, index) => {
     const meta = codeDictionary?.issues?.[issue.code] || {};
     const severity = roundTo(issue.severity ?? 0);
     const bucket = severityBucket(severity);
     severityCounts[bucket] += 1;
+
+    // Enrich contributing_features for structure issues with max_nesting_depth from metrics
+    let contributingFeatures = issue.contributing_features || [];
+    const category = (issue.category || '').toLowerCase();
+    if (category.includes('struct') && (!contributingFeatures.length || !contributingFeatures.some(f => f.feature_name === 'max_nesting_depth'))) {
+      if (metrics.max_nesting_depth != null) {
+        contributingFeatures = [
+          ...contributingFeatures,
+          { feature_name: 'max_nesting_depth', value: metrics.max_nesting_depth }
+        ];
+      }
+    }
 
     return {
       ...issue,
@@ -677,6 +743,7 @@ function buildEntityNode(entity, codeDictionary, severityCounts) {
       summary: meta.summary || `Signals detected in the ${issue.category} dimension.`,
       severity,
       badges: [`Severity ${severity.toFixed(1)}`],
+      contributing_features: contributingFeatures,
     };
   });
 
@@ -715,16 +782,18 @@ function buildEntityNode(entity, codeDictionary, severityCounts) {
     line_number: entity.line_number ?? entity.start_line ?? null,
     start_line: entity.start_line ?? entity.line_number ?? null,
     score: entityScore,
+    // Add maintainability_index for tooltip display
+    maintainability_index: maintainabilityIndex,
     issues: issueDetails,
     suggestions: suggestionDetails,
     children: [],
   };
 }
 
-function buildFileNode(group, codeDictionary) {
+function buildFileNode(group, codeDictionary, metricsLookup = new Map()) {
   const severityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
   const entities = (group.entities || []).map((entity) =>
-    buildEntityNode(entity, codeDictionary, severityCounts)
+    buildEntityNode(entity, codeDictionary, severityCounts, metricsLookup)
   );
 
   const normalizedPath = normalizePath(group.file_path || '');
@@ -769,7 +838,7 @@ function buildDirectoryNode(dirPath, fileNodes) {
   };
 }
 
-function addFilesToHierarchy(baseHierarchy, groups, codeDictionary) {
+function addFilesToHierarchy(baseHierarchy, groups, codeDictionary, metricsLookup = new Map()) {
   const filesByDir = groupFilesByDirectory(groups);
 
   const attach = (node) => {
@@ -777,7 +846,7 @@ function addFilesToHierarchy(baseHierarchy, groups, codeDictionary) {
     const childDirs = Array.isArray(node.children) ? node.children.map(attach) : [];
     const files = filesByDir.get(pathValue) || [];
     filesByDir.delete(pathValue);
-    const fileNodes = files.map((group) => buildFileNode(group, codeDictionary));
+    const fileNodes = files.map((group) => buildFileNode(group, codeDictionary, metricsLookup));
 
     return {
       ...node,
@@ -792,7 +861,7 @@ function addFilesToHierarchy(baseHierarchy, groups, codeDictionary) {
     if (!fileList || fileList.length === 0) {
       return;
     }
-    const fileNodes = fileList.map((group) => buildFileNode(group, codeDictionary));
+    const fileNodes = fileList.map((group) => buildFileNode(group, codeDictionary, metricsLookup));
     hierarchy.push(buildDirectoryNode(dirPath, fileNodes));
   });
 
@@ -844,8 +913,9 @@ function buildTemplateData(results) {
     };
   }
 
-  // Build line number lookup from passes.complexity.detailed_results
+  // Build line number and metrics lookups from passes.complexity.detailed_results
   const lineNumberLookup = buildLineNumberLookup(results);
+  const metricsLookup = buildMetricsLookup(results);
   const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates, lineNumberLookup);
   const summary = buildSummary(results);
 
@@ -887,7 +957,8 @@ function buildTemplateData(results) {
   unifiedHierarchy = addFilesToHierarchy(
     Array.isArray(unifiedHierarchy) ? unifiedHierarchy : [],
     refactoringCandidatesByFile,
-    dictionary
+    dictionary,
+    metricsLookup
   );
   unifiedHierarchy = sortHierarchy(unifiedHierarchy);
 

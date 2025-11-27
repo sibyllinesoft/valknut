@@ -1242,12 +1242,11 @@ h1, h2 {
   padding: 0.45rem 0.65rem;
   border-bottom: none;
   border: none !important;
-  transition: background 0.15s ease;
   color: var(--tree-foreground);
 }
 
 .tree-header-row:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tree-header-row--selected {
@@ -1289,6 +1288,20 @@ h1, h2 {
   border-left: 3px solid transparent;
   border-bottom: none !important;
   color: var(--tree-foreground);
+  position: relative;
+}
+
+.tree-detail-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.tree-detail-row:hover::before {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 

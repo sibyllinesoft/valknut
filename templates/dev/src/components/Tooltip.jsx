@@ -15,7 +15,7 @@ import {
   useClientPoint,
 } from '@floating-ui/react';
 
-const Tooltip = ({ children, content, placement: initialPlacement = 'bottom', delay = 80 }) => {
+const Tooltip = ({ children, content, placement: initialPlacement = 'bottom', delay = 200 }) => {
   const arrowRef = useRef(null);
   const [open, setOpen] = useState(false);
 

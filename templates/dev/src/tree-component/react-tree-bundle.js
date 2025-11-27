@@ -28957,7 +28957,7 @@ Check the top-level render call using <` + parentName + ">.";
 
   // src/components/Tooltip.jsx
   var jsx_dev_runtime = __toESM(require_jsx_dev_runtime(), 1);
-  var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 80 }) => {
+  var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 200 }) => {
     const arrowRef = import_react3.useRef(null);
     const [open, setOpen] = import_react3.useState(false);
     const middleware = import_react3.useMemo(() => [
@@ -29083,6 +29083,44 @@ Check the top-level render call using <` + parentName + ">.";
       return null;
     const rounded = Math.round(value);
     return `${rounded}%`;
+  };
+  var getEntityMaintainability = (entity) => {
+    if (!entity)
+      return null;
+    const mi = entity.maintainability_index ?? entity.maintainabilityIndex;
+    if (mi != null && Number.isFinite(mi))
+      return mi;
+    const issues = entity.issues || [];
+    for (const issue of issues) {
+      const features = issue.contributing_features || [];
+      const miFeat = features.find((f) => f.feature_name === "maintainability_index" || f.feature_name === "maintainabilityIndex");
+      if (miFeat && miFeat.value != null && Number.isFinite(miFeat.value)) {
+        return miFeat.value;
+      }
+    }
+    return null;
+  };
+  var getSeverityColor = (pct) => {
+    if (pct === null || pct === undefined)
+      return "inherit";
+    if (pct >= 80)
+      return "#dc3545";
+    if (pct >= 60)
+      return "#fd7e14";
+    if (pct >= 40)
+      return "#ffc107";
+    return "#6c757d";
+  };
+  var getMaintainabilityColor = (mi) => {
+    if (mi === null || mi === undefined)
+      return "inherit";
+    if (mi >= 65)
+      return "#6c757d";
+    if (mi >= 40)
+      return "#ffc107";
+    if (mi >= 20)
+      return "#fd7e14";
+    return "#dc3545";
   };
   var ccPct = (value) => value != null ? value / 10 * 100 : null;
   var cogPct = (value, lang = "default") => {
@@ -29514,10 +29552,10 @@ Check the top-level render call using <` + parentName + ">.";
     };
     const getHealthColor = (score) => {
       if (score >= 0.8)
-        return "var(--success)";
+        return "#6c757d";
       if (score >= 0.6)
-        return "var(--warning)";
-      return "var(--danger)";
+        return "#ffc107";
+      return "#dc3545";
     };
     const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ["healthScore", "health_score", "health"], null);
     const children = [];
@@ -29575,36 +29613,54 @@ Check the top-level render call using <` + parentName + ">.";
       const cognitive = getFeat("cognitive_complexity");
       const mi = getFeat("maintainability_index");
       const debt = getFeat("technical_debt_score");
+      const nesting = getFeat("max_nesting_depth");
+      let healthPct = null;
       if (category.includes("debt")) {
         title = "Poor code organization";
+        healthPct = debt != null ? Math.min(100, debt) : null;
         if (!summary) {
           summary = debt != null ? `Technical debt score ${debt.toFixed(1)} — higher means more restructuring and cleanup needed` : "Organization/debt exceeds the acceptable baseline";
         }
       } else if (category.includes("maintain")) {
         title = "Too much code coupling";
+        healthPct = mi != null ? Math.max(0, 100 - mi) : null;
         if (!summary) {
           summary = mi != null ? `Maintainability Index ${mi.toFixed(1)} — lower MI suggests tighter coupling; target ≥ 60` : "Maintainability/coupling exceeds the acceptable baseline";
         }
       } else if (category.includes("cognit")) {
         title = "Too many code paths";
+        healthPct = cognitive != null ? Math.min(100, cognitive / 15 * 50) : null;
         if (!summary && cognitive != null) {
           summary = `Cognitive complexity ${cognitive.toFixed(0)} — target ≤ 15 (lower is better)`;
         }
       } else if (category.includes("complex")) {
         title = "Too many branch points";
+        healthPct = cyclo != null ? Math.min(100, cyclo / 10 * 50) : null;
         if (!summary && cyclo != null) {
           summary = `Cyclomatic complexity ${cyclo.toFixed(0)} — target ≤ 10 (lower is better)`;
         }
       } else if (category.includes("struct")) {
-        title = "Optimize file layout";
+        title = "Deep nesting";
+        if (nesting != null) {
+          if (nesting <= 3) {
+            healthPct = nesting / 3 * 40;
+          } else if (nesting <= 6) {
+            healthPct = 40 + (nesting - 3) / 3 * 40;
+          } else {
+            const excess = nesting - 6;
+            healthPct = 80 + 20 * (1 - Math.exp(-excess / 3));
+          }
+          healthPct = Math.min(100, Math.max(0, healthPct));
+        }
         if (!summary) {
-          summary = "Large or entangled structure; consider splitting files or extracting modules";
+          summary = nesting != null ? `Nesting depth ${nesting} — target ≤ 3 (lower is better)` : "Deeply nested control flow (if/for/while blocks); consider extracting helper functions";
         }
       }
       return {
         title,
         severity,
-        summary
+        summary,
+        healthPct
       };
     };
     const formatSuggestion = (suggestion = {}) => {
@@ -29725,12 +29781,30 @@ Check the top-level render call using <` + parentName + ">.";
           { key: "low", label: "Low", value: severityCounts.low || 0 }
         ].filter((item) => item.value > 0);
         const topEntities = (data.children || []).filter((child) => child.type === "entity").slice(0, 3);
-        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), docIssueCount != null && docIssueCount > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Documentation"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, import_react5.default.createElement("li", { key: "doc-issues" }, import_react5.default.createElement("div", { className: "issue-heading" }, `${docIssueCount} undocumented items`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", { className: "issue-heading" }, entity.name), suggestionText ? import_react5.default.createElement("div", { className: "issue-summary" }, suggestionText) : import_react5.default.createElement("div", { className: "issue-summary" }, `Score ${renderValue(entity.score)}`))))));
+        return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), docIssueCount != null && docIssueCount > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Documentation"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, import_react5.default.createElement("li", { key: "doc-issues" }, import_react5.default.createElement("div", { className: "issue-heading" }, `${docIssueCount} undocumented items`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => {
+          const mi = getEntityMaintainability(entity);
+          const miColor = getMaintainabilityColor(mi);
+          const miDisplay = mi != null ? `${Math.round(mi)}%` : null;
+          return import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", {
+            className: "issue-heading",
+            style: { display: "flex", justifyContent: "space-between", gap: "0.5rem" }
+          }, [
+            import_react5.default.createElement("span", { key: "name" }, entity.name),
+            miDisplay && import_react5.default.createElement("span", {
+              key: "mi",
+              style: { color: miColor, fontWeight: 500 }
+            }, miDisplay)
+          ].filter(Boolean)));
+        }))));
       }
       const issues = Array.isArray(data.issues) ? data.issues.map(formatIssue) : [];
       const rawSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
       const suggestions = rawSuggestions.map(formatSuggestion);
-      const listedIssues = issues.filter((issue) => issue.severity !== "—").sort((a, b) => Number(b.severity) - Number(a.severity));
+      const listedIssues = issues.filter((issue) => issue.severity !== "—").sort((a, b) => {
+        const aPct = a.healthPct ?? -1;
+        const bPct = b.healthPct ?? -1;
+        return bPct - aPct;
+      });
       const metrics = [];
       const suggestionsWithTags = (() => {
         const deriveText = (s) => {
@@ -29849,7 +29923,21 @@ Check the top-level render call using <` + parentName + ">.";
         }
         return suggestionFallback;
       };
-      return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Entity"), metrics.length > 0 && import_react5.default.createElement("ul", { className: "tooltip-metrics" }, metrics.map(({ label, value }) => import_react5.default.createElement("li", { key: label }, import_react5.default.createElement("span", { className: "metric-label" }, label), import_react5.default.createElement("span", { className: "metric-value" }, renderValue(value))))), listedIssues.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Issues"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, listedIssues.map((issue, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-heading" }, `${issue.title} (Severity ${issue.severity})`))))), suggestionTexts.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Suggested Actions"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, suggestionTexts.map((txt, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-summary" }, txt))))));
+      return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "Entity"), metrics.length > 0 && import_react5.default.createElement("ul", { className: "tooltip-metrics" }, metrics.map(({ label, value }) => import_react5.default.createElement("li", { key: label }, import_react5.default.createElement("span", { className: "metric-label" }, label), import_react5.default.createElement("span", { className: "metric-value" }, renderValue(value))))), listedIssues.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Issues"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, listedIssues.map((issue, idx) => {
+        const pct = issue.healthPct;
+        const pctColor = getSeverityColor(pct);
+        const pctDisplay = pct != null ? `${Math.round(pct)}%` : null;
+        return import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", {
+          className: "issue-heading",
+          style: { display: "flex", justifyContent: "space-between", gap: "0.5rem" }
+        }, [
+          import_react5.default.createElement("span", { key: "title" }, issue.title),
+          pctDisplay && import_react5.default.createElement("span", {
+            key: "pct",
+            style: { color: pctColor, fontWeight: 500 }
+          }, pctDisplay)
+        ].filter(Boolean)));
+      }))), suggestionTexts.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Suggested Actions"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, suggestionTexts.map((txt, idx) => import_react5.default.createElement("li", { key: idx }, import_react5.default.createElement("div", { className: "issue-summary" }, txt))))));
     };
     if (shouldShowChevron && hasChildren) {
       children.push(import_react5.default.createElement("span", {
@@ -29916,8 +30004,7 @@ Check the top-level render call using <` + parentName + ">.";
         minWidth: 0,
         textDecoration: "none",
         cursor: "pointer"
-      },
-      title: `Open in VS Code: ${filePath || data.name}`
+      }
     }, labelText) : import_react5.default.createElement("span", {
       key: "label",
       style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit", minWidth: 0 }
@@ -30053,7 +30140,7 @@ Check the top-level render call using <` + parentName + ">.";
         marginLeft: `${manualIndent}px`,
         borderRadius: "4px",
         border: "none",
-        backgroundColor: node.isSelected ? "rgba(99, 102, 241, 0.18)" : "transparent",
+        ...node.isSelected ? { backgroundColor: "rgba(99, 102, 241, 0.18)" } : {},
         width: "calc(100% - " + manualIndent + "px)",
         minHeight: "32px",
         gap: "0.5rem"
@@ -31627,5 +31714,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=43DA62DCC91480C764756E2164756E21
+//# debugId=73F0A58A2E3BA73E64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

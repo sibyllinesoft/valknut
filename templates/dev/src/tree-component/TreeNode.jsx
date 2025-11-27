@@ -89,6 +89,48 @@ const fmtPct = (value) => {
     const rounded = Math.round(value);
     return `${rounded}%`;
 };
+
+// Get maintainability index from entity (0-100, higher = better)
+// This is the standard software metric where 100 = highly maintainable
+const getEntityMaintainability = (entity) => {
+    if (!entity) return null;
+    // Direct property
+    const mi = entity.maintainability_index ?? entity.maintainabilityIndex;
+    if (mi != null && Number.isFinite(mi)) return mi;
+    // From contributing features in issues
+    const issues = entity.issues || [];
+    for (const issue of issues) {
+        const features = issue.contributing_features || [];
+        const miFeat = features.find(f =>
+            f.feature_name === 'maintainability_index' || f.feature_name === 'maintainabilityIndex'
+        );
+        if (miFeat && miFeat.value != null && Number.isFinite(miFeat.value)) {
+            return miFeat.value;
+        }
+    }
+    return null;
+};
+
+// Get color for severity percentage (0-100, higher = worse/more critical, like treemap)
+// Uses badge colors: grey (low), yellow (medium), orange (high), red (critical)
+const getSeverityColor = (pct) => {
+    if (pct === null || pct === undefined) return 'inherit';
+    if (pct >= 80) return '#dc3545'; // red - critical
+    if (pct >= 60) return '#fd7e14'; // orange - high concern
+    if (pct >= 40) return '#ffc107'; // yellow - medium
+    return '#6c757d'; // grey - low/acceptable
+};
+
+// Get color for maintainability index (0-100, higher = better health)
+// Uses badge colors: grey (good), yellow (medium), orange (concerning), red (critical)
+const getMaintainabilityColor = (mi) => {
+    if (mi === null || mi === undefined) return 'inherit';
+    if (mi >= 65) return '#6c757d'; // grey - good
+    if (mi >= 40) return '#ffc107'; // yellow - medium
+    if (mi >= 20) return '#fd7e14'; // orange - high concern
+    return '#dc3545'; // red - critical
+};
+
 const ccPct = (value) => value != null ? (value / 10) * 100 : null;
 const cogPct = (value, lang = 'default') => {
     const base = ['c', 'cpp', 'c++', 'objc', 'objective-c'].includes((lang || '').toLowerCase()) ? 25 : 15;
@@ -618,11 +660,11 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         );
     };
     
-    // Health score color
+    // Health score color (uses badge colors: grey for good, not green)
     const getHealthColor = (score) => {
-        if (score >= 0.8) return 'var(--success)';
-        if (score >= 0.6) return 'var(--warning)';
-        return 'var(--danger)';
+        if (score >= 0.8) return '#6c757d'; // grey - good
+        if (score >= 0.6) return '#ffc107'; // yellow - warning
+        return '#dc3545'; // red - danger
     };
 
     const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ['healthScore', 'health_score', 'health'], null);
@@ -690,9 +732,15 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         const cognitive = getFeat('cognitive_complexity');
         const mi = getFeat('maintainability_index');
         const debt = getFeat('technical_debt_score');
+        const nesting = getFeat('max_nesting_depth');
 
+        // Calculate a normalized severity percentage based on the issue category
+        // Higher percentage = worse/more critical (like treemap: 100% = critical)
+        let healthPct = null;
         if (category.includes('debt')) {
             title = 'Poor code organization';
+            // debt is 0-100 where higher is worse, use directly as severity %
+            healthPct = debt != null ? Math.min(100, debt) : null;
             if (!summary) {
                 summary = debt != null
                     ? `Technical debt score ${debt.toFixed(1)} — higher means more restructuring and cleanup needed`
@@ -700,6 +748,8 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             }
         } else if (category.includes('maintain')) {
             title = 'Too much code coupling';
+            // MI is 0-100 where higher is better, invert: low MI = high severity
+            healthPct = mi != null ? Math.max(0, 100 - mi) : null;
             if (!summary) {
                 summary = mi != null
                     ? `Maintainability Index ${mi.toFixed(1)} — lower MI suggests tighter coupling; target ≥ 60`
@@ -707,18 +757,42 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             }
         } else if (category.includes('cognit')) {
             title = 'Too many code paths';
+            // cognitive target is 15, normalize: at 15 = 50%, at 30 = 100%
+            healthPct = cognitive != null ? Math.min(100, (cognitive / 15) * 50) : null;
             if (!summary && cognitive != null) {
                 summary = `Cognitive complexity ${cognitive.toFixed(0)} — target ≤ 15 (lower is better)`;
             }
         } else if (category.includes('complex')) {
             title = 'Too many branch points';
+            // cyclomatic target is 10, normalize: at 10 = 50%, at 20 = 100%
+            healthPct = cyclo != null ? Math.min(100, (cyclo / 10) * 50) : null;
             if (!summary && cyclo != null) {
                 summary = `Cyclomatic complexity ${cyclo.toFixed(0)} — target ≤ 10 (lower is better)`;
             }
         } else if (category.includes('struct')) {
-            title = 'Optimize file layout';
+            title = 'Deep nesting';
+            // Nesting depth: industry wisdom suggests 3-4 is ideal max, 5+ is problematic
+            // Scale: 0-3 = 0-40% (acceptable range with resolution), 3-6 = 40-80% (linear concern zone),
+            // 6+ = 80-100% (exponential compression for outliers)
+            if (nesting != null) {
+                if (nesting <= 3) {
+                    // Acceptable range: 0-3 maps to 0-40%
+                    healthPct = (nesting / 3) * 40;
+                } else if (nesting <= 6) {
+                    // Concern zone: 3-6 maps to 40-80%
+                    healthPct = 40 + ((nesting - 3) / 3) * 40;
+                } else {
+                    // Outlier zone: 6+ maps to 80-100% with exponential compression
+                    // Use 1 - e^(-x) curve so it asymptotically approaches 100%
+                    const excess = nesting - 6;
+                    healthPct = 80 + 20 * (1 - Math.exp(-excess / 3));
+                }
+                healthPct = Math.min(100, Math.max(0, healthPct));
+            }
             if (!summary) {
-                summary = 'Large or entangled structure; consider splitting files or extracting modules';
+                summary = nesting != null
+                    ? `Nesting depth ${nesting} — target ≤ 3 (lower is better)`
+                    : 'Deeply nested control flow (if/for/while blocks); consider extracting helper functions';
             }
         }
 
@@ -726,6 +800,7 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             title,
             severity,
             summary,
+            healthPct,
         };
     };
 
@@ -981,16 +1056,25 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                         React.createElement(
                             'ul',
                             { className: 'tooltip-section-list' },
-                            topEntities.map((entity) =>
-                                React.createElement(
+                            topEntities.map((entity) => {
+                                const mi = getEntityMaintainability(entity);
+                                const miColor = getMaintainabilityColor(mi);
+                                const miDisplay = mi != null ? `${Math.round(mi)}%` : null;
+                                return React.createElement(
                                     'li',
                                     { key: entity.id },
-                                    React.createElement('div', { className: 'issue-heading' }, entity.name),
-                                    suggestionText
-                                        ? React.createElement('div', { className: 'issue-summary' }, suggestionText)
-                                        : React.createElement('div', { className: 'issue-summary' }, `Score ${renderValue(entity.score)}`)
-                                )
-                            )
+                                    React.createElement('div', {
+                                        className: 'issue-heading',
+                                        style: { display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }
+                                    }, [
+                                        React.createElement('span', { key: 'name' }, entity.name),
+                                        miDisplay && React.createElement('span', {
+                                            key: 'mi',
+                                            style: { color: miColor, fontWeight: 500 }
+                                        }, miDisplay)
+                                    ].filter(Boolean))
+                                );
+                            })
                         )
                     )
             );
@@ -1001,10 +1085,14 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         const rawSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
         const suggestions = rawSuggestions.map(formatSuggestion);
 
-        // Show all issues sorted by severity; omit metric row for entities
+        // Show all issues sorted by healthPct descending (higher % = worse = first)
         const listedIssues = issues
             .filter((issue) => issue.severity !== '—')
-            .sort((a, b) => Number(b.severity) - Number(a.severity));
+            .sort((a, b) => {
+                const aPct = a.healthPct ?? -1;
+                const bPct = b.healthPct ?? -1;
+                return bPct - aPct;
+            });
 
         const metrics = [];
 
@@ -1162,13 +1250,25 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                     React.createElement(
                         'ul',
                         { className: 'tooltip-section-list' },
-                        listedIssues.map((issue, idx) =>
-                            React.createElement(
+                        listedIssues.map((issue, idx) => {
+                            const pct = issue.healthPct;
+                            const pctColor = getSeverityColor(pct);
+                            const pctDisplay = pct != null ? `${Math.round(pct)}%` : null;
+                            return React.createElement(
                                 'li',
                                 { key: idx },
-                                React.createElement('div', { className: 'issue-heading' }, `${issue.title} (Severity ${issue.severity})`)
-                            )
-                        )
+                                React.createElement('div', {
+                                    className: 'issue-heading',
+                                    style: { display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }
+                                }, [
+                                    React.createElement('span', { key: 'title' }, issue.title),
+                                    pctDisplay && React.createElement('span', {
+                                        key: 'pct',
+                                        style: { color: pctColor, fontWeight: 500 }
+                                    }, pctDisplay)
+                                ].filter(Boolean))
+                            );
+                        })
                     )
                 ),
             suggestionTexts.length > 0 &&
@@ -1269,8 +1369,7 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                 minWidth: 0,
                 textDecoration: 'none',
                 cursor: 'pointer'
-            },
-            title: `Open in VS Code: ${filePath || data.name}`
+            }
         }, labelText)
         : React.createElement('span', {
             key: 'label',
@@ -1442,7 +1541,8 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             marginLeft: `${manualIndent}px`,
             borderRadius: '4px',
             border: 'none',
-            backgroundColor: node.isSelected ? 'rgba(99, 102, 241, 0.18)' : 'transparent',
+            // Only set backgroundColor when selected; let CSS :hover handle hover state
+            ...(node.isSelected ? { backgroundColor: 'rgba(99, 102, 241, 0.18)' } : {}),
             width: 'calc(100% - ' + manualIndent + 'px)',
             minHeight: '32px',
             gap: '0.5rem'
