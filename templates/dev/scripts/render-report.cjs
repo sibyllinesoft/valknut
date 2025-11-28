@@ -199,7 +199,7 @@ function extractEntityNameFromId(entityId) {
   return parts[parts.length - 1] || null;
 }
 
-function cleanRefactoringCandidates(candidates = [], lineNumberLookup = new Map()) {
+function cleanRefactoringCandidates(candidates = [], lineNumberLookup = new Map(), metricsLookup = new Map()) {
   return candidates.map((candidate) => {
     const entityId = normalizeEntityId(candidate.entity_id || '');
     const filePath = normalizePath(candidate.file_path || '');
@@ -210,6 +210,36 @@ function cleanRefactoringCandidates(candidates = [], lineNumberLookup = new Map(
     let lineFromLookup = lineNumberLookup.get(entityId)
       || lineNumberLookup.get(candidate.entity_id)
       || lineNumberLookup.get(`${filePath}:${entityName}`);
+
+    // Look up metrics for enriching structure issues
+    const metrics = metricsLookup.get(entityId)
+      || metricsLookup.get(candidate.entity_id)
+      || metricsLookup.get(`${filePath}:${entityName}`)
+      || {};
+
+    // Enrich issues - add max_nesting_depth to structure issues if missing
+    const issues = (candidate.issues || []).map((issue) => {
+      const category = (issue.category || '').toLowerCase();
+      let contributingFeatures = issue.contributing_features || [];
+
+      // For structure issues, add max_nesting_depth from metrics if not present
+      if (category.includes('struct') && metrics.max_nesting_depth != null) {
+        const hasNesting = contributingFeatures.some(f =>
+          (f.feature_name || '').toLowerCase().includes('nesting')
+        );
+        if (!hasNesting) {
+          contributingFeatures = [
+            ...contributingFeatures,
+            { feature_name: 'max_nesting_depth', value: metrics.max_nesting_depth }
+          ];
+        }
+      }
+
+      return {
+        ...issue,
+        contributing_features: contributingFeatures,
+      };
+    });
 
     return {
       ...candidate,
@@ -223,6 +253,7 @@ function cleanRefactoringCandidates(candidates = [], lineNumberLookup = new Map(
       line_number: candidate.line_number ?? candidate.start_line ?? lineFromLookup ?? null,
       start_line: candidate.start_line ?? candidate.line_number ?? lineFromLookup ?? null,
       score: roundTo(candidate.score ?? 0),
+      issues,
     };
   });
 }
@@ -916,7 +947,7 @@ function buildTemplateData(results) {
   // Build line number and metrics lookups from passes.complexity.detailed_results
   const lineNumberLookup = buildLineNumberLookup(results);
   const metricsLookup = buildMetricsLookup(results);
-  const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates, lineNumberLookup);
+  const cleanedCandidates = cleanRefactoringCandidates(results.refactoring_candidates, lineNumberLookup, metricsLookup);
   const summary = buildSummary(results);
 
   const dictionary = results.code_dictionary || { issues: {}, suggestions: {} };

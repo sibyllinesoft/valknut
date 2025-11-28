@@ -28,7 +28,8 @@
                 "candidates": {{#if refactoring_candidates}}{{{json refactoring_candidates}}}{{else}}[]{{/if}},
                 "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
                 "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}},
-                "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}}
+                "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}},
+                "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{"issues":{},"suggestions":{}}{{/if}}
             }
         </script>
         <script>
@@ -47,6 +48,7 @@
                 const clonePairs = Array.isArray(payload.clone_pairs) ? payload.clone_pairs : [];
                 const docHealthMap = payload.documentation?.file_doc_health || {};
                 const coveragePacks = Array.isArray(payload.coverage_packs) ? payload.coverage_packs : [];
+                const codeDictionary = payload.code_dictionary || { issues: {}, suggestions: {} };
 
                 // Build file-level coverage map from coverage_packs
                 const fileCoverageMap = {};
@@ -286,6 +288,25 @@
                         return v;
                     };
 
+                    // Get color for severity percentage (0-100, higher = worse/more critical)
+                    // Uses badge colors: grey (low), yellow (medium), orange (high), red (critical)
+                    const getSeverityColor = (pct) => {
+                        if (pct === null || pct === undefined) return 'inherit';
+                        if (pct >= 80) return '#dc3545'; // red - critical
+                        if (pct >= 60) return '#fd7e14'; // orange - high concern
+                        if (pct >= 40) return '#ffc107'; // yellow - medium
+                        return '#6c757d'; // grey - low/acceptable
+                    };
+
+                    // Get color for maintainability index (0-100, higher = better health)
+                    const getMaintainabilityColor = (mi) => {
+                        if (mi === null || mi === undefined) return 'inherit';
+                        if (mi >= 65) return '#6c757d'; // grey - good
+                        if (mi >= 40) return '#ffc107'; // yellow - medium
+                        if (mi >= 20) return '#fd7e14'; // orange - high concern
+                        return '#dc3545'; // red - critical
+                    };
+
                     const formatIssue = (issue = {}) => {
                         const severity = typeof issue.severity === 'number' ? issue.severity.toFixed(1) : '—';
                         const category = (issue.category || issue.code || '').toString().toLowerCase();
@@ -293,6 +314,7 @@
                         let summary = issue.summary || '';
 
                         const feats = Array.isArray(issue.contributing_features) ? issue.contributing_features : [];
+
                         const getFeat = (key) => {
                             const m = feats.find(f => String(f.feature_name || '').toLowerCase().includes(key));
                             return m && m.value !== undefined ? Number(m.value) : null;
@@ -300,25 +322,78 @@
 
                         const cyclo = getFeat('cyclomatic');
                         const cognitive = getFeat('cognitive');
+                        const mi = getFeat('maintainability');
+                        const debt = getFeat('technical_debt');
+                        const nesting = getFeat('nesting');
 
+                        // Calculate a normalized severity percentage based on the issue category
+                        // Higher percentage = worse/more critical (like treemap: 100% = critical)
+                        let healthPct = null;
                         if (category.includes('debt')) {
                             title = 'Poor code organization';
+                            healthPct = debt != null ? Math.min(100, debt) : null;
+                            if (!summary) {
+                                summary = debt != null
+                                    ? `Technical debt score ${debt.toFixed(1)} — higher means more restructuring needed`
+                                    : 'Organization/debt exceeds the acceptable baseline';
+                            }
                         } else if (category.includes('maintain')) {
                             title = 'Too much code coupling';
+                            healthPct = mi != null ? Math.max(0, 100 - mi) : null;
+                            if (!summary) {
+                                summary = mi != null
+                                    ? `Maintainability Index ${mi.toFixed(1)} — lower MI suggests tighter coupling; target ≥ 60`
+                                    : 'Maintainability/coupling exceeds the acceptable baseline';
+                            }
                         } else if (category.includes('cognit')) {
                             title = 'Too many code paths';
-                            if (!summary && cognitive != null) summary = `Cognitive complexity ${cognitive.toFixed(0)}`;
+                            healthPct = cognitive != null ? Math.min(100, (cognitive / 15) * 50) : null;
+                            if (!summary && cognitive != null) {
+                                summary = `Cognitive complexity ${cognitive.toFixed(0)} — target ≤ 15 (lower is better)`;
+                            }
                         } else if (category.includes('complex')) {
                             title = 'Too many branch points';
-                            if (!summary && cyclo != null) summary = `Cyclomatic complexity ${cyclo.toFixed(0)}`;
+                            healthPct = cyclo != null ? Math.min(100, (cyclo / 10) * 50) : null;
+                            if (!summary && cyclo != null) {
+                                summary = `Cyclomatic complexity ${cyclo.toFixed(0)} — target ≤ 10 (lower is better)`;
+                            }
                         } else if (category.includes('struct')) {
-                            title = 'Optimize file layout';
+                            title = 'Deep nesting';
+                            if (nesting != null) {
+                                if (nesting <= 3) {
+                                    healthPct = (nesting / 3) * 40;
+                                } else if (nesting <= 6) {
+                                    healthPct = 40 + ((nesting - 3) / 3) * 40;
+                                } else {
+                                    const excess = nesting - 6;
+                                    healthPct = 80 + 20 * (1 - Math.exp(-excess / 3));
+                                }
+                                healthPct = Math.min(100, Math.max(0, healthPct));
+                            }
+                            if (!summary) {
+                                summary = nesting != null
+                                    ? `Nesting depth ${nesting} — target ≤ 3 (lower is better)`
+                                    : 'Deeply nested control flow; consider extracting helper functions';
+                            }
                         } else if (category.includes('coverage')) {
                             title = 'Missing test coverage';
                             if (!summary) summary = 'Add tests for this code path';
                         }
 
-                        return { title, severity, summary };
+                        return { title, severity, summary, healthPct };
+                    };
+
+                    // Get maintainability index from entity's issues contributing_features
+                    const getEntityMaintainability = (entity) => {
+                        if (!entity) return null;
+                        if (entity.maintainability_index != null) return entity.maintainability_index;
+                        const issues = entity.issues || [];
+                        for (const issue of issues) {
+                            const feats = issue.contributing_features || [];
+                            const miFeat = feats.find(f => (f.feature_name || '').toLowerCase().includes('maintainability'));
+                            if (miFeat && miFeat.value != null) return Number(miFeat.value);
+                        }
+                        return null;
                     };
 
                     const buildTooltipHtml = (nodeId, colorVal) => {
@@ -333,8 +408,17 @@
 
                         if (isEntity && node.entity) {
                             const entity = node.entity;
-                            const issues = Array.isArray(entity.issues) ? entity.issues : [];
-                            const suggestions = Array.isArray(entity.suggestions) ? entity.suggestions : [];
+                            const rawIssues = Array.isArray(entity.issues) ? entity.issues : [];
+                            const rawSuggestions = Array.isArray(entity.suggestions) ? entity.suggestions : [];
+
+                            // Format and sort issues by healthPct descending (higher % = worse = first)
+                            const issues = rawIssues
+                                .map(formatIssue)
+                                .sort((a, b) => {
+                                    const aPct = a.healthPct ?? -1;
+                                    const bPct = b.healthPct ?? -1;
+                                    return bPct - aPct;
+                                });
 
                             // Metrics
                             html += '<ul class="tooltip-metrics">';
@@ -345,70 +429,74 @@
                             }
                             html += '</ul>';
 
-                            // Issues
+                            // Issues with color-coded percentages (matching tree panel format)
                             if (issues.length > 0) {
                                 html += '<div class="tooltip-section"><h4>Issues</h4><ul class="tooltip-section-list">';
-                                issues.slice(0, 3).forEach(issue => {
-                                    const fmt = formatIssue(issue);
-                                    html += '<li><div class="issue-heading">' + fmt.title + ' · ' + fmt.severity + '</div>';
-                                    if (fmt.summary) html += '<div class="issue-summary">' + fmt.summary + '</div>';
-                                    html += '</li>';
+                                issues.slice(0, 5).forEach(fmt => {
+                                    const pct = fmt.healthPct;
+                                    const pctColor = getSeverityColor(pct);
+                                    const pctDisplay = pct != null ? Math.round(pct) + '%' : null;
+                                    html += '<li><div class="issue-heading" style="display:flex;justify-content:space-between;gap:0.5rem">';
+                                    html += '<span>' + fmt.title + '</span>';
+                                    if (pctDisplay) {
+                                        html += '<span style="color:' + pctColor + ';font-weight:500">' + pctDisplay + '</span>';
+                                    }
+                                    html += '</div></li>';
                                 });
                                 html += '</ul></div>';
                             }
 
-                            // Suggestions
-                            if (suggestions.length > 0) {
-                                html += '<div class="tooltip-section"><h4>Suggestions</h4><ul class="tooltip-section-list">';
-                                suggestions.slice(0, 2).forEach(sug => {
-                                    const code = sug.code || '';
-                                    const title = sug.title || sug.refactoring_type || code || 'Suggestion';
-                                    html += '<li><div class="issue-heading">' + (code ? code + ' · ' : '') + title + '</div></li>';
-                                });
-                                html += '</ul></div>';
+                            // Suggestions (matching tree panel format, using codeDictionary for friendly names)
+                            if (rawSuggestions.length > 0) {
+                                // Extract unique suggestion texts, looking up from codeDictionary if needed
+                                const suggestionTexts = [...new Set(rawSuggestions.map(s => {
+                                    // First try the suggestion's own summary/title
+                                    let text = s.summary || s.explanation || s.heading || s.title || '';
+                                    // If not found, look up in codeDictionary by code
+                                    if (!text && s.code && codeDictionary.suggestions) {
+                                        const dictEntry = codeDictionary.suggestions[s.code];
+                                        if (dictEntry) {
+                                            text = dictEntry.summary || dictEntry.title || '';
+                                        }
+                                    }
+                                    // Last resort: clean up refactoring_type (remove trailing numbers)
+                                    if (!text && s.refactoring_type) {
+                                        text = s.refactoring_type.replace(/_\d+$/, '').replace(/_/g, ' ');
+                                    }
+                                    return (text || '').trim();
+                                }).filter(Boolean))];
+
+                                if (suggestionTexts.length > 0) {
+                                    html += '<div class="tooltip-section"><h4>Suggested Actions</h4><ul class="tooltip-section-list">';
+                                    suggestionTexts.slice(0, 3).forEach(txt => {
+                                        html += '<li><div class="issue-summary">' + txt + '</div></li>';
+                                    });
+                                    html += '</ul></div>';
+                                }
                             }
                         } else if (isFile && node.entities.length > 0) {
-                            // File-level: aggregate severity breakdown
-                            const severityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
-                            node.entities.forEach(e => {
-                                (e.issues || []).forEach(issue => {
-                                    const sev = issue.severity || 0;
-                                    if (sev >= 2) severityCounts.critical++;
-                                    else if (sev >= 1.5) severityCounts.high++;
-                                    else if (sev >= 1) severityCounts.medium++;
-                                    else severityCounts.low++;
-                                });
-                            });
-
+                            // File-level tooltip
                             html += '<ul class="tooltip-metrics">';
                             html += '<li><span class="metric-label">Entities</span><span class="metric-value">' + node.entities.length + '</span></li>';
                             html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
                             html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
                             html += '</ul>';
 
-                            const severityList = [
-                                { key: 'critical', label: 'Critical', value: severityCounts.critical },
-                                { key: 'high', label: 'High', value: severityCounts.high },
-                                { key: 'medium', label: 'Medium', value: severityCounts.medium },
-                                { key: 'low', label: 'Low', value: severityCounts.low },
-                            ].filter(item => item.value > 0);
-
-                            if (severityList.length > 0) {
-                                html += '<div class="tooltip-section"><h4>Severity Breakdown</h4><ul class="tooltip-section-list">';
-                                severityList.forEach(item => {
-                                    html += '<li><div class="issue-heading">' + item.label + ' · ' + item.value + '</div></li>';
-                                });
-                                html += '</ul></div>';
-                            }
-
-                            // Top entities
-                            const topEntities = node.entities.slice(0, 3);
+                            // Top entities with color-coded severity (inverted MI: 100% = bad, 0% = good)
+                            const topEntities = node.entities.slice(0, 5);
                             if (topEntities.length > 0) {
                                 html += '<div class="tooltip-section"><h4>Top Entities</h4><ul class="tooltip-section-list">';
                                 topEntities.forEach(entity => {
-                                    const score = entity.score != null ? renderValue(entity.score) : '—';
-                                    html += '<li><div class="issue-heading">' + (entity.name || 'Entity') + '</div>';
-                                    html += '<div class="issue-summary">Score ' + score + '</div></li>';
+                                    const mi = getEntityMaintainability(entity);
+                                    // Invert MI to severity: 100% MI (good) = 0% severity, 0% MI (bad) = 100% severity
+                                    const severityPct = mi != null ? Math.max(0, 100 - mi) : null;
+                                    const severityColor = getSeverityColor(severityPct);
+                                    const severityDisplay = severityPct != null ? Math.round(severityPct) + '%' : null;
+                                    html += '<li><div class="issue-heading">' + (entity.name || 'Entity');
+                                    if (severityDisplay) {
+                                        html += ' · <span style="color:' + severityColor + '">' + severityDisplay + '</span>';
+                                    }
+                                    html += '</div></li>';
                                 });
                                 html += '</ul></div>';
                             }

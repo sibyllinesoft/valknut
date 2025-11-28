@@ -1058,8 +1058,10 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                             { className: 'tooltip-section-list' },
                             topEntities.map((entity) => {
                                 const mi = getEntityMaintainability(entity);
-                                const miColor = getMaintainabilityColor(mi);
-                                const miDisplay = mi != null ? `${Math.round(mi)}%` : null;
+                                // Invert MI to severity: 100% MI (good) = 0% severity, 0% MI (bad) = 100% severity
+                                const severityPct = mi != null ? Math.max(0, 100 - mi) : null;
+                                const severityColor = getSeverityColor(severityPct);
+                                const severityDisplay = severityPct != null ? `${Math.round(severityPct)}%` : null;
                                 return React.createElement(
                                     'li',
                                     { key: entity.id },
@@ -1068,10 +1070,10 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                                         style: { display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }
                                     }, [
                                         React.createElement('span', { key: 'name' }, entity.name),
-                                        miDisplay && React.createElement('span', {
-                                            key: 'mi',
-                                            style: { color: miColor, fontWeight: 500 }
-                                        }, miDisplay)
+                                        severityDisplay && React.createElement('span', {
+                                            key: 'sev',
+                                            style: { color: severityColor, fontWeight: 500 }
+                                        }, severityDisplay)
                                     ].filter(Boolean))
                                 );
                             })

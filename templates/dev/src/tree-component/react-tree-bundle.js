@@ -29111,17 +29111,6 @@ Check the top-level render call using <` + parentName + ">.";
       return "#ffc107";
     return "#6c757d";
   };
-  var getMaintainabilityColor = (mi) => {
-    if (mi === null || mi === undefined)
-      return "inherit";
-    if (mi >= 65)
-      return "#6c757d";
-    if (mi >= 40)
-      return "#ffc107";
-    if (mi >= 20)
-      return "#fd7e14";
-    return "#dc3545";
-  };
   var ccPct = (value) => value != null ? value / 10 * 100 : null;
   var cogPct = (value, lang = "default") => {
     const base = ["c", "cpp", "c++", "objc", "objective-c"].includes((lang || "").toLowerCase()) ? 25 : 15;
@@ -29783,17 +29772,18 @@ Check the top-level render call using <` + parentName + ">.";
         const topEntities = (data.children || []).filter((child) => child.type === "entity").slice(0, 3);
         return import_react5.default.createElement("div", null, import_react5.default.createElement("div", { className: "tooltip-name" }, data.name || "File"), severityList.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Severity Breakdown"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, severityList.map((item) => import_react5.default.createElement("li", { key: item.key }, import_react5.default.createElement("div", { className: "issue-heading" }, `${item.label} · ${item.value}`))))), docIssueCount != null && docIssueCount > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Documentation"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, import_react5.default.createElement("li", { key: "doc-issues" }, import_react5.default.createElement("div", { className: "issue-heading" }, `${docIssueCount} undocumented items`)))), topEntities.length > 0 && import_react5.default.createElement("div", { className: "tooltip-section" }, import_react5.default.createElement("h4", null, "Top Entities"), import_react5.default.createElement("ul", { className: "tooltip-section-list" }, topEntities.map((entity) => {
           const mi = getEntityMaintainability(entity);
-          const miColor = getMaintainabilityColor(mi);
-          const miDisplay = mi != null ? `${Math.round(mi)}%` : null;
+          const severityPct = mi != null ? Math.max(0, 100 - mi) : null;
+          const severityColor = getSeverityColor(severityPct);
+          const severityDisplay = severityPct != null ? `${Math.round(severityPct)}%` : null;
           return import_react5.default.createElement("li", { key: entity.id }, import_react5.default.createElement("div", {
             className: "issue-heading",
             style: { display: "flex", justifyContent: "space-between", gap: "0.5rem" }
           }, [
             import_react5.default.createElement("span", { key: "name" }, entity.name),
-            miDisplay && import_react5.default.createElement("span", {
-              key: "mi",
-              style: { color: miColor, fontWeight: 500 }
-            }, miDisplay)
+            severityDisplay && import_react5.default.createElement("span", {
+              key: "sev",
+              style: { color: severityColor, fontWeight: 500 }
+            }, severityDisplay)
           ].filter(Boolean)));
         }))));
       }
@@ -31714,5 +31704,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=73F0A58A2E3BA73E64756E2164756E21
+//# debugId=BAE054A62C66A72264756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
