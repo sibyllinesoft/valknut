@@ -467,11 +467,13 @@ impl AnalysisResults {
     fn build_coverage_map(
         coverage_packs: &[crate::detectors::coverage::CoveragePack],
     ) -> (
-        std::collections::HashMap<String, f64>,                          // file -> coverage %
-        std::collections::HashMap<(String, usize, usize), f64>,          // (file, start, end) -> coverage %
+        std::collections::HashMap<String, f64>, // file -> coverage %
+        std::collections::HashMap<(String, usize, usize), f64>, // (file, start, end) -> coverage %
     ) {
-        let mut file_coverage: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-        let mut entity_coverage: std::collections::HashMap<(String, usize, usize), f64> = std::collections::HashMap::new();
+        let mut file_coverage: std::collections::HashMap<String, f64> =
+            std::collections::HashMap::new();
+        let mut entity_coverage: std::collections::HashMap<(String, usize, usize), f64> =
+            std::collections::HashMap::new();
 
         for pack in coverage_packs {
             let file_path = pack.path.display().to_string();

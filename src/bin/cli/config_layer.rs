@@ -116,13 +116,9 @@ pub fn build_layered_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<Valknu
     let cli_overrides = ValknutConfig::from_cli_args(args);
     config.merge_with(cli_overrides);
 
-    // Ensure coverage analysis is enabled/disabled based on CLI flags
-    // This is needed because ValknutConfig::merge_with doesn't merge analysis settings
+    // Respect merged coverage setting; only force-disable when CLI requests it.
     if args.coverage.no_coverage {
         config.analysis.enable_coverage_analysis = false;
-    } else {
-        // Default to enabled, especially if coverage_file is provided
-        config.analysis.enable_coverage_analysis = true;
     }
 
     config
@@ -138,6 +134,31 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
     fn merge_with(&mut self, other: ValknutConfig) {
         self.coverage.merge_with(other.coverage);
         self.denoise.merge_with(other.denoise);
+
+        // Analysis module toggles (other wins)
+        self.analysis.enable_scoring = other.analysis.enable_scoring;
+        self.analysis.enable_graph_analysis = other.analysis.enable_graph_analysis;
+        self.analysis.enable_lsh_analysis = other.analysis.enable_lsh_analysis;
+        self.analysis.enable_refactoring_analysis = other.analysis.enable_refactoring_analysis;
+        self.analysis.enable_coverage_analysis = other.analysis.enable_coverage_analysis;
+        self.analysis.enable_structure_analysis = other.analysis.enable_structure_analysis;
+        self.analysis.enable_names_analysis = other.analysis.enable_names_analysis;
+        self.analysis.confidence_threshold = other.analysis.confidence_threshold;
+
+        if other.analysis.max_files != 0 {
+            self.analysis.max_files = other.analysis.max_files;
+        }
+
+        // Replace include/exclude/ignore patterns when explicitly provided
+        if !other.analysis.include_patterns.is_empty() {
+            self.analysis.include_patterns = other.analysis.include_patterns.clone();
+        }
+        if !other.analysis.exclude_patterns.is_empty() {
+            self.analysis.exclude_patterns = other.analysis.exclude_patterns.clone();
+        }
+        if !other.analysis.ignore_patterns.is_empty() {
+            self.analysis.ignore_patterns = other.analysis.ignore_patterns.clone();
+        }
 
         if other.io.cache_dir.is_some() {
             self.io.cache_dir = other.io.cache_dir;
@@ -503,19 +524,19 @@ impl FromCliArgs<AnalyzeArgs> for api_config::AnalysisConfig {
         config.modules.structure = !args.analysis_control.no_structure;
         config.modules.refactoring = !args.analysis_control.no_refactoring;
         config.modules.dependencies = !args.analysis_control.no_impact;
-        // config.modules.duplicates = !args.analysis_control.no_lsh; // Clone analysis (LSH) disabled by default for performance
+
+        // Clone detection: default to whatever the config file specified; only
+        // change when the user explicitly toggles it via CLI flags.
         if args.analysis_control.no_lsh {
             config.modules.duplicates = false;
-        } else {
+        } else if args.clone_detection.semantic_clones
+            || args.clone_detection.denoise
+            || args.advanced_clone.no_apted_verify
+            || args.advanced_clone.apted_verify
+        {
             config.modules.duplicates = true;
-            if args.clone_detection.semantic_clones
-                || args.clone_detection.denoise
-                || args.advanced_clone.no_apted_verify
-                || args.advanced_clone.apted_verify
-            {
-                config.modules.duplicates = true;
-            }
         }
+
         config.modules.coverage = !args.coverage.no_coverage;
         config.modules.complexity = !args.analysis_control.no_complexity;
 

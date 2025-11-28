@@ -584,10 +584,7 @@ fn parse_tarpaulin_json(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
 fn extract_tarpaulin_path(file_entry: &Value) -> Option<PathBuf> {
     if let Some(path_array) = file_entry.get("path").and_then(|v| v.as_array()) {
         // Path is array of segments: ["/", "home", "user", "project", "src", "lib.rs"]
-        let segments: Vec<&str> = path_array
-            .iter()
-            .filter_map(|s| s.as_str())
-            .collect();
+        let segments: Vec<&str> = path_array.iter().filter_map(|s| s.as_str()).collect();
 
         if segments.is_empty() {
             return None;
@@ -951,7 +948,9 @@ mod tests {
         assert_eq!(files.len(), 1);
         // Absolute path normalized - leading slash removed by normalize_report_path
         let path = &files[0].path;
-        assert!(path.to_string_lossy().contains("home/user/project/src/main.rs"));
+        assert!(path
+            .to_string_lossy()
+            .contains("home/user/project/src/main.rs"));
     }
 
     #[test]
