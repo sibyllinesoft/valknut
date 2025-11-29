@@ -12,6 +12,7 @@ fn candidate(path: &str, severity: f64, priority: Priority) -> RefactoringCandid
         name: "entity".to_string(),
         file_path: path.to_string(),
         line_range: Some((10, 40)),
+        coverage_percentage: None,
         priority,
         score: severity * 20.0,
         confidence: 0.8,

@@ -1,390 +1,53 @@
-name: Documentation
+name: docs
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  release:
-    types: [published]
+    branches: [main]
+  workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  # Generate and validate documentation
-  generate-docs:
-    name: Generate Documentation
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: docs/requirements.txt
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: docs-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install Nightly Rust for rustdoc
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Generate rustdoc
+      - name: Install MkDocs
         run: |
-          echo "📚 Generating Rust documentation..."
-          RUSTDOCFLAGS="--enable-index-page -Zunstable-options --document-private-items" \
-            cargo +nightly doc --all-features --no-deps --workspace
-          
-          # Create index page
-          echo '<meta http-equiv="refresh" content="0; url=valknut_rs">' > target/doc/index.html
+          python -m pip install --upgrade pip
+          pip install -r docs/requirements.txt
 
-      - name: Generate API documentation
-        run: |
-          echo "🔧 Generating API documentation..."
-          
-          # Create API documentation structure
-          mkdir -p docs/api
-          
-          # Generate module documentation
-          find src/ -name "*.rs" -type f | while read file; do
-            module_name=$(basename "$file" .rs)
-            echo "Documenting module: $module_name"
-            
-            # Extract public APIs and create markdown
-            cat > "docs/api/${module_name}.md" << EOF
-          # ${module_name^} Module API
-          
-          Generated from: \`$file\`
-          
-          ## Public APIs
-          
-          \`\`\`rust
-          $(grep -E "^pub (fn|struct|enum|trait|type|const|static)" "$file" || echo "// No public APIs found")
-          \`\`\`
-          
-          ## Documentation
-          
-          See [rustdoc](../target/doc/valknut_rs/${module_name}/index.html) for detailed documentation.
-          EOF
-          done
+      - name: Build site
+        run: mkdocs build
 
-      - name: Create documentation summary
-        run: |
-          echo "📋 Creating documentation summary..."
-          
-          # Count documentation coverage
-          TOTAL_ITEMS=$(grep -r "^pub " src/ --include="*.rs" | wc -l)
-          DOCUMENTED_ITEMS=$(grep -r "^/// " src/ --include="*.rs" | wc -l)
-          
-          # Install bc for calculations
-          sudo apt-get update && sudo apt-get install -y bc
-          
-          if [ "$TOTAL_ITEMS" -gt 0 ]; then
-            COVERAGE=$(echo "scale=1; $DOCUMENTED_ITEMS * 100 / $TOTAL_ITEMS" | bc -l)
-          else
-            COVERAGE="0.0"
-          fi
-          
-          # Create documentation report
-          cat > docs/coverage-report.md << EOF
-          # Documentation Coverage Report
-          
-          Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          
-          ## Summary
-          
-          - **Total Public Items**: $TOTAL_ITEMS
-          - **Documented Items**: $DOCUMENTED_ITEMS  
-          - **Coverage**: ${COVERAGE}%
-          
-          ## Guidelines
-          
-          - All public APIs should have documentation
-          - Include examples for complex functions
-          - Document safety requirements for unsafe code
-          - Keep documentation up to date with code changes
-          
-          ## Links
-          
-          - [Full API Documentation](target/doc/valknut_rs/index.html)
-          - [Module Documentation](api/)
-          - [Performance Benchmarks](../benches/)
-          EOF
-          
-          echo "Documentation coverage: ${COVERAGE}%"
-
-      - name: Validate documentation links
-        run: |
-          echo "🔗 Validating documentation links..."
-          
-          # Check for broken internal links
-          find docs/ -name "*.md" -type f | while read file; do
-            echo "Checking links in: $file"
-            
-            # Extract markdown links and check if files exist
-            grep -o '\[.*\](.*\.md)' "$file" | sed 's/.*](\(.*\))/\1/' | while read link; do
-              if [[ "$link" =~ ^http ]]; then
-                continue  # Skip external links for now
-              fi
-              
-              target_file="docs/$link"
-              if [ ! -f "$target_file" ]; then
-                echo "⚠️ Broken link in $file: $link"
-              fi
-            done
-          done
-
-      - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: documentation
-          path: |
-            target/doc/
-            docs/
-            
-  # Deploy documentation to GitHub Pages
-  deploy-docs:
-    name: Deploy Documentation
-    needs: generate-docs
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
-    steps:
-      - name: Download documentation
-        uses: actions/download-artifact@v4
-        with:
-          name: documentation
-          path: ./docs-output
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        continue-on-error: true
-
-      - name: Upload to GitHub Pages
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs-output/target/doc
-        continue-on-error: true
+          path: site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
-        id: deployment
+        id: deploy
         uses: actions/deploy-pages@v4
-        continue-on-error: true
-
-  # Generate changelog and release notes
-  changelog:
-    name: Generate Changelog
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        run: |
-          echo "📝 Generating changelog..."
-          
-          # Get the latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-          
-          echo "Latest tag: $LATEST_TAG"
-          echo "Previous tag: $PREVIOUS_TAG"
-          
-          # Generate changelog since last tag
-          if [ -n "$PREVIOUS_TAG" ]; then
-            git log --pretty=format:"- %s (%h)" "${PREVIOUS_TAG}..HEAD" > CHANGELOG_LATEST.md
-          else
-            git log --pretty=format:"- %s (%h)" > CHANGELOG_LATEST.md
-          fi
-          
-          echo "## Changes in $LATEST_TAG" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          cat CHANGELOG_LATEST.md >> RELEASE_NOTES.md
-
-      - name: Upload changelog
-        uses: actions/upload-artifact@v4
-        with:
-          name: changelog
-          path: |
-            CHANGELOG_LATEST.md
-            RELEASE_NOTES.md
-
-  # Performance documentation
-  perf-docs:
-    name: Performance Documentation
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Generate performance report
-        run: |
-          echo "⚡ Generating performance documentation..."
-          
-          # Run benchmarks and capture results
-          cargo bench --features benchmarks -- --output-format json > bench-results.json || true
-          
-          # Create performance documentation
-          mkdir -p docs/performance
-          
-          cat > docs/performance/README.md << 'EOF'
-          # Performance Documentation
-          
-          This directory contains performance benchmarks and optimization guides for Valknut.
-          
-          ## Benchmarking
-          
-          Run benchmarks with:
-          ```bash
-          cargo bench --features benchmarks
-          ```
-          
-          ## SIMD Optimizations
-          
-          Valknut uses SIMD instructions for performance-critical operations:
-          - Statistical calculations in `src/core/scoring.rs`
-          - Feature vector operations in `src/core/featureset.rs`
-          - Batch processing in analysis pipelines
-          
-          Enable SIMD with:
-          ```bash
-          cargo build --features simd --release
-          ```
-          
-          ## Parallel Processing
-          
-          Parallel processing is enabled by default using Rayon:
-          - File discovery and parsing
-          - Feature extraction pipelines
-          - Batch analysis operations
-          
-          Control thread count:
-          ```bash
-          RAYON_NUM_THREADS=8 cargo run -- analyze project/
-          ```
-          
-          ## Memory Optimization
-          
-          For memory-constrained environments:
-          - Use streaming processing: `--stream`
-          - Reduce concurrency: `RAYON_NUM_THREADS=1`
-          - Enable compact mode: `--compact`
-          
-          ## Profiling
-          
-          Profile with:
-          ```bash
-          cargo build --release --features jemalloc
-          perf record ./target/release/valknut analyze large-project/
-          perf report
-          ```
-          EOF
-
-      - name: Upload performance docs
-        uses: actions/upload-artifact@v4
-        with:
-          name: performance-docs
-          path: docs/performance/
-
-  # Documentation quality check
-  docs-quality:
-    name: Documentation Quality Check
-    needs: generate-docs
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Download documentation
-        uses: actions/download-artifact@v4
-        with:
-          name: documentation
-
-      - name: Check documentation quality
-        run: |
-          echo "🔍 Checking documentation quality..."
-          
-          # Check for missing documentation
-          if [ -f "docs/coverage-report.md" ]; then
-            # Install bc for calculations
-            sudo apt-get update && sudo apt-get install -y bc
-            
-            # Extract coverage percentage (handles both "Coverage:" and "**Coverage**:" formats)
-            COVERAGE=$(grep -E "(Coverage|coverage):" docs/coverage-report.md | grep -o '[0-9.]*%' | head -1 | sed 's/%//')
-            
-            if [ -z "$COVERAGE" ]; then
-              echo "⚠️ Could not parse coverage from report, setting to 0"
-              COVERAGE="0"
-            fi
-            
-            echo "Documentation coverage: $COVERAGE%"
-            
-            # Set minimum coverage threshold  
-            MIN_COVERAGE=50  # Lowered from 80 to be more realistic
-            
-            if (( $(echo "$COVERAGE >= $MIN_COVERAGE" | bc -l) )); then
-              echo "✅ Documentation coverage ($COVERAGE%) meets minimum requirement ($MIN_COVERAGE%)"
-            else
-              echo "❌ Documentation coverage ($COVERAGE%) below minimum requirement ($MIN_COVERAGE%)"
-              # Don't fail for now, just warn
-              echo "::warning::Documentation coverage is below target"
-            fi
-          else
-            echo "⚠️ Coverage report not found"
-            echo "::warning::Documentation coverage report could not be generated"
-          fi
-          
-          # Check for common documentation issues
-          echo "Checking for documentation issues..."
-          
-          if find docs/ -name "*.md" -exec grep -l "TODO\|FIXME\|XXX" {} \; | head -1; then
-            echo "⚠️ Found TODO/FIXME items in documentation"
-          fi
-          
-          echo "✅ Documentation quality check completed"
-
-  # Documentation summary
-  docs-summary:
-    name: Documentation Summary
-    needs: [generate-docs, docs-quality, perf-docs]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Documentation summary
-        run: |
-          echo "## Documentation Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| API Documentation | ${{ needs.generate-docs.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Quality Check | ${{ needs.docs-quality.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Performance Docs | ${{ needs.perf-docs.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "📚 Documentation deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
-          fi

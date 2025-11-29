@@ -15,6 +15,12 @@ Complete reference for the Valknut command-line interface.
 - [Quality Gates](#quality-gates)
 - [Examples](#examples)
 
+<div id="analysis-commands"></div>
+<div id="configuration-commands"></div>
+<div id="information-commands"></div>
+<div id="integration-commands"></div>
+<div id="doc-audit---documentation-coverage"></div>
+
 ## Overview
 
 Valknut provides a rich CLI interface for comprehensive code analysis. The main entry point is the `analyze` command, with additional commands for configuration management and integration.
@@ -34,6 +40,8 @@ Available across all commands:
 | `--survey-verbosity LEVEL` | Set survey invitation verbosity level [low, medium, high, maximum] |
 
 ## Commands
+
+## Analysis Commands {#analysis-commands}
 
 ### `analyze` - Comprehensive Code Analysis
 
@@ -139,7 +147,7 @@ valknut analyze src crates --format html --semantic-clones --denoise --coverage-
 - `clone_analysis.clone_pairs` & `coverage_packs`: remain unchanged; shown in Clones and Coverage tabs.
 ```
 
-### Configuration Commands
+## Configuration Commands {#configuration-commands}
 
 #### `init-config` - Initialize Configuration File
 
@@ -175,7 +183,7 @@ Output the default configuration in YAML format.
 valknut print-default-config
 ```
 
-### Information Commands
+## Information Commands {#information-commands}
 
 #### `list-languages` - List Supported Languages
 
@@ -191,7 +199,7 @@ Shows:
 - Support status (Full/Experimental)
 - Available features
 
-#### `doc-audit` - Documentation Coverage
+#### `doc-audit` - Documentation Coverage {#doc-audit---documentation-coverage}
 
 Audit source files for missing docstrings or doc comments, verify README coverage
 in complex directories, and flag READMEs that may be stale.
@@ -220,7 +228,7 @@ valknut doc-audit --strict --format json --ignore-dir node_modules
 
 Doc audits ship with sensible defaults that skip common test paths (e.g., `**/tests/**`, `**/*_test.*`); add more with `--ignore` or a config file when needed.
 
-### Integration Commands
+## Integration Commands {#integration-commands}
 
 #### `mcp-stdio` - MCP Server for IDE Integration
 

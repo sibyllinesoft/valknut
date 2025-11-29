@@ -759,56 +759,63 @@ struct FileCandidate {
 
 /// Check if a file path indicates it's a test file
 fn is_test_file(path: &str) -> bool {
-    // Common test file patterns
-    if path.contains("/test/") || path.contains("/tests/") {
+    let normalized = path.replace('\\', "/");
+    let lower = normalized.to_lowercase();
+
+    // Directory-based markers
+    const DIR_MARKERS: [&str; 4] = ["/test/", "/tests/", "/__tests__/", "/spec/"];
+    if DIR_MARKERS.iter().any(|marker| lower.contains(marker)) {
         return true;
     }
 
-    // Test file naming patterns
-    if path.ends_with("_test.rs")
-        || path.ends_with("_test.py")
-        || path.ends_with("_test.js")
-        || path.ends_with("_test.ts")
-        || path.ends_with(".test.js")
-        || path.ends_with(".test.ts")
-        || path.ends_with(".test.tsx")
-        || path.ends_with(".test.jsx")
-        || path.ends_with("_spec.js")
-        || path.ends_with("_spec.ts")
-        || path.ends_with(".spec.js")
-        || path.ends_with(".spec.ts")
-        || path.ends_with("_test.go")
-        || path.ends_with("_test.java")
-        || path.ends_with("_test.cpp")
-        || path.ends_with("_test.c")
-        || path.ends_with("Test.java")
-        || path.ends_with("Tests.java")
-        || (path.contains("Test") && path.ends_with(".java"))
+    // Leading path components that typically house tests
+    const DIR_PREFIXES: [&str; 3] = ["tests/", "test/", "spec/"];
+    if DIR_PREFIXES.iter().any(|prefix| lower.starts_with(prefix)) {
+        return true;
+    }
+
+    // File-name driven patterns (lowercased for case-insensitive matches)
+    const SUFFIXES: [&str; 16] = [
+        "_test.rs",
+        "_test.py",
+        "_test.js",
+        "_test.ts",
+        ".test.js",
+        ".test.ts",
+        ".test.tsx",
+        ".test.jsx",
+        "_spec.js",
+        "_spec.ts",
+        ".spec.js",
+        ".spec.ts",
+        "_test.go",
+        "_test.java",
+        "_test.cpp",
+        "_test.c",
+    ];
+    if SUFFIXES.iter().any(|suffix| lower.ends_with(suffix)) {
+        return true;
+    }
+
+    // Java naming conventions rely on original casing
+    if normalized.ends_with("Test.java")
+        || normalized.ends_with("Tests.java")
+        || (normalized.ends_with(".java") && normalized.contains("Test"))
     {
         return true;
     }
 
-    // Rust test module files
-    if path.contains("tests.rs") && !path.ends_with("/tests.rs") {
+    // Rust in-module tests (e.g., src/foo/tests.rs), but ignore the top-level tests.rs file
+    if lower.contains("tests.rs") && !lower.ends_with("/tests.rs") {
         return true;
     }
 
-    // Python test patterns
-    if path.starts_with("test_")
-        || path.contains("/test_")
-        || path == "conftest.py"
-        || path.ends_with("/conftest.py")
+    // Python conventions
+    if lower.starts_with("test_")
+        || lower.contains("/test_")
+        || lower.ends_with("/conftest.py")
+        || lower == "conftest.py"
     {
-        return true;
-    }
-
-    // JavaScript/TypeScript test patterns
-    if path.contains("/__tests__/") || path.contains("/spec/") {
-        return true;
-    }
-
-    // Common test directory patterns
-    if path.starts_with("tests/") || path.starts_with("test/") || path.starts_with("spec/") {
         return true;
     }
 

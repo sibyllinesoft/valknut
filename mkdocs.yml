@@ -1,0 +1,55 @@
+site_name: Valknut Docs
+site_description: Documentation for the Valknut code analysis toolkit
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - toc.integrate
+markdown_extensions:
+  - admonition
+  - attr_list
+  - codehilite
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+extra_css:
+  - themes/sibylline.css
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quickstart: quickstart.md
+      - Installation: README_INSTALLATION.md
+      - CLI Usage: CLI_USAGE.md
+      - Config Guide: CONFIG_GUIDE.md
+      - Quality Gates: QUALITY_GATES_GUIDE.md
+      - Coverage How-To: coverage.md
+  - Architecture:
+      - Architecture Deep Dive: ARCHITECTURE_DEEP_DIVE.md
+      - Agent Usage: AGENT_USAGE_GUIDE.md
+      - Template System: TEMPLATE_SYSTEM_README.md
+      - Metrics Reference: metrics.md
+  - Operations:
+      - CI Local Testing: CI_LOCAL_TESTING.md
+      - Benchmarking: BENCHMARKING.md
+      - Homebrew Setup: setup/HOMEBREW.md
+  - Reference:
+      - CLI Reference: cli_reference.md
+      - Config Reference: config_reference.md
+      - Refactoring Playbook: refactoring_playbook.md
+      - MCP Roadmap: mcp/MCP_IMPLEMENTATION_ROADMAP.md
+      - Archive Snapshot: archive/IMPLEMENTATION_SUMMARY.md
