@@ -15,22 +15,232 @@
             <span class="clone-metric-card__value">{{summary.refactoring_needed}}</span>
         </div>
         <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Health Score</span>
-            <span class="clone-metric-card__value">
-                {{#if summary.code_health_score}}{{percentage summary.code_health_score "1"}}%{{else}}N/A{{/if}}
-            </span>
-        </div>
-        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
-            <span class="clone-metric-card__label">Doc Health</span>
-            <span class="clone-metric-card__value">
-                {{#if summary.doc_health_score}}{{percentage summary.doc_health_score "1"}}%{{else}}N/A{{/if}}
-            </span>
-        </div>
-        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Doc Issues</span>
             <span class="clone-metric-card__value">
                 {{#if summary.doc_issue_count}}{{summary.doc_issue_count}}{{else}}0{{/if}}
             </span>
         </div>
     </div>
+
+    {{#if refactoring_candidates}}
+    <div class="health-gauges" id="health-gauges-container" style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:1rem;margin-top:1.5rem;padding:1rem;border-radius:12px;">
+    </div>
+    <div id="health-tooltip" class="valknut-tooltip" style="display:none;position:fixed;pointer-events:none;z-index:9999;max-width:280px;"></div>
+    <script id="health-candidates-data" type="application/json">{{{json refactoring_candidates}}}</script>
+    <script id="health-doc-score" type="application/json">{{#if health_metrics.doc_health_score}}{{health_metrics.doc_health_score}}{{else}}null{{/if}}</script>
+    <script>
+    (function() {
+        const dataEl = document.getElementById('health-candidates-data');
+        const docScoreEl = document.getElementById('health-doc-score');
+        const container = document.getElementById('health-gauges-container');
+        const tooltipEl = document.getElementById('health-tooltip');
+        if (!dataEl || !container) return;
+
+        let candidates;
+        try {
+            candidates = JSON.parse(dataEl.textContent || '[]');
+        } catch (e) {
+            return;
+        }
+
+        let docHealthScore = null;
+        try {
+            docHealthScore = JSON.parse(docScoreEl?.textContent || 'null');
+        } catch (e) {}
+
+        if (!candidates.length) return;
+
+        // Tooltip descriptions for each metric (all as health: higher = better)
+        const tooltipInfo = {
+            'Health': {
+                title: 'Overall Health',
+                desc: 'Average health across all metrics. Higher is better.',
+                calc: 'Average of all category health scores.'
+            },
+            'Maintainability': {
+                title: 'Maintainability Health',
+                desc: 'How easy the code is to maintain and modify. Higher is better.',
+                calc: 'Based on maintainability index, code duplication, and coupling.'
+            },
+            'Complexity': {
+                title: 'Complexity Health',
+                desc: 'Code simplicity score. Higher means less complex.',
+                calc: 'Inverse of cyclomatic complexity (branches, loops, decisions).'
+            },
+            'Cognitive': {
+                title: 'Cognitive Health',
+                desc: 'How easy the code is for humans to understand. Higher is better.',
+                calc: 'Inverse of cognitive load from nesting and control flow.'
+            },
+            'Structure': {
+                title: 'Structure Health',
+                desc: 'Code organization quality. Higher means better structured.',
+                calc: 'Based on file size, function length, and nesting depth.'
+            },
+            'Debt': {
+                title: 'Debt Health',
+                desc: 'Freedom from technical debt. Higher is better.',
+                calc: 'Inverse of accumulated complexity, coupling, and code smells.'
+            },
+            'Docs': {
+                title: 'Documentation Health',
+                desc: 'How well the code is documented. Higher is better.',
+                calc: 'Percentage of public APIs with documentation.'
+            }
+        };
+
+        // Compute average severity per category from entity issues
+        const categoryTotals = { maintainability: [], complexity: [], cognitive: [], structure: [], debt: [] };
+
+        candidates.forEach(entity => {
+            const issues = entity.issues || [];
+            issues.forEach(issue => {
+                const cat = (issue.category || '').toLowerCase();
+                const sev = typeof issue.severity === 'number' ? issue.severity : null;
+                if (sev !== null) {
+                    if (cat.includes('maintain')) categoryTotals.maintainability.push(sev);
+                    else if (cat.includes('complex') && !cat.includes('cognit')) categoryTotals.complexity.push(sev);
+                    else if (cat.includes('cognit')) categoryTotals.cognitive.push(sev);
+                    else if (cat.includes('struct')) categoryTotals.structure.push(sev);
+                    else if (cat.includes('debt')) categoryTotals.debt.push(sev);
+                }
+            });
+        });
+
+        const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+        // Health metrics (higher = better): convert severity to health
+        const metrics = [
+            { label: 'Maintainability', health: avg(categoryTotals.maintainability) !== null ? 100 - avg(categoryTotals.maintainability) : null },
+            { label: 'Complexity', health: avg(categoryTotals.complexity) !== null ? 100 - avg(categoryTotals.complexity) : null },
+            { label: 'Cognitive', health: avg(categoryTotals.cognitive) !== null ? 100 - avg(categoryTotals.cognitive) : null },
+            { label: 'Structure', health: avg(categoryTotals.structure) !== null ? 100 - avg(categoryTotals.structure) : null },
+            { label: 'Debt', health: avg(categoryTotals.debt) !== null ? 100 - avg(categoryTotals.debt) : null },
+        ].filter(m => m.health !== null);
+
+        // Add docs score if present (already a health score)
+        if (typeof docHealthScore === 'number' && !isNaN(docHealthScore)) {
+            metrics.push({ label: 'Docs', health: docHealthScore });
+        }
+
+        if (!metrics.length) {
+            container.style.display = 'none';
+            return;
+        }
+
+        // Overall health
+        const overallHealth = metrics.reduce((sum, m) => sum + m.health, 0) / metrics.length;
+
+        // Interpolate color for health gauges using same scale as treemap
+        // Treemap uses severity (0=good, 100=bad): gray -> brown -> dark red
+        // Health is inverted (100=good, 0=bad), so we map health to severity first
+        const getHealthColor = (health) => {
+            // Convert health (100=good) to severity (0=good) for color lookup
+            const severity = 100 - health;
+            const t = Math.max(0, Math.min(1, severity / 100));
+
+            // Colorscale: [0, '#6b7280'], [0.5, '#8b4513'], [1, '#991b1b']
+            // gray (107,114,128) -> brown (139,69,19) -> dark red (153,27,27)
+            const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+
+            let r, g, b;
+            if (t <= 0.5) {
+                // gray to brown (t: 0 -> 0.5 maps to 0 -> 1)
+                const localT = t * 2;
+                r = lerp(107, 139, localT);
+                g = lerp(114, 69, localT);
+                b = lerp(128, 19, localT);
+            } else {
+                // brown to dark red (t: 0.5 -> 1 maps to 0 -> 1)
+                const localT = (t - 0.5) * 2;
+                r = lerp(139, 153, localT);
+                g = lerp(69, 27, localT);
+                b = lerp(19, 27, localT);
+            }
+
+            return `rgb(${r},${g},${b})`;
+        };
+
+        // Tooltip event handlers
+        const showTooltip = (e, label) => {
+            if (!tooltipEl) return;
+            const info = tooltipInfo[label];
+            if (!info) return;
+            tooltipEl.innerHTML = `
+                <div class="tooltip-name">${info.title}</div>
+                <p style="margin:0 0 0.5rem 0;color:rgba(229,231,235,0.85);">${info.desc}</p>
+                <p style="margin:0;font-size:0.8rem;color:rgba(229,231,235,0.6);"><strong>Calculation:</strong> ${info.calc}</p>
+            `;
+            tooltipEl.style.display = 'block';
+            const rect = tooltipEl.getBoundingClientRect();
+            let x = e.clientX + 12;
+            let y = e.clientY + 12;
+            if (x + rect.width > window.innerWidth - 10) x = e.clientX - rect.width - 12;
+            if (y + rect.height > window.innerHeight - 10) y = e.clientY - rect.height - 12;
+            tooltipEl.style.left = x + 'px';
+            tooltipEl.style.top = y + 'px';
+        };
+        const hideTooltip = () => { if (tooltipEl) tooltipEl.style.display = 'none'; };
+        const moveTooltip = (e) => {
+            if (!tooltipEl || tooltipEl.style.display === 'none') return;
+            const rect = tooltipEl.getBoundingClientRect();
+            let x = e.clientX + 12;
+            let y = e.clientY + 12;
+            if (x + rect.width > window.innerWidth - 10) x = e.clientX - rect.width - 12;
+            if (y + rect.height > window.innerHeight - 10) y = e.clientY - rect.height - 12;
+            tooltipEl.style.left = x + 'px';
+            tooltipEl.style.top = y + 'px';
+        };
+
+        // Render overall health first (special treatment - white text, no ring color coding)
+        const overallGauge = document.createElement('div');
+        overallGauge.className = 'health-gauge';
+        overallGauge.style.cursor = 'help';
+        overallGauge.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:0.25rem;">
+                <div style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:1.5rem;font-weight:700;color:var(--text,#e5e7eb);">${Math.round(overallHealth)}%</span>
+                </div>
+                <span style="font-size:0.7rem;color:rgba(229,231,235,0.6);text-align:center;">Health</span>
+            </div>
+        `;
+        overallGauge.addEventListener('mouseenter', (e) => showTooltip(e, 'Health'));
+        overallGauge.addEventListener('mouseleave', hideTooltip);
+        overallGauge.addEventListener('mousemove', moveTooltip);
+        container.appendChild(overallGauge);
+
+        // Render health gauges (higher = better = more filled = grayer)
+        metrics.forEach(({ label, health }) => {
+            const color = getHealthColor(health);
+
+            const size = 52;
+            const strokeWidth = 5;
+            const radius = (size - strokeWidth) / 2;
+            const circumference = 2 * Math.PI * radius;
+            const strokeDashoffset = circumference - (health / 100) * circumference;
+
+            const gauge = document.createElement('div');
+            gauge.className = 'health-gauge';
+            gauge.style.cursor = 'help';
+            gauge.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:0.25rem;">
+                    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                        <circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="${strokeWidth}"/>
+                        <circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="${color}" stroke-width="${strokeWidth}"
+                            stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"
+                            transform="rotate(-90 ${size/2} ${size/2})" style="transition:stroke-dashoffset 0.5s ease"/>
+                        <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="middle"
+                            fill="var(--text,#e5e7eb)" font-size="11" font-weight="600">${Math.round(health)}</text>
+                    </svg>
+                    <span style="font-size:0.7rem;color:rgba(229,231,235,0.6);text-align:center;">${label}</span>
+                </div>
+            `;
+            gauge.addEventListener('mouseenter', (e) => showTooltip(e, label));
+            gauge.addEventListener('mouseleave', hideTooltip);
+            gauge.addEventListener('mousemove', moveTooltip);
+            container.appendChild(gauge);
+        });
+    })();
+    </script>
+    {{/if}}
 </div>

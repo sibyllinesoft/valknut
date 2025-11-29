@@ -15,13 +15,8 @@
                 <option value="docs">Docs</option>
                 <option value="coverage">Coverage</option>
             </select>
-            <label for="treemap-max-scale" style="font-size:0.9rem;color:var(--text-secondary);">Max scale:</label>
-            <input id="treemap-max-scale" type="number" value="100" min="10" max="200" step="5" style="width:80px; background: var(--panel,rgba(255,255,255,0.06)); color: var(--text); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:6px 8px; font-size:0.9rem;">
         </div>
-        <div id="treemap-color-desc" style="font-size: 0.85rem; color: rgba(148,163,184,0.85); margin-bottom: 0.5rem;">
-            Complexity: severity derived from cyclomatic/cognitive complexity (higher = more complex).
-        </div>
-        <div id="treemap-root" style="width: 100%; min-height: 525px;"></div>
+        <div id="treemap-root" style="width: 100%; height: calc(100vh - 128px); min-height: 300px;"></div>
         <div id="treemap-tooltip" class="valknut-tooltip" style="display:none; position:fixed; pointer-events:none; z-index:9999;"></div>
         <script id="treemap-data" type="application/json">
             {
@@ -36,9 +31,7 @@
             (function() {
                 const dataEl = document.getElementById('treemap-data');
                 const colorSelect = document.getElementById('treemap-color-metric');
-                const maxScaleInput = document.getElementById('treemap-max-scale');
                 const rootEl = document.getElementById('treemap-root');
-                const descEl = document.getElementById('treemap-color-desc');
                 if (!dataEl || !rootEl) return;
 
                 const rawText = dataEl.textContent || '{}';
@@ -483,13 +476,19 @@
                             html += '</ul>';
 
                             // Top entities with color-coded severity (inverted MI: 100% = bad, 0% = good)
-                            const topEntities = node.entities.slice(0, 5);
-                            if (topEntities.length > 0) {
-                                html += '<div class="tooltip-section"><h4>Top Entities</h4><ul class="tooltip-section-list">';
-                                topEntities.forEach(entity => {
+                            // Sort by severity descending (worst first)
+                            const sortedEntities = node.entities
+                                .map(entity => {
                                     const mi = getEntityMaintainability(entity);
-                                    // Invert MI to severity: 100% MI (good) = 0% severity, 0% MI (bad) = 100% severity
                                     const severityPct = mi != null ? Math.max(0, 100 - mi) : null;
+                                    return { entity, severityPct };
+                                })
+                                .sort((a, b) => (b.severityPct ?? -1) - (a.severityPct ?? -1))
+                                .slice(0, 5);
+
+                            if (sortedEntities.length > 0) {
+                                html += '<div class="tooltip-section"><h4>Top Entities</h4><ul class="tooltip-section-list">';
+                                sortedEntities.forEach(({ entity, severityPct }) => {
                                     const severityColor = getSeverityColor(severityPct);
                                     const severityDisplay = severityPct != null ? Math.round(severityPct) + '%' : null;
                                     html += '<li><div class="issue-heading">' + (entity.name || 'Entity');
@@ -501,11 +500,8 @@
                                 html += '</ul></div>';
                             }
                         } else if (isDir) {
-                            // Directory: just show basic stats
-                            html += '<ul class="tooltip-metrics">';
-                            html += '<li><span class="metric-label">Severity</span><span class="metric-value">' + renderValue(colorVal) + '</span></li>';
-                            html += '<li><span class="metric-label">Lines</span><span class="metric-value">' + renderValue(node.value) + '</span></li>';
-                            html += '</ul>';
+                            // No tooltip for directories
+                            return '';
                         } else {
                             // Root or unknown
                             html += '<ul class="tooltip-metrics">';
@@ -533,8 +529,10 @@
                         customdata: custom
                     };
 
+                    const containerHeight = rootEl.getBoundingClientRect().height || Math.max(300, window.innerHeight - 128);
                     Plotly.newPlot(rootEl, [trace], {
                         margin: { l: 0, r: 0, t: 0, b: 10 },
+                        height: containerHeight,
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
@@ -546,18 +544,7 @@
                             ],
                             cmin: 0,
                             cmax: maxScale,
-                            colorbar: {
-                                title: `${colorMetric.charAt(0).toUpperCase() + colorMetric.slice(1)} severity`,
-                                tickformat: '.0f',
-                                orientation: 'h',
-                                y: -0.1,
-                                yanchor: 'top',
-                                x: 0.5,
-                                xanchor: 'center',
-                                len: 0.6,
-                                thickness: 12,
-                                bgcolor: 'rgba(0,0,0,0)'
-                            }
+                            showscale: false
                         }
                     }, {
                         displaylogo: false,
@@ -617,20 +604,15 @@
                 }
 
                 function resizePlot() {
-                    const w = (rootEl.parentElement && rootEl.parentElement.getBoundingClientRect().width) || rootEl.getBoundingClientRect().width || undefined;
-                    if (w) {
-                        Plotly.relayout(rootEl, { width: w });
-                    }
-                    Plotly.Plots.resize(rootEl);
+                    const rect = rootEl.getBoundingClientRect();
+                    const w = rect.width || (rootEl.parentElement && rootEl.parentElement.getBoundingClientRect().width) || undefined;
+                    const h = rect.height || Math.max(300, window.innerHeight - 128);
+                    Plotly.relayout(rootEl, { width: w, height: h });
                 }
 
                 function render() {
                     const metric = (colorSelect && colorSelect.value) || 'complexity';
-                    const maxScale = Number(maxScaleInput && maxScaleInput.value) || 60;
-                    if (descEl) {
-                        descEl.textContent = metricDescriptions[metric] || '';
-                    }
-                    buildTreemap(metric.toLowerCase(), maxScale);
+                    buildTreemap(metric.toLowerCase(), 100);
                     // hook hover after build
                     rootEl.on('plotly_hover', function(ev) {
                         const pt = ev?.points?.[0];
@@ -646,7 +628,6 @@
                 }
 
                 if (colorSelect) colorSelect.addEventListener('change', render);
-                if (maxScaleInput) maxScaleInput.addEventListener('change', render);
 
                 if (document.readyState === 'complete' || document.readyState === 'interactive') {
                     render();
