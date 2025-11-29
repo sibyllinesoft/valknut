@@ -1405,8 +1405,9 @@ export const CodeAnalysisTree = ({ data }) => {
     role: 'tree',
     'aria-label': 'Complexity analysis tree',
     style: {
-      height: 600,
+      height: '100%',
       width: '100%',
+      flex: 1,
       overflow: 'auto',
       position: 'relative',
       borderRadius: '8px',
@@ -1418,7 +1419,7 @@ export const CodeAnalysisTree = ({ data }) => {
     if (!shouldVirtualize) {
         return React.createElement('div', {
             className: 'valknut-analysis-tree',
-            style: { display: 'flex', flexDirection: 'column', gap: '0.75rem' }
+            style: { display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }
         },
             React.createElement('div', treeContainerProps,
                 React.createElement('div', { className: 'tree-virtualizer-inner' },
@@ -1440,7 +1441,7 @@ export const CodeAnalysisTree = ({ data }) => {
 
     return React.createElement('div', {
         className: 'valknut-analysis-tree',
-        style: { display: 'flex', flexDirection: 'column', gap: '0.75rem' }
+        style: { display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }
     },
         React.createElement('div', {
             ref: parentRef,

@@ -31387,8 +31387,9 @@ Check the top-level render call using <` + parentName + ">.";
       role: "tree",
       "aria-label": "Complexity analysis tree",
       style: {
-        height: 600,
+        height: "100%",
         width: "100%",
+        flex: 1,
         overflow: "auto",
         position: "relative",
         borderRadius: "8px",
@@ -31399,7 +31400,7 @@ Check the top-level render call using <` + parentName + ">.";
     if (!shouldVirtualize) {
       return import_react6.default.createElement("div", {
         className: "valknut-analysis-tree",
-        style: { display: "flex", flexDirection: "column", gap: "0.75rem" }
+        style: { display: "flex", flexDirection: "column", height: "100%", flex: 1 }
       }, import_react6.default.createElement("div", treeContainerProps, import_react6.default.createElement("div", { className: "tree-virtualizer-inner" }, flatNodes.map((item) => import_react6.default.createElement("div", {
         key: item.wrapper.id,
         className: "tree-virtual-row",
@@ -31409,7 +31410,7 @@ Check the top-level render call using <` + parentName + ">.";
     const virtualItems = rowVirtualizer.getVirtualItems();
     return import_react6.default.createElement("div", {
       className: "valknut-analysis-tree",
-      style: { display: "flex", flexDirection: "column", gap: "0.75rem" }
+      style: { display: "flex", flexDirection: "column", height: "100%", flex: 1 }
     }, import_react6.default.createElement("div", {
       ref: parentRef,
       ...treeContainerProps
@@ -31704,5 +31705,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=BAE054A62C66A72264756E2164756E21
+//# debugId=B700E50483420AE664756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

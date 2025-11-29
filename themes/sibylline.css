@@ -1210,7 +1210,6 @@ h1, h2 {
 }
 
 .valknut-analysis-tree .tree-scroll-container {
-  max-height: 600px;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--keyline) transparent;
