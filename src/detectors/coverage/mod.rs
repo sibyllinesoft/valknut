@@ -356,25 +356,54 @@ impl CoverageExtractor {
 
     fn generate_preview(&self, content: &str, gap: &mut CoverageGap) -> Result<()> {
         let lines: Vec<&str> = content.lines().collect();
+        let total_lines = lines.len();
         let gap_start = gap.span.start;
         let gap_end = gap.span.end;
-        let context_lines = self.config.snippet_context_lines;
-        let head_tail_limit = self.config.long_gap_head_tail;
-
-        let pre_start = gap_start.saturating_sub(context_lines).max(1);
-        let post_end = (gap_end + context_lines).min(lines.len());
-
-        gap.preview.pre = self.extract_lines(&lines, pre_start, gap_start.saturating_sub(1));
-        gap.preview.post = self.extract_lines(&lines, gap_end + 1, post_end);
-
         let gap_size = gap_end.saturating_sub(gap_start).saturating_add(1);
-        if gap_size > head_tail_limit * 2 {
-            gap.preview.head =
-                self.extract_lines(&lines, gap_start, gap_start + head_tail_limit - 1);
-            gap.preview.tail = self.extract_lines(&lines, gap_end - head_tail_limit + 1, gap_end);
-        } else {
+
+        gap.preview.pre.clear();
+        gap.preview.head.clear();
+        gap.preview.tail.clear();
+        gap.preview.post.clear();
+
+        // Helper to push a single line by number
+        let mut push_line = |vec: &mut Vec<String>, line_no: usize| {
+            if line_no == 0 || line_no > total_lines {
+                return;
+            }
+            if let Some(line) = lines.get(line_no - 1) {
+                vec.push(format!("{:>4}: {}", line_no, line));
+            }
+        };
+
+        if gap_size >= 3 {
+            // Show only the uncovered lines
             gap.preview.head = self.extract_lines(&lines, gap_start, gap_end);
-            gap.preview.tail.clear();
+        } else if gap_size == 2 {
+            // Include one line of context before (or after if start is 1)
+            if gap_start > 1 {
+                push_line(&mut gap.preview.pre, gap_start - 1);
+            } else if gap_end < total_lines {
+                push_line(&mut gap.preview.post, gap_end + 1);
+            }
+            gap.preview.head = self.extract_lines(&lines, gap_start, gap_end);
+        } else {
+            // gap_size == 1
+            if gap_start > 1 {
+                push_line(&mut gap.preview.pre, gap_start - 1);
+            }
+            gap.preview.head = self.extract_lines(&lines, gap_start, gap_end);
+            if gap_end < total_lines {
+                push_line(&mut gap.preview.post, gap_end + 1);
+            }
+            // ensure at least 3 lines of snippet by adding trailing context if available
+            let mut next = gap_end + 2;
+            while (gap.preview.pre.len() + gap.preview.head.len() + gap.preview.post.len()) < 3
+                && next <= total_lines
+            {
+                push_line(&mut gap.preview.post, next);
+                next += 1;
+            }
         }
 
         gap.preview.imports = self.extract_imports(&lines, &gap.language);
