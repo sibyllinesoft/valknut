@@ -91,19 +91,19 @@
   font-weight: 600;
 }
 
-.tree-badge-High {
-  background: rgba(32, 212, 192, 0.1);
-  color: #20d4c0;
+.tree-badge-Low {
+  background: rgba(11, 106, 127, 0.16); /* #0b6a7f */
+  color: #0b6a7f;
 }
 
 .tree-badge-Medium {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: rgba(79, 47, 102, 0.16); /* #4f2f66 */
+  color: #4f2f66;
 }
 
-.tree-badge-Low {
-  background: rgba(160, 167, 179, 0.1);
-  color: #a0a7b3;
+.tree-badge-High {
+  background: rgba(127, 29, 29, 0.18); /* #7f1d1d */
+  color: #7f1d1d;
 }
 
 /* Tree children */
