@@ -83,8 +83,8 @@
 
                             <!-- Code Snippet -->
                             {{#if preview}}
-                            <div style="background: rgba(255,255,255,0.035); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent); overflow:auto;">
-                                <pre style="margin:0;"><code class="language-{{preview.language}}" data-preview-id="code-preview-{{@../index}}-{{@index}}"></code></pre>
+                            <div style="background: transparent; border-left: 3px solid var(--accent);">
+                                <pre style="margin:0; white-space: pre-wrap; word-break: break-word;"><code class="language-{{preview.language}}" data-preview-id="code-preview-{{@../index}}-{{@index}}"></code></pre>
                                 <script type="application/json" id="code-preview-{{@../index}}-{{@index}}">{{{json preview}}}</script>
                             </div>
                             {{/if}}
