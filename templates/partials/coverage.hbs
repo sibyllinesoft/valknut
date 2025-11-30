@@ -30,7 +30,7 @@
                 </div>
                 <div class="tree-children collapsed" style="display:none; margin-left: 1rem; margin-right: 1rem;">
                     <!-- File Info -->
-                    <div class="tree-leaf" style="margin-left: 1rem; margin-right: 1rem;">
+                    <div class="tree-leaf" style="margin-left: 1.5rem; margin-right: 0;">
                         <div class="tree-leaf-header">
                             <div class="tree-leaf-title">Coverage Metrics</div>
                         </div>
@@ -58,7 +58,7 @@
 
                     <!-- Coverage Gaps -->
                     {{#each gaps}}
-                    <div class="tree-leaf" style="margin-left: 1rem; margin-right: 1rem;">
+                    <div class="tree-leaf" style="margin-left: 1.5rem; margin-right: 0;">
                         <div class="tree-leaf-header">
                             <div class="tree-leaf-title">Coverage Gap (Lines {{span.start}}-{{span.end}})</div>
                             <div class="tree-badge tree-badge-{{#if (gt score 0.8)}}High{{else}}{{#if (gt score 0.6)}}Medium{{else}}Low{{/if}}{{/if}}">
