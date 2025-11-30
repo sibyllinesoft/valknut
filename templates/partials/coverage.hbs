@@ -20,7 +20,7 @@
                         </svg>
                     </div>
                     <div class="tree-icon"><i data-lucide="file-code"></i></div>
-                    <div class="tree-label">{{path}}</div>
+                    <div class="tree-label" data-path="{{path}}">{{path}}</div>
                     <div class="tree-badge tree-badge-Medium">
                         {{length gaps}} gaps
                     </div>
@@ -139,7 +139,12 @@
         const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
         const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
         const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
-        const rawPaths = labels.map((el) => String(el.textContent || '').trim().replace(/\\/g, '/')).filter(Boolean);
+        const rawPaths = labels.map((el) => {
+            const dataPath = el.getAttribute('data-path') || '';
+            const textPath = String(el.textContent || '');
+            const chosen = dataPath || textPath;
+            return chosen.trim().replace(/\\/g, '/');
+        }).filter(Boolean);
 
         // Derive a common prefix if project root is absent or mismatch
         const commonPrefix = (() => {
