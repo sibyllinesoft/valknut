@@ -141,9 +141,7 @@
         const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
         const rawPaths = labels.map((el) => {
             const dataPath = el.getAttribute('data-path') || '';
-            const textPath = String(el.textContent || '');
-            const chosen = dataPath || textPath;
-            return chosen.trim().replace(/\\/g, '/');
+            return dataPath.trim().replace(/\\/g, '/');
         }).filter(Boolean);
 
         // Derive a common prefix if project root is absent or mismatch
@@ -170,16 +168,10 @@
             let display = normalized;
             if (normRoot && normalized.startsWith(normRoot)) {
                 display = normalized.slice(normRoot.length);
-                if (display.startsWith('/')) display = display.slice(1);
-                if (display.startsWith('\\')) display = display.slice(1);
             } else if (commonPrefix && normalized.startsWith(commonPrefix) && commonPrefix.length > 1) {
                 display = normalized.slice(commonPrefix.length);
-                if (display.startsWith('/')) display = display.slice(1);
-                if (display.startsWith('\\')) display = display.slice(1);
-            } else {
-                // Keep the full path when no project root or meaningful common prefix is found
-                display = normalized;
             }
+            display = display.replace(/^[/\\]+/, '');
             labelEl.textContent = display;
             labelEl.setAttribute('title', raw);
         });
