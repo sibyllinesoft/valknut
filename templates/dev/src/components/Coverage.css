@@ -98,8 +98,8 @@
 
 .tree-badge-Medium {
   background: rgba(79, 47, 102, 0.24); /* #4f2f66 darker */
-  color: #e6dff0; /* lighter text for contrast */
-  border: 1px solid rgba(79, 47, 102, 0.45);
+  color: #f3edf9; /* lighter text for contrast */
+  border: 1px solid rgba(79, 47, 102, 0.55);
 }
 
 .tree-badge-High {
