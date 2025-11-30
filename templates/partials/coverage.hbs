@@ -183,7 +183,13 @@
         wireCoverageToggles();
         if (window.lucide) window.lucide.createIcons();
         if (window.hljs) {
-            document.querySelectorAll('.coverage-section pre code').forEach((block) => window.hljs.highlightElement(block));
+            document.querySelectorAll('.coverage-section pre code').forEach((block) => {
+                // Normalize to plain text to strip any unintended HTML
+                const raw = block.textContent || '';
+                block.textContent = raw;
+                block.removeAttribute('data-highlighted');
+                window.hljs.highlightElement(block);
+            });
         }
     }
 
