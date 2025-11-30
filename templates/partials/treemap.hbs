@@ -535,7 +535,10 @@
                         height: containerHeight,
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
-                        font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
+                        font: {
+                            family: 'Sunflower, var(--font-sans, sans-serif)',
+                            color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb'
+                        },
                         coloraxis: {
                             // New palette: blue -> purple -> red
                             colorscale: [
