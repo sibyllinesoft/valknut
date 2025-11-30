@@ -81,8 +81,13 @@
                             <!-- Code Snippet -->
                             {{#if preview}}
                             <div style="background: rgba(255,255,255,0.035); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
-                                <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
-{{/each}}</pre>
+                                <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">
+{{#if preview.pre}}{{#each preview.pre}}{{this}}
+{{/each}}{{/if}}{{#if preview.head}}{{#each preview.head}}{{this}}
+{{/each}}{{/if}}{{#if preview.tail}}{{#each preview.tail}}{{this}}
+{{/each}}{{/if}}{{#if preview.post}}{{#each preview.post}}{{this}}
+{{/each}}{{/if}}
+                                </pre>
                             </div>
                             {{/if}}
                         </div>
