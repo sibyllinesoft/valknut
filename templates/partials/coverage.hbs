@@ -134,42 +134,17 @@
         });
     }
 
-    // Shorten coverage paths to project-relative or common prefix
+    // Shorten coverage paths to project-relative (no basename fallback)
     function shortenCoveragePaths() {
         const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
         const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
         const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
-        const rawPaths = labels.map((el) => {
-            const dataPath = el.getAttribute('data-path') || '';
-            return dataPath.trim().replace(/\\/g, '/');
-        }).filter(Boolean);
-
-        // Derive a common prefix if project root is absent or mismatch
-        const commonPrefix = (() => {
-            if (rawPaths.length === 0) return '';
-            const parts = rawPaths.map((p) => p.split('/'));
-            const shortest = Math.min(...parts.map((p) => p.length));
-            const prefix = [];
-            for (let i = 0; i < shortest; i++) {
-                const segment = parts[0][i];
-                if (parts.every((p) => p[i] === segment)) {
-                    prefix.push(segment);
-                } else {
-                    break;
-                }
-            }
-            return prefix.join('/');
-        })();
-
-        labels.forEach((labelEl, idx) => {
-            const raw = rawPaths[idx];
+        labels.forEach((labelEl) => {
+            const raw = (labelEl.getAttribute('data-path') || labelEl.textContent || '').trim();
             if (!raw) return;
-            const normalized = raw;
-            let display = normalized;
-            if (normRoot && normalized.startsWith(normRoot)) {
-                display = normalized.slice(normRoot.length);
-            } else if (commonPrefix && normalized.startsWith(commonPrefix) && commonPrefix.length > 1) {
-                display = normalized.slice(commonPrefix.length);
+            let display = raw.replace(/\\/g, '/');
+            if (normRoot && display.startsWith(normRoot)) {
+                display = display.slice(normRoot.length);
             }
             display = display.replace(/^[/\\]+/, '');
             labelEl.textContent = display;
