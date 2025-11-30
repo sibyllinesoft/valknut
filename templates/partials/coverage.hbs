@@ -58,7 +58,7 @@
 
                     <!-- Coverage Gaps -->
                     {{#each gaps}}
-                    <div class="tree-leaf">
+                    <div class="tree-leaf" style="background: rgba(255, 255, 255, 0.035);">
                         <div class="tree-leaf-header">
                             <div class="tree-leaf-title">Coverage Gap (Lines {{span.start}}-{{span.end}})</div>
                             <div class="tree-badge tree-badge-{{#if (gt score 0.8)}}High{{else}}{{#if (gt score 0.6)}}Medium{{else}}Low{{/if}}{{/if}}">
@@ -66,18 +66,9 @@
                             </div>
                         </div>
                         <div class="tree-leaf-value">
-                            <!-- Gap Features -->
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.25rem; margin-bottom: 0.5rem; font-size: 0.75rem;">
-                                <div><strong>LOC:</strong> {{features.gap_loc}}</div>
-                                <div><strong>Complexity:</strong> {{format features.cyclomatic_in_gap "0.1"}}</div>
-                                <div><strong>Callers:</strong> {{features.fan_in_gap}}</div>
-                                <div><strong>Public API:</strong> {{#if features.exports_touched}}Yes{{else}}No{{/if}}</div>
-                            </div>
-
                             <!-- Code Preview -->
                             {{#if symbols}}
-                            <div style="margin-top: 0.5rem;">
-                                <div style="font-weight: 600; margin-bottom: 0.25rem;">Functions/Methods:</div>
+                            <div style="margin-bottom: 0.5rem;">
                                 {{#each symbols}}
                                 <div style="background: var(--surface); padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.75rem;">
                                     <div style="color: var(--accent); margin-bottom: 0.125rem;">{{kind}}: {{name}}</div>
@@ -89,12 +80,9 @@
 
                             <!-- Code Snippet -->
                             {{#if preview}}
-                            <div style="margin-top: 0.5rem;">
-                                <div style="font-weight: 600; margin-bottom: 0.25rem;">Code Preview:</div>
-                                <div style="background: var(--surface); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
-                                    <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
+                            <div style="background: var(--surface); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
+                                <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
 {{/each}}</pre>
-                                </div>
                             </div>
                             {{/if}}
                         </div>
