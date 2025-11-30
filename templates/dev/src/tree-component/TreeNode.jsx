@@ -584,10 +584,10 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         const priorityStr = String(priority || '').toLowerCase();
         // Align with palette: teal -> purple -> red
         const palettes = {
-            low:  { bg: 'rgba(11,106,127,0.16)', color: '#0b6a7f', border: '1px solid rgba(11,106,127,0.28)' },
+            low:  { bg: 'rgba(11,106,127,0.16)', color: '#b5d7de', border: '1px solid rgba(11,106,127,0.28)' },
             medium: { bg: 'rgba(79,47,102,0.24)', color: '#b5a9c2', border: '1px solid rgba(79,47,102,0.55)' },
-            high: { bg: 'rgba(127,29,29,0.18)', color: '#7f1d1d', border: '1px solid rgba(127,29,29,0.30)' },
-            critical: { bg: 'rgba(185,28,28,0.2)', color: '#b91c1c', border: '1px solid rgba(185,28,28,0.32)' },
+            high: { bg: 'rgba(127,29,29,0.18)', color: '#e9c0c0', border: '1px solid rgba(127,29,29,0.30)' },
+            critical: { bg: 'rgba(185,28,28,0.2)', color: '#f2c6c6', border: '1px solid rgba(185,28,28,0.32)' },
         };
         const chosen =
             priorityStr === 'critical' ? palettes.critical :
