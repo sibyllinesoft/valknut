@@ -476,6 +476,90 @@
         }
     })();
 
+    // Coverage helpers (global fallback so inline handlers never throw)
+    (function() {
+        if (!window.toggleCoverageNode) {
+            window.toggleCoverageNode = function(el) {
+                const header = el?.closest ? el.closest('.tree-header') : null;
+                const node = header?.closest ? header.closest('.tree-node') : null;
+                const children = node?.querySelector ? node.querySelector('.tree-children') : null;
+                const chevron = header?.querySelector ? header.querySelector('.chevron-icon') : null;
+                if (!node || !children) return;
+                const next = node.getAttribute('aria-expanded') !== 'true';
+                node.setAttribute('aria-expanded', String(next));
+                children.classList.toggle('collapsed', !next);
+                children.classList.toggle('expanded', next);
+                children.style.display = next ? 'block' : 'none';
+                if (chevron) chevron.style.transform = next ? 'rotate(90deg)' : 'rotate(0deg)';
+            };
+        }
+
+        // Path shortening fallback (runs once on load)
+        function shortenCoveragePaths() {
+            const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
+            const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+            const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
+            if (!labels.length) return;
+            const rawPaths = labels.map((el) => String(el.textContent || '').trim().replace(/\\/g, '/')).filter(Boolean);
+
+            const commonPrefix = (() => {
+                if (rawPaths.length === 0) return '';
+                const parts = rawPaths.map((p) => p.split('/'));
+                const shortest = Math.min(...parts.map((p) => p.length));
+                const prefix = [];
+                for (let i = 0; i < shortest; i++) {
+                    const seg = parts[0][i];
+                    if (parts.every((p) => p[i] === seg)) prefix.push(seg);
+                    else break;
+                }
+                return prefix.join('/');
+            })();
+
+            labels.forEach((labelEl, idx) => {
+                const raw = rawPaths[idx];
+                if (!raw) return;
+                let display = raw;
+                if (normRoot && raw.startsWith(normRoot)) {
+                    display = raw.slice(normRoot.length);
+                    if (display.startsWith('/')) display = display.slice(1);
+                    if (display.startsWith('\\')) display = display.slice(1);
+                } else if (commonPrefix && raw.startsWith(commonPrefix)) {
+                    display = raw.slice(commonPrefix.length);
+                    if (display.startsWith('/')) display = display.slice(1);
+                    if (display.startsWith('\\')) display = display.slice(1);
+                } else {
+                    const parts = raw.split('/');
+                    display = parts[parts.length - 1] || raw;
+                }
+                labelEl.textContent = display;
+                labelEl.setAttribute('title', raw);
+            });
+        }
+
+        function wireCoverageHeaders() {
+            document.querySelectorAll('.coverage-section .tree-header').forEach((header) => {
+                header.addEventListener('click', () => window.toggleCoverageNode(header));
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.toggleCoverageNode(header);
+                    }
+                });
+            });
+        }
+
+        function initCoverage() {
+            shortenCoveragePaths();
+            wireCoverageHeaders();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initCoverage);
+        } else {
+            initCoverage();
+        }
+    })();
+
     </script>
     {{#if enable_animation}}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
