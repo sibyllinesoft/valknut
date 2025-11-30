@@ -81,7 +81,7 @@
                             <!-- Code Snippet -->
                             {{#if preview}}
                             <div style="background: rgba(255,255,255,0.035); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent); overflow:auto;">
-                                <pre style="margin:0;"><code class="language-{{preview.language}}" data-preview='{{{json preview}}}'></code></pre>
+                                <pre style="margin:0;"><code class="language-{{preview.language}}" data-preview="{{json preview}}"></code></pre>
                             </div>
                             {{/if}}
                         </div>
@@ -182,6 +182,7 @@
                 const payload = block.getAttribute('data-preview');
                 if (payload) {
                     try {
+                        // Attribute may contain escaped entities; JSON.parse handles quotes once decoded
                         const preview = JSON.parse(payload);
                         const lines = []
                             .concat(preview.pre || [])
@@ -190,7 +191,7 @@
                             .concat(preview.post || []);
                         block.textContent = lines.join('\n');
                     } catch (e) {
-                        console.warn('Preview parse failed', e);
+                        console.warn('Preview parse failed', e, payload);
                     }
                 }
                 window.hljs.highlightElement(block);
