@@ -75,15 +75,15 @@ export const Dashboard = ({ data, initialMetric = 'complexity' }) => {
   const getSeverityColor = (severity, maxScale = 100) => {
     const t = Math.max(0, Math.min(1, severity / maxScale));
 
-    // Colors: blue (#0f3fa6) -> purple (#6b21a8) -> red (#7f1d1d)
+    // Colors: blue (#0e4c7a) -> purple (#6b21a8) -> red (#7f1d1d)
     const lerp = (a, b, tVal) => Math.round(a + (b - a) * tVal);
 
     let r, g, b;
     if (t <= 0.5) {
       const localT = t * 2;
-      r = lerp(0x0f, 0x6b, localT); // 15 -> 107
-      g = lerp(0x3f, 0x21, localT); // 63 -> 33
-      b = lerp(0xa6, 0xa8, localT); // 166 -> 168
+      r = lerp(0x0e, 0x6b, localT); // 14 -> 107
+      g = lerp(0x4c, 0x21, localT); // 76 -> 33
+      b = lerp(0x7a, 0xa8, localT); // 122 -> 168
     } else {
       const localT = (t - 0.5) * 2;
       r = lerp(0x6b, 0x7f, localT); // 107 -> 127
