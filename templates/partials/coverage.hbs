@@ -58,7 +58,7 @@
 
                     <!-- Coverage Gaps -->
                     {{#each gaps}}
-                    <div class="tree-leaf" style="background: rgba(255, 255, 255, 0.035);">
+                    <div class="tree-leaf">
                         <div class="tree-leaf-header">
                             <div class="tree-leaf-title">Coverage Gap (Lines {{span.start}}-{{span.end}})</div>
                             <div class="tree-badge tree-badge-{{#if (gt score 0.8)}}High{{else}}{{#if (gt score 0.6)}}Medium{{else}}Low{{/if}}{{/if}}">
@@ -70,7 +70,7 @@
                             {{#if symbols}}
                             <div style="margin-bottom: 0.5rem;">
                                 {{#each symbols}}
-                                <div style="background: var(--surface); padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <div style="background: rgba(255,255,255,0.035); padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.75rem;">
                                     <div style="color: var(--accent); margin-bottom: 0.125rem;">{{kind}}: {{name}}</div>
                                     <div style="color: var(--muted);">{{signature}}</div>
                                 </div>
@@ -80,7 +80,7 @@
 
                             <!-- Code Snippet -->
                             {{#if preview}}
-                            <div style="background: var(--surface); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
+                            <div style="background: rgba(255,255,255,0.035); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent);">
                                 <pre style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">{{#each preview.head}}{{this}}
 {{/each}}</pre>
                             </div>
