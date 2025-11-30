@@ -62,11 +62,7 @@
                         <div class="tree-leaf-header">
                             <div class="tree-leaf-title">
                                 {{#if ../path}}
-                                {{#if (build_vscode_link ../path span.start)}}
-                                <a href="{{build_vscode_link ../path span.start}}" style="color:inherit; text-decoration:none;" onclick="event.stopPropagation();">Coverage Gap ({{../path}}:{{span.start}}-{{span.end}})</a>
-                                {{else}}
-                                Coverage Gap (Lines {{span.start}}-{{span.end}})
-                                {{/if}}
+                                <a href="vscode://file{{../path}}:{{span.start}}" style="color:inherit; text-decoration:none;" onclick="event.stopPropagation();">Coverage Gap ({{../path}}:{{span.start}}-{{span.end}})</a>
                                 {{else}}
                                 Coverage Gap (Lines {{span.start}}-{{span.end}})
                                 {{/if}}
