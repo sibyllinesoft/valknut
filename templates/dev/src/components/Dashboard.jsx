@@ -71,24 +71,24 @@ export const Dashboard = ({ data, initialMetric = 'complexity' }) => {
     return nodes;
   };
 
-  // Get severity color (matches treemap colorscale)
+  // Get severity color (matches treemap colorscale: blue -> purple -> red)
   const getSeverityColor = (severity, maxScale = 100) => {
     const t = Math.max(0, Math.min(1, severity / maxScale));
 
-    // Colorscale: [0, '#6b7280'], [0.5, '#8b4513'], [1, '#991b1b']
-    const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+    // Colors: blue (#2563eb) -> purple (#a855f7) -> red (#dc2626)
+    const lerp = (a, b, tVal) => Math.round(a + (b - a) * tVal);
 
     let r, g, b;
     if (t <= 0.5) {
       const localT = t * 2;
-      r = lerp(0x6b, 0x8b, localT);
-      g = lerp(0x72, 0x45, localT);
-      b = lerp(0x80, 0x13, localT);
+      r = lerp(0x25, 0xa8, localT); // 37 -> 168
+      g = lerp(0x63, 0x55, localT); // 99 -> 85
+      b = lerp(0xeb, 0xf7, localT); // 235 -> 247
     } else {
       const localT = (t - 0.5) * 2;
-      r = lerp(0x8b, 0x99, localT);
-      g = lerp(0x45, 0x1b, localT);
-      b = lerp(0x13, 0x1b, localT);
+      r = lerp(0xa8, 0xdc, localT); // 168 -> 220
+      g = lerp(0x55, 0x26, localT); // 85 -> 38
+      b = lerp(0xf7, 0x26, localT); // 247 -> 38
     }
 
     return `rgb(${r},${g},${b})`;

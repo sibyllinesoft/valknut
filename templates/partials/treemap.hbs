@@ -537,10 +537,11 @@
                         plot_bgcolor: 'transparent',
                         font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e5e7eb' },
                         coloraxis: {
+                            // New palette: blue -> purple -> red
                             colorscale: [
-                                [0, '#6b7280'],
-                                [0.5, '#8b4513'],
-                                [1, '#991b1b']
+                                [0, '#2563eb'],   // blue
+                                [0.5, '#a855f7'], // purple
+                                [1, '#dc2626']    // red
                             ],
                             cmin: 0,
                             cmax: maxScale,

@@ -139,23 +139,22 @@
             const severity = 100 - health;
             const t = Math.max(0, Math.min(1, severity / 100));
 
-            // Colorscale: [0, '#6b7280'], [0.5, '#8b4513'], [1, '#991b1b']
-            // gray (107,114,128) -> brown (139,69,19) -> dark red (153,27,27)
+            // Colorscale: blue (#2563eb) -> purple (#a855f7) -> red (#dc2626)
             const lerp = (a, b, t) => Math.round(a + (b - a) * t);
 
             let r, g, b;
             if (t <= 0.5) {
-                // gray to brown (t: 0 -> 0.5 maps to 0 -> 1)
+                // blue to purple (t: 0 -> 0.5 maps to 0 -> 1)
                 const localT = t * 2;
-                r = lerp(107, 139, localT);
-                g = lerp(114, 69, localT);
-                b = lerp(128, 19, localT);
+                r = lerp(37, 168, localT);  // 0x25 -> 0xa8
+                g = lerp(99, 85, localT);   // 0x63 -> 0x55
+                b = lerp(235, 247, localT); // 0xeb -> 0xf7
             } else {
-                // brown to dark red (t: 0.5 -> 1 maps to 0 -> 1)
+                // purple to red (t: 0.5 -> 1 maps to 0 -> 1)
                 const localT = (t - 0.5) * 2;
-                r = lerp(139, 153, localT);
-                g = lerp(69, 27, localT);
-                b = lerp(19, 27, localT);
+                r = lerp(168, 220, localT); // 0xa8 -> 0xdc
+                g = lerp(85, 38, localT);   // 0x55 -> 0x26
+                b = lerp(247, 38, localT);  // 0xf7 -> 0x26
             }
 
             return `rgb(${r},${g},${b})`;
