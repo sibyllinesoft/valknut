@@ -56,31 +56,6 @@
                         </div>
                     </div>
 
-                    <!-- Value/Effort Analysis -->
-                    <div class="tree-leaf">
-                        <div class="tree-leaf-header">
-                            <div class="tree-leaf-title">Priority Analysis</div>
-                        </div>
-                        <div class="tree-leaf-value">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                                <div style="background: rgba(99, 102, 241, 0.1); padding: 0.5rem; border-radius: 4px;">
-                                    <div style="font-weight: 600; color: var(--accent); margin-bottom: 0.25rem;">Value</div>
-                                    <div style="font-size: 0.875rem;">
-                                        File Coverage: +{{percentage value.file_cov_gain "1"}}%<br>
-                                        Repo Impact: +{{percentage value.repo_cov_gain_est "2"}}%
-                                    </div>
-                                </div>
-                                <div style="background: rgba(245, 158, 11, 0.1); padding: 0.5rem; border-radius: 4px;">
-                                    <div style="font-weight: 600; color: var(--warning); margin-bottom: 0.25rem;">Effort</div>
-                                    <div style="font-size: 0.875rem;">
-                                        Tests to Write: {{effort.tests_to_write_est}}<br>
-                                        Mocks Needed: {{effort.mocks_est}}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Coverage Gaps -->
                     {{#each gaps}}
                     <div class="tree-leaf">
