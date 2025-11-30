@@ -1,153 +1,103 @@
 <!-- AI Refactoring Oracle -->
 {{#if has_oracle_data}}
-<div class="oracle-section">
-    <div class="oracle-header">
-        <div class="oracle-title">
-            <div class="oracle-icon">
-                <i data-lucide="brain" style="color: var(--accent);" class="oracle-brain-icon"></i>
-            </div>
-            <div>
-                <h2>AI Refactoring Oracle</h2>
-                <div class="oracle-subtitle">Strategic guidance powered by Gemini 2.5 Pro</div>
-            </div>
-        </div>
+<section class="oracle-section tab-panel" data-tab="oracle">
+    <div class="tab-heading-row" style="display:none;">
+        <h2 class="tab-heading">Oracle</h2>
     </div>
+    <div class="tab-body oracle-tab-body">
 
-    <div class="oracle-content">
-        <!-- Assessment Overview -->
-        <div class="oracle-assessment">
-            <h3>Architecture Assessment</h3>
-            <div class="assessment-grid">
-                <div class="assessment-strengths">
-                    <h4><i data-lucide="check-circle" style="color: var(--accent);" class="tree-icon"></i> Strengths</h4>
-                    <ul>
-                        {{#each oracle_refactoring_plan.assessment.strengths}}
-                        <li>{{this}}</li>
-                        {{/each}}
-                    </ul>
-                </div>
-                <div class="assessment-weaknesses">
-                    <h4><i data-lucide="alert-triangle" style="color: var(--warning);" class="tree-icon"></i> Areas for Improvement</h4>
-                    <ul>
-                        {{#each oracle_refactoring_plan.assessment.weaknesses}}
-                        <li>{{this}}</li>
-                        {{/each}}
-                    </ul>
-                </div>
-            </div>
-            
-            {{#if oracle_refactoring_plan.assessment.architecture_quality}}
-            <div class="assessment-summary">
-                <h4>Architecture Quality</h4>
-                <p>{{oracle_refactoring_plan.assessment.architecture_quality}}</p>
-            </div>
+    <!-- Assessment - inline style with architectural narrative -->
+    {{#if oracle_refactoring_plan.assessment}}
+    <div class="oracle-assessment" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+            <span style="color: #a0a7b3; font-size: 0.875rem;">Assessment:</span>
+            {{#if oracle_refactoring_plan.assessment.architectural_style}}
+            <span style="color: #e5e7eb; font-weight: 600; font-size: 0.875rem;">
+                {{oracle_refactoring_plan.assessment.architectural_style}}
+            </span>
             {{/if}}
         </div>
 
-        <!-- Refactoring Plan -->
-        {{#if oracle_refactoring_plan.refactoring_plan}}
-        <div class="oracle-plan">
-            <div class="plan-header">
-                <h3>Refactoring Roadmap</h3>
-            </div>
+        {{#if oracle_refactoring_plan.assessment.architectural_narrative}}
+        <p style="margin: 0; color: #c8ccd2; font-size: 0.9375rem; line-height: 1.6;">
+            {{oracle_refactoring_plan.assessment.architectural_narrative}}
+        </p>
+        {{/if}}
+    </div>
+    {{/if}}
 
-            <!-- Phases -->
-            <div class="refactoring-phases">
-                {{#each oracle_refactoring_plan.refactoring_plan.phases}}
-                <div class="phase-card phase-priority-{{priority}}">
-                    <div class="phase-header" onclick="togglePhase(this)" style="cursor: pointer;">
-                        <div class="phase-title">
-                            <div class="phase-priority">Phase {{priority}}</div>
-                            <h4>{{name}}</h4>
-                        </div>
-                        <div class="phase-expand">
-                            <i data-lucide="chevron-right" class="tree-chevron"></i>
-                        </div>
-                    </div>
-                    <div class="phase-description">{{description}}</div>
-                    
-                    <div class="phase-content" style="display: none;">
-                        {{#each subsystems}}
-                        <div class="subsystem">
-                            <div class="subsystem-header">
-                                <h5>{{name}}</h5>
-                                <div class="subsystem-files">
-                                    <i data-lucide="file" class="tree-icon"></i>
-                                    {{#each affected_files}}{{#unless @first}}, {{/unless}}{{this}}{{/each}}
-                                </div>
-                            </div>
-                            
-                            <div class="subsystem-tasks">
-                                {{#each tasks}}
-                                <div class="task-card task-{{task_type}}">
-                                    <div class="task-header">
-                                        <div class="task-title">{{title}}</div>
-                                        <div class="task-effort">
-                                            <i data-lucide="clock" class="tree-icon"></i>
-                                            {{estimated_hours}}h
-                                        </div>
-                                        <div class="task-risk task-risk-{{risk_level}}">{{risk_level}}</div>
-                                    </div>
-                                    <div class="task-description">{{description}}</div>
-                                    
-                                    {{#if benefits}}
-                                    <div class="task-benefits">
-                                        <strong>Benefits:</strong>
-                                        <ul>
-                                            {{#each benefits}}
-                                            <li>{{this}}</li>
-                                            {{/each}}
-                                        </ul>
-                                    </div>
-                                    {{/if}}
-                                    
-                                    {{#if files}}
-                                    <div class="task-files">
-                                        <strong>Files:</strong>
-                                        {{#each files}}
-                                        <code>{{this}}</code>{{#unless @last}}, {{/unless}}
-                                        {{/each}}
-                                    </div>
-                                    {{/if}}
-                                </div>
-                                {{/each}}
-                            </div>
-                        </div>
-                        {{/each}}
-                    </div>
-                </div>
-                {{/each}}
+    <!-- Refactoring Tasks - flat cards -->
+    {{#if oracle_refactoring_plan.refactoring_roadmap.tasks}}
+    <div class="oracle-roadmap">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <span style="color: #e5e7eb; font-size: 0.9375rem; font-weight: 600;">Roadmap</span>
+            <div style="display: flex; gap: 0.75rem;">
+                <span style="padding: 0.125rem 0.625rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: rgba(32,212,192,0.1); color: #20d4c0;">
+                    {{count_required oracle_refactoring_plan.refactoring_roadmap.tasks}} required
+                </span>
+                <span style="padding: 0.125rem 0.625rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: rgba(160,167,179,0.1); color: #a0a7b3;">
+                    {{count_optional oracle_refactoring_plan.refactoring_roadmap.tasks}} optional
+                </span>
             </div>
         </div>
-        {{/if}}
 
-        <!-- Risk Assessment -->
-        {{#if oracle_refactoring_plan.risk_assessment}}
-        <div class="oracle-risks">
-            <h3>Risk Assessment</h3>
-            <div class="risk-overview">
-                <div class="risk-level risk-level-{{oracle_refactoring_plan.risk_assessment.overall_risk}}">
-                    Overall Risk: {{capitalize oracle_refactoring_plan.risk_assessment.overall_risk}}
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            {{#each oracle_refactoring_plan.refactoring_roadmap.tasks}}
+            <div class="oracle-task-card" style="background: transparent; border: 1px solid rgba(255,255,255,0.026); border-radius: 8px; padding: 12px; display: flex; flex-direction: column;">
+                <!-- Header row: title, then optional + category -->
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="font-weight: 600; color: #e5e7eb; flex: 1; min-width: 150px;">
+                        {{title}}
+                    </span>
+                    <span style="font-size: 11px; color: #64748b;">
+                        {{#unless required}}optional {{/unless}}{{category}}
+                    </span>
+                </div>
+
+                <!-- Files - after title with margin -->
+                {{#if files}}
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; margin-bottom: 24px;">
+                    {{#each files}}
+                    <code style="font-size: 11px; padding: 2px 6px; background: rgba(148,163,184,0.08); border-radius: 4px; color: #94a3b8;">
+                        {{this}}
+                    </code>
+                    {{/each}}
+                </div>
+                {{/if}}
+
+                <!-- Description - regular text color -->
+                <p style="margin: 0; margin-bottom: {{#if mitigation}}4{{else}}24{{/if}}px; color: #e5e7eb; font-size: 13px; line-height: 1.5;">
+                    {{description}}
+                </p>
+
+                <!-- Mitigation note if present -->
+                {{#if mitigation}}
+                <p style="margin: 0; margin-bottom: 24px; color: #94a3b8; font-size: 12px; font-style: italic;">
+                    {{mitigation}}
+                </p>
+                {{/if}}
+
+                <!-- Bottom row: Impact, Effort, Risk -->
+                <div style="display: flex; justify-content: space-between;">
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(148, 163, 184, 0.78);">Impact</span>
+                        <span style="font-size: 1.1rem; font-weight: 600; color: #e2e8f0;">{{#if impact}}{{impact}}{{else}}—{{/if}}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(148, 163, 184, 0.78);">Effort</span>
+                        <span style="font-size: 1.1rem; font-weight: 600; color: #e2e8f0;">{{#if effort}}{{effort}}{{else}}—{{/if}}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(148, 163, 184, 0.78);">Risk</span>
+                        <span style="font-size: 1.1rem; font-weight: 600; color: #e2e8f0;">{{#if risk_level}}{{capitalize risk_level}}{{else}}—{{/if}}</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="risks-grid">
-                {{#each oracle_refactoring_plan.risk_assessment.risks}}
-                <div class="risk-card risk-{{impact}}">
-                    <div class="risk-header">
-                        <div class="risk-category">{{category}}</div>
-                        <div class="risk-probability">{{probability}} probability</div>
-                    </div>
-                    <div class="risk-description">{{description}}</div>
-                    <div class="risk-mitigation">
-                        <strong>Mitigation:</strong> {{mitigation}}
-                    </div>
-                </div>
-                {{/each}}
-            </div>
+            {{/each}}
         </div>
-        {{/if}}
+    </div>
+    {{/if}}
 
     </div>
-</div>
+</section>
 {{/if}}

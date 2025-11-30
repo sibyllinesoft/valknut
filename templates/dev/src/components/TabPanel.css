@@ -1,0 +1,59 @@
+/* TabPanel Component Styles - matching the report's tab system */
+
+.tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 0.75rem 0;
+  font-family: var(--font-sans, 'Sunflower', sans-serif);
+}
+
+.tab-button {
+  background: transparent;
+  border: none;
+  color: var(--color-text, #e5e7eb);
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: color 0.2s ease;
+}
+
+.tab-button:not(.tab-active) {
+  color: rgba(229, 231, 235, 0.35);
+}
+
+.tab-button.tab-active {
+  color: var(--color-text, #e5e7eb);
+}
+
+.tab-button:hover:not(.tab-active) {
+  color: rgba(229, 231, 235, 0.6);
+}
+
+.tab-button .tab-heading {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+.tab-panel {
+  font-family: var(--font-sans, 'Sunflower', sans-serif);
+}
+
+.tab-panel:not(.tab-active) {
+  display: none;
+}
+
+.tab-heading-row {
+  /* Hidden by default - tab heading is extracted for tab buttons */
+  display: none;
+}
+
+.tab-body {
+  /* Content area */
+}

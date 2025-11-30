@@ -1,0 +1,96 @@
+/* Oracle Component Styles - Minimal flat design */
+
+.oracle-section {
+  font-family: var(--font-sans, 'Sunflower', sans-serif);
+}
+
+.oracle-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Assessment section */
+.oracle-assessment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.assessment-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.assessment-label {
+  color: #a0a7b3;
+  font-size: 0.875rem;
+}
+
+.architectural-style {
+  color: #e5e7eb;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.assessment-narrative {
+  margin: 0;
+  color: #c8ccd2;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Roadmap section */
+.oracle-roadmap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.roadmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.roadmap-label {
+  color: #e5e7eb;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.roadmap-stats {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.roadmap-stats .stat {
+  padding: 0.125rem 0.625rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.roadmap-stats .required-count {
+  background: rgba(32,212,192,0.1);
+  color: #20d4c0;
+}
+
+.roadmap-stats .optional-count {
+  background: rgba(160,167,179,0.1);
+  color: #a0a7b3;
+}
+
+.roadmap-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-card {
+  /* Container only for margin offset */
+}

@@ -29508,37 +29508,6 @@ Check the top-level render call using <` + parentName + ">.";
           };
       }
     };
-    const buildSeverityBar = (counts, keyPrefix, options = {}) => {
-      if (!counts)
-        return null;
-      const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
-      if (total <= 0)
-        return null;
-      const order = ["critical", "high", "medium", "low"];
-      const segments = order.map((severity) => {
-        const value = counts[severity] || 0;
-        if (!value)
-          return null;
-        const pct = value / total * 100;
-        const color = getPriorityStyle(severity).color || "var(--accent)";
-        const label = `${severity.charAt(0).toUpperCase()}${severity.slice(1)} ${Math.round(pct)}% (${value})`;
-        return import_react5.default.createElement("div", {
-          key: `${keyPrefix}-${severity}`,
-          className: `severity-bar__segment severity-bar__segment--${severity}`,
-          style: { width: `${pct}%`, backgroundColor: color },
-          title: label
-        });
-      }).filter(Boolean);
-      if (!segments.length)
-        return null;
-      return import_react5.default.createElement("div", {
-        key: `${keyPrefix}-bar`,
-        className: "severity-bar",
-        style: { marginLeft: options.marginLeft ?? "0.5rem" },
-        role: "presentation",
-        "aria-label": "Severity mix"
-      }, segments);
-    };
     const getHealthColor = (score) => {
       if (score >= 0.8)
         return "#6c757d";
@@ -30087,32 +30056,12 @@ Check the top-level render call using <` + parentName + ">.";
         }
       }, priority));
     }
-    let severityBar = null;
-    if ((isFolder || isFile) && aggregates.severityCounts) {
-      severityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
-    }
-    if (severityBar) {
-      children.push(severityBar);
-    }
-    if (severityBar) {
-      const idx = children.indexOf(severityBar);
-      if (idx >= 0 && idx !== children.length - 1) {
-        children.splice(idx, 1);
-        children.push(severityBar);
-      }
-    }
     if (isEntity && data.lineRange) {
       children.push(import_react5.default.createElement("div", {
         key: "lines",
         className: "tree-badge tree-badge-low",
         style: { marginLeft: "0.5rem" }
       }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
-    }
-    if (isEntity && data.severityCounts) {
-      const severityBar2 = buildSeverityBar(data.severityCounts, `${node.id}-entity-severity`);
-      if (severityBar2) {
-        children.push(severityBar2);
-      }
     }
     const manualIndent = node.level * 24;
     const headerRow = import_react5.default.createElement("div", {
@@ -31705,5 +31654,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=B700E50483420AE664756E2164756E21
+//# debugId=E4E8307858619AC564756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

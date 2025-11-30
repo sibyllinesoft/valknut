@@ -44,7 +44,7 @@ impl OracleConfig {
             api_key,
             max_tokens: 400_000, // Default 400k tokens for codebase bundle
             api_endpoint: "https://generativelanguage.googleapis.com/v1beta/models".to_string(),
-            model: "gemini-2.5-pro".to_string(),
+            model: "gemini-3-pro-preview".to_string(),
         })
     }
 
@@ -57,42 +57,25 @@ impl OracleConfig {
 /// Response from the AI refactoring oracle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefactoringOracleResponse {
-    /// Overall assessment of the codebase
+    /// Overall assessment of the codebase architecture
     pub assessment: CodebaseAssessment,
-    /// Refactoring plan organized by phases
-    pub refactoring_plan: RefactoringPlan,
-    /// Risk assessment for proposed changes
-    pub risk_assessment: RiskAssessment,
+    /// Flat list of refactoring tasks in recommended order
+    pub refactoring_roadmap: RefactoringRoadmap,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodebaseAssessment {
-    pub health_score: u8,
-    pub strengths: Vec<String>,
-    pub weaknesses: Vec<String>,
-    pub architecture_quality: String,
-    pub organization_quality: String,
+    /// Brief narrative describing the architectural state and recommended direction
+    pub architectural_narrative: String,
+    /// The detected or recommended architectural style of the project
+    pub architectural_style: String,
+    /// Key issues identified
+    pub issues: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefactoringPlan {
-    pub phases: Vec<RefactoringPhase>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefactoringPhase {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub priority: u8,
-    pub subsystems: Vec<RefactoringSubsystem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefactoringSubsystem {
-    pub id: String,
-    pub name: String,
-    pub affected_files: Vec<String>,
+pub struct RefactoringRoadmap {
+    /// Flat list of tasks in safe execution order
     pub tasks: Vec<RefactoringTask>,
 }
 
@@ -101,26 +84,26 @@ pub struct RefactoringTask {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub task_type: String,
-    pub files: Vec<String>,
-    pub risk_level: String,
-    pub benefits: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RiskAssessment {
-    pub overall_risk: String,
-    pub risks: Vec<IdentifiedRisk>,
-    pub mitigation_strategies: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IdentifiedRisk {
+    /// Category of architectural change: "pattern", "structure", "abstraction", "cleanup", "optimization"
     pub category: String,
-    pub description: String,
-    pub probability: String,
-    pub impact: String,
-    pub mitigation: String,
+    pub files: Vec<String>,
+    /// Risk level: "low", "medium", "high"
+    pub risk_level: String,
+    /// Expected impact: "low", "medium", "high"
+    #[serde(default)]
+    pub impact: Option<String>,
+    /// Expected effort: "low", "medium", "high"
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// Mitigation strategy for this task's risks
+    #[serde(default)]
+    pub mitigation: Option<String>,
+    /// Whether this task is required (true) or optional/suggested (false)
+    pub required: bool,
+    /// Dependencies on other task IDs that must be completed first
+    pub depends_on: Vec<String>,
+    /// Expected benefits from this change
+    pub benefits: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -400,125 +383,67 @@ impl RefactoringOracle {
             .condense_analysis_results_with_budget(analysis_results, VALKNUT_OUTPUT_TOKEN_BUDGET)?;
 
         let final_bundle = format!(
-            "# Codebase Refactoring Analysis Request\n\n\
+            "# Architectural Improvement Analysis Request\n\n\
             ## Project Codebase ({} files, ~{} tokens)\n{}\n\n\
-            ## Valknut Technical Debt Analysis\n{}\n\n\
+            ## Valknut Technical Debt Analysis (for context only)\n{}\n\n\
             ## Task Instructions\n\
-            Analyze the provided codebase and generate a comprehensive refactoring plan in JSON format.\n\
-            Focus on maximizing maintainability and discoverability while avoiding any breakage.\n\n\
+            You are an expert software architect. Analyze this codebase and propose **architectural improvements** - \
+            not just fixes for the issues detected by static analysis, but larger structural changes that would \
+            improve the overall design, maintainability, and developer experience.\n\n\
+            **IMPORTANT**: Your suggestions should:\n\
+            1. First, identify the \"engineering/architectural spirit\" of the project - what design philosophy does it follow \
+               (or should it follow)? Examples: functional-core-imperative-shell, clean architecture, hexagonal architecture, \
+               modular monolith, domain-driven design, pipeline architecture, plugin-based, etc.\n\
+            2. Propose improvements that RESPECT and STRENGTHEN that spirit, not fight against it.\n\
+            3. If the project lacks a clear architectural vision, recommend one that fits its domain and suggest \
+               how to evolve toward it.\n\
+            4. Focus on PATTERN-LEVEL changes (introducing patterns, consolidating abstractions, improving module boundaries) \
+               rather than just fixing individual complexity hotspots.\n\
+            5. Be EXPANSIVE - include both essential improvements and optional \"nice to have\" suggestions.\n\
+            6. Order tasks in a SAFE execution sequence where dependencies are respected.\n\n\
             ## CRITICAL: Response Format Requirements\n\
             You MUST respond with valid JSON that exactly matches this schema. Do not include markdown formatting, explanations, or any text outside the JSON object.\n\n\
             ## Required JSON Response Schema:\n\
             ```json\n\
             {{\n\
               \"assessment\": {{\n\
-                \"health_score\": <number 0-100>,\n\
-                \"strengths\": [\"<strength1>\", \"<strength2>\"],\n\
-                \"weaknesses\": [\"<weakness1>\", \"<weakness2>\"],\n\
-                \"architecture_quality\": \"<detailed assessment>\",\n\
-                \"organization_quality\": \"<detailed assessment>\"\n\
+                \"architectural_narrative\": \"<2-4 sentence narrative describing the current architectural state, its trajectory, and the recommended direction>\",\n\
+                \"architectural_style\": \"<the detected or recommended architectural philosophy for this codebase>\",\n\
+                \"issues\": [\"<issue1>\", \"<issue2>\", \"<issue3>\"]\n\
               }},\n\
-              \"refactoring_plan\": {{\n\
-                \"phases\": [\n\
+              \"refactoring_roadmap\": {{\n\
+                \"tasks\": [\n\
                   {{\n\
-                    \"id\": \"<phase-id>\",\n\
-                    \"name\": \"<phase-name>\",\n\
-                    \"description\": \"<detailed-description>\",\n\
-                    \"priority\": <number 1-5>,\n\
-                    \"subsystems\": [\n\
-                      {{\n\
-                        \"id\": \"<subsystem-id>\",\n\
-                        \"name\": \"<subsystem-name>\",\n\
-                        \"affected_files\": [\"<file-path1>\", \"<file-path2>\"],\n\
-                        \"tasks\": [\n\
-                          {{\n\
-                            \"id\": \"<task-id>\",\n\
-                            \"title\": \"<task-title>\",\n\
-                            \"description\": \"<detailed-task-description>\",\n\
-                            \"task_type\": \"<extract_method|split_file|move_module|refactor_class|architectural_change>\",\n\
-                            \"files\": [\"<affected-file1>\", \"<affected-file2>\"],\n\
-                            \"risk_level\": \"<low|medium|high>\",\n\
-                            \"benefits\": [\"<benefit1>\", \"<benefit2>\"]\n\
-                          }}\n\
-                        ]\n\
-                      }}\n\
-                    ]\n\
-                  }}\n\
-                ]\n\
-              }},\n\
-              \"risk_assessment\": {{\n\
-                \"overall_risk\": \"<low|medium|high>\",\n\
-                \"risks\": [\n\
-                  {{\n\
-                    \"category\": \"<technical|process|business>\",\n\
-                    \"description\": \"<risk-description>\",\n\
-                    \"probability\": \"<low|medium|high>\",\n\
+                    \"id\": \"<task-id>\",\n\
+                    \"title\": \"<concise task title>\",\n\
+                    \"description\": \"<detailed description explaining the architectural change and why it matters>\",\n\
+                    \"category\": \"<pattern|structure|abstraction|cleanup|optimization>\",\n\
+                    \"files\": [\"<affected-file1>\", \"<affected-file2>\"],\n\
+                    \"risk_level\": \"<low|medium|high>\",\n\
                     \"impact\": \"<low|medium|high>\",\n\
-                    \"mitigation\": \"<mitigation-strategy>\"\n\
-                  }}\n\
-                ],\n\
-                \"mitigation_strategies\": [\"<strategy1>\", \"<strategy2>\"]\n\
-              }}\n\
-            }}\n\
-            ```\n\n\
-            ## Example Response:\n\
-            ```json\n\
-            {{\n\
-              \"assessment\": {{\n\
-                \"health_score\": 72,\n\
-                \"strengths\": [\"Well-defined module boundaries\", \"Comprehensive error handling\"],\n\
-                \"weaknesses\": [\"Large configuration files\", \"Complex data transformations\"],\n\
-                \"architecture_quality\": \"The system shows good separation of concerns at the module level with clear boundaries between API, core logic, and I/O operations.\",\n\
-                \"organization_quality\": \"Directory structure follows Rust conventions but some files have grown too large and should be decomposed.\"\n\
-              }},\n\
-              \"refactoring_plan\": {{\n\
-                \"phases\": [\n\
-                  {{\n\
-                    \"id\": \"phase-1-config\",\n\
-                    \"name\": \"Configuration Refactoring\",\n\
-                    \"description\": \"Simplify and modularize the configuration system to reduce complexity and improve maintainability.\",\n\
-                    \"priority\": 1,\n\
-                    \"subsystems\": [\n\
-                      {{\n\
-                        \"id\": \"config-decomposition\",\n\
-                        \"name\": \"Configuration Decomposition\",\n\
-                        \"affected_files\": [\"src/core/config.rs\"],\n\
-                        \"tasks\": [\n\
-                          {{\n\
-                            \"id\": \"task-1.1\",\n\
-                            \"title\": \"Split configuration struct\",\n\
-                            \"description\": \"Break down monolithic ValknutConfig into feature-specific configuration structs\",\n\
-                            \"task_type\": \"split_file\",\n\
-                            \"files\": [\"src/core/config.rs\", \"src/detectors/config.rs\"],\n\
-                            \"risk_level\": \"medium\",\n\
-                            \"benefits\": [\"Improved maintainability\", \"Better organization\"]\n\
-                          }}\n\
-                        ]\n\
-                      }}\n\
-                    ]\n\
+                    \"effort\": \"<low|medium|high>\",\n\
+                    \"mitigation\": \"<optional: mitigation strategy if risk is medium or high>\",\n\
+                    \"required\": <true for essential changes, false for optional/suggested>,\n\
+                    \"depends_on\": [\"<task-id of prerequisite>\"],\n\
+                    \"benefits\": [\"<benefit1>\", \"<benefit2>\"]\n\
                   }}\n\
                 ]\n\
-              }},\n\
-              \"risk_assessment\": {{\n\
-                \"overall_risk\": \"medium\",\n\
-                \"risks\": [\n\
-                  {{\n\
-                    \"category\": \"technical\",\n\
-                    \"description\": \"Configuration changes may break existing integrations\",\n\
-                    \"probability\": \"medium\",\n\
-                    \"impact\": \"high\",\n\
-                    \"mitigation\": \"Maintain backward compatibility layer during transition\"\n\
-                  }}\n\
-                ],\n\
-                \"mitigation_strategies\": [\"Incremental rollout\", \"Comprehensive testing\"]\n\
               }}\n\
             }}\n\
             ```\n\n\
+            ## Task Categories:\n\
+            - **pattern**: Introducing or improving design patterns (e.g., \"Introduce Repository pattern\", \"Add Builder pattern for configs\")\n\
+            - **structure**: Reorganizing modules, splitting files, moving code (e.g., \"Extract detection subsystem into separate crate\")\n\
+            - **abstraction**: Creating or refining abstractions, traits, interfaces (e.g., \"Unify detector trait hierarchy\")\n\
+            - **cleanup**: Removing dead code, consolidating duplicates (e.g., \"Remove deprecated config fields\")\n\
+            - **optimization**: Performance or resource improvements (e.g., \"Add caching layer for parsed ASTs\")\n\n\
             ## Guidelines:\n\
-            - Prioritize tasks by impact vs effort ratio\n\
-            - Be specific and actionable in task descriptions\n\
-            - Focus on the most critical issues identified in the valknut analysis\n\
-            - Ensure all file paths are accurate and exist in the codebase\n\
+            - Provide 8-15 tasks covering a mix of essential and optional improvements\n\
+            - Tasks should be ordered so dependencies come first\n\
+            - Be specific about file paths - they must exist in the codebase\n\
+            - Focus on architectural patterns, not just complexity metrics\n\
+            - Mark truly foundational changes as required=true, nice-to-haves as required=false\n\
+            - The narrative should read like advice from a senior architect\n\
             - Response must be valid JSON with no additional formatting",
             files_included,
             total_tokens,
@@ -1210,7 +1135,7 @@ mod tests {
         let config = result.unwrap();
         assert_eq!(config.api_key, "test-api-key");
         assert_eq!(config.max_tokens, 400_000);
-        assert_eq!(config.model, "gemini-2.5-pro");
+        assert_eq!(config.model, "gemini-3-pro-preview");
         assert!(config
             .api_endpoint
             .contains("generativelanguage.googleapis.com"));
@@ -1335,16 +1260,14 @@ mod tests {
     #[test]
     fn test_codebase_assessment_structure() {
         let assessment = CodebaseAssessment {
-            health_score: 75,
-            strengths: vec!["Good modularity".to_string()],
-            weaknesses: vec!["Large files".to_string()],
-            architecture_quality: "Well structured".to_string(),
-            organization_quality: "Clear hierarchy".to_string(),
+            architectural_narrative: "The codebase follows a pipeline architecture with clear separation.".to_string(),
+            architectural_style: "Pipeline Architecture with Modular Detectors".to_string(),
+            issues: vec!["Configuration complexity".to_string(), "Module boundaries".to_string()],
         };
 
-        assert_eq!(assessment.health_score, 75);
-        assert_eq!(assessment.strengths.len(), 1);
-        assert_eq!(assessment.weaknesses.len(), 1);
+        assert!(assessment.architectural_narrative.contains("pipeline"));
+        assert!(assessment.architectural_style.contains("Pipeline"));
+        assert_eq!(assessment.issues.len(), 2);
     }
 
     #[test]
@@ -1353,105 +1276,47 @@ mod tests {
             id: "task-1".to_string(),
             title: "Split large file".to_string(),
             description: "Break down monolithic module".to_string(),
-            task_type: "split_file".to_string(),
+            category: "structure".to_string(),
             files: vec!["src/large.rs".to_string()],
             risk_level: "medium".to_string(),
+            impact: Some("high".to_string()),
+            effort: Some("medium".to_string()),
+            mitigation: Some("Use feature flags".to_string()),
+            required: true,
+            depends_on: vec![],
             benefits: vec!["Improved maintainability".to_string()],
         };
 
         assert_eq!(task.id, "task-1");
-        assert_eq!(task.task_type, "split_file");
+        assert_eq!(task.category, "structure");
         assert_eq!(task.risk_level, "medium");
+        assert_eq!(task.impact, Some("high".to_string()));
+        assert_eq!(task.effort, Some("medium".to_string()));
+        assert!(task.required);
+        assert!(task.depends_on.is_empty());
         assert_eq!(task.files.len(), 1);
         assert_eq!(task.benefits.len(), 1);
     }
 
     #[test]
-    fn test_refactoring_subsystem_structure() {
-        let subsystem = RefactoringSubsystem {
-            id: "config-module".to_string(),
-            name: "Configuration System".to_string(),
-            affected_files: vec!["src/config.rs".to_string()],
-            tasks: vec![],
-        };
-
-        assert_eq!(subsystem.id, "config-module");
-        assert_eq!(subsystem.name, "Configuration System");
-        assert_eq!(subsystem.affected_files.len(), 1);
-        assert!(subsystem.tasks.is_empty());
-    }
-
-    #[test]
-    fn test_refactoring_phase_structure() {
-        let phase = RefactoringPhase {
-            id: "phase-1".to_string(),
-            name: "Initial Cleanup".to_string(),
-            description: "Address immediate issues".to_string(),
-            priority: 1,
-            subsystems: vec![],
-        };
-
-        assert_eq!(phase.id, "phase-1");
-        assert_eq!(phase.priority, 1);
-        assert!(phase.subsystems.is_empty());
-    }
-
-    #[test]
-    fn test_identified_risk_structure() {
-        let risk = IdentifiedRisk {
-            category: "technical".to_string(),
-            description: "Configuration changes may break integrations".to_string(),
-            probability: "medium".to_string(),
-            impact: "high".to_string(),
-            mitigation: "Use compatibility layer".to_string(),
-        };
-
-        assert_eq!(risk.category, "technical");
-        assert_eq!(risk.probability, "medium");
-        assert_eq!(risk.impact, "high");
-    }
-
-    #[test]
-    fn test_risk_assessment_structure() {
-        let assessment = RiskAssessment {
-            overall_risk: "medium".to_string(),
-            risks: vec![],
-            mitigation_strategies: vec!["Incremental deployment".to_string()],
-        };
-
-        assert_eq!(assessment.overall_risk, "medium");
-        assert!(assessment.risks.is_empty());
-        assert_eq!(assessment.mitigation_strategies.len(), 1);
-    }
-
-    #[test]
-    fn test_refactoring_plan_structure() {
-        let plan = RefactoringPlan { phases: vec![] };
-
-        assert!(plan.phases.is_empty());
+    fn test_refactoring_roadmap_structure() {
+        let roadmap = RefactoringRoadmap { tasks: vec![] };
+        assert!(roadmap.tasks.is_empty());
     }
 
     #[test]
     fn test_oracle_response_structure() {
         let response = RefactoringOracleResponse {
             assessment: CodebaseAssessment {
-                health_score: 80,
-                strengths: vec!["Good tests".to_string()],
-                weaknesses: vec!["Complex config".to_string()],
-                architecture_quality: "Solid".to_string(),
-                organization_quality: "Clear".to_string(),
+                architectural_narrative: "The codebase is well-structured.".to_string(),
+                architectural_style: "Clean Architecture".to_string(),
+                issues: vec!["Testing".to_string()],
             },
-            refactoring_plan: RefactoringPlan { phases: vec![] },
-            risk_assessment: RiskAssessment {
-                overall_risk: "low".to_string(),
-                risks: vec![],
-                mitigation_strategies: vec![],
-            },
+            refactoring_roadmap: RefactoringRoadmap { tasks: vec![] },
         };
 
-        assert_eq!(response.assessment.health_score, 80);
-        assert!(response.refactoring_plan.phases.is_empty());
-        assert_eq!(response.risk_assessment.overall_risk, "low");
+        assert!(response.assessment.architectural_narrative.contains("well-structured"));
+        assert!(response.refactoring_roadmap.tasks.is_empty());
     }
 
     #[test]

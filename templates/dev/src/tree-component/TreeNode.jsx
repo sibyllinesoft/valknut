@@ -616,50 +616,6 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         }
     };
 
-    const buildSeverityBar = (counts, keyPrefix, options = {}) => {
-        if (!counts) return null;
-
-        const total =
-            (counts.critical || 0) +
-            (counts.high || 0) +
-            (counts.medium || 0) +
-            (counts.low || 0);
-
-        if (total <= 0) return null;
-
-        const order = ['critical', 'high', 'medium', 'low'];
-        const segments = order
-            .map((severity) => {
-                const value = counts[severity] || 0;
-                if (!value) return null;
-                const pct = (value / total) * 100;
-                const color = getPriorityStyle(severity).color || 'var(--accent)';
-                const label = `${severity.charAt(0).toUpperCase()}${severity.slice(1)} ${Math.round(pct)}% (${value})`;
-
-                return React.createElement('div', {
-                    key: `${keyPrefix}-${severity}`,
-                    className: `severity-bar__segment severity-bar__segment--${severity}`,
-                    style: { width: `${pct}%`, backgroundColor: color },
-                    title: label,
-                });
-            })
-            .filter(Boolean);
-
-        if (!segments.length) return null;
-
-        return React.createElement(
-            'div',
-            {
-                key: `${keyPrefix}-bar`,
-                className: 'severity-bar',
-                style: { marginLeft: options.marginLeft ?? '0.5rem' },
-                role: 'presentation',
-                'aria-label': 'Severity mix',
-            },
-            segments
-        );
-    };
-    
     // Health score color (uses badge colors: grey for good, not green)
     const getHealthColor = (score) => {
         if (score >= 0.8) return '#6c757d'; // grey - good
@@ -1489,24 +1445,6 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         }, priority));
     }
 
-    // Severity mix badge (normalized percentages) — ensure last/rightmost
-    let severityBar = null;
-    if ((isFolder || isFile) && aggregates.severityCounts) {
-        severityBar = buildSeverityBar(aggregates.severityCounts, `${node.id}-severity`);
-    }
-    if (severityBar) {
-        children.push(severityBar);
-    }
-
-    // Ensure severity bar is last/rightmost
-    if (severityBar) {
-        const idx = children.indexOf(severityBar);
-        if (idx >= 0 && idx !== children.length - 1) {
-            children.splice(idx, 1);
-            children.push(severityBar);
-        }
-    }
-    
     // Line range for entities
     if (isEntity && data.lineRange) {
         children.push(React.createElement('div', {
@@ -1515,15 +1453,7 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             style: { marginLeft: '0.5rem' }
         }, `L${data.lineRange[0]}-${data.lineRange[1]}`));
     }
-    
-    // Severity mix badge for entities
-    if (isEntity && data.severityCounts) {
-        const severityBar = buildSeverityBar(data.severityCounts, `${node.id}-entity-severity`);
-        if (severityBar) {
-            children.push(severityBar);
-        }
-    }
-    
+
     // Manual indentation calculation for nested rows
     const manualIndent = node.level * 24; // 24px per level
 

@@ -68,6 +68,7 @@ pub fn discover_files(
                 exclude_glob.as_ref(),
                 ignore_glob.as_ref(),
                 &allowed_extensions,
+                pipeline_config.max_file_size_bytes,
             ) {
                 if unique.insert(file.clone()) {
                     collected.push(file);
@@ -88,6 +89,7 @@ pub fn discover_files(
                     exclude_glob.as_ref(),
                     ignore_glob.as_ref(),
                     &allowed_extensions,
+                    pipeline_config.max_file_size_bytes,
                 ) {
                     if unique.insert(root.clone()) {
                         collected.push(root.clone());
@@ -123,6 +125,7 @@ pub fn discover_files(
                             exclude_glob.as_ref(),
                             ignore_glob.as_ref(),
                             &allowed_extensions,
+                            pipeline_config.max_file_size_bytes,
                         ) {
                             let path = path.to_path_buf();
                             if unique.insert(path.clone()) {
@@ -285,6 +288,7 @@ fn should_keep(
     exclude_glob: Option<&GlobSet>,
     ignore_glob: Option<&GlobSet>,
     allowed_extensions: &HashSet<String>,
+    max_file_size_bytes: u64,
 ) -> bool {
     let extension = match path.extension().and_then(|ext| ext.to_str()) {
         Some(ext) => ext.to_ascii_lowercase(),
@@ -293,6 +297,15 @@ fn should_keep(
 
     if !allowed_extensions.is_empty() && !allowed_extensions.contains(&extension) {
         return false;
+    }
+
+    // Check file size limit (0 means unlimited)
+    if max_file_size_bytes > 0 {
+        if let Ok(metadata) = fs::metadata(path) {
+            if metadata.len() > max_file_size_bytes {
+                return false;
+            }
+        }
     }
 
     let relative = path.strip_prefix(base).unwrap_or(path);
@@ -382,6 +395,7 @@ mod tests {
             exclude.as_ref(),
             ignore.as_ref(),
             &allowed,
+            0, // unlimited file size
         ));
 
         let generated_path = base.join("generated/file.rs");
@@ -392,6 +406,7 @@ mod tests {
             exclude.as_ref(),
             ignore.as_ref(),
             &allowed,
+            0,
         ));
 
         let ignored_path = base.join("src/ignored.rs");
@@ -402,6 +417,7 @@ mod tests {
             exclude.as_ref(),
             ignore.as_ref(),
             &allowed,
+            0,
         ));
 
         let wrong_extension = base.join("src/lib.ts");
@@ -412,6 +428,7 @@ mod tests {
             exclude.as_ref(),
             ignore.as_ref(),
             &allowed,
+            0,
         ));
     }
 

@@ -27,6 +27,8 @@ pub struct AnalysisConfig {
     pub exclude_directories: Vec<String>,
     /// Maximum files to analyze (0 = no limit)
     pub max_files: usize,
+    /// Maximum file size in bytes (0 = no limit, default = 500KB)
+    pub max_file_size_bytes: u64,
 }
 
 impl Default for AnalysisConfig {
@@ -57,6 +59,7 @@ impl Default for AnalysisConfig {
                 "build".to_string(),
             ],
             max_files: 5000,
+            max_file_size_bytes: 500 * 1024, // 500KB default
         }
     }
 }
@@ -128,6 +131,7 @@ impl From<ValknutConfig> for AnalysisConfig {
             file_extensions: final_file_extensions,
             exclude_directories: final_exclude_directories,
             max_files: config.analysis.max_files,
+            max_file_size_bytes: config.analysis.max_file_size_bytes,
         }
     }
 }

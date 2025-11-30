@@ -1,0 +1,49 @@
+/* CloneAnalysis Component Styles */
+
+.clone-section {
+  padding: 1.5rem;
+  margin: 2rem 0;
+  font-family: var(--font-sans, 'Sunflower', sans-serif);
+}
+
+.clone-metric-grid {
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.clone-metric-card {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.026);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 120px;
+}
+
+.clone-metric-card__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.clone-metric-card__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-top: 4px;
+}
+
+.clone-pairs {
+  scrollbar-width: thin;
+  scrollbar-color: var(--keyline, rgba(255,255,255,0.1)) transparent;
+}
+
+.clone-pair-card {
+  transition: border-color 0.2s ease;
+}
+
+.clone-pair-card:hover {
+  border-color: rgba(255,255,255,0.08);
+}

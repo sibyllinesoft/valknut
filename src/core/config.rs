@@ -309,6 +309,11 @@ pub struct AnalysisConfig {
     /// Additional ignore patterns applied after include/exclude
     #[serde(default)]
     pub ignore_patterns: Vec<String>,
+
+    /// Maximum file size in bytes to analyze (0 = unlimited, default = 500KB)
+    /// Files larger than this are skipped during file discovery
+    #[serde(default = "AnalysisConfig::default_max_file_size_bytes")]
+    pub max_file_size_bytes: u64,
 }
 
 impl Default for AnalysisConfig {
@@ -332,11 +337,17 @@ impl Default for AnalysisConfig {
             ],
             include_patterns: vec!["**/*".to_string()],
             ignore_patterns: Vec::new(),
+            max_file_size_bytes: Self::default_max_file_size_bytes(),
         }
     }
 }
 
 impl AnalysisConfig {
+    /// Default maximum file size: 500KB
+    pub const fn default_max_file_size_bytes() -> u64 {
+        500 * 1024
+    }
+
     /// Validate analysis configuration
     pub fn validate(&self) -> Result<()> {
         if !(0.0..=1.0).contains(&self.confidence_threshold) {

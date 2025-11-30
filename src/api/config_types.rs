@@ -77,6 +77,10 @@ pub struct FileSettings {
     /// Maximum number of files to analyze (None = unlimited)
     pub max_files: Option<usize>,
 
+    /// Maximum file size in bytes (None = unlimited, default = 500KB)
+    /// Files larger than this are skipped during analysis
+    pub max_file_size_bytes: Option<u64>,
+
     /// Follow symbolic links during file discovery
     pub follow_symlinks: bool,
 }
@@ -173,6 +177,7 @@ impl Default for FileSettings {
                 "*.min.js".to_string(),
             ],
             max_files: None,
+            max_file_size_bytes: Some(500 * 1024), // 500KB default
             follow_symlinks: false,
         }
     }
@@ -467,6 +472,11 @@ impl AnalysisConfig {
                     None
                 } else {
                     Some(valknut_config.analysis.max_files)
+                },
+                max_file_size_bytes: if valknut_config.analysis.max_file_size_bytes == 0 {
+                    None
+                } else {
+                    Some(valknut_config.analysis.max_file_size_bytes)
                 },
                 follow_symlinks: false, // Default value, not stored in ValknutConfig
             },

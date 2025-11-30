@@ -632,13 +632,13 @@ impl RefactoringCandidate {
 
         // Extract entity information
         let (name, line_range) = if let Some(vector) = feature_vector {
-            // Extract from metadata if available
+            // Extract from metadata if available, falling back to parsing entity_id
             let name = vector
                 .metadata
                 .get("name")
                 .and_then(|v| v.as_str())
-                .unwrap_or(&result.entity_id)
-                .to_string();
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| Self::extract_name_from_entity_id(&result.entity_id));
 
             let line_range = vector
                 .metadata
@@ -656,7 +656,7 @@ impl RefactoringCandidate {
 
             (name, line_range)
         } else {
-            (result.entity_id.clone(), None)
+            (Self::extract_name_from_entity_id(&result.entity_id), None)
         };
 
         // Create issues from category scores
@@ -727,6 +727,32 @@ impl RefactoringCandidate {
             "graph" => feature_name.contains("fan_") || feature_name.contains("centrality"),
             _ => true,
         }
+    }
+
+    /// Extract the display name from an entity_id.
+    /// Entity ID formats vary but commonly follow patterns like:
+    /// - "file_path:name:line_number" (complexity detector)
+    /// - "file_path:type_number:counter" (language adapters)
+    /// This function extracts just the name portion for display.
+    fn extract_name_from_entity_id(entity_id: &str) -> String {
+        let parts: Vec<&str> = entity_id.split(':').collect();
+        if parts.len() >= 2 {
+            // Try to find the name portion - usually the second-to-last part
+            // that isn't a pure number (which would be line number or counter)
+            for i in (1..parts.len()).rev() {
+                let part = parts[i];
+                // Skip pure numeric parts (likely line numbers or counters)
+                if part.parse::<u64>().is_err() {
+                    return part.to_string();
+                }
+            }
+            // If all parts after the first are numbers, use the second part
+            if parts.len() > 1 {
+                return parts[1].to_string();
+            }
+        }
+        // Fallback to full entity_id
+        entity_id.to_string()
     }
 
     /// Generate refactoring suggestions based on issues

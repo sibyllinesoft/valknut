@@ -2426,17 +2426,18 @@ async fn run_oracle_analysis(
         Ok(response) => {
             if !quiet_mode {
                 println!("  ✅ Oracle analysis completed successfully!");
+                let required_tasks = response
+                    .refactoring_roadmap
+                    .tasks
+                    .iter()
+                    .filter(|t| t.required)
+                    .count();
+                let optional_tasks = response.refactoring_roadmap.tasks.len() - required_tasks;
                 println!(
-                    "  📊 Generated {} refactoring phases with {} total tasks",
-                    response.refactoring_plan.phases.len().to_string().green(),
-                    response
-                        .refactoring_plan
-                        .phases
-                        .iter()
-                        .map(|p| p.subsystems.iter().map(|s| s.tasks.len()).sum::<usize>())
-                        .sum::<usize>()
-                        .to_string()
-                        .green()
+                    "  📊 Generated {} tasks ({} required, {} optional)",
+                    response.refactoring_roadmap.tasks.len().to_string().green(),
+                    required_tasks.to_string().green(),
+                    optional_tasks.to_string().cyan()
                 );
             }
 
@@ -2502,8 +2503,8 @@ mod tests {
         CodeDictionary, HealthMetrics, QualityGateConfig, QualityGateViolation,
     };
     use valknut_rs::oracle::{
-        CodebaseAssessment, IdentifiedRisk, RefactoringOracleResponse, RefactoringPhase,
-        RefactoringPlan, RefactoringSubsystem, RefactoringTask, RiskAssessment,
+        CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap,
+        RefactoringTask,
     };
 
     struct ColorOverrideGuard {
@@ -2795,45 +2796,25 @@ export function accumulate(values: number[]): number {
     fn sample_oracle_response() -> RefactoringOracleResponse {
         RefactoringOracleResponse {
             assessment: CodebaseAssessment {
-                health_score: 70,
-                strengths: vec!["Modular design".to_string()],
-                weaknesses: vec!["Clone density".to_string()],
-                architecture_quality: "Improving".to_string(),
-                organization_quality: "Good".to_string(),
+                architectural_narrative: "The codebase follows a modular design with room for improvement in clone density.".to_string(),
+                architectural_style: "Modular Architecture".to_string(),
+                issues: vec!["Clone density".to_string()],
             },
-            refactoring_plan: RefactoringPlan {
-                phases: vec![RefactoringPhase {
-                    id: "phase-1".to_string(),
-                    name: "Stabilize Core Modules".to_string(),
-                    description: "Address hotspots in core utilities.".to_string(),
-                    priority: 1,
-                    subsystems: vec![RefactoringSubsystem {
-                        id: "core-utils".to_string(),
-                        name: "Core Utilities".to_string(),
-                        affected_files: vec!["src/lib.rs".to_string()],
-                        tasks: vec![RefactoringTask {
-                            id: "task-1".to_string(),
-                            title: "Extract helper utilities".to_string(),
-                            description: "Split monolithic helper into focused modules."
-                                .to_string(),
-                            task_type: "refactor".to_string(),
-                            files: vec!["src/lib.rs".to_string()],
-                            risk_level: "Low".to_string(),
-                            benefits: vec!["Improved readability".to_string()],
-                        }],
-                    }],
+            refactoring_roadmap: RefactoringRoadmap {
+                tasks: vec![RefactoringTask {
+                    id: "task-1".to_string(),
+                    title: "Extract helper utilities".to_string(),
+                    description: "Split monolithic helper into focused modules.".to_string(),
+                    category: "structure".to_string(),
+                    files: vec!["src/lib.rs".to_string()],
+                    risk_level: "low".to_string(),
+                    impact: Some("high".to_string()),
+                    effort: Some("medium".to_string()),
+                    mitigation: None,
+                    required: true,
+                    depends_on: vec![],
+                    benefits: vec!["Improved readability".to_string()],
                 }],
-            },
-            risk_assessment: RiskAssessment {
-                overall_risk: "Moderate".to_string(),
-                risks: vec![IdentifiedRisk {
-                    category: "Regression".to_string(),
-                    description: "Potential behaviour regressions during extraction".to_string(),
-                    probability: "Medium".to_string(),
-                    impact: "Medium".to_string(),
-                    mitigation: "Add focused regression tests".to_string(),
-                }],
-                mitigation_strategies: vec!["Increase automated test coverage".to_string()],
             },
         }
     }
