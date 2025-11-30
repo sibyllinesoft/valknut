@@ -582,38 +582,24 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     // Priority color mapping with actual styling
     const getPriorityStyle = (priority) => {
         const priorityStr = String(priority || '').toLowerCase();
-        switch(priorityStr) {
-            case 'critical': 
-                return { 
-                    backgroundColor: '#dc354520', 
-                    color: '#dc3545',
-                    border: '1px solid #dc354540' 
-                };
-            case 'high': 
-                return { 
-                    backgroundColor: '#fd7e1420', 
-                    color: '#fd7e14',
-                    border: '1px solid #fd7e1440'
-                };
-            case 'medium': 
-                return { 
-                    backgroundColor: '#ffc10720', 
-                    color: '#ffc107',
-                    border: '1px solid #ffc10740'
-                };
-            case 'low': 
-                return { 
-                    backgroundColor: '#6c757d20', 
-                    color: '#6c757d',
-                    border: '1px solid #6c757d40'
-                };
-            default: 
-                return { 
-                    backgroundColor: '#6c757d20', 
-                    color: '#6c757d',
-                    border: '1px solid #6c757d40'
-                };
-        }
+        // Align with palette: teal -> purple -> red
+        const palettes = {
+            low:  { bg: 'rgba(11,106,127,0.16)', color: '#0b6a7f', border: '1px solid rgba(11,106,127,0.28)' },
+            medium: { bg: 'rgba(79,47,102,0.24)', color: '#b5a9c2', border: '1px solid rgba(79,47,102,0.55)' },
+            high: { bg: 'rgba(127,29,29,0.18)', color: '#7f1d1d', border: '1px solid rgba(127,29,29,0.30)' },
+            critical: { bg: 'rgba(185,28,28,0.2)', color: '#b91c1c', border: '1px solid rgba(185,28,28,0.32)' },
+        };
+        const chosen =
+            priorityStr === 'critical' ? palettes.critical :
+            priorityStr === 'high' ? palettes.high :
+            priorityStr === 'medium' ? palettes.medium :
+            priorityStr === 'low' ? palettes.low :
+            palettes.low;
+        return {
+            backgroundColor: chosen.bg,
+            color: chosen.color,
+            border: chosen.border
+        };
     };
 
     // Health score color (uses badge colors: grey for good, not green)
