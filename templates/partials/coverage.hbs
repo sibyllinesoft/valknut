@@ -81,12 +81,7 @@
                             <!-- Code Snippet -->
                             {{#if preview}}
                             <div style="background: rgba(255,255,255,0.035); padding: 0.5rem; border-radius: 4px; border-left: 3px solid var(--accent); overflow:auto;">
-                                <pre style="margin:0;"><code class="language-{{preview.language}}">
-{{#if preview.pre}}{{#each preview.pre}}{{this}}
-{{/each}}{{/if}}{{#if preview.head}}{{#each preview.head}}{{this}}
-{{/each}}{{/if}}{{#if preview.tail}}{{#each preview.tail}}{{this}}
-{{/each}}{{/if}}{{#if preview.post}}{{#each preview.post}}{{this}}
-{{/each}}{{/if}}</code></pre>
+                                <pre style="margin:0;"><code class="language-{{preview.language}}" data-preview="{{json preview}}"></code></pre>
                             </div>
                             {{/if}}
                         </div>
@@ -184,9 +179,21 @@
         if (window.lucide) window.lucide.createIcons();
         if (window.hljs) {
             document.querySelectorAll('.coverage-section pre code').forEach((block) => {
-                // Normalize to plain text to strip any unintended HTML
-                const raw = block.textContent || '';
-                block.textContent = raw;
+                const payload = block.getAttribute('data-preview');
+                if (payload) {
+                    try {
+                        const preview = JSON.parse(payload);
+                        const lines = []
+                            .concat(preview.pre || [])
+                            .concat(preview.head || [])
+                            .concat(preview.tail || [])
+                            .concat(preview.post || []);
+                        block.textContent = lines.join('\n');
+                    } catch (e) {
+                        console.warn('Preview parse failed', e, payload);
+                        block.textContent = '';
+                    }
+                }
                 block.removeAttribute('data-highlighted');
                 window.hljs.highlightElement(block);
             });
