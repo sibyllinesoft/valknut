@@ -1370,14 +1370,20 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     // Also check for line_number/start_line fields (common in code_dictionary entities)
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
     const effectiveRoot = projectRoot || getStoredRoot() || '';
-    const vscodeLink =
-        isFile || isEntity
-            ? (filePath
-                ? (filePath.startsWith('/') || effectiveRoot
-                    ? buildVSCodeLink(filePath, lineRange, effectiveRoot, lineNumber)
-                    : null)
-                : null)
-            : null;
+    const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
+    const hasRoot = !!effectiveRoot;
+    const isAbsolutePath = filePath ? filePath.startsWith('/') : false;
+
+    let vscodeLink = null;
+    if (isFile || isEntity) {
+        if (filePath) {
+            if (isFileProtocol && isAbsolutePath) {
+                vscodeLink = buildVSCodeLink(filePath, lineRange, '', lineNumber);
+            } else if (hasRoot) {
+                vscodeLink = buildVSCodeLink(filePath, lineRange, effectiveRoot, lineNumber);
+            }
+        }
+    }
 
     const labelElement = vscodeLink
         ? React.createElement(
