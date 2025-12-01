@@ -47,6 +47,34 @@ languages:
     max_file_size_mb: 10.0
     complexity_threshold: 15.0
     additional_settings: {}
+  python:
+    enabled: true
+    file_extensions: [".py"]
+    tree_sitter_language: "python"
+    max_file_size_mb: 5.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  javascript:
+    enabled: true
+    file_extensions: [".js", ".jsx", ".mjs", ".cjs"]
+    tree_sitter_language: "javascript"
+    max_file_size_mb: 5.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  typescript:
+    enabled: true
+    file_extensions: [".ts", ".tsx"]
+    tree_sitter_language: "typescript"
+    max_file_size_mb: 5.0
+    complexity_threshold: 15.0
+    additional_settings: {}
+  go:
+    enabled: true
+    file_extensions: [".go"]
+    tree_sitter_language: "go"
+    max_file_size_mb: 5.0
+    complexity_threshold: 15.0
+    additional_settings: {}
 
 structure:
   enable_branch_packs: true
