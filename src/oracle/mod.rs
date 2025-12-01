@@ -402,9 +402,8 @@ impl RefactoringOracle {
             5. Be EXPANSIVE - include both essential improvements and optional \"nice to have\" suggestions.\n\
             6. Order tasks in a SAFE execution sequence where dependencies are respected.\n\n\
             Additional guardrails:\n\
-            - Do NOT cap the roadmap at three phases; generate a full, detailed plan.\n\
-            - Avoid nitpicks or low-impact / high-effort churn; prioritise meaningful architectural wins.\n\
-            - Prefer fewer, higher-value tasks over noisy micro-fixes, but target at least 8 solid items when possible.\n\n\
+            - Avoid nitpicks or low-impact / high-effort churn; prioritise meaningful architectural wins grounded in the code shown.\n\
+            - Prefer fewer, higher-value tasks over noisy micro-fixes; target ~8+ solid items when the evidence supports it.\n\n\
             ## CRITICAL: Response Format Requirements\n\
             You MUST respond with valid JSON that exactly matches this schema. Do not include markdown formatting, explanations, or any text outside the JSON object.\n\n\
             ## Required JSON Response Schema:\n\
