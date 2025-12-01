@@ -4,7 +4,7 @@
   **Valknut – Fast, Multi-Layer Code Intelligence for Real Teams**
 </div>
 
-Valknut is a Rust-native analysis platform that combines structural heuristics, AST-driven complexity metrics, documentation audits, and optional AI guidance. The CLI ships with CI-friendly output, a documentation linter, MCP endpoints for IDE automation, and an opt-in Gemini 2.5 Pro refactoring oracle.
+Valknut is a Rust-native analysis platform that combines structural heuristics, AST-driven complexity metrics, documentation audits, and optional AI guidance. The CLI ships with CI-friendly output, a documentation linter, MCP endpoints for IDE automation, and optional refactoring oracle.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
