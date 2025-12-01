@@ -36,7 +36,7 @@ async fn run_cli(cli: Cli) -> anyhow::Result<()> {
     // Execute command
     match cli.command {
         Commands::Analyze(args) => {
-            cli::analyze_command(*args, cli.survey, cli.survey_verbosity).await?;
+            cli::analyze_command(*args, cli.survey, cli.survey_verbosity, cli.verbose).await?;
         }
         Commands::PrintDefaultConfig => {
             cli::print_default_config().await?;

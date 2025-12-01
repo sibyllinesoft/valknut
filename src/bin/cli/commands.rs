@@ -11,7 +11,6 @@ use crate::cli::args::{
 use crate::cli::config_layer::build_layered_valknut_config;
 use anyhow::{self, Context};
 use chrono;
-use console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use serde_json;
@@ -53,8 +52,10 @@ pub async fn analyze_command(
     args: AnalyzeArgs,
     _survey: bool,
     _survey_verbosity: SurveyVerbosity,
+    verbose: bool,
 ) -> anyhow::Result<()> {
     let quiet_mode = is_quiet(&args);
+    let detail_mode = verbose && !quiet_mode;
 
     // Print header
     if !quiet_mode {
@@ -63,34 +64,13 @@ pub async fn analyze_command(
 
     // Build comprehensive configuration from CLI args and file
     let valknut_config = build_valknut_config(&args).await?;
-
-    if !quiet_mode {
-        println!(
-            "{}",
-            "✅ Configuration loaded with comprehensive analysis enabled".green()
-        );
-        display_analysis_config_summary(&valknut_config);
-    }
     warn_for_unsupported_languages(&valknut_config, quiet_mode);
 
     // Validate and prepare paths
-    if !quiet_mode {
-        println!("{}", "📂 Validating Input Paths".bright_blue().bold());
-        println!();
-    }
-
     let mut valid_paths = Vec::new();
     for path in &args.paths {
         if path.exists() {
             valid_paths.push(path.clone());
-            if !quiet_mode {
-                let path_type = if path.is_dir() {
-                    "📁 Directory"
-                } else {
-                    "📄 File"
-                };
-                println!("  {}: {}", path_type, path.display().to_string().green());
-            }
         } else {
             return Err(anyhow::anyhow!("Path does not exist: {}", path.display()));
         }
@@ -104,35 +84,18 @@ pub async fn analyze_command(
     tokio::fs::create_dir_all(&args.out).await?;
 
     if !quiet_mode {
-        println!();
-        println!(
-            "{} {}",
-            "📁 Output directory:".bold(),
-            args.out.display().to_string().cyan()
-        );
-        println!(
-            "{} {}",
-            "📊 Report format:".bold(),
-            format_to_string(&args.format).to_uppercase().cyan()
-        );
-        println!();
+        print_run_overview(&valid_paths, &args, &valknut_config, detail_mode);
     }
 
     // Preview coverage file discovery if enabled
     if valknut_config.analysis.enable_coverage_analysis && !quiet_mode {
-        preview_coverage_discovery(&valid_paths, &valknut_config.coverage).await?;
+        preview_coverage_discovery(&valid_paths, &valknut_config.coverage, detail_mode).await?;
     }
 
     // Run comprehensive analysis with enhanced progress tracking
     if !quiet_mode {
-        println!(
-            "{}",
-            "🔍 Starting Comprehensive Analysis Pipeline"
-                .bright_blue()
-                .bold()
-        );
-        display_enabled_analyses(&valknut_config);
-        println!();
+        println!("Running analysis...");
+        display_enabled_analyses(&valknut_config, detail_mode);
     }
 
     let analysis_result = if quiet_mode {
@@ -156,7 +119,7 @@ pub async fn analyze_command(
 
     // Display analysis results
     if !quiet_mode {
-        display_comprehensive_results(&analysis_result);
+        display_comprehensive_results(&analysis_result, detail_mode);
     }
 
     // Run Oracle analysis if requested
@@ -181,17 +144,17 @@ pub async fn analyze_command(
     if let Some(quality_result) = quality_gate_result {
         if !quality_result.passed {
             if !quiet_mode {
-                println!("{}", "❌ Quality gates failed!".red().bold());
-                display_quality_failures(&quality_result);
+                println!("Quality gate: failed");
+                display_quality_failures(&quality_result, detail_mode);
             }
             return Err(anyhow::anyhow!("Quality gates failed"));
         } else if !quiet_mode {
-            println!("{}", "✅ All quality gates passed!".green().bold());
+            println!("Quality gate: passed");
         }
     }
 
     if !quiet_mode {
-        println!("{}", "🎉 Analysis completed successfully!".green().bold());
+        println!("Analysis completed.");
     }
 
     Ok(())
@@ -273,143 +236,190 @@ fn apply_dev_clone_presets(config: &mut ValknutConfig) {
 async fn preview_coverage_discovery(
     paths: &[PathBuf],
     coverage_config: &CoverageConfig,
+    detailed: bool,
 ) -> anyhow::Result<()> {
-    println!(
-        "{}",
-        "📋 Coverage File Discovery Preview".bright_blue().bold()
-    );
-
     // Use all provided roots (deduped) for discovery to mirror pipeline behavior
     let discovered_files = CoverageDiscovery::discover_coverage_for_roots(paths, coverage_config)
         .map_err(|e| anyhow::anyhow!("Coverage discovery failed: {}", e))?;
 
     if discovered_files.is_empty() {
-        println!(
-            "  {} No coverage files found - coverage analysis will be skipped",
-            "⚠️".yellow()
-        );
-        println!("  💡 Tip: Generate coverage files using your test runner, e.g.:");
-        println!("    - Rust: cargo tarpaulin --out xml");
-        println!("    - Python: pytest --cov --cov-report=xml");
-        println!("    - JavaScript: npm test -- --coverage --coverageReporters=cobertura");
+        println!("Coverage: none found (analysis will skip coverage)");
+        if detailed {
+            println!("  tip: provide --coverage-file <path> or enable discovery in config");
+        }
     } else {
+        let mode = if coverage_config.auto_discover {
+            "auto-discover"
+        } else {
+            "manual"
+        };
         println!(
-            "  {} Found {} coverage files:",
-            "✅".green(),
+            "Coverage: {} file(s) detected ({mode})",
             discovered_files.len()
         );
-        for (i, file) in discovered_files.iter().take(3).enumerate() {
-            println!(
-                "    {}. {} (format: {:?}, size: {} KB)",
-                i + 1,
-                file.path.display(),
-                file.format,
-                file.size / 1024
-            );
-        }
-        if discovered_files.len() > 3 {
-            println!("    ... and {} more files", discovered_files.len() - 3);
+        if detailed {
+            for file in discovered_files.iter().take(3) {
+                println!(
+                    "  - {} ({:?}, {} KB)",
+                    file.path.display(),
+                    file.format,
+                    file.size / 1024
+                );
+            }
+            if discovered_files.len() > 3 {
+                println!("  - ... {} more", discovered_files.len() - 3);
+            }
         }
     }
 
-    println!();
     Ok(())
 }
 
 /// Display which analyses are enabled
-fn display_enabled_analyses(config: &ValknutConfig) {
-    println!("  Enabled Analyses:");
-
+fn display_enabled_analyses(config: &ValknutConfig, detailed: bool) {
+    let mut enabled = Vec::new();
     if config.analysis.enable_scoring {
-        println!("    ✅ Complexity Analysis - Cyclomatic and cognitive complexity scoring");
+        enabled.push("scoring");
     }
     if config.analysis.enable_structure_analysis {
-        println!("    ✅ Structure Analysis - Directory organization and architectural patterns");
+        enabled.push("structure");
     }
     if config.analysis.enable_refactoring_analysis {
-        println!("    ✅ Refactoring Analysis - Refactoring opportunity detection");
+        enabled.push("refactoring");
     }
     if config.analysis.enable_graph_analysis {
-        println!("    ✅ Impact Analysis - Dependency graphs, cycles, and centrality");
+        enabled.push("impact");
     }
     if config.analysis.enable_lsh_analysis {
-        let mut note = if config.denoise.enabled {
-            " (with denoising)".to_string()
-        } else {
-            String::new()
-        };
-        if config.lsh.verify_with_apted {
-            if note.is_empty() {
-                note.push_str(" (APTED verification)");
-            } else {
-                note.push_str(" + APTED verification");
-            }
-        }
-        println!(
-            "    ✅ Clone Detection - LSH-based similarity analysis{}",
-            note
-        );
+        enabled.push("clones");
     }
     if config.analysis.enable_coverage_analysis {
-        let auto_status = if config.coverage.auto_discover {
-            " (auto-discovery enabled)"
-        } else {
-            ""
-        };
-        println!(
-            "    ✅ Coverage Analysis - Test gap analysis{}",
-            auto_status
-        );
+        enabled.push("coverage");
     }
 
-    // Count enabled analyses
-    let enabled_count = [
-        config.analysis.enable_scoring,
-        config.analysis.enable_structure_analysis,
-        config.analysis.enable_refactoring_analysis,
-        config.analysis.enable_graph_analysis,
-        config.analysis.enable_lsh_analysis,
-        config.analysis.enable_coverage_analysis,
-    ]
-    .iter()
-    .filter(|&&enabled| enabled)
-    .count();
+    let enabled_summary = if enabled.is_empty() {
+        "none".to_string()
+    } else {
+        enabled.join(", ")
+    };
 
-    println!("  📊 Total: {} analyses enabled", enabled_count);
+    println!("Analyses: {enabled_summary}");
+
+    if detailed && config.analysis.enable_lsh_analysis {
+        let mut notes = Vec::new();
+        if config.denoise.enabled {
+            notes.push(format!("denoise {:.0}%", config.denoise.similarity * 100.0));
+        }
+        if config.lsh.verify_with_apted {
+            notes.push("apted verification".to_string());
+        }
+        if !notes.is_empty() {
+            println!("  clones: {}", notes.join(", "));
+        }
+    }
+
+    if detailed && config.analysis.enable_coverage_analysis {
+        let mode = if config.coverage.auto_discover {
+            "auto-discover"
+        } else {
+            "manual"
+        };
+        println!(
+            "  coverage: {} patterns, max age {}d, {}",
+            config.coverage.file_patterns.len(),
+            config.coverage.max_age_days,
+            mode
+        );
+    }
 }
 
-/// Display analysis configuration summary
+/// Display analysis configuration summary (verbose-only)
 fn display_analysis_config_summary(config: &ValknutConfig) {
-    println!("  📊 Analysis Configuration:");
+    let max_files = if config.analysis.max_files == 0 {
+        "unlimited".to_string()
+    } else {
+        config.analysis.max_files.to_string()
+    };
+
     println!(
-        "    • Confidence threshold: {:.1}%",
+        "Config : confidence {:.0}%, max files {max_files}",
         config.analysis.confidence_threshold * 100.0
     );
-    println!(
-        "    • Max files: {}",
-        if config.analysis.max_files == 0 {
-            "unlimited".to_string()
-        } else {
-            config.analysis.max_files.to_string()
-        }
-    );
-
-    if config.analysis.enable_coverage_analysis {
-        println!(
-            "    • Coverage max age: {} days",
-            config.coverage.max_age_days
-        );
-        println!(
-            "    • Coverage patterns: {} patterns",
-            config.coverage.file_patterns.len()
-        );
-    }
 
     if config.analysis.enable_lsh_analysis && config.denoise.enabled {
         println!(
-            "    • Clone detection: denoising enabled (similarity: {:.0}%)",
-            config.denoise.similarity * 100.0
+            "  clones: similarity {:.0}%, blocks {}",
+            config.denoise.similarity * 100.0,
+            config.denoise.require_blocks
         );
+    }
+}
+
+/// Print a compact overview of the upcoming run.
+fn print_run_overview(
+    paths: &[PathBuf],
+    args: &AnalyzeArgs,
+    config: &ValknutConfig,
+    detailed: bool,
+) {
+    let targets = if paths.is_empty() {
+        "-".to_string()
+    } else if paths.len() == 1 {
+        paths[0].display().to_string()
+    } else {
+        format!(
+            "{} (+{} more)",
+            paths[0].display(),
+            paths.len().saturating_sub(1)
+        )
+    };
+
+    let profile = format!("{:?}", args.profile).to_lowercase();
+    let coverage = coverage_status(config, args);
+    let quality = quality_status(&args.quality_gate);
+
+    println!("Valknut v{VERSION} — analyze");
+    println!("Targets : {targets}");
+    println!(
+        "Output  : {} | Format: {} | Profile: {}",
+        args.out.display(),
+        format_to_string(&args.format),
+        profile
+    );
+    println!("Coverage: {coverage} | Quality gate: {quality}");
+
+    if detailed {
+        display_analysis_config_summary(config);
+    }
+}
+
+fn coverage_status(config: &ValknutConfig, args: &AnalyzeArgs) -> String {
+    if !config.analysis.enable_coverage_analysis {
+        return "off".to_string();
+    }
+
+    if let Some(file) = &args.coverage.coverage_file {
+        return format!("on (file {})", file.display());
+    }
+
+    if config.coverage.auto_discover {
+        format!(
+            "on (auto, max age {}d, {} patterns)",
+            config.coverage.max_age_days,
+            config.coverage.file_patterns.len()
+        )
+    } else {
+        "on (manual)".to_string()
+    }
+}
+
+fn quality_status(args: &QualityGateArgs) -> String {
+    if args.fail_on_issues {
+        "fail on issues".to_string()
+    } else if args.quality_gate {
+        "on".to_string()
+    } else {
+        "off".to_string()
     }
 }
 
@@ -702,138 +712,111 @@ fn evaluate_quality_gates(
 }
 
 /// Display comprehensive analysis results
-fn display_comprehensive_results(result: &AnalysisResults) {
-    println!("{}", "📊 Analysis Results".bright_blue().bold());
-    println!();
-
-    // Display summary information
-    display_analysis_summary(result);
-
-    println!();
+fn display_comprehensive_results(result: &AnalysisResults, detailed: bool) {
+    println!("Results:");
+    display_analysis_summary(result, detailed);
 }
 
 /// Display analysis summary
-fn display_analysis_summary(result: &AnalysisResults) {
+fn display_analysis_summary(result: &AnalysisResults, detailed: bool) {
     let summary = &result.summary;
 
     println!(
-        "  Files analyzed: {} | Entities: {} | Candidates: {}",
+        "  files {} | entities {} | candidates {}",
         summary.files_processed, summary.entities_analyzed, summary.refactoring_needed
     );
     println!(
-        "  High priority issues: {} ({} critical)",
+        "  high priority {} (critical {})",
         summary.high_priority, summary.critical
     );
     println!(
-        "  Code health score: {:.1}% | Avg refactor score: {:.1}",
+        "  health {:.1}% | avg refactor {:.1}",
         summary.code_health_score * 100.0,
         summary.avg_refactoring_score
     );
 
-    if let Some(metrics) = result.health_metrics.as_ref() {
-        println!(
-            "  Maintainability: {:.1} | Technical debt: {:.1}% | Complexity: {:.1} | Structure: {:.1}",
-            metrics.maintainability_score,
-            metrics.technical_debt_ratio,
-            metrics.complexity_score,
-            metrics.structure_quality_score
-        );
-    }
+    if detailed {
+        if let Some(metrics) = result.health_metrics.as_ref() {
+            println!(
+                "  maintainability {:.1} | debt {:.1}% | complexity {:.1} | structure {:.1}",
+                metrics.maintainability_score,
+                metrics.technical_debt_ratio,
+                metrics.complexity_score,
+                metrics.structure_quality_score
+            );
+        }
 
-    if let Some(clone_analysis) = result.clone_analysis.as_ref() {
-        println!(
-            "  Clone candidates after denoising: {}",
-            clone_analysis.candidates_after_denoising
-        );
-        if let Some(avg_similarity) = clone_analysis.avg_similarity {
-            println!("  Avg clone similarity: {:.2}", avg_similarity);
+        if let Some(clone_analysis) = result.clone_analysis.as_ref() {
+            println!(
+                "  clones: {} after denoise",
+                clone_analysis.candidates_after_denoising
+            );
+            if let Some(avg_similarity) = clone_analysis.avg_similarity {
+                println!("  clone similarity avg {:.2}", avg_similarity);
+            }
         }
-        if let Some(max_similarity) = clone_analysis.max_similarity {
-            println!("  Max clone similarity: {:.2}", max_similarity);
-        }
-        if let Some(verification) = clone_analysis.verification.as_ref() {
-            let scored = verification.pairs_scored;
-            let evaluated = verification.pairs_evaluated;
-            let considered = verification.pairs_considered;
-            if let Some(avg) = verification.avg_similarity {
+
+        let mut hotspots: Vec<&RefactoringCandidate> = result
+            .refactoring_candidates
+            .iter()
+            .filter(|candidate| matches!(candidate.priority, Priority::High | Priority::Critical))
+            .collect();
+
+        hotspots.sort_by(|a, b| {
+            b.priority
+                .cmp(&a.priority)
+                .then_with(|| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal))
+        });
+        hotspots.truncate(3);
+
+        if !hotspots.is_empty() {
+            println!("  top hotspots:");
+            for candidate in hotspots {
+                let file_name = Path::new(&candidate.file_path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(&candidate.file_path);
+
                 println!(
-                    "  Verification ({}): scored {}/{} pairs ({}) avg {:.2}",
-                    verification.method, scored, evaluated, considered, avg
-                );
-            } else {
-                println!(
-                    "  Verification ({}): scored {}/{} pairs ({})",
-                    verification.method, scored, evaluated, considered
+                    "    - {} ({}) score {:.1} @ {}",
+                    candidate.name,
+                    priority_label(candidate.priority),
+                    candidate.score,
+                    file_name
                 );
             }
         }
-    }
 
-    let mut hotspots: Vec<&RefactoringCandidate> = result
-        .refactoring_candidates
-        .iter()
-        .filter(|candidate| matches!(candidate.priority, Priority::High | Priority::Critical))
-        .collect();
-
-    hotspots.sort_by(|a, b| {
-        b.priority
-            .cmp(&a.priority)
-            .then_with(|| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal))
-    });
-    hotspots.truncate(3);
-
-    if !hotspots.is_empty() {
-        println!();
-        println!("  Top hotspots:");
-        for candidate in hotspots {
-            let file_name = Path::new(&candidate.file_path)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or(&candidate.file_path);
-
-            println!(
-                "    • {} ({}) — score {:.1} • {}",
-                candidate.name,
-                priority_label(candidate.priority),
-                candidate.score,
-                file_name
-            );
-        }
-    }
-
-    if !result.warnings.is_empty() {
-        println!();
-        println!("  ⚠️ Warnings:");
-        for warning in &result.warnings {
-            println!("    • {}", warning.yellow());
+        if !result.warnings.is_empty() {
+            println!("  warnings:");
+            for warning in &result.warnings {
+                println!("    - {}", warning);
+            }
         }
     }
 }
 
 /// Display quality gate failures and recommended remediation steps.
-fn display_quality_failures(result: &QualityGateResult) {
+fn display_quality_failures(result: &QualityGateResult, detailed: bool) {
     for violation in &result.violations {
         println!(
-            "  ❌ {} - {} (current: {:.1}, threshold: {:.1})",
+            "  {} - {} (current: {:.1}, threshold: {:.1})",
             violation.rule_name,
             violation.description,
             violation.current_value,
             violation.threshold
         );
 
-        if !violation.recommended_actions.is_empty() {
-            println!("     💡 Recommended actions:");
+        if detailed && !violation.recommended_actions.is_empty() {
+            println!("     actions:");
             for action in &violation.recommended_actions {
-                println!("       • {}", action);
+                println!("       - {}", action);
             }
         }
     }
 
     if !result.violations.is_empty() {
-        println!(
-            "  📊 Overall quality score: {:.1}/100",
-            result.overall_score
-        );
+        println!("  overall quality score: {:.1}/100", result.overall_score);
     }
 }
 
@@ -925,7 +908,7 @@ async fn generate_reports_with_oracle(
     let quiet_mode = is_quiet(args);
 
     if !quiet_mode {
-        println!("{}", "📝 Generating Reports".bright_blue().bold());
+        println!("Saving report...");
     }
 
     let output_file = match args.format {
@@ -1032,10 +1015,7 @@ async fn generate_reports_with_oracle(
     };
 
     if !quiet_mode {
-        println!(
-            "  ✅ Report saved: {}",
-            output_file.display().to_string().cyan()
-        );
+        println!("Report: {}", output_file.display());
     }
     Ok(())
 }
@@ -1531,45 +1511,13 @@ pub fn doc_audit_command(args: DocAuditArgs) -> anyhow::Result<()> {
 
 /// Print Valknut header with version info
 pub fn print_header() {
-    let width = Term::stdout().size().1;
-    for line in header_lines_for_width(width) {
-        println!("{line}");
-    }
-    println!();
+    println!("Valknut v{VERSION}");
 }
 
 /// Build the stylized header lines to fit the given terminal width.
 fn header_lines_for_width(width: u16) -> Vec<String> {
-    if width >= 80 {
-        vec![
-            format!(
-                "{}",
-                "┌".cyan().bold().to_string()
-                    + &"─".repeat(60).cyan().to_string()
-                    + &"┐".cyan().bold().to_string()
-            ),
-            format!(
-                "{} {} {}",
-                "│".cyan().bold(),
-                format!("⚙️  Valknut v{} - AI-Powered Code Analysis", VERSION)
-                    .bright_cyan()
-                    .bold(),
-                "│".cyan().bold()
-            ),
-            format!(
-                "{}",
-                "└".cyan().bold().to_string()
-                    + &"─".repeat(60).cyan().to_string()
-                    + &"┘".cyan().bold().to_string()
-            ),
-        ]
-    } else {
-        vec![format!(
-            "{} {}",
-            "⚙️".bright_cyan(),
-            format!("Valknut v{}", VERSION).bright_cyan().bold()
-        )]
-    }
+    let _ = width; // width retained for test call signature
+    vec![format!("Valknut v{VERSION}")]
 }
 
 /// Display configuration summary in a formatted table
@@ -2129,7 +2077,7 @@ fn warn_for_unsupported_languages(config: &ValknutConfig, quiet_mode: bool) {
     if quiet_mode {
         warn!("{}", message);
     } else {
-        println!("{} {}", "⚠️".yellow(), message);
+        println!("warn: {}", message);
     }
 }
 
@@ -2415,11 +2363,8 @@ async fn run_oracle_analysis(
             config
         }
         Err(e) => {
-            eprintln!("{} {}", "❌ Oracle configuration failed:".red(), e);
-            eprintln!(
-                "   {}",
-                "Set the GEMINI_API_KEY environment variable to use the oracle feature".dimmed()
-            );
+            eprintln!("Oracle configuration failed: {e}");
+            eprintln!("Set GEMINI_API_KEY to enable oracle suggestions.");
             return Ok(None);
         }
     };
@@ -2431,10 +2376,9 @@ async fn run_oracle_analysis(
 
     if !quiet_mode {
         println!(
-            "  🔍 Analyzing project: {}",
-            project_path.display().to_string().cyan()
+            "Oracle: analyzing {} for refactoring suggestions",
+            project_path.display()
         );
-        println!("  🧠 Sending to Gemini 2.5 Pro for intelligent refactoring suggestions...");
     }
 
     match oracle
@@ -2443,7 +2387,6 @@ async fn run_oracle_analysis(
     {
         Ok(response) => {
             if !quiet_mode {
-                println!("  ✅ Oracle analysis completed successfully!");
                 let required_tasks = response
                     .refactoring_roadmap
                     .tasks
@@ -2452,10 +2395,10 @@ async fn run_oracle_analysis(
                     .count();
                 let optional_tasks = response.refactoring_roadmap.tasks.len() - required_tasks;
                 println!(
-                    "  📊 Generated {} tasks ({} required, {} optional)",
-                    response.refactoring_roadmap.tasks.len().to_string().green(),
-                    required_tasks.to_string().green(),
-                    optional_tasks.to_string().cyan()
+                    "Oracle: {} tasks ({} required, {} optional)",
+                    response.refactoring_roadmap.tasks.len(),
+                    required_tasks,
+                    optional_tasks
                 );
             }
 
@@ -2469,10 +2412,7 @@ async fn run_oracle_analysis(
                         e
                     );
                 } else if !quiet_mode {
-                    println!(
-                        "  💾 Oracle recommendations saved to: {}",
-                        oracle_path.display().to_string().cyan()
-                    );
+                    println!("Oracle: saved recommendations to {}", oracle_path.display());
                 }
             }
 
@@ -2480,11 +2420,8 @@ async fn run_oracle_analysis(
         }
         Err(e) => {
             if !quiet_mode {
-                eprintln!("{} Oracle analysis failed: {}", "⚠️".yellow(), e);
-                eprintln!(
-                    "   {}",
-                    "Analysis will continue without oracle suggestions".dimmed()
-                );
+                eprintln!("Oracle analysis failed: {e}");
+                eprintln!("Continuing without oracle suggestions.");
             }
             warn!("Oracle analysis failed: {}", e);
             Ok(None)
@@ -3212,11 +3149,8 @@ export function accumulate(values: number[]): number {
     #[test]
     fn test_header_lines_for_wide_terminal() {
         let lines = header_lines_for_width(120);
-        assert_eq!(lines.len(), 3);
-        assert!(
-            lines[1].contains("Valknut"),
-            "expected middle header line to mention Valknut"
-        );
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("Valknut"));
     }
 
     #[test]
@@ -3592,7 +3526,7 @@ export function accumulate(values: number[]): number {
         let paths = vec![workspace.path().to_path_buf()];
         let _ = capture_stdout(|| {
             runtime.block_on(async {
-                preview_coverage_discovery(&paths, &coverage_config)
+                preview_coverage_discovery(&paths, &coverage_config, false)
                     .await
                     .expect("preview discovery");
             });
@@ -3620,7 +3554,7 @@ export function accumulate(values: number[]): number {
         let paths = vec![workspace.path().to_path_buf()];
         let _ = capture_stdout(|| {
             runtime.block_on(async {
-                preview_coverage_discovery(&paths, &coverage_config)
+                preview_coverage_discovery(&paths, &coverage_config, false)
                     .await
                     .expect("preview discovery");
             });
@@ -3678,7 +3612,7 @@ export function accumulate(values: number[]): number {
             overall_score: 62.5,
         };
 
-        let _ = capture_stdout(|| display_quality_failures(&result));
+        let _ = capture_stdout(|| display_quality_failures(&result, true));
     }
 
     #[test]
@@ -3689,7 +3623,7 @@ export function accumulate(values: number[]): number {
             overall_score: 91.0,
         };
 
-        let _ = capture_stdout(|| display_quality_failures(&result));
+        let _ = capture_stdout(|| display_quality_failures(&result, true));
     }
 
     // Mock test for handle_quality_gates since it requires complex analysis result structure
@@ -3773,7 +3707,7 @@ export function accumulate(values: number[]): number {
         args.quiet = false;
         args.format = OutputFormat::Json;
 
-        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        let result = analyze_command(args, false, SurveyVerbosity::Low, false).await;
         assert!(result.is_err());
     }
 
@@ -3787,7 +3721,7 @@ export function accumulate(values: number[]): number {
         args.quiet = false;
         args.format = OutputFormat::Json;
 
-        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        let result = analyze_command(args, false, SurveyVerbosity::Low, false).await;
         assert!(result.is_err());
     }
 
@@ -3818,7 +3752,7 @@ export function accumulate(values: number[]): number {
         args.analysis_control.no_impact = true;
         args.analysis_control.no_lsh = true;
 
-        let result = analyze_command(args, false, SurveyVerbosity::Low).await;
+        let result = analyze_command(args, false, SurveyVerbosity::Low, false).await;
         assert!(
             result.is_ok(),
             "analyze_command should succeed for minimal quiet invocation: {:?}",
@@ -3998,7 +3932,7 @@ export function accumulate(values: number[]): number {
         config.denoise.enabled = true;
         config.lsh.verify_with_apted = true;
 
-        display_enabled_analyses(&config);
+        display_enabled_analyses(&config, true);
     }
 
     #[test]
@@ -4020,7 +3954,8 @@ export function accumulate(values: number[]): number {
         let temp_dir = TempDir::new().unwrap();
         let config = CoverageConfig::default();
 
-        let result = preview_coverage_discovery(&[temp_dir.path().to_path_buf()], &config).await;
+        let result =
+            preview_coverage_discovery(&[temp_dir.path().to_path_buf()], &config, false).await;
         assert!(result.is_ok());
     }
 
@@ -4036,7 +3971,7 @@ export function accumulate(values: number[]): number {
         config.auto_discover = true;
         config.file_patterns = vec!["coverage.lcov".into()];
 
-        let result = preview_coverage_discovery(&[root.to_path_buf()], &config).await;
+        let result = preview_coverage_discovery(&[root.to_path_buf()], &config, false).await;
         assert!(result.is_ok());
     }
 
@@ -4057,7 +3992,7 @@ export function accumulate(values: number[]): number {
         config.search_paths = vec!["coverage".to_string()];
         config.file_patterns = vec!["*.lcov".to_string()];
 
-        let result = preview_coverage_discovery(&[root.to_path_buf()], &config).await;
+        let result = preview_coverage_discovery(&[root.to_path_buf()], &config, false).await;
         assert!(result.is_ok());
     }
 
@@ -4113,7 +4048,7 @@ export function accumulate(values: number[]): number {
 
         result.warnings = vec!["Sample warning".to_string()];
 
-        display_comprehensive_results(&result);
+        display_comprehensive_results(&result, true);
     }
 
     #[test]

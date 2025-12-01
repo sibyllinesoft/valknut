@@ -19,27 +19,15 @@ Analyze your codebase for technical debt, complexity, and refactoring opportunit
 Generate professional reports for teams and integrate with development workflows.
 
 Common Usage:
-
-  # Comprehensive analysis (all analyses enabled by default)
-  valknut analyze
-  
-  # Generate team-friendly HTML report with coverage discovery
-  valknut analyze --format html ./src
-  
-  # Disable specific analyses if not needed
-  valknut analyze --no-coverage --no-impact ./src
-  
-  # Use specific coverage file instead of auto-discovery
-  valknut analyze --coverage-file ./coverage.xml ./src
-  
-  # Custom output directory
-  valknut analyze --out .valknut/reports
-  
-  # Start MCP server for IDE integration
-  valknut mcp-stdio
-  
-  # List supported programming languages
-  valknut list-languages
+  valknut analyze                                # default JSONL output with coverage + clones
+  valknut analyze --format html --out reports ./src ./api
+  valknut analyze --profile thorough --quality-gate --fail-on-issues
+  valknut analyze --coverage-file coverage/lcov.info
+  valknut doc-audit --root . --strict            # audit READMEs and docs
+  valknut init-config --output valknut.yml       # write a starter config
+  valknut validate-config --config valknut.yml   # verify config before CI
+  valknut list-languages                         # supported languages
+  valknut mcp-stdio                              # run MCP server for editors
 
 Learn more: https://github.com/nathanricedev/valknut
 ")]

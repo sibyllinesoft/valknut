@@ -1,77 +1,77 @@
 # CLI Reference
 
-This page lists the primary commands and high-signal flags exposed by the `valknut` binary. All options come from `src/bin/cli/args.rs`.
+Authoritative summary of the current Rust CLI (`src/bin/cli/args.rs`). Use `valknut --help` and `valknut <cmd> --help` for the source of truth; this page mirrors those flags.
 
-## Top-level
+## Top-level commands
 
-- `valknut analyze [PATHS...]` — run the full analysis pipeline (defaults to `.`).
-- `valknut print-default-config` — print the built-in config to stdout.
-- `valknut init-config [--output .valknut.yml] [--force]` — write a starter config file.
-- `valknut validate-config --config path.yml [--verbose]` — schema/semantic validation.
-- `valknut list-languages` — show supported languages and parser status.
-- `valknut doc-audit [--config]` — documentation coverage/readme audit.
-- `valknut mcp-stdio [--config]` — start the MCP server for editor agents.
-- `valknut mcp-manifest [--output manifest.json]` — emit MCP manifest JSON.
+- `valknut analyze [PATHS...]` – full analysis pipeline (defaults to `.`).
+- `valknut print-default-config` – dump built-in config to stdout.
+- `valknut init-config [--output .valknut.yml] [--force]` – write a starter config file.
+- `valknut validate-config --config <PATH> [--verbose]` – schema/semantic validation.
+- `valknut list-languages` – show supported languages and parser status.
+- `valknut doc-audit [--root .] [--strict] [--format text|json]` – standalone documentation/README audit.
+- `valknut mcp-stdio [--config <PATH>]` – start the MCP server for editors/agents.
+- `valknut mcp-manifest [--output manifest.json]` – emit MCP manifest JSON.
 
-Global flags:
+Global flags: `-v/--verbose`, `--survey`, `--survey-verbosity {low|medium|high|maximum}`.
 
-- `-v/--verbose` — debug logging.
-- `--survey` and `--survey-verbosity {low,medium,high,maximum}` — opt-in analytics prompts.
+## analyze command – core flags
 
-## analyze command (core flags)
+- `--config <FILE>` – use explicit config (otherwise auto-discover).
+- `--out <DIR>` (default `.valknut`) – report/output directory.
+- `--format {jsonl,json,yaml,markdown,html,sonar,csv,ci-summary,pretty}`.
+- `--quiet` – suppress console chatter (also implied by machine formats).
+- `--profile {fast,balanced,thorough,extreme}` – speed/coverage presets.
 
-- `--config <FILE>` — override config discovery.
-- `--out <DIR>` (default `.valknut`) — where reports/results land.
-- `--format {jsonl,json,yaml,markdown,html,sonar,csv,ci-summary,pretty}` — output shape.
-- `--quiet` — minimal console output.
-- `--profile {fast,balanced,thorough,extreme}` — speed vs depth presets.
+### Quality gates (CI / fail builds)
 
-### Quality gates (fail builds)
-
-- `--quality-gate` or `--fail-on-issues`
+Enable with `--quality-gate` or `--fail-on-issues`, then optionally:
 - `--max-complexity <0-100>`
-- `--min-health <0-100>`
+- `--min-health <0-100>` (mirrors min maintainability)
 - `--min-doc-health <0-100>`
+- `--max-debt <0-100>`
+- `--min-maintainability <0-100>`
+- `--max-issues <int>`
+- `--max-critical <int>`
+- `--max-high-priority <int>`
 
 ### Coverage
 
-- `--no-coverage` — skip coverage analysis.
-- `--coverage-file <PATH>` — explicit LCOV/Cobertura/etc.
-- `--coverage-search-path <PATH>` (repeatable) — extra discovery roots.
-- `--coverage-max-age <days>`
+- `--no-coverage` – skip coverage analysis.
+- `--coverage-file <PATH>` – explicit LCOV/Cobertura/etc.
+- `--no-coverage-auto-discover` – disable searching for coverage files.
+- `--coverage-max-age <days>` – discard stale coverage (0 = no limit).
 
-### Clone / duplicate analysis
+### Clone / duplicate detection
 
-- `--no-duplicates` — disable.
-- `--shingle-k <int>` — shingle size for LSH.
-- `--min-match-tokens <int>` / `--min-ast-nodes <int>`
-- `--similarity-threshold <0-1>` — LSH similarity cutoff.
+Core: `--semantic-clones`, `--strict-dedupe`, `--denoise`, `--denoise-dry-run`, `--min-function-tokens <int>`, `--min-match-tokens <int>`, `--require-blocks <int>`, `--similarity <0-1>`.
+
+Advanced (rare): `--no-auto`, `--loose-sweep`, `--rarity-weighting`, `--structural-validation`, `--apted-verify` / `--no-apted-verify`, `--apted-max-nodes <int>`, `--apted-max-pairs <int>`, `--live-reach-boost`, `--ast-weight <0-1>`, `--pdg-weight <0-1>`, `--emb-weight <0-1>`, `--io-mismatch-penalty <0-1>`, `--quality-target <0-1>`, `--sample-size <int>`, `--min-saved-tokens <int>`, `--min-rarity-gain <float>`.
 
 ### Analysis toggles
 
-- `--no-complexity`, `--no-structure`, `--no-refactoring`, `--no-impact`, `--no-coverage`, `--no-graph`
-- `--languages <list>` — limit languages (comma-separated).
-- `--include <glob>` / `--exclude <glob>` — file filters.
-- `--max-files <int>` — cap scanned files.
+`--no-complexity`, `--no-structure`, `--no-refactoring`, `--no-impact`, `--no-lsh`.
 
 ### AI features
 
-- `--no-oracle` — skip AI refactoring hints.
-- `--oracle-max-tokens <int>` — cap token budget for hints.
+`--oracle` – enable Gemini-powered refactoring oracle (requires `GEMINI_API_KEY`).  
+`--oracle-max-tokens <int>` – cap token budget.
 
-## Output formats (what you get)
+## doc-audit command – key flags
 
-- `jsonl` — line-delimited events, good for streaming/logs.
-- `json` / `yaml` — structured snapshot of full results.
-- `markdown` — team-friendly summary (`team_report.md`).
-- `html` — interactive report with treemap and drilldowns.
-- `csv` — tabular issues for spreadsheets.
-- `sonar` — SonarQube-compatible issues JSON.
-- `ci-summary` — small JSON for CI status checks.
-- `pretty` — colorized console dump.
+- `--root <PATH>` (default `.`)
+- `--complexity-threshold <int>` (defaults come from `doc_audit`)
+- `--max-readme-commits <int>`
+- `--strict` – non-zero exit on findings
+- `--format {text,json}`
+- `--ignore-dir <NAME>` (repeatable), `--ignore-suffix <SUFFIX>`, `--ignore <GLOB>`
+- `--config <FILE>` – optional doc-audit YAML
 
-## Tips
+## Quick recipes
 
-- Use `valknut analyze --format html --out .valknut/reports` for stakeholder-friendly output.
-- In CI, pair `--quality-gate --min-health 80 --max-complexity 75` with `--format ci-summary` and parse the small JSON.
-- For monorepos, run multiple `analyze` invocations per package and merge reports downstream. +#+
+- CI summary: `valknut analyze --quality-gate --format ci-summary --out .valknut ./src`
+- HTML for stakeholders: `valknut analyze --format html --out reports ./src`
+- Fast local run: `valknut analyze --profile fast --quiet ./src`
+- Strict clones with coverage: `valknut analyze --strict-dedupe --denoise --coverage-file coverage/lcov.info ./`
+
+See `docs/CONFIG_GUIDE.md` and `docs/QUALITY_GATES_GUIDE.md` for deeper config semantics and examples.

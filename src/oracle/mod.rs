@@ -1260,9 +1260,13 @@ mod tests {
     #[test]
     fn test_codebase_assessment_structure() {
         let assessment = CodebaseAssessment {
-            architectural_narrative: "The codebase follows a pipeline architecture with clear separation.".to_string(),
+            architectural_narrative:
+                "The codebase follows a pipeline architecture with clear separation.".to_string(),
             architectural_style: "Pipeline Architecture with Modular Detectors".to_string(),
-            issues: vec!["Configuration complexity".to_string(), "Module boundaries".to_string()],
+            issues: vec![
+                "Configuration complexity".to_string(),
+                "Module boundaries".to_string(),
+            ],
         };
 
         assert!(assessment.architectural_narrative.contains("pipeline"));
@@ -1315,7 +1319,10 @@ mod tests {
             refactoring_roadmap: RefactoringRoadmap { tasks: vec![] },
         };
 
-        assert!(response.assessment.architectural_narrative.contains("well-structured"));
+        assert!(response
+            .assessment
+            .architectural_narrative
+            .contains("well-structured"));
         assert!(response.refactoring_roadmap.tasks.is_empty());
     }
 

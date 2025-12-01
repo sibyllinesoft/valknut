@@ -62,10 +62,10 @@ cargo build --release
 ## Quickstart
 ```bash
 # Fast scan with JSONL output (default profile)
-valknut analyze ./src --format jsonl --out .valknut
+valknut analyze ./src --format jsonl
 
 # HTML + Markdown bundle for stakeholders
-valknut analyze ./ --format html --out reports --profile thorough
+valknut analyze ./ --format html --profile thorough
 
 # Documentation audit with strict exit codes
 valknut doc-audit --root . --strict
