@@ -1238,11 +1238,12 @@ export const CodeAnalysisTree = ({ data }) => {
     // Load data from props
     useEffect(() => {
         try {
+            const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
+            const storedRoot = typeof window !== 'undefined'
+                ? (window.localStorage.getItem('valknut.projectRoot') || '')
+                : '';
+
             if (data && typeof data === 'object') {
-                // Store project root for VS Code links
-                if (data.projectRoot) {
-                    setProjectRoot(data.projectRoot);
-                }
 
                 const unifiedHierarchy = Array.isArray(data.unifiedHierarchy)
                     ? data.unifiedHierarchy
@@ -1328,10 +1329,12 @@ export const CodeAnalysisTree = ({ data }) => {
                     ...coveragePacks.map((pack) => pack?.path || pack?.file_path || pack?.filePath || '').filter(Boolean),
                 ];
 
-                const inferredRoot = detectProjectRoot(candidatePaths);
-                const effectiveProjectRoot = data.projectRoot || projectRoot || inferredRoot;
+                const inferredRoot = isFileProtocol ? detectProjectRoot(candidatePaths) : '';
+                const effectiveProjectRoot = isFileProtocol
+                    ? (storedRoot || data.projectRoot || projectRoot || inferredRoot)
+                    : (storedRoot || '');
 
-                if (effectiveProjectRoot && effectiveProjectRoot !== projectRoot) {
+                if (effectiveProjectRoot !== projectRoot) {
                     setProjectRoot(effectiveProjectRoot);
                 }
 

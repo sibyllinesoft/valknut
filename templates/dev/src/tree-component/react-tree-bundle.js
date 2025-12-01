@@ -31249,10 +31249,9 @@ Check the top-level render call using <` + parentName + ">.";
     }, []);
     import_react6.useEffect(() => {
       try {
+        const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
+        const storedRoot = typeof window !== "undefined" ? window.localStorage.getItem("valknut.projectRoot") || "" : "";
         if (data && typeof data === "object") {
-          if (data.projectRoot) {
-            setProjectRoot(data.projectRoot);
-          }
           const unifiedHierarchy = Array.isArray(data.unifiedHierarchy) ? data.unifiedHierarchy : Array.isArray(data.unified_hierarchy) ? data.unified_hierarchy : [];
           if (unifiedHierarchy.length > 0) {
             const hierarchy = JSON.parse(JSON.stringify(unifiedHierarchy));
@@ -31303,9 +31302,9 @@ Check the top-level render call using <` + parentName + ">.";
             ...fileGroups.map((f) => f.filePath).filter(Boolean),
             ...coveragePacks.map((pack) => pack?.path || pack?.file_path || pack?.filePath || "").filter(Boolean)
           ];
-          const inferredRoot = detectProjectRoot(candidatePaths);
-          const effectiveProjectRoot = data.projectRoot || projectRoot || inferredRoot;
-          if (effectiveProjectRoot && effectiveProjectRoot !== projectRoot) {
+          const inferredRoot = isFileProtocol ? detectProjectRoot(candidatePaths) : "";
+          const effectiveProjectRoot = isFileProtocol ? storedRoot || data.projectRoot || projectRoot || inferredRoot : storedRoot || "";
+          if (effectiveProjectRoot !== projectRoot) {
             setProjectRoot(effectiveProjectRoot);
           }
           const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks, docIssuesMap, effectiveProjectRoot);
@@ -31756,5 +31755,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=C94FD6E3CFC3A56364756E2164756E21
+//# debugId=70460ADF517F7C2664756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
