@@ -1106,6 +1106,16 @@ function registerHelpers() {
     return `${value.slice(0, limit - 1)}…`;
   });
 
+  handlebars.registerHelper('count_required', (tasks = []) => {
+    if (!Array.isArray(tasks)) return 0;
+    return tasks.filter((t) => t && (t.required === true || String(t.required || '').toLowerCase() === 'true')).length;
+  });
+
+  handlebars.registerHelper('count_optional', (tasks = []) => {
+    if (!Array.isArray(tasks)) return 0;
+    return tasks.filter((t) => !(t && (t.required === true || String(t.required || '').toLowerCase() === 'true'))).length;
+  });
+
 handlebars.registerHelper('basename', (value = '') => {
   if (typeof value !== 'string') return '';
   const parts = value.split(/[/\\]/);
