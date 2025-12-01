@@ -217,7 +217,34 @@ const computeAggregates = (node) => {
         {}
     );
 
+    const bumpSeverity = (level) => {
+        if (!level) return;
+        const key = String(level).toLowerCase();
+        if (key === 'critical') severityCounts.critical = (severityCounts.critical || 0) + 1;
+        else if (key === 'high') severityCounts.high = (severityCounts.high || 0) + 1;
+        else if (key === 'medium') severityCounts.medium = (severityCounts.medium || 0) + 1;
+        else severityCounts.low = (severityCounts.low || 0) + 1;
+    };
+
+    const classifyIssueSeverity = (issue = {}) => {
+        const raw = issue.severity ?? issue.priority ?? issue.priority_level;
+        if (typeof raw === 'string') {
+            return raw.toLowerCase();
+        }
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+            const val = raw;
+            if (val >= 80) return 'critical';
+            if (val >= 60) return 'high';
+            if (val >= 40) return 'medium';
+            return 'low';
+        }
+        return 'low';
+    };
+
     const directIssues = Array.isArray(node.issues) ? node.issues.length : 0;
+    if (Array.isArray(node.issues)) {
+        node.issues.forEach((issue) => bumpSeverity(classifyIssueSeverity(issue)));
+    }
     let totalIssues = getNumericValue(node, [
         'totalIssues',
         'total_issues',
