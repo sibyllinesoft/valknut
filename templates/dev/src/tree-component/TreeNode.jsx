@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Tooltip from '../components/Tooltip.jsx';
 
 /**
@@ -63,11 +63,6 @@ const buildVSCodeLink = (filePath, lineRange, projectRoot, lineNumber) => {
 const getStoredRoot = () => {
     if (typeof window === 'undefined') return '';
     return window.localStorage.getItem('valknut.projectRoot') || '';
-};
-
-const setStoredRoot = (value) => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('valknut.projectRoot', value || '');
 };
 
 const getNumericValue = (source, keys, fallback = null) => {
@@ -359,11 +354,6 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             tree.toggle(id);
         }
     };
-
-    const [storedRoot, setStoredRootState] = useState(() => getStoredRoot());
-    const [showRootPrompt, setShowRootPrompt] = useState(false);
-    const [pendingLinkContext, setPendingLinkContext] = useState(null);
-    const [rootInput, setRootInput] = useState(storedRoot || projectRoot || '');
 
     const registerIcon = (element, fallback) => {
         if (element) {
@@ -1379,22 +1369,15 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     const lineRange = data.line_range || data.lineRange;
     // Also check for line_number/start_line fields (common in code_dictionary entities)
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
-    const effectiveRoot = storedRoot || projectRoot || '';
+    const effectiveRoot = projectRoot || getStoredRoot() || '';
     const vscodeLink =
         isFile || isEntity
-            ? buildVSCodeLink(filePath, lineRange, effectiveRoot, lineNumber)
+            ? (filePath
+                ? (filePath.startsWith('/') || effectiveRoot
+                    ? buildVSCodeLink(filePath, lineRange, effectiveRoot, lineNumber)
+                    : null)
+                : null)
             : null;
-
-    const handleLabelClick = (e) => {
-        if (isFolder || isCategory) return; // folders/categories don't get VS Code links
-        if (vscodeLink) return; // link is already valid
-        if (!filePath) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setPendingLinkContext({ filePath, lineRange, lineNumber });
-        setRootInput(effectiveRoot || '');
-        setShowRootPrompt(true);
-    };
 
     const labelElement = vscodeLink
         ? React.createElement(
@@ -1418,14 +1401,13 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             'span',
             {
                 key: 'label',
-                onClick: handleLabelClick,
                 style: {
                     flex: 1,
                     fontWeight: (isFolder || isCategory) ? '500' : 'normal',
                     color: 'inherit',
                     minWidth: 0,
-                    textDecoration: isFile || isEntity ? 'underline dotted' : 'none',
-                    cursor: isFile || isEntity ? 'pointer' : 'default'
+                    textDecoration: 'none',
+                    cursor: 'default'
                 }
             },
             labelText
@@ -1537,117 +1519,5 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         ? React.createElement(Tooltip, { content: tooltipContent, placement: 'bottom' }, headerRow)
         : headerRow;
 
-    const modal = showRootPrompt
-        ? React.createElement(
-            'div',
-            {
-                key: 'root-modal',
-                style: {
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(15,15,15,0.65)',
-                    backdropFilter: 'blur(2px)',
-                    zIndex: 9999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                },
-                onClick: () => setShowRootPrompt(false),
-                role: 'presentation',
-            },
-            React.createElement(
-                'div',
-                {
-                    style: {
-                        minWidth: '320px',
-                        maxWidth: '520px',
-                        background: 'var(--surface, #1f1f1f)',
-                        color: 'var(--color-text, #e5e7eb)',
-                        border: '1px solid var(--keyline, rgba(255,255,255,0.08))',
-                        borderRadius: '10px',
-                        padding: '1rem 1.25rem',
-                        boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
-                    },
-                    onClick: (e) => e.stopPropagation(),
-                },
-                React.createElement('div', { style: { fontWeight: 600, marginBottom: '0.5rem' } }, 'Set VS Code workspace root'),
-                React.createElement(
-                    'p',
-                    { style: { margin: '0 0 0.75rem 0', color: 'var(--tree-muted, #9ca3af)' } },
-                    'Enter the absolute path to your local clone. We will use it to build VS Code links from relative paths.'
-                ),
-                React.createElement('input', {
-                    value: rootInput,
-                    onChange: (e) => setRootInput(e.target.value),
-                    placeholder: '/home/you/projects/repo',
-                    style: {
-                        width: '100%',
-                        padding: '0.6rem 0.75rem',
-                        borderRadius: '8px',
-                        border: '1px solid var(--keyline, rgba(255,255,255,0.12))',
-                        background: 'rgba(255,255,255,0.04)',
-                        color: 'inherit',
-                        marginBottom: '0.75rem',
-                    },
-                }),
-                React.createElement(
-                    'div',
-                    { style: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' } },
-                    React.createElement(
-                        'button',
-                        {
-                            style: {
-                                padding: '0.45rem 0.9rem',
-                                borderRadius: '8px',
-                                background: 'transparent',
-                                border: '1px solid var(--keyline, rgba(255,255,255,0.12))',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                            },
-                            onClick: () => {
-                                setPendingLinkContext(null);
-                                setShowRootPrompt(false);
-                            },
-                        },
-                        'Cancel'
-                    ),
-                    React.createElement(
-                        'button',
-                        {
-                            style: {
-                                padding: '0.45rem 0.9rem',
-                                borderRadius: '8px',
-                                background: 'var(--accent, #6366f1)',
-                                border: 'none',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                            },
-                            onClick: () => {
-                                const trimmed = (rootInput || '').trim();
-                                if (!trimmed) {
-                                    setShowRootPrompt(false);
-                                    return;
-                                }
-                                setStoredRoot(trimmed);
-                                setStoredRootState(trimmed);
-                                setShowRootPrompt(false);
-                                if (pendingLinkContext) {
-                                    const { filePath, lineRange, lineNumber } = pendingLinkContext;
-                                    const link = buildVSCodeLink(filePath, lineRange, trimmed, lineNumber);
-                                    if (link) {
-                                        window.location.href = link;
-                                    }
-                                    setPendingLinkContext(null);
-                                }
-                            },
-                        },
-                        'Save & Open'
-                    )
-                )
-            )
-        )
-        : null;
-
-    return React.createElement(React.Fragment, null, tooltipWrapped, modal);
+    return tooltipWrapped;
 };

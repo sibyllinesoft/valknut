@@ -476,6 +476,23 @@
         }
     })();
 
+    // VS Code root input -> localStorage bridge (used by tree links)
+    (function setupVSCodeRootInput() {
+        const input = document.getElementById('vscode-root-input');
+        if (!input || typeof window === 'undefined') return;
+        const KEY = 'valknut.projectRoot';
+        const saved = window.localStorage.getItem(KEY) || '';
+        if (saved) {
+            input.value = saved;
+        }
+        const persist = (value) => {
+            window.localStorage.setItem(KEY, value || '');
+        };
+        input.addEventListener('input', (e) => {
+            persist((e.target.value || '').trim());
+        });
+    })();
+
     // Coverage helpers (global fallback so inline handlers never throw)
     (function() {
         if (!window.toggleCoverageNode) {
