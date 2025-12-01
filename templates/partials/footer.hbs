@@ -514,10 +514,19 @@
             };
         }
 
+        const inlineProjectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
+        const getStoredRoot = () => {
+            try {
+                return window.localStorage.getItem('valknut.projectRoot') || '';
+            } catch (e) {
+                return '';
+            }
+        };
+
         // Path shortening (runs once on load) - keep directory parts intact
         function shortenCoveragePaths() {
-            const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
-            const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+            const chosenRoot = getStoredRoot() || (window.location?.protocol === 'file:' ? inlineProjectRoot : '');
+            const normRoot = chosenRoot ? chosenRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
             const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
             labels.forEach((labelEl) => {
                 const raw = String(labelEl.textContent || '').trim().replace(/\\/g, '/');
@@ -529,6 +538,45 @@
                 display = display.replace(/^[/\\]+/, '');
                 labelEl.textContent = display;
                 labelEl.setAttribute('title', raw);
+            });
+        }
+
+        function applyCoverageLinks() {
+            const isFileProtocol = window.location?.protocol === 'file:';
+            const storedRoot = getStoredRoot();
+            const baseRoot = isFileProtocol ? (storedRoot || inlineProjectRoot) : storedRoot;
+            const normRoot = baseRoot ? baseRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+
+            const buildLink = (path, line) => {
+                if (!path) return null;
+                const normalized = String(path).replace(/\\/g, '/');
+                if (isFileProtocol && normalized.startsWith('/')) {
+                    return `vscode://file${normalized}${line ? `:${line}` : ''}`;
+                }
+                if (normRoot) {
+                    const rel = normalized.replace(/^\.?\\//, '');
+                    return `vscode://file${normRoot}/${rel}${line ? `:${line}` : ''}`;
+                }
+                return null;
+            };
+
+            document.querySelectorAll('.coverage-gap-link').forEach((linkEl) => {
+                const path = linkEl.getAttribute('data-path') || '';
+                const line = linkEl.getAttribute('data-line') || '';
+                const href = buildLink(path, line);
+                if (href) {
+                    linkEl.setAttribute('href', href);
+                    linkEl.style.pointerEvents = 'auto';
+                    linkEl.style.textDecoration = 'none';
+                    linkEl.onclick = (e) => {
+                        e.stopPropagation();
+                    };
+                } else {
+                    linkEl.removeAttribute('href');
+                    linkEl.style.pointerEvents = 'none';
+                    linkEl.style.textDecoration = 'none';
+                    linkEl.onclick = (e) => e.stopPropagation();
+                }
             });
         }
 
@@ -546,6 +594,7 @@
 
         function initCoverage() {
             shortenCoveragePaths();
+            applyCoverageLinks();
             wireCoverageHeaders();
         }
 
@@ -554,6 +603,12 @@
         } else {
             initCoverage();
         }
+
+        window.addEventListener('storage', applyCoverageLinks);
+        window.addEventListener('valknut-root-changed', () => {
+            shortenCoveragePaths();
+            applyCoverageLinks();
+        });
     })();
 
     </script>
