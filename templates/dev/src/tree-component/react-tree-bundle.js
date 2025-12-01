@@ -29056,6 +29056,11 @@ Check the top-level render call using <` + parentName + ">.";
     console.log("[VSCode Link]", { filePath, projectRoot, absPath, lineNumber, uri });
     return uri;
   };
+  var getStoredRoot = () => {
+    if (typeof window === "undefined")
+      return "";
+    return window.localStorage.getItem("valknut.projectRoot") || "";
+  };
   var getNumericValue = (source, keys, fallback = null) => {
     if (!source || typeof source !== "object") {
       return fallback;
@@ -30000,7 +30005,20 @@ Check the top-level render call using <` + parentName + ">.";
     const filePath = data.file_path || data.filePath || data.path;
     const lineRange = data.line_range || data.lineRange;
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
-    const vscodeLink = isFile || isEntity ? buildVSCodeLink(filePath, lineRange, projectRoot, lineNumber) : null;
+    const effectiveRoot = projectRoot || getStoredRoot() || "";
+    const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
+    const hasRoot = !!effectiveRoot;
+    const isAbsolutePath = filePath ? filePath.startsWith("/") : false;
+    let vscodeLink = null;
+    if (isFile || isEntity) {
+      if (filePath) {
+        if (isFileProtocol && isAbsolutePath) {
+          vscodeLink = buildVSCodeLink(filePath, lineRange, "", lineNumber);
+        } else if (hasRoot) {
+          vscodeLink = buildVSCodeLink(filePath, lineRange, effectiveRoot, lineNumber);
+        }
+      }
+    }
     const labelElement = vscodeLink ? import_react5.default.createElement("a", {
       key: "label",
       href: vscodeLink,
@@ -30015,7 +30033,14 @@ Check the top-level render call using <` + parentName + ">.";
       }
     }, labelText) : import_react5.default.createElement("span", {
       key: "label",
-      style: { flex: 1, fontWeight: isFolder || isCategory ? "500" : "normal", color: "inherit", minWidth: 0 }
+      style: {
+        flex: 1,
+        fontWeight: isFolder || isCategory ? "500" : "normal",
+        color: "inherit",
+        minWidth: 0,
+        textDecoration: "none",
+        cursor: "default"
+      }
     }, labelText);
     if (shouldShowTooltip) {
       children.push(import_react5.default.createElement(Tooltip_default, { key: "label-tooltip", content: tooltipContent, placement: "bottom" }, import_react5.default.createElement("span", {
@@ -30093,7 +30118,8 @@ Check the top-level render call using <` + parentName + ">.";
       },
       onClick: shouldShowChevron ? () => toggleNode(node.id) : undefined
     }, ...children.filter(Boolean));
-    return headerRow;
+    const tooltipWrapped = shouldShowTooltip ? import_react5.default.createElement(Tooltip_default, { content: tooltipContent, placement: "bottom" }, headerRow) : headerRow;
+    return tooltipWrapped;
   };
 
   // src/tree-component/treeUtils.js
@@ -31707,5 +31733,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=4C512BD8896DEEE464756E2164756E21
+//# debugId=BC7D6EBEA11396DA64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
