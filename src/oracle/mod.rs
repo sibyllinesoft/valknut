@@ -516,7 +516,7 @@ impl RefactoringOracle {
                 temperature: 0.2,
                 top_k: 40,
                 top_p: 0.95,
-                max_output_tokens: 16000,
+                max_output_tokens: 32000,
                 response_mime_type: "application/json".to_string(),
             },
         };
