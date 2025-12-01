@@ -1381,41 +1381,30 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         }, `${aggregates.totalIssues} issues`));
     }
 
-    // Health badges
+    // Health badges (replaces complexity badge)
     if (isFolder && folderHealth !== null) {
         children.push(React.createElement('div', {
             key: 'health-folder',
             className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem', color: getHealthColor(folderHealth) }
+            style: { marginLeft: '0.5rem', color: getHealthColor(folderHealth) },
+            title: 'Aggregate health score (higher is better)'
         }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
     }
     if (isFile && fileHealth !== null) {
         children.push(React.createElement('div', {
             key: 'health-file',
             className: 'tree-badge tree-badge-low complexity-score',
-            style: { marginLeft: '0.5rem', color: getHealthColor(fileHealth) }
+            style: { marginLeft: '0.5rem', color: getHealthColor(fileHealth) },
+            title: 'File health score (higher is better)'
         }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
     }
-
-    // Complexity badges
-    if (isFolder && formattedNodeAvgScore !== null) {
+    if (isEntity && formattedNodeAvgScore !== null) {
         children.push(React.createElement('div', {
-            key: 'avg-score',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' },
-            title: 'Average complexity score across entities in this folder'
-        }, folderAcceptable
-            ? `Complexity: ${folderAcceptable}`
-            : `Avg Score: ${formattedNodeAvgScore}`));
-    }
-    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
-    const entityAcceptable = formatAcceptableRatio(getMaxComplexityRatio(data));
-    if (isEntity && formattedEntityScore !== null) {
-        children.push(React.createElement('div', {
-            key: 'complexity',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, entityAcceptable ? `Complexity: ${entityAcceptable}` : `Complexity: ${formattedEntityScore}`));
+            key: 'health-entity',
+            className: 'tree-badge tree-badge-low complexity-score',
+            style: { marginLeft: '0.5rem', color: getHealthColor((formattedNodeAvgScore / 100)) },
+            title: 'Entity health score (higher is better)'
+        }, `Health: ${formattedNodeAvgScore}%`));
     }
 
     // Priority badge with color coding

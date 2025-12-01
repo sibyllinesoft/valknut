@@ -29998,32 +29998,25 @@ Check the top-level render call using <` + parentName + ">.";
       children.push(import_react5.default.createElement("div", {
         key: "health-folder",
         className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem", color: getHealthColor(folderHealth) }
+        style: { marginLeft: "0.5rem", color: getHealthColor(folderHealth) },
+        title: "Aggregate health score (higher is better)"
       }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
     }
     if (isFile && fileHealth !== null) {
       children.push(import_react5.default.createElement("div", {
         key: "health-file",
         className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem", color: getHealthColor(fileHealth) }
+        style: { marginLeft: "0.5rem", color: getHealthColor(fileHealth) },
+        title: "File health score (higher is better)"
       }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
     }
-    if (isFolder && formattedNodeAvgScore !== null) {
+    if (isEntity && formattedNodeAvgScore !== null) {
       children.push(import_react5.default.createElement("div", {
-        key: "avg-score",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" },
-        title: "Average complexity score across entities in this folder"
-      }, folderAcceptable ? `Complexity: ${folderAcceptable}` : `Avg Score: ${formattedNodeAvgScore}`));
-    }
-    const formattedEntityScore = formatDecimal(aggregates.avgScore ?? data.score);
-    const entityAcceptable = formatAcceptableRatio(getMaxComplexityRatio(data));
-    if (isEntity && formattedEntityScore !== null) {
-      children.push(import_react5.default.createElement("div", {
-        key: "complexity",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, entityAcceptable ? `Complexity: ${entityAcceptable}` : `Complexity: ${formattedEntityScore}`));
+        key: "health-entity",
+        className: "tree-badge tree-badge-low complexity-score",
+        style: { marginLeft: "0.5rem", color: getHealthColor(formattedNodeAvgScore / 100) },
+        title: "Entity health score (higher is better)"
+      }, `Health: ${formattedNodeAvgScore}%`));
     }
     if (data.priority || data.highestPriority) {
       const priority = data.priority || data.highestPriority;
@@ -31680,5 +31673,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=9282ABF99BD262C764756E2164756E21
+//# debugId=AC8F06E63A9C634564756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
