@@ -551,11 +551,11 @@
                 if (!path) return null;
                 const normalized = String(path).replace(/\\/g, '/');
                 if (isFileProtocol && normalized.startsWith('/')) {
-                    return `vscode://file${normalized}${line ? `:${line}` : ''}`;
+                    return `vscode://file${normalized}${line ? ':' + line : ''}`;
                 }
                 if (normRoot) {
                     const rel = normalized.replace(/^\.?\\//, '');
-                    return `vscode://file${normRoot}/${rel}${line ? `:${line}` : ''}`;
+                    return `vscode://file${normRoot}/${rel}${line ? ':' + line : ''}`;
                 }
                 return null;
             };
