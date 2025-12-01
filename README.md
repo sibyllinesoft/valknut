@@ -9,6 +9,10 @@ Valknut is a Rust-native analysis platform that combines structural heuristics, 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Docs & Demo
+- Docs site: https://valknut.sibylline.dev
+- Live report snapshot: https://valknut.sibylline.dev/report-dev.html
+
 ## At a Glance
 - **Comprehensive analysis pipeline** – structure, complexity, dependency graph, coverage, LSH clone detection, refactoring scoring, and health metrics driven by `AnalysisPipeline`.
 - **Documentation awareness** – the bundled `doc-audit` command finds missing/dated READMEs, TODO clusters, and style regressions using the `crates/doc_audit` crate.
