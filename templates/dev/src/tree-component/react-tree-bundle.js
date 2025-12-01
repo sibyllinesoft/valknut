@@ -29997,24 +29997,24 @@ Check the top-level render call using <` + parentName + ">.";
     if (isFolder && folderHealth !== null) {
       children.push(import_react5.default.createElement("div", {
         key: "health-folder",
-        className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem", color: getHealthColor(folderHealth) },
+        className: "tree-badge tree-badge-low complexity-score health-badge",
+        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(folderHealth), color: getHealthColor(folderHealth) },
         title: "Aggregate health score (higher is better)"
       }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
     }
     if (isFile && fileHealth !== null) {
       children.push(import_react5.default.createElement("div", {
         key: "health-file",
-        className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem", color: getHealthColor(fileHealth) },
+        className: "tree-badge tree-badge-low complexity-score health-badge",
+        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(fileHealth), color: getHealthColor(fileHealth) },
         title: "File health score (higher is better)"
       }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
     }
     if (isEntity && formattedNodeAvgScore !== null) {
       children.push(import_react5.default.createElement("div", {
         key: "health-entity",
-        className: "tree-badge tree-badge-low complexity-score",
-        style: { marginLeft: "0.5rem", color: getHealthColor(formattedNodeAvgScore / 100) },
+        className: "tree-badge tree-badge-low complexity-score health-badge",
+        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(formattedNodeAvgScore / 100), color: getHealthColor(formattedNodeAvgScore / 100) },
         title: "Entity health score (higher is better)"
       }, `Health: ${formattedNodeAvgScore}%`));
     }
@@ -31673,5 +31673,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=AC8F06E63A9C634564756E2164756E21
+//# debugId=17A653F870AA345F64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
