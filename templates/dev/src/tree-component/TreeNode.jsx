@@ -934,7 +934,6 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
                             : '—',
                 },
                 { label: 'Files', value: aggregates.fileCount ?? data.fileCount ?? 0 },
-                { label: 'Entities', value: aggregates.entityCount ?? data.entityCount ?? 0 },
                 { label: 'Issues', value: totalFolderIssues },
                 { label: 'Critical Issues', value: aggregates.severityCounts?.critical ?? data.criticalIssues ?? 0 },
                 { label: 'High Priority', value: (aggregates.severityCounts?.high || 0) + (aggregates.severityCounts?.critical || 0) },
@@ -1414,41 +1413,9 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
     const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
 
-    // Badge ordering: Entities → Issues → Health → Complexity → Priority → Severity bar (rightmost)
+    // Badge ordering: Issues → Health → Complexity → Priority → Severity bar (rightmost)
 
-    // Entities badges
-    if (isFolder && (aggregates.entityCount || data.entityCount)) {
-        const count = aggregates.entityCount ?? data.entityCount ?? 0;
-        children.push(React.createElement('div', {
-            key: 'entities-folder',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${count} entities`));
-    }
-    if (isFile && (aggregates.entityCount || data.entityCount)) {
-        const count = aggregates.entityCount ?? data.entityCount ?? 0;
-        children.push(React.createElement('div', {
-            key: 'entities-file',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${count} entities`));
-    }
-
-    // Issues badges
-    if (isFolder && aggregates.totalIssues > 0) {
-        children.push(React.createElement('div', {
-            key: 'issues-folder',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${aggregates.totalIssues} issues`));
-    }
-    if (isFile && aggregates.totalIssues > 0) {
-        children.push(React.createElement('div', {
-            key: 'issues-file',
-            className: 'tree-badge tree-badge-low',
-            style: { marginLeft: '0.5rem' }
-        }, `${aggregates.totalIssues} issues`));
-    }
+    // Issues badges intentionally omitted (no badges on folders, files, or entities)
 
     // Health badges (replaces complexity badge)
     const healthStyle = {

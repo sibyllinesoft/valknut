@@ -29746,7 +29746,6 @@ Check the top-level render call using <` + parentName + ">.";
             value: typeof folderHealth === "number" ? `${Math.round(folderHealth * 100)}%` : "—"
           },
           { label: "Files", value: aggregates.fileCount ?? data.fileCount ?? 0 },
-          { label: "Entities", value: aggregates.entityCount ?? data.entityCount ?? 0 },
           { label: "Issues", value: totalFolderIssues },
           { label: "Critical Issues", value: aggregates.severityCounts?.critical ?? data.criticalIssues ?? 0 },
           { label: "High Priority", value: (aggregates.severityCounts?.high || 0) + (aggregates.severityCounts?.critical || 0) }
@@ -30034,36 +30033,6 @@ Check the top-level render call using <` + parentName + ">.";
     const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
     const fileComplexityRatio = isFile ? getMaxComplexityRatio(data) : null;
     const formattedNodeAcceptable = formatAcceptableRatio(fileComplexityRatio);
-    if (isFolder && (aggregates.entityCount || data.entityCount)) {
-      const count2 = aggregates.entityCount ?? data.entityCount ?? 0;
-      children.push(import_react5.default.createElement("div", {
-        key: "entities-folder",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${count2} entities`));
-    }
-    if (isFile && (aggregates.entityCount || data.entityCount)) {
-      const count2 = aggregates.entityCount ?? data.entityCount ?? 0;
-      children.push(import_react5.default.createElement("div", {
-        key: "entities-file",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${count2} entities`));
-    }
-    if (isFolder && aggregates.totalIssues > 0) {
-      children.push(import_react5.default.createElement("div", {
-        key: "issues-folder",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${aggregates.totalIssues} issues`));
-    }
-    if (isFile && aggregates.totalIssues > 0) {
-      children.push(import_react5.default.createElement("div", {
-        key: "issues-file",
-        className: "tree-badge tree-badge-low",
-        style: { marginLeft: "0.5rem" }
-      }, `${aggregates.totalIssues} issues`));
-    }
     const healthStyle = {
       marginLeft: "0.5rem",
       display: "inline-flex",
@@ -31738,5 +31707,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=7E8FD2A4E8662AF064756E2164756E21
+//# debugId=4C512BD8896DEEE464756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
