@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use walkdir::WalkDir;
 
-/// Token budget for valknut analysis output (50k tokens)
-const VALKNUT_OUTPUT_TOKEN_BUDGET: usize = 50_000;
+/// Token budget for valknut analysis output (70k tokens)
+const VALKNUT_OUTPUT_TOKEN_BUDGET: usize = 70_000;
 
 /// AI refactoring oracle that provides intelligent suggestions using Gemini 2.5 Pro
 pub struct RefactoringOracle {
@@ -401,6 +401,10 @@ impl RefactoringOracle {
                rather than just fixing individual complexity hotspots.\n\
             5. Be EXPANSIVE - include both essential improvements and optional \"nice to have\" suggestions.\n\
             6. Order tasks in a SAFE execution sequence where dependencies are respected.\n\n\
+            Additional guardrails:\n\
+            - Do NOT cap the roadmap at three phases; generate a full, detailed plan.\n\
+            - Avoid nitpicks or low-impact / high-effort churn; prioritise meaningful architectural wins.\n\
+            - Prefer fewer, higher-value tasks over noisy micro-fixes, but target at least 8 solid items when possible.\n\n\
             ## CRITICAL: Response Format Requirements\n\
             You MUST respond with valid JSON that exactly matches this schema. Do not include markdown formatting, explanations, or any text outside the JSON object.\n\n\
             ## Required JSON Response Schema:\n\
@@ -512,7 +516,7 @@ impl RefactoringOracle {
                 temperature: 0.2,
                 top_k: 40,
                 top_p: 0.95,
-                max_output_tokens: 8192,
+                max_output_tokens: 16000,
                 response_mime_type: "application/json".to_string(),
             },
         };
