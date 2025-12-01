@@ -32,13 +32,16 @@
     <!-- Report Metadata -->
     <div class="meta" style="display:flex; align-items:center; justify-content: space-around; gap: 12px; margin-bottom: var(--space-xl); color: var(--color-text-muted); font-size: var(--text-sm); flex-wrap: wrap;">
         <span style="order:1;">Generated: {{generated_at}} • Version: {{version}}</span>
-        <input
-            id="vscode-root-input"
-            type="text"
-            placeholder="Project path for vscode links"
-            style="order:2; min-width: 220px; max-width: 420px; flex: 1 1 260px; padding: 0.5rem 0.6rem; border-radius: 8px; border: 1px solid var(--keyline, rgba(255,255,255,0.12)); background: rgba(255,255,255,0.05); color: var(--color-text, #e5e7eb); font-size: 0.9rem; outline: none;"
-            aria-label="Project path for VS Code links"
-        />
+        <span style="order:2; display:inline-flex; align-items:center; gap:8px; min-width: 260px; flex:1 1 300px;">
+            <i data-lucide="folder" aria-hidden="true" style="width:16px;height:16px; color: var(--color-text-muted);"></i>
+            <input
+                id="vscode-root-input"
+                type="text"
+                placeholder="Project path for vscode links"
+                style="flex:1; min-width: 220px; max-width: 420px; padding: 0.5rem 0.6rem; border-radius: 8px; border: 1px solid var(--keyline, rgba(255,255,255,0.12)); background: rgba(255,255,255,0.05); color: var(--color-text, #e5e7eb); font-size: 0.9rem; outline: none;"
+                aria-label="Project path for VS Code links"
+            />
+        </span>
         <button id="debug-open" type="button" aria-label="Show raw analysis JSON"
             style="order:3; display:inline-flex; align-items:center; gap:4px; background: transparent; border: none; color: var(--color-text); padding: 0; cursor: pointer; font-size: 0.9rem;">
             <span data-lucide="bug" aria-hidden="true" style="width:14px;height:14px;"></span>

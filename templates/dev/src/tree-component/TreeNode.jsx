@@ -1369,7 +1369,9 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     const lineRange = data.line_range || data.lineRange;
     // Also check for line_number/start_line fields (common in code_dictionary entities)
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
-    const effectiveRoot = projectRoot || getStoredRoot() || '';
+    // Only honor user-provided root (localStorage). Do not fall back to embedded projectRoot
+    // so that localhost/served reports do not leak absolute paths.
+    const effectiveRoot = getStoredRoot() || '';
     const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
     const hasRoot = !!effectiveRoot;
     const isAbsolutePath = filePath ? filePath.startsWith('/') : false;

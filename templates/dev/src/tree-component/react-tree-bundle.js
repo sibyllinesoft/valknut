@@ -41,7 +41,7 @@
       });
   };
 
-  // node_modules/react/cjs/react.development.js
+  // templates/dev/node_modules/react/cjs/react.development.js
   var require_react_development = __commonJS((exports, module) => {
     if (true) {
       (function() {
@@ -1844,14 +1844,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // node_modules/react/index.js
+  // templates/dev/node_modules/react/index.js
   var require_react = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_development();
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.development.js
+  // templates/dev/node_modules/scheduler/cjs/scheduler.development.js
   var require_scheduler_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -2294,14 +2294,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // node_modules/scheduler/index.js
+  // templates/dev/node_modules/scheduler/index.js
   var require_scheduler = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_scheduler_development();
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.development.js
+  // templates/dev/node_modules/react-dom/cjs/react-dom.development.js
   var require_react_dom_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -22748,14 +22748,14 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
     }
   });
 
-  // node_modules/react-dom/index.js
+  // templates/dev/node_modules/react-dom/index.js
   var require_react_dom = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_dom_development();
     }
   });
 
-  // node_modules/react-dom/client.js
+  // templates/dev/node_modules/react-dom/client.js
   var require_client = __commonJS((exports) => {
     var m = require_react_dom();
     if (false) {} else {
@@ -22780,7 +22780,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
     var i;
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.development.js
+  // templates/dev/node_modules/react/cjs/react-jsx-runtime.development.js
   var require_react_jsx_runtime_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -23673,14 +23673,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // templates/dev/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_jsx_runtime_development();
     }
   });
 
-  // node_modules/react/cjs/react-jsx-dev-runtime.development.js
+  // templates/dev/node_modules/react/cjs/react-jsx-dev-runtime.development.js
   var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -24561,14 +24561,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // node_modules/react/jsx-dev-runtime.js
+  // templates/dev/node_modules/react/jsx-dev-runtime.js
   var require_jsx_dev_runtime = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_jsx_dev_runtime_development();
     }
   });
 
-  // src/tree-component/index.js
+  // templates/dev/src/tree-component/index.js
   var exports_tree_component = {};
   __export(exports_tree_component, {
     validateTreeData: () => validateTreeData,
@@ -24583,14 +24583,14 @@ Check the top-level render call using <` + parentName + ">.";
   var import_react8 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
-  // src/tree-component/CodeAnalysisTree.jsx
+  // templates/dev/src/tree-component/CodeAnalysisTree.jsx
   var import_react6 = __toESM(require_react(), 1);
 
-  // node_modules/@tanstack/react-virtual/dist/esm/index.js
+  // templates/dev/node_modules/@tanstack/react-virtual/dist/esm/index.js
   var React = __toESM(require_react(), 1);
   var import_react_dom = __toESM(require_react_dom(), 1);
 
-  // node_modules/@tanstack/virtual-core/dist/esm/utils.js
+  // templates/dev/node_modules/@tanstack/virtual-core/dist/esm/utils.js
   function memo(getDeps, fn, opts) {
     let deps = opts.initialDeps ?? [];
     let result;
@@ -24649,7 +24649,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   };
 
-  // node_modules/@tanstack/virtual-core/dist/esm/index.js
+  // templates/dev/node_modules/@tanstack/virtual-core/dist/esm/index.js
   var getRect = (element) => {
     const { offsetWidth, offsetHeight } = element;
     return { width: offsetWidth, height: offsetHeight };
@@ -25325,7 +25325,7 @@ Check the top-level render call using <` + parentName + ">.";
     return { startIndex, endIndex };
   }
 
-  // node_modules/@tanstack/react-virtual/dist/esm/index.js
+  // templates/dev/node_modules/@tanstack/react-virtual/dist/esm/index.js
   var useIsomorphicLayoutEffect = typeof document !== "undefined" ? React.useLayoutEffect : React.useEffect;
   function useVirtualizerBase(options) {
     const rerender = React.useReducer(() => ({}), {})[1];
@@ -25360,16 +25360,16 @@ Check the top-level render call using <` + parentName + ">.";
     });
   }
 
-  // src/tree-component/TreeNode.jsx
+  // templates/dev/src/tree-component/TreeNode.jsx
   var import_react5 = __toESM(require_react(), 1);
 
-  // src/components/Tooltip.jsx
+  // templates/dev/src/components/Tooltip.jsx
   var import_react3 = __toESM(require_react(), 1);
 
-  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var React4 = __toESM(require_react(), 1);
 
-  // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+  // templates/dev/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
   function hasWindow() {
     return typeof window !== "undefined";
   }
@@ -25517,11 +25517,11 @@ Check the top-level render call using <` + parentName + ">.";
     return win.parent && Object.getPrototypeOf(win.parent) ? win.frameElement : null;
   }
 
-  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
   var React2 = __toESM(require_react(), 1);
   var import_react = __toESM(require_react(), 1);
 
-  // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+  // templates/dev/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
   var min = Math.min;
   var max = Math.max;
   var round = Math.round;
@@ -25653,7 +25653,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   }
 
-  // node_modules/tabbable/dist/index.esm.js
+  // templates/dev/node_modules/tabbable/dist/index.esm.js
   /*!
   * tabbable 6.2.0
   * @license MIT, https://github.com/focus-trap/tabbable/blob/master/LICENSE
@@ -25947,7 +25947,7 @@ Check the top-level render call using <` + parentName + ">.";
     return sortByOrder(candidates);
   };
 
-  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
   function getPlatform() {
     const uaData = navigator.userAgentData;
     if (uaData != null && uaData.platform) {
@@ -26142,11 +26142,11 @@ Check the top-level render call using <` + parentName + ">.";
     });
   }
 
-  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
   var ReactDOM2 = __toESM(require_react_dom(), 1);
 
-  // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+  // templates/dev/node_modules/@floating-ui/core/dist/floating-ui.core.mjs
   function computeCoordsFromPlacement(_ref, placement, rtl) {
     let {
       reference,
@@ -26649,7 +26649,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   };
 
-  // node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+  // templates/dev/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
   function getCssDimensions(element) {
     const css = getComputedStyle2(element);
     let width = parseFloat(css.width) || 0;
@@ -27256,7 +27256,7 @@ Check the top-level render call using <` + parentName + ">.";
     });
   };
 
-  // node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
+  // templates/dev/node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
   var React3 = __toESM(require_react(), 1);
   var import_react2 = __toESM(require_react(), 1);
   var ReactDOM = __toESM(require_react_dom(), 1);
@@ -27525,7 +27525,7 @@ Check the top-level render call using <` + parentName + ">.";
     ...arrow$1(options),
     options: [options, deps]
   });
-  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var FOCUSABLE_ATTRIBUTE2 = "data-floating-ui-focusable";
   var ACTIVE_KEY = "active";
   var SELECTED_KEY = "selected";
@@ -28955,7 +28955,7 @@ Check the top-level render call using <` + parentName + ">.";
     } : {}, [enabled, reference, floating, item]);
   }
 
-  // src/components/Tooltip.jsx
+  // templates/dev/src/components/Tooltip.jsx
   var jsx_dev_runtime = __toESM(require_jsx_dev_runtime(), 1);
   var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 200 }) => {
     const arrowRef = import_react3.useRef(null);
@@ -29011,7 +29011,7 @@ Check the top-level render call using <` + parentName + ">.";
   };
   var Tooltip_default = Tooltip;
 
-  // src/tree-component/TreeNode.jsx
+  // templates/dev/src/tree-component/TreeNode.jsx
   var renderChevronIcon = () => {
     const pathD = "M9 6l6 6-6 6";
     return import_react5.default.createElement("svg", {
@@ -30005,7 +30005,7 @@ Check the top-level render call using <` + parentName + ">.";
     const filePath = data.file_path || data.filePath || data.path;
     const lineRange = data.line_range || data.lineRange;
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
-    const effectiveRoot = projectRoot || getStoredRoot() || "";
+    const effectiveRoot = getStoredRoot() || "";
     const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
     const hasRoot = !!effectiveRoot;
     const isAbsolutePath = filePath ? filePath.startsWith("/") : false;
@@ -30122,7 +30122,7 @@ Check the top-level render call using <` + parentName + ">.";
     return tooltipWrapped;
   };
 
-  // src/tree-component/treeUtils.js
+  // templates/dev/src/tree-component/treeUtils.js
   var transformTreeData = (data, parentId = "", codeDictionary = { issues: {}, suggestions: {} }) => {
     if (!Array.isArray(data)) {
       return [];
@@ -30307,7 +30307,7 @@ Check the top-level render call using <` + parentName + ">.";
     return data.map(filterNode).filter(Boolean);
   };
 
-  // src/tree-component/CodeAnalysisTree.jsx
+  // templates/dev/src/tree-component/CodeAnalysisTree.jsx
   var CodeAnalysisTree = ({ data }) => {
     const SHOW_ENTITY_DETAIL_ROWS = false;
     const [treeData, setTreeData] = import_react6.useState([]);
@@ -31468,7 +31468,7 @@ Check the top-level render call using <` + parentName + ">.";
     }))));
   };
 
-  // src/tree-component/ClonePairsPanel.jsx
+  // templates/dev/src/tree-component/ClonePairsPanel.jsx
   var import_react7 = __toESM(require_react(), 1);
   var jsx_dev_runtime2 = __toESM(require_jsx_dev_runtime(), 1);
   var chunk = (items, size4) => {
@@ -31680,7 +31680,7 @@ Check the top-level render call using <` + parentName + ">.";
     }, undefined, false, undefined, this);
   };
 
-  // src/tree-component/index.js
+  // templates/dev/src/tree-component/index.js
   var tree_component_default = CodeAnalysisTree;
   if (typeof window !== "undefined") {
     if (typeof window.ReactTreeBundle === "function") {
@@ -31733,5 +31733,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=BC7D6EBEA11396DA64756E2164756E21
+//# debugId=DB73424D6FDAAFE364756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
