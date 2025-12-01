@@ -29528,13 +29528,14 @@ Check the top-level render call using <` + parentName + ">.";
         return "#ffc107";
       return "#dc3545";
     };
-    const computeHealthPercent = (severityCounts = {}) => {
+    const computeHealthPercent = (severityCounts = {}, entityCount = 1) => {
       const crit = Number(severityCounts.critical || 0);
       const high = Number(severityCounts.high || 0);
       const med = Number(severityCounts.medium || 0);
       const low = Number(severityCounts.low || 0);
       const penalty = crit * 25 + high * 15 + med * 7 + low * 3;
-      const health = Math.max(0, Math.min(100, 100 - penalty));
+      const denom = Math.max(1, entityCount);
+      const health = Math.max(0, Math.min(100, 100 - penalty / denom));
       return health;
     };
     const children = [];
@@ -29998,7 +29999,7 @@ Check the top-level render call using <` + parentName + ">.";
       children.push(iconElement);
       children.push(labelElement);
     }
-    const nodeHealthPercent = computeHealthPercent(aggregates.severityCounts || aggregates.severity_counts || {});
+    const nodeHealthPercent = computeHealthPercent(aggregates.severityCounts || aggregates.severity_counts || {}, aggregates.entityCount || data.entityCount || 1);
     const nodeHealthRatio = nodeHealthPercent / 100;
     const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
     const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
@@ -31735,5 +31736,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=69DFD5BC3133E21F64756E2164756E21
+//# debugId=81B7F090F07D606B64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

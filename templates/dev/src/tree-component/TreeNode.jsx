@@ -636,13 +636,14 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         return '#dc3545'; // red - danger
     };
 
-    const computeHealthPercent = (severityCounts = {}) => {
+    const computeHealthPercent = (severityCounts = {}, entityCount = 1) => {
         const crit = Number(severityCounts.critical || 0);
         const high = Number(severityCounts.high || 0);
         const med = Number(severityCounts.medium || 0);
         const low = Number(severityCounts.low || 0);
         const penalty = crit * 25 + high * 15 + med * 7 + low * 3;
-        const health = Math.max(0, Math.min(100, 100 - penalty));
+        const denom = Math.max(1, entityCount);
+        const health = Math.max(0, Math.min(100, 100 - penalty / denom));
         return health;
     };
     
@@ -1372,7 +1373,10 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     }
 
     // Pre-compute all badge data before adding to children array
-    const nodeHealthPercent = computeHealthPercent(aggregates.severityCounts || aggregates.severity_counts || {});
+    const nodeHealthPercent = computeHealthPercent(
+        aggregates.severityCounts || aggregates.severity_counts || {},
+        aggregates.entityCount || data.entityCount || 1
+    );
     const nodeHealthRatio = nodeHealthPercent / 100;
     const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
     const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
