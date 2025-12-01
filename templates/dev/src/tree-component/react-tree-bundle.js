@@ -30094,17 +30094,6 @@ Check the top-level render call using <` + parentName + ">.";
         title: "Entity health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
-    if (data.priority || data.highestPriority) {
-      const priority = data.priority || data.highestPriority;
-      children.push(import_react5.default.createElement("div", {
-        key: "priority",
-        className: "tree-badge",
-        style: {
-          marginLeft: "0.5rem",
-          ...getPriorityStyle(priority)
-        }
-      }, priority));
-    }
     if (isEntity && data.lineRange) {
       children.push(import_react5.default.createElement("div", {
         key: "lines",
@@ -31749,5 +31738,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=38EB7F6441F4DBB264756E2164756E21
+//# debugId=7E8FD2A4E8662AF064756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

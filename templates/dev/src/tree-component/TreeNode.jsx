@@ -1483,19 +1483,6 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
 
-    // Priority badge with color coding
-    if (data.priority || data.highestPriority) {
-        const priority = data.priority || data.highestPriority;
-        children.push(React.createElement('div', {
-            key: 'priority',
-            className: 'tree-badge',
-            style: {
-                marginLeft: '0.5rem',
-                ...getPriorityStyle(priority)
-            }
-        }, priority));
-    }
-
     // Line range for entities
     if (isEntity && data.lineRange) {
         children.push(React.createElement('div', {
