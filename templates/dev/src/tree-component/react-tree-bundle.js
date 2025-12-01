@@ -30260,6 +30260,40 @@ Check the top-level render call using <` + parentName + ">.";
     const [treeData, setTreeData] = import_react6.useState([]);
     const [expandedIds, setExpandedIds] = import_react6.useState(new Set);
     const [projectRoot, setProjectRoot] = import_react6.useState("");
+    const normalizePath = import_react6.useCallback((value = "") => {
+      return String(value || "").replace(/\\/g, "/");
+    }, []);
+    const toProjectRelativePath = import_react6.useCallback((filePath, rootPath) => {
+      const normalized = normalizePath(filePath).replace(/^\.\/?/, "");
+      const rootNormalized = normalizePath(rootPath).replace(/\/+$/, "");
+      if (rootNormalized && normalized.startsWith(rootNormalized)) {
+        const stripped = normalized.slice(rootNormalized.length).replace(/^\/+/, "");
+        if (stripped.length > 0) {
+          return stripped;
+        }
+      }
+      const withoutLeading = normalized.replace(/^\/+/, "");
+      return withoutLeading || normalized.split("/").pop() || normalized;
+    }, [normalizePath]);
+    const detectProjectRoot = import_react6.useCallback((paths = []) => {
+      const normalizedPaths = paths.map((p) => normalizePath(p)).filter((p) => p && p.length > 0);
+      if (normalizedPaths.length === 0) {
+        return "";
+      }
+      const splitPaths = normalizedPaths.map((p) => p.split("/").filter(Boolean));
+      let prefix = splitPaths[0];
+      for (const parts of splitPaths.slice(1)) {
+        const limit = Math.min(prefix.length, parts.length);
+        let i = 0;
+        while (i < limit && prefix[i] === parts[i]) {
+          i += 1;
+        }
+        prefix = prefix.slice(0, i);
+        if (prefix.length === 0)
+          break;
+      }
+      return prefix.length > 0 ? `/${prefix.join("/")}` : "";
+    }, [normalizePath]);
     const codeDictionary = import_react6.useMemo(() => {
       const source = data && typeof data === "object" ? data.code_dictionary || data.codeDictionary || {} : {};
       return {
@@ -30512,7 +30546,7 @@ Check the top-level render call using <` + parentName + ">.";
       const aggregated = bubble(cloneNodes);
       return cleanup(aggregated);
     }, []);
-    const buildTreeData = import_react6.useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap) => {
+    const buildTreeData = import_react6.useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap, activeProjectRoot = projectRoot) => {
       const folderMap = new Map;
       const result = [];
       const directoryLookup = directoryHealth && directoryHealth.directories || {};
@@ -30805,9 +30839,10 @@ Check the top-level render call using <` + parentName + ">.";
             }
             return null;
           };
+          const displayName = toProjectRelativePath(fileGroup.filePath, activeProjectRoot || projectRoot || "");
           const fileNode = {
             id: fileNodeId,
-            name: String(fileName),
+            name: String(displayName || fileName),
             type: "file",
             filePath: String(fileGroup.filePath),
             highestPriority: String(fileGroup.highestPriority || "Low"),
@@ -30924,7 +30959,7 @@ Check the top-level render call using <` + parentName + ">.";
       const aggregatedResult = aggregateTreeMetrics(result);
       const sortedResult = sortNodesByPriority(aggregatedResult);
       return sortedResult;
-    }, [aggregateTreeMetrics, codeDictionary, sortNodesByPriority]);
+    }, [aggregateTreeMetrics, codeDictionary, sortNodesByPriority, toProjectRelativePath, projectRoot]);
     const normalizeTreeData = import_react6.useCallback((nodes) => {
       if (!Array.isArray(nodes)) {
         return [];
@@ -31188,7 +31223,16 @@ Check the top-level render call using <` + parentName + ">.";
             entities: g.entities || []
           })) : groupCandidatesByFile(candidates);
           const docIssuesMap = data.documentation?.file_doc_issues || data.documentation?.fileDocIssues || {};
-          const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks, docIssuesMap);
+          const candidatePaths = [
+            ...fileGroups.map((f) => f.filePath).filter(Boolean),
+            ...coveragePacks.map((pack) => pack?.path || pack?.file_path || pack?.filePath || "").filter(Boolean)
+          ];
+          const inferredRoot = detectProjectRoot(candidatePaths);
+          const effectiveProjectRoot = data.projectRoot || projectRoot || inferredRoot;
+          if (effectiveProjectRoot && effectiveProjectRoot !== projectRoot) {
+            setProjectRoot(effectiveProjectRoot);
+          }
+          const treeStructure = buildTreeData(fileGroups, data.directory_health_tree || data.directoryHealthTree || null, coveragePacks, docIssuesMap, effectiveProjectRoot);
           const annotated = annotateNodesWithDictionary(treeStructure);
           const normalized = normalizeTreeData(annotated);
           const aggregatedNormalized = aggregateTreeMetrics(normalized);
@@ -31209,7 +31253,9 @@ Check the top-level render call using <` + parentName + ">.";
       annotateDocIssues,
       sortNodesByPriority,
       aggregateTreeMetrics,
-      groupCandidatesByFile
+      groupCandidatesByFile,
+      detectProjectRoot,
+      projectRoot
     ]);
     import_react6.useEffect(() => {
       if (treeData.length === 0) {
@@ -31634,5 +31680,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=93ACC92114B8144B64756E2164756E21
+//# debugId=9282ABF99BD262C764756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

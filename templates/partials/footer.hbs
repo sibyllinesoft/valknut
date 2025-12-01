@@ -494,43 +494,19 @@
             };
         }
 
-        // Path shortening fallback (runs once on load)
+        // Path shortening (runs once on load) - keep directory parts intact
         function shortenCoveragePaths() {
             const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
             const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
             const labels = Array.from(document.querySelectorAll('.coverage-section .tree-label'));
-            if (!labels.length) return;
-            const rawPaths = labels.map((el) => String(el.textContent || '').trim().replace(/\\/g, '/')).filter(Boolean);
-
-            const commonPrefix = (() => {
-                if (rawPaths.length === 0) return '';
-                const parts = rawPaths.map((p) => p.split('/'));
-                const shortest = Math.min(...parts.map((p) => p.length));
-                const prefix = [];
-                for (let i = 0; i < shortest; i++) {
-                    const seg = parts[0][i];
-                    if (parts.every((p) => p[i] === seg)) prefix.push(seg);
-                    else break;
-                }
-                return prefix.join('/');
-            })();
-
-            labels.forEach((labelEl, idx) => {
-                const raw = rawPaths[idx];
+            labels.forEach((labelEl) => {
+                const raw = String(labelEl.textContent || '').trim().replace(/\\/g, '/');
                 if (!raw) return;
                 let display = raw;
                 if (normRoot && raw.startsWith(normRoot)) {
                     display = raw.slice(normRoot.length);
-                    if (display.startsWith('/')) display = display.slice(1);
-                    if (display.startsWith('\\')) display = display.slice(1);
-                } else if (commonPrefix && raw.startsWith(commonPrefix)) {
-                    display = raw.slice(commonPrefix.length);
-                    if (display.startsWith('/')) display = display.slice(1);
-                    if (display.startsWith('\\')) display = display.slice(1);
-                } else {
-                    const parts = raw.split('/');
-                    display = parts[parts.length - 1] || raw;
                 }
+                display = display.replace(/^[/\\]+/, '');
                 labelEl.textContent = display;
                 labelEl.setAttribute('title', raw);
             });

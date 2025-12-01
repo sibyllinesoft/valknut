@@ -13,6 +13,51 @@ export const CodeAnalysisTree = ({ data }) => {
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [projectRoot, setProjectRoot] = useState('');
 
+    const normalizePath = useCallback((value = '') => {
+        return String(value || '').replace(/\\/g, '/');
+    }, []);
+
+    const toProjectRelativePath = useCallback((filePath, rootPath) => {
+        const normalized = normalizePath(filePath).replace(/^\.\/?/, '');
+        const rootNormalized = normalizePath(rootPath).replace(/\/+$/, '');
+
+        if (rootNormalized && normalized.startsWith(rootNormalized)) {
+            const stripped = normalized.slice(rootNormalized.length).replace(/^\/+/, '');
+            if (stripped.length > 0) {
+                return stripped;
+            }
+        }
+
+        // Fallbacks: drop leading slashes but preserve directory structure
+        const withoutLeading = normalized.replace(/^\/+/, '');
+        return withoutLeading || normalized.split('/').pop() || normalized;
+    }, [normalizePath]);
+
+    const detectProjectRoot = useCallback((paths = []) => {
+        const normalizedPaths = paths
+            .map((p) => normalizePath(p))
+            .filter((p) => p && p.length > 0);
+
+        if (normalizedPaths.length === 0) {
+            return '';
+        }
+
+        const splitPaths = normalizedPaths.map((p) => p.split('/').filter(Boolean));
+        let prefix = splitPaths[0];
+
+        for (const parts of splitPaths.slice(1)) {
+            const limit = Math.min(prefix.length, parts.length);
+            let i = 0;
+            while (i < limit && prefix[i] === parts[i]) {
+                i += 1;
+            }
+            prefix = prefix.slice(0, i);
+            if (prefix.length === 0) break;
+        }
+
+        return prefix.length > 0 ? `/${prefix.join('/')}` : '';
+    }, [normalizePath]);
+
     const codeDictionary = useMemo(() => {
         const source = (data && typeof data === 'object')
             ? (data.code_dictionary || data.codeDictionary || {})
@@ -346,7 +391,7 @@ export const CodeAnalysisTree = ({ data }) => {
         return cleanup(aggregated);
     }, []);
 
-    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap) => {
+    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap, activeProjectRoot = projectRoot) => {
         const folderMap = new Map();
         const result = [];
         const directoryLookup = (directoryHealth && directoryHealth.directories) || {};
@@ -732,9 +777,11 @@ export const CodeAnalysisTree = ({ data }) => {
                     return null;
                 };
 
+                const displayName = toProjectRelativePath(fileGroup.filePath, activeProjectRoot || projectRoot || '');
+
                 const fileNode = {
                     id: fileNodeId,
-                    name: String(fileName),
+                    name: String(displayName || fileName),
                     type: 'file',
                     filePath: String(fileGroup.filePath),
                     highestPriority: String(fileGroup.highestPriority || 'Low'),
@@ -898,7 +945,7 @@ export const CodeAnalysisTree = ({ data }) => {
         const sortedResult = sortNodesByPriority(aggregatedResult);
 
         return sortedResult;
-    }, [aggregateTreeMetrics, codeDictionary, sortNodesByPriority]);
+    }, [aggregateTreeMetrics, codeDictionary, sortNodesByPriority, toProjectRelativePath, projectRoot]);
 
     // Normalize tree data by flattening legacy category wrappers under entities
     const normalizeTreeData = useCallback((nodes) => {
@@ -1252,11 +1299,24 @@ export const CodeAnalysisTree = ({ data }) => {
                     || data.documentation?.fileDocIssues
                     || {};
 
+                const candidatePaths = [
+                    ...fileGroups.map((f) => f.filePath).filter(Boolean),
+                    ...coveragePacks.map((pack) => pack?.path || pack?.file_path || pack?.filePath || '').filter(Boolean),
+                ];
+
+                const inferredRoot = detectProjectRoot(candidatePaths);
+                const effectiveProjectRoot = data.projectRoot || projectRoot || inferredRoot;
+
+                if (effectiveProjectRoot && effectiveProjectRoot !== projectRoot) {
+                    setProjectRoot(effectiveProjectRoot);
+                }
+
                 const treeStructure = buildTreeData(
                     fileGroups,
                     data.directory_health_tree || data.directoryHealthTree || null,
                     coveragePacks,
-                    docIssuesMap
+                    docIssuesMap,
+                    effectiveProjectRoot
                 );
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
@@ -1279,6 +1339,8 @@ export const CodeAnalysisTree = ({ data }) => {
         sortNodesByPriority,
         aggregateTreeMetrics,
         groupCandidatesByFile,
+        detectProjectRoot,
+        projectRoot,
     ]);
 
     useEffect(() => {

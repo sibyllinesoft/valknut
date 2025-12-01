@@ -131,7 +131,7 @@
         });
     }
 
-    // Shorten coverage paths to project-relative (no basename fallback)
+    // Shorten coverage paths to project-relative (never collapse to basename)
     function shortenCoveragePaths() {
         const projectRoot = {{#if project_root}}{{{json project_root}}}{{else}}""{{/if}};
         const normRoot = projectRoot ? projectRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
@@ -144,6 +144,7 @@
                 display = display.slice(normRoot.length);
             }
             display = display.replace(/^[/\\]+/, '');
+            // Leave directory parts intact; no further shortening
             labelEl.textContent = display;
             labelEl.setAttribute('title', raw);
         });
