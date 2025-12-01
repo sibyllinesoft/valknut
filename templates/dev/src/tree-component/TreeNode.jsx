@@ -1371,7 +1371,11 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
     // Only honor user-provided root (localStorage). Do not fall back to embedded projectRoot
     // so that localhost/served reports do not leak absolute paths.
-    const effectiveRoot = getStoredRoot() || '';
+    const effectiveRoot =
+        projectRoot ||
+        (typeof window !== 'undefined' && window.__VALKNUT_PROJECT_ROOT) ||
+        getStoredRoot() ||
+        '';
     const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
     const hasRoot = !!effectiveRoot;
     const isAbsolutePath = filePath ? filePath.startsWith('/') : false;

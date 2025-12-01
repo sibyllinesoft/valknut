@@ -486,7 +486,10 @@
             input.value = saved;
         }
         const persist = (value) => {
-            window.localStorage.setItem(KEY, value || '');
+            const next = value || '';
+            window.localStorage.setItem(KEY, next);
+            window.__VALKNUT_PROJECT_ROOT = next;
+            window.dispatchEvent(new Event('valknut-root-changed'));
         };
         input.addEventListener('input', (e) => {
             persist((e.target.value || '').trim());

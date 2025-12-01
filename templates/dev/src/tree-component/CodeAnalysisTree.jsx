@@ -68,6 +68,30 @@ export const CodeAnalysisTree = ({ data }) => {
         };
     }, [data]);
 
+    // Sync project root with localStorage/custom events so VS Code links update without reload.
+    useEffect(() => {
+        const loadStoredRoot = () => {
+            if (typeof window === 'undefined') return '';
+            return window.localStorage.getItem('valknut.projectRoot') || '';
+        };
+        const maybeUpdate = () => {
+            const stored = loadStoredRoot();
+            if (stored && stored !== projectRoot) {
+                setProjectRoot(stored);
+            }
+            if (!stored && projectRoot) {
+                setProjectRoot(''); // allow clearing
+            }
+        };
+        maybeUpdate();
+        window.addEventListener('storage', maybeUpdate);
+        window.addEventListener('valknut-root-changed', maybeUpdate);
+        return () => {
+            window.removeEventListener('storage', maybeUpdate);
+            window.removeEventListener('valknut-root-changed', maybeUpdate);
+        };
+    }, [projectRoot]);
+
     const priorityOrder = useMemo(() => ({
         critical: 0,
         high: 1,

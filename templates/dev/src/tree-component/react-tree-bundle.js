@@ -30005,7 +30005,7 @@ Check the top-level render call using <` + parentName + ">.";
     const filePath = data.file_path || data.filePath || data.path;
     const lineRange = data.line_range || data.lineRange;
     const lineNumber = data.line_number || data.lineNumber || data.start_line || data.startLine;
-    const effectiveRoot = getStoredRoot() || "";
+    const effectiveRoot = projectRoot || typeof window !== "undefined" && window.__VALKNUT_PROJECT_ROOT || getStoredRoot() || "";
     const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
     const hasRoot = !!effectiveRoot;
     const isAbsolutePath = filePath ? filePath.startsWith("/") : false;
@@ -30354,6 +30354,29 @@ Check the top-level render call using <` + parentName + ">.";
         suggestions: source.suggestions || {}
       };
     }, [data]);
+    import_react6.useEffect(() => {
+      const loadStoredRoot = () => {
+        if (typeof window === "undefined")
+          return "";
+        return window.localStorage.getItem("valknut.projectRoot") || "";
+      };
+      const maybeUpdate = () => {
+        const stored = loadStoredRoot();
+        if (stored && stored !== projectRoot) {
+          setProjectRoot(stored);
+        }
+        if (!stored && projectRoot) {
+          setProjectRoot("");
+        }
+      };
+      maybeUpdate();
+      window.addEventListener("storage", maybeUpdate);
+      window.addEventListener("valknut-root-changed", maybeUpdate);
+      return () => {
+        window.removeEventListener("storage", maybeUpdate);
+        window.removeEventListener("valknut-root-changed", maybeUpdate);
+      };
+    }, [projectRoot]);
     const priorityOrder = import_react6.useMemo(() => ({
       critical: 0,
       high: 1,
@@ -31733,5 +31756,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=DB73424D6FDAAFE364756E2164756E21
+//# debugId=C94FD6E3CFC3A56364756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
