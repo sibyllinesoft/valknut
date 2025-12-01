@@ -139,6 +139,13 @@ coverage.lcov
 three.min.js
 trefoil-animation.js
 
+# Keep the published report assets under docs/webpage_files
+!docs/webpage_files/
+!docs/webpage_files/**
+!docs/webpage_files/three.min.js
+!docs/webpage_files/trefoil-animation.js
+!docs/webpage_files/valknut-large.webp
+
 # Templates assets build artifacts (keep source, ignore build output)
 templates/assets/dist/
 templates/assets/react-tree-bundle.js
