@@ -542,40 +542,40 @@
         }
 
         function applyCoverageLinks() {
-            const isFileProtocol = window.location?.protocol === 'file:';
-            const storedRoot = getStoredRoot();
-            const baseRoot = isFileProtocol ? (storedRoot || inlineProjectRoot) : storedRoot;
-            const normRoot = baseRoot ? baseRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+            var isFileProtocol = window.location && window.location.protocol === 'file:';
+            var storedRoot = getStoredRoot();
+            var baseRoot = isFileProtocol ? (storedRoot || inlineProjectRoot) : storedRoot;
+            var normRoot = baseRoot ? baseRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
 
-            const buildLink = (path, line) => {
+            function buildLink(path, line) {
                 if (!path) return null;
-                const normalized = String(path).replace(/\\/g, '/');
-                if (isFileProtocol && normalized.startsWith('/')) {
-                    return `vscode://file${normalized}${line ? ':' + line : ''}`;
+                var normalized = String(path).replace(/\\/g, '/');
+                if (isFileProtocol && normalized.indexOf('/') === 0) {
+                    return 'vscode://file' + normalized + (line ? ':' + line : '');
                 }
                 if (normRoot) {
-                    const rel = normalized.replace(/^\.?\\//, '');
-                    return `vscode://file${normRoot}/${rel}${line ? ':' + line : ''}`;
+                    var rel = normalized.replace(/^\.?\/+/, '');
+                    return 'vscode://file' + normRoot + '/' + rel + (line ? ':' + line : '');
                 }
                 return null;
-            };
+            }
 
-            document.querySelectorAll('.coverage-gap-link').forEach((linkEl) => {
-                const path = linkEl.getAttribute('data-path') || '';
-                const line = linkEl.getAttribute('data-line') || '';
-                const href = buildLink(path, line);
+            Array.prototype.forEach.call(document.querySelectorAll('.coverage-gap-link'), function (linkEl) {
+                var path = linkEl.getAttribute('data-path') || '';
+                var line = linkEl.getAttribute('data-line') || '';
+                var href = buildLink(path, line);
                 if (href) {
                     linkEl.setAttribute('href', href);
                     linkEl.style.pointerEvents = 'auto';
                     linkEl.style.textDecoration = 'none';
-                    linkEl.onclick = (e) => {
+                    linkEl.onclick = function (e) {
                         e.stopPropagation();
                     };
                 } else {
                     linkEl.removeAttribute('href');
                     linkEl.style.pointerEvents = 'none';
                     linkEl.style.textDecoration = 'none';
-                    linkEl.onclick = (e) => e.stopPropagation();
+                    linkEl.onclick = function (e) { e.stopPropagation(); };
                 }
             });
         }
