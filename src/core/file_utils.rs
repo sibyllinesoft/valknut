@@ -248,6 +248,21 @@ impl CoverageFormat {
 pub struct CoverageDiscovery;
 
 impl CoverageDiscovery {
+    /// Discover coverage files across multiple roots and return a de-duplicated, recency-sorted list.
+    pub fn discover_coverage_for_roots<T: AsRef<Path>>(
+        roots: &[T],
+        config: &CoverageConfig,
+    ) -> Result<Vec<CoverageFile>> {
+        let mut all = Vec::new();
+        for root in roots {
+            let mut found = Self::discover_coverage_files(root.as_ref(), config)?;
+            all.append(&mut found);
+        }
+        all.sort_by(|a, b| b.modified.cmp(&a.modified));
+        all.dedup_by(|a, b| a.path == b.path);
+        Ok(all)
+    }
+
     /// Discover coverage files in the given root path using configuration
     pub fn discover_coverage_files(
         root_path: &Path,

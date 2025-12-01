@@ -17,6 +17,7 @@ use owo_colors::OwoColorize;
 use serde_json;
 use serde_yaml;
 use std::cmp::Ordering;
+use std::env;
 use std::path::Path;
 use std::path::PathBuf;
 use tabled::{settings::Style as TableStyle, Table, Tabled};
@@ -246,6 +247,26 @@ fn apply_performance_profile(config: &mut ValknutConfig, profile: &PerformancePr
             info!("🔥 Performance profile: Extreme mode - maximum analysis depth");
         }
     }
+
+    // Optional dev/demo preset to ensure UI clone pairs appear with low thresholds.
+    if env::var("VALKNUT_DEV_DEMO").is_ok() || cfg!(debug_assertions) {
+        apply_dev_clone_presets(config);
+    }
+}
+
+/// Lower clone thresholds and enable semantic similarity for demos/UI snapshots.
+fn apply_dev_clone_presets(config: &mut ValknutConfig) {
+    config.analysis.enable_lsh_analysis = true;
+    config.denoise.enabled = true;
+    config.denoise.min_function_tokens = config.denoise.min_function_tokens.min(8).max(1);
+    config.denoise.min_match_tokens = config.denoise.min_match_tokens.min(6).max(1);
+    config.denoise.require_blocks = 1;
+    config.denoise.similarity = config.denoise.similarity.min(0.7);
+    config.denoise.threshold_s = config.denoise.similarity;
+    config.dedupe.min_ast_nodes = config.dedupe.min_ast_nodes.min(8).max(1);
+    config.dedupe.min_match_tokens = config.dedupe.min_match_tokens.min(8).max(1);
+    config.lsh.use_semantic_similarity = true;
+    config.lsh.similarity_threshold = config.lsh.similarity_threshold.min(0.7);
 }
 
 /// Preview coverage file discovery to show what will be analyzed
@@ -258,11 +279,8 @@ async fn preview_coverage_discovery(
         "📋 Coverage File Discovery Preview".bright_blue().bold()
     );
 
-    // Use the first path as root for discovery
-    let default_path = PathBuf::from(".");
-    let root_path = paths.first().unwrap_or(&default_path);
-
-    let discovered_files = CoverageDiscovery::discover_coverage_files(root_path, coverage_config)
+    // Use all provided roots (deduped) for discovery to mirror pipeline behavior
+    let discovered_files = CoverageDiscovery::discover_coverage_for_roots(paths, coverage_config)
         .map_err(|e| anyhow::anyhow!("Coverage discovery failed: {}", e))?;
 
     if discovered_files.is_empty() {
@@ -2503,8 +2521,7 @@ mod tests {
         CodeDictionary, HealthMetrics, QualityGateConfig, QualityGateViolation,
     };
     use valknut_rs::oracle::{
-        CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap,
-        RefactoringTask,
+        CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap, RefactoringTask,
     };
 
     struct ColorOverrideGuard {
