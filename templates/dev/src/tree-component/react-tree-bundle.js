@@ -29538,6 +29538,15 @@ Check the top-level render call using <` + parentName + ">.";
       const health = Math.max(0, Math.min(100, 100 - penalty / denom));
       return health;
     };
+    const getHealthBadgeClass = (pct) => {
+      if (pct >= 80)
+        return "tree-badge-low";
+      if (pct >= 60)
+        return "tree-badge-medium";
+      if (pct >= 40)
+        return "tree-badge-high";
+      return "tree-badge-critical";
+    };
     const children = [];
     const aggregates = computeAggregates(data);
     if (typeof window !== "undefined") {
@@ -30039,45 +30048,24 @@ Check the top-level render call using <` + parentName + ">.";
     if (isFolder) {
       children.push(import_react5.default.createElement("div", {
         key: "health-folder",
-        className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: {
-          marginLeft: "0.5rem",
-          background: "transparent",
-          borderColor: getHealthColor(nodeHealthRatio),
-          color: getHealthColor(nodeHealthRatio),
-          display: "inline-flex",
-          alignItems: "center"
-        },
+        className: `tree-badge ${getHealthBadgeClass(nodeHealthPercent)} health-badge`,
+        style: { marginLeft: "0.5rem" },
         title: "Aggregate health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
     if (isFile) {
       children.push(import_react5.default.createElement("div", {
         key: "health-file",
-        className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: {
-          marginLeft: "0.5rem",
-          background: "transparent",
-          borderColor: getHealthColor(nodeHealthRatio),
-          color: getHealthColor(nodeHealthRatio),
-          display: "inline-flex",
-          alignItems: "center"
-        },
+        className: `tree-badge ${getHealthBadgeClass(nodeHealthPercent)} health-badge`,
+        style: { marginLeft: "0.5rem" },
         title: "File health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
     if (isEntity) {
       children.push(import_react5.default.createElement("div", {
         key: "health-entity",
-        className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: {
-          marginLeft: "0.5rem",
-          background: "transparent",
-          borderColor: getHealthColor(nodeHealthRatio),
-          color: getHealthColor(nodeHealthRatio),
-          display: "inline-flex",
-          alignItems: "center"
-        },
+        className: `tree-badge ${getHealthBadgeClass(nodeHealthPercent)} health-badge`,
+        style: { marginLeft: "0.5rem" },
         title: "Entity health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
@@ -31736,5 +31724,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=81B7F090F07D606B64756E2164756E21
+//# debugId=B08ED3E659A5D73864756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map
