@@ -9,6 +9,18 @@
 
     <div class="clone-metric-grid">
         <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Clones</span>
+            <span class="clone-metric-card__value">
+                {{#if clone_pairs.length}}
+                    {{clone_pairs.length}}
+                {{else if clone_analysis.candidatesAfter}}
+                    {{clone_analysis.candidatesAfter}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
             <span class="clone-metric-card__label">Average Similarity</span>
             <span class="clone-metric-card__value">
                 {{#if clone_analysis.avgSimilarity}}
