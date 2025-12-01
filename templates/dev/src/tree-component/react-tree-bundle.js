@@ -29495,7 +29495,15 @@ Check the top-level render call using <` + parentName + ">.";
         return "#ffc107";
       return "#dc3545";
     };
-    const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ["healthScore", "health_score", "health"], null);
+    const computeHealthPercent = (severityCounts = {}) => {
+      const crit = Number(severityCounts.critical || 0);
+      const high = Number(severityCounts.high || 0);
+      const med = Number(severityCounts.medium || 0);
+      const low = Number(severityCounts.low || 0);
+      const penalty = crit * 25 + high * 15 + med * 7 + low * 3;
+      const health = Math.max(0, Math.min(100, 100 - penalty));
+      return health;
+    };
     const children = [];
     const aggregates = computeAggregates(data);
     if (typeof window !== "undefined") {
@@ -29657,7 +29665,7 @@ Check the top-level render call using <` + parentName + ">.";
       }
       if (isFolder) {
         const totalFolderIssues = aggregates.totalIssues ?? data.totalIssues ?? data.refactoringNeeded ?? 0;
-        const folderHealth2 = getHealthScore(data);
+        const folderHealth = getHealthScore(data);
         const folderAcceptable2 = formatAcceptableRatio((() => {
           let maxRatio = null;
           const visit = (n) => {
@@ -29673,7 +29681,7 @@ Check the top-level render call using <` + parentName + ">.";
         const metrics2 = [
           {
             label: "Health",
-            value: typeof folderHealth2 === "number" ? `${Math.round(folderHealth2 * 100)}%` : "—"
+            value: typeof folderHealth === "number" ? `${Math.round(folderHealth * 100)}%` : "—"
           },
           { label: "Files", value: aggregates.fileCount ?? data.fileCount ?? 0 },
           { label: "Entities", value: aggregates.entityCount ?? data.entityCount ?? 0 },
@@ -29957,8 +29965,8 @@ Check the top-level render call using <` + parentName + ">.";
       children.push(iconElement);
       children.push(labelElement);
     }
-    const folderHealth = isFolder ? getHealthScore(data) : null;
-    const fileHealth = isFile ? getHealthScore(data) : null;
+    const nodeHealthPercent = computeHealthPercent(aggregates.severityCounts || aggregates.severity_counts || {});
+    const nodeHealthRatio = nodeHealthPercent / 100;
     const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
     const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
     const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
@@ -29994,29 +30002,50 @@ Check the top-level render call using <` + parentName + ">.";
         style: { marginLeft: "0.5rem" }
       }, `${aggregates.totalIssues} issues`));
     }
-    if (isFolder && folderHealth !== null) {
+    if (isFolder) {
       children.push(import_react5.default.createElement("div", {
         key: "health-folder",
         className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(folderHealth), color: getHealthColor(folderHealth) },
+        style: {
+          marginLeft: "0.5rem",
+          background: "transparent",
+          borderColor: getHealthColor(nodeHealthRatio),
+          color: getHealthColor(nodeHealthRatio),
+          display: "inline-flex",
+          alignItems: "center"
+        },
         title: "Aggregate health score (higher is better)"
-      }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
+      }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
-    if (isFile && fileHealth !== null) {
+    if (isFile) {
       children.push(import_react5.default.createElement("div", {
         key: "health-file",
         className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(fileHealth), color: getHealthColor(fileHealth) },
+        style: {
+          marginLeft: "0.5rem",
+          background: "transparent",
+          borderColor: getHealthColor(nodeHealthRatio),
+          color: getHealthColor(nodeHealthRatio),
+          display: "inline-flex",
+          alignItems: "center"
+        },
         title: "File health score (higher is better)"
-      }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
+      }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
-    if (isEntity && formattedNodeAvgScore !== null) {
+    if (isEntity) {
       children.push(import_react5.default.createElement("div", {
         key: "health-entity",
         className: "tree-badge tree-badge-low complexity-score health-badge",
-        style: { marginLeft: "0.5rem", background: "transparent", borderColor: getHealthColor(formattedNodeAvgScore / 100), color: getHealthColor(formattedNodeAvgScore / 100) },
+        style: {
+          marginLeft: "0.5rem",
+          background: "transparent",
+          borderColor: getHealthColor(nodeHealthRatio),
+          color: getHealthColor(nodeHealthRatio),
+          display: "inline-flex",
+          alignItems: "center"
+        },
         title: "Entity health score (higher is better)"
-      }, `Health: ${formattedNodeAvgScore}%`));
+      }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
     if (data.priority || data.highestPriority) {
       const priority = data.priority || data.highestPriority;
@@ -31673,5 +31702,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=17A653F870AA345F64756E2164756E21
+//# debugId=01D46F1ADF5B5D3864756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

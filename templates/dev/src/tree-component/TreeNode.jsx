@@ -609,7 +609,15 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
         return '#dc3545'; // red - danger
     };
 
-    const getHealthScore = (nodeLike) => getNumericValue(nodeLike, ['healthScore', 'health_score', 'health'], null);
+    const computeHealthPercent = (severityCounts = {}) => {
+        const crit = Number(severityCounts.critical || 0);
+        const high = Number(severityCounts.high || 0);
+        const med = Number(severityCounts.medium || 0);
+        const low = Number(severityCounts.low || 0);
+        const penalty = crit * 25 + high * 15 + med * 7 + low * 3;
+        const health = Math.max(0, Math.min(100, 100 - penalty));
+        return health;
+    };
     
     const children = [];
 
@@ -1337,8 +1345,8 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     }
 
     // Pre-compute all badge data before adding to children array
-    const folderHealth = isFolder ? getHealthScore(data) : null;
-    const fileHealth = isFile ? getHealthScore(data) : null;
+    const nodeHealthPercent = computeHealthPercent(aggregates.severityCounts || aggregates.severity_counts || {});
+    const nodeHealthRatio = nodeHealthPercent / 100;
     const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
     const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);
     const formattedNodeAvgScore = formatDecimal(aggregates.avgScore ?? data.avgScore);
@@ -1382,29 +1390,50 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     }
 
     // Health badges (replaces complexity badge)
-    if (isFolder && folderHealth !== null) {
+    if (isFolder) {
         children.push(React.createElement('div', {
             key: 'health-folder',
             className: 'tree-badge tree-badge-low complexity-score health-badge',
-            style: { marginLeft: '0.5rem', background: 'transparent', borderColor: getHealthColor(folderHealth), color: getHealthColor(folderHealth) },
+            style: {
+                marginLeft: '0.5rem',
+                background: 'transparent',
+                borderColor: getHealthColor(nodeHealthRatio),
+                color: getHealthColor(nodeHealthRatio),
+                display: 'inline-flex',
+                alignItems: 'center'
+            },
             title: 'Aggregate health score (higher is better)'
-        }, `Health: ${(folderHealth * 100).toFixed(0)}%`));
+        }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
-    if (isFile && fileHealth !== null) {
+    if (isFile) {
         children.push(React.createElement('div', {
             key: 'health-file',
             className: 'tree-badge tree-badge-low complexity-score health-badge',
-            style: { marginLeft: '0.5rem', background: 'transparent', borderColor: getHealthColor(fileHealth), color: getHealthColor(fileHealth) },
+            style: {
+                marginLeft: '0.5rem',
+                background: 'transparent',
+                borderColor: getHealthColor(nodeHealthRatio),
+                color: getHealthColor(nodeHealthRatio),
+                display: 'inline-flex',
+                alignItems: 'center'
+            },
             title: 'File health score (higher is better)'
-        }, `Health: ${(fileHealth * 100).toFixed(0)}%`));
+        }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
-    if (isEntity && formattedNodeAvgScore !== null) {
+    if (isEntity) {
         children.push(React.createElement('div', {
             key: 'health-entity',
             className: 'tree-badge tree-badge-low complexity-score health-badge',
-            style: { marginLeft: '0.5rem', background: 'transparent', borderColor: getHealthColor((formattedNodeAvgScore / 100)), color: getHealthColor((formattedNodeAvgScore / 100)) },
+            style: {
+                marginLeft: '0.5rem',
+                background: 'transparent',
+                borderColor: getHealthColor(nodeHealthRatio),
+                color: getHealthColor(nodeHealthRatio),
+                display: 'inline-flex',
+                alignItems: 'center'
+            },
             title: 'Entity health score (higher is better)'
-        }, `Health: ${formattedNodeAvgScore}%`));
+        }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
     }
 
     // Priority badge with color coding
