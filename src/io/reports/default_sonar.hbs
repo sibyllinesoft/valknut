@@ -1,0 +1,20 @@
+{
+  "issues": [
+  {{#each refactoring_candidates}}
+    {
+      "engineId": "valknut",
+      "ruleId": "refactoring/{{priority}}",
+      "severity": "{{priority}}",
+      "type": "CODE_SMELL",
+      "primaryLocation": {
+        "message": "{{name}} requires attention (score {{score}})",
+        "filePath": "{{file_path}}"{{#if line_range}},
+        "textRange": {
+          "startLine": {{line_range.[0]}},
+          "endLine": {{line_range.[1]}}
+        }{{/if}}
+      }
+    }{{#unless @last}},{{/unless}}
+  {{/each}}
+  ]
+}

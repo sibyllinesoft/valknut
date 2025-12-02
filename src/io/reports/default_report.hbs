@@ -1,0 +1,398 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{tool_name}} Analysis Report</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --background-color: #ffffff;
+            --surface-color: #f8fafc;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--background-color);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .header h1 {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header .meta {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .summary-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .summary-card .label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .directory-tree {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            white-space: pre-line;
+            overflow-x: auto;
+        }
+        
+        .health-indicator {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .health-score {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .hotspot-list {
+            margin-top: 1rem;
+        }
+        
+        .hotspot-item {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .hotspot-item .hotspot-path {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: var(--error-color);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .hotspot-item .hotspot-details {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 1.5rem;
+        }
+        
+        .tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        
+        .tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .results-section {
+            margin-bottom: 3rem;
+        }
+        
+        .results-section h2 {
+            color: var(--text-primary);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary-color);
+        }
+        
+        .file-list {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .file-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .file-item:hover {
+            background-color: rgba(37, 99, 235, 0.05);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-path {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: var(--primary-color);
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+        
+        .file-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .raw-data {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .raw-data h3 {
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+        
+        .raw-data pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .summary {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>{{tool_name}} Analysis Report</h1>
+            <div class="meta">
+                Generated on {{generated_at}} | Version {{version}}
+            </div>
+        </header>
+        
+        <section class="summary">
+            <div class="summary-card">
+                <div class="value">{{summary.total_files}}</div>
+                <div class="label">Files Analyzed</div>
+            </div>
+            <div class="summary-card">
+                <div class="value">{{summary.total_issues}}</div>
+                <div class="label">Issues Found</div>
+            </div>
+            {{#if directory_tree}}
+            <div class="summary-card">
+                <div class="value">{{percentage directory_tree.tree_statistics.avg_health_score}}%</div>
+                <div class="label">Avg Health Score</div>
+            </div>
+            <div class="summary-card">
+                <div class="value">{{#if directory_tree.tree_statistics.hotspot_directories}}{{directory_tree.tree_statistics.hotspot_directories.length}}{{else}}0{{/if}}</div>
+                <div class="label">Directory Hotspots</div>
+            </div>
+            {{/if}}
+        </section>
+        
+        {{#if directory_tree}}
+        <section class="results-section">
+            <h2>Directory Health Overview</h2>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('tree-view')">Tree View</button>
+                <button class="tab" onclick="showTab('hotspots')">Hotspots</button>
+                <button class="tab" onclick="showTab('statistics')">Statistics</button>
+            </div>
+            
+            <div id="tree-view" class="tab-content active">
+                <div class="directory-tree">{{tree_visualization}}</div>
+            </div>
+            
+            <div id="hotspots" class="tab-content">
+                {{#if directory_tree.tree_statistics.hotspot_directories}}
+                <div class="hotspot-list">
+                    {{#each directory_tree.tree_statistics.hotspot_directories}}
+                    <div class="hotspot-item">
+                        <div class="hotspot-path">{{this.path}} (Rank #{{this.rank}})</div>
+                        <div class="hotspot-details">
+                            <strong>Health Score:</strong> {{percentage this.health_score}}% | 
+                            <strong>Primary Issue:</strong> {{this.primary_issue_category}}<br>
+                            <strong>Recommendation:</strong> {{this.recommendation}}
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+                {{else}}
+                <p>No directory hotspots identified. All directories are in good health!</p>
+                {{/if}}
+            </div>
+            
+            <div id="statistics" class="tab-content">
+                <div class="summary">
+                    <div class="summary-card">
+                        <div class="value">{{directory_tree.tree_statistics.total_directories}}</div>
+                        <div class="label">Total Directories</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="value">{{directory_tree.tree_statistics.max_depth}}</div>
+                        <div class="label">Max Depth</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="value">{{directory_tree.tree_statistics.health_score_std_dev}}</div>
+                        <div class="label">Health Score Std Dev</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {{/if}}
+        
+        <section class="results-section">
+            <h2>Refactoring Candidates</h2>
+            <div class="file-list">
+                {{#each results.refactoring_candidates}}
+                <div class="file-item" data-file-path="{{this.file_path}}">
+                    <div class="file-path">{{this.name}} in {{this.file_path}}</div>
+                    <div class="file-details">
+                        Priority: {{this.priority}} | Score: {{this.score}} | Confidence: {{this.confidence}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </section>
+        
+        <section class="raw-data">
+            <h3>Raw Data</h3>
+            <pre><code>{{json results}}</code></pre>
+        </section>
+    </div>
+    
+    <script>
+        // Tab switching functionality
+        function showTab(tabId) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            const selectedContent = document.getElementById(tabId);
+            if (selectedContent) {
+                selectedContent.classList.add('active');
+            }
+            
+            // Add active class to clicked tab
+            const clickedTab = event.target;
+            clickedTab.classList.add('active');
+        }
+        
+        // Add click handlers for file navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileItems = document.querySelectorAll('.file-item');
+            fileItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const filePath = this.dataset.filePath;
+                    if (window.vscode) {
+                        // VS Code extension will handle this
+                        window.vscode.postMessage({
+                            command: 'openFile',
+                            filePath: filePath
+                        });
+                    } else {
+                        // Fallback for web view
+                        console.log('Open file:', filePath);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

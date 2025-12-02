@@ -138,6 +138,9 @@ coverage.lcov
 *.min.js
 three.min.js
 trefoil-animation.js
+# Keep runtime report templates/assets in source tree
+!src/io/reports/
+!src/io/reports/**
 
 # Keep the published report assets under docs/webpage_files
 !docs/webpage_files/
