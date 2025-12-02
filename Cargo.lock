@@ -4024,7 +4024,7 @@ dependencies = [
 
 [[package]]
 name = "valknut-rs"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "ahash 0.8.12",
  "aho-corasick",
