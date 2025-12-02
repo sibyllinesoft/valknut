@@ -106,7 +106,7 @@ globset = "0.4"
 git2 = "0.18"
 ignore = "0.4"
 walkdir = "2.4"
-doc_audit = { path = "crates/doc_audit" }
+doc_audit = { version = "0.1.0", path = "crates/doc_audit" }
 
 # UUID and time handling (moved below to avoid duplicate)
 # uuid and chrono are defined in the Time and UUID utilities section
