@@ -1,8 +1,4 @@
-<div align="center">
-  <img src="assets/logo.webp" alt="Valknut Logo" width="200">
-
-  **Valknut – Fast, Multi-Layer Code Intelligence for Real Teams**
-</div>
+# Valknut – Fast, Multi-Layer Code Intelligence for Real Teams
 
 Valknut is a Rust-native analysis platform that combines structural heuristics, AST-driven complexity metrics, documentation audits, and optional AI guidance. The CLI ships with CI-friendly output, a documentation linter, MCP endpoints for IDE automation, and optional refactoring oracle.
 
