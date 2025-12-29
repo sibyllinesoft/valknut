@@ -18,6 +18,7 @@ use super::pipeline_results::{
     ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
     StructureAnalysisResults,
 };
+use crate::detectors::cohesion::{CohesionAnalysisResults, CohesionExtractor};
 use crate::core::arena_analysis::{ArenaAnalysisResult, ArenaBatchAnalyzer, ArenaFileAnalyzer};
 use crate::core::ast_service::{AstService, CachedTree};
 use crate::core::config::{CoverageConfig, ValknutConfig};
@@ -43,6 +44,7 @@ pub struct AnalysisStages {
     pub refactoring_analyzer: RefactoringAnalyzer,
     pub lsh_extractor: Option<LshExtractor>,
     pub coverage_extractor: CoverageExtractor,
+    pub cohesion_extractor: Option<tokio::sync::Mutex<CohesionExtractor>>,
     pub arena_analyzer: ArenaFileAnalyzer,
     pub ast_service: Arc<AstService>,
     pub valknut_config: Arc<ValknutConfig>,
@@ -115,6 +117,221 @@ struct CachedSimpleAst {
     ast: Arc<SimpleAstNode>,
     node_count: usize,
     truncated: bool,
+}
+
+/// Results from collecting entities for LSH analysis.
+struct LshEntityCollection {
+    entities: Vec<crate::core::featureset::CodeEntity>,
+    entity_index: HashMap<String, crate::core::featureset::CodeEntity>,
+    ast_cache: HashMap<String, Arc<CachedTree>>,
+}
+
+impl LshEntityCollection {
+    fn new() -> Self {
+        Self {
+            entities: Vec::new(),
+            entity_index: HashMap::new(),
+            ast_cache: HashMap::new(),
+        }
+    }
+}
+
+impl CloneEndpoint {
+    fn from_entity(entity: &crate::core::featureset::CodeEntity) -> Self {
+        Self {
+            id: entity.id.clone(),
+            name: entity.name.clone(),
+            path: entity.file_path.clone(),
+            range: entity.line_range,
+        }
+    }
+}
+
+/// Parameters for LSH clone detection
+struct LshDetectionParams {
+    candidate_limit: Option<usize>,
+    min_ast_nodes: usize,
+    lsh_threshold: f64,
+    verify_with_apted: bool,
+    apted_limit: Option<usize>,
+    apted_max_nodes: usize,
+}
+
+/// Statistics collected during clone detection
+#[derive(Default)]
+struct CloneDetectionStats {
+    max_similarity: f64,
+    similarity_total: f64,
+    similarity_count: usize,
+    apted_similarity_total: f64,
+    apted_similarity_count: usize,
+    apted_pairs_requested: usize,
+    apted_pairs_scored: usize,
+}
+
+impl CloneDetectionStats {
+    fn record_similarity(&mut self, similarity: f64) {
+        self.max_similarity = self.max_similarity.max(similarity);
+        self.similarity_total += similarity;
+        self.similarity_count += 1;
+    }
+
+    fn record_verification(&mut self, detail: &Option<CloneVerificationDetail>, apted_evaluated: &mut usize) {
+        if let Some(ref d) = detail {
+            if d.node_counts.is_some() {
+                *apted_evaluated += 1;
+            }
+            if let Some(sim) = d.similarity {
+                self.apted_pairs_scored += 1;
+                self.apted_similarity_total += sim;
+                self.apted_similarity_count += 1;
+            }
+        }
+    }
+
+    fn avg_similarity(&self) -> f64 {
+        if self.similarity_count > 0 {
+            self.similarity_total / self.similarity_count as f64
+        } else {
+            0.0
+        }
+    }
+
+    fn verification_summary(&self, enabled: bool) -> Option<CloneVerificationResults> {
+        if !enabled {
+            return None;
+        }
+        Some(CloneVerificationResults {
+            method: "apted".to_string(),
+            pairs_considered: self.similarity_count,
+            pairs_evaluated: self.apted_pairs_requested,
+            pairs_scored: self.apted_pairs_scored,
+            avg_similarity: if self.apted_similarity_count > 0 {
+                Some(self.apted_similarity_total / self.apted_similarity_count as f64)
+            } else {
+                None
+            },
+        })
+    }
+}
+
+fn compute_apted_limit(settings: &crate::core::config::LshConfig) -> Option<usize> {
+    let limit = if settings.apted_max_pairs_per_entity == 0 {
+        settings.max_candidates
+    } else if settings.max_candidates == 0 {
+        settings.apted_max_pairs_per_entity
+    } else {
+        settings.apted_max_pairs_per_entity.min(settings.max_candidates)
+    };
+    if limit == 0 { None } else { Some(limit) }
+}
+
+fn log_partition_stats(partitions: &crate::detectors::graph::clique::CliquePartitions) {
+    let partition_count = partitions.len();
+    let total_peers: usize = partitions.values().map(|g| g.len()).sum();
+    let max_peers = partitions.values().map(|g| g.len()).max().unwrap_or(0);
+    let avg_peers = if partition_count > 0 {
+        total_peers as f64 / partition_count as f64
+    } else {
+        0.0
+    };
+    info!(
+        entities_with_peers = partition_count,
+        avg_peers = avg_peers,
+        max_peers = max_peers,
+        "Similarity clique pre-filter enabled"
+    );
+}
+
+fn ordered_pair_key(a: &str, b: &str) -> (String, String) {
+    if a <= b {
+        (a.to_string(), b.to_string())
+    } else {
+        (b.to_string(), a.to_string())
+    }
+}
+
+fn should_skip_small_pair(
+    verification: &Option<CloneVerificationDetail>,
+    min_ast_nodes: usize,
+    entity: &crate::core::featureset::CodeEntity,
+    candidate: &crate::core::featureset::CodeEntity,
+) -> bool {
+    if min_ast_nodes == 0 {
+        return false;
+    }
+    if let Some(ref detail) = verification {
+        if let Some(ref counts) = detail.node_counts {
+            let observed_min = counts.0.min(counts.1);
+            if observed_min < min_ast_nodes {
+                debug!(
+                    "Skipping clone pair below min_ast_nodes (min {}): {} -> {} ({:?})",
+                    min_ast_nodes, entity.id, candidate.id, counts
+                );
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn filter_small_pairs(mut pairs: Vec<ClonePairReport>, min_ast_nodes: usize) -> Vec<ClonePairReport> {
+    if min_ast_nodes == 0 {
+        return pairs;
+    }
+    let before = pairs.len();
+    pairs.retain(|pair| {
+        if let Some(ref ver) = pair.verification {
+            if let Some(counts) = ver.node_counts {
+                return counts.0.min(counts.1) >= min_ast_nodes;
+            }
+        }
+        true
+    });
+    let filtered = before.saturating_sub(pairs.len());
+    if filtered > 0 {
+        info!(filtered, min_ast_nodes, "Filtered clone pairs below min_ast_nodes");
+    }
+    pairs
+}
+
+/// Serialize clone pairs to JSON values, filtering by min_ast_nodes threshold.
+fn serialize_clone_pairs(
+    clone_pairs: Vec<ClonePairReport>,
+    min_ast_nodes: usize,
+) -> Vec<serde_json::Value> {
+    let mut serialized = Vec::with_capacity(clone_pairs.len());
+
+    for pair in clone_pairs {
+        match serde_json::to_value(&pair) {
+            Ok(value) => {
+                // Filter pairs below min_ast_nodes threshold
+                if min_ast_nodes > 0 {
+                    if let Some(ver) = value.get("verification") {
+                        if let Some(counts) = ver.get("node_counts") {
+                            if let (Some(a), Some(b)) = (
+                                counts.get(0).and_then(|v| v.as_u64()),
+                                counts.get(1).and_then(|v| v.as_u64()),
+                            ) {
+                                if std::cmp::min(a, b) < min_ast_nodes as u64 {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                serialized.push(value);
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to serialize clone pair {} -> {}: {}",
+                    pair.source.id, pair.target.id, e
+                );
+            }
+        }
+    }
+
+    serialized
 }
 
 fn hash_kind(kind: &str) -> u64 {
@@ -210,6 +427,69 @@ fn get_or_build_simple_ast(
         }
     }
 }
+
+/// Compute APTED tree-edit-distance verification for a clone pair.
+///
+/// Returns `Some(CloneVerificationDetail)` if verification was attempted,
+/// `None` if verification was not allowed (limit reached).
+async fn compute_apted_verification(
+    source_entity: &crate::core::featureset::CodeEntity,
+    target_entity: &crate::core::featureset::CodeEntity,
+    simple_ast_cache: &mut HashMap<String, Option<CachedSimpleAst>>,
+    ast_cache: &HashMap<String, Arc<CachedTree>>,
+    apted_max_nodes: usize,
+) -> Option<CloneVerificationDetail> {
+    let source_ast = get_or_build_simple_ast(simple_ast_cache, source_entity, ast_cache, apted_max_nodes);
+    let target_ast = get_or_build_simple_ast(simple_ast_cache, target_entity, ast_cache, apted_max_nodes);
+
+    let (source_ast, target_ast) = match (source_ast, target_ast) {
+        (Some(s), Some(t)) => (s, t),
+        _ => {
+            return Some(CloneVerificationDetail {
+                similarity: None,
+                edit_cost: None,
+                node_counts: None,
+                truncated: false,
+            });
+        }
+    };
+
+    let nodes_total = (source_ast.node_count + target_ast.node_count).max(1);
+    let truncated = source_ast.truncated || target_ast.truncated;
+    let tree_a = Arc::clone(&source_ast.ast);
+    let tree_b = Arc::clone(&target_ast.ast);
+    let node_counts = Some((source_ast.node_count, target_ast.node_count));
+
+    match tokio::task::spawn_blocking(move || {
+        let (_, cost) = diff(&*tree_a, &*tree_b);
+        cost
+    })
+    .await
+    {
+        Ok(cost) => {
+            let normalized = (1.0 - (cost as f64 / nodes_total as f64)).clamp(0.0, 1.0);
+            Some(CloneVerificationDetail {
+                similarity: Some(normalized),
+                edit_cost: Some(cost),
+                node_counts,
+                truncated,
+            })
+        }
+        Err(e) => {
+            warn!(
+                "APTED computation failed for {} -> {}: {}",
+                source_entity.id, target_entity.id, e,
+            );
+            Some(CloneVerificationDetail {
+                similarity: None,
+                edit_cost: None,
+                node_counts,
+                truncated: true,
+            })
+        }
+    }
+}
+
 impl AnalysisStages {
     /// Create new analysis stages with the given analyzers
     pub fn new(
@@ -225,6 +505,13 @@ impl AnalysisStages {
             ast_service.clone(),
         );
 
+        // Initialize cohesion extractor if enabled in config
+        let cohesion_extractor = if valknut_config.cohesion.enabled {
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(valknut_config.cohesion.clone())))
+        } else {
+            None
+        };
+
         Self {
             structure_extractor,
             complexity_analyzer,
@@ -232,6 +519,7 @@ impl AnalysisStages {
             refactoring_analyzer,
             lsh_extractor: None,
             coverage_extractor,
+            cohesion_extractor,
             arena_analyzer: ArenaFileAnalyzer::with_ast_service(ast_service.clone()),
             ast_service,
             valknut_config,
@@ -253,6 +541,13 @@ impl AnalysisStages {
             ast_service.clone(),
         );
 
+        // Initialize cohesion extractor if enabled in config
+        let cohesion_extractor = if valknut_config.cohesion.enabled {
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(valknut_config.cohesion.clone())))
+        } else {
+            None
+        };
+
         Self {
             structure_extractor,
             complexity_analyzer,
@@ -260,6 +555,7 @@ impl AnalysisStages {
             refactoring_analyzer,
             lsh_extractor: Some(lsh_extractor),
             coverage_extractor,
+            cohesion_extractor,
             arena_analyzer: ArenaFileAnalyzer::with_ast_service(ast_service.clone()),
             ast_service,
             valknut_config,
@@ -306,6 +602,85 @@ impl AnalysisStages {
             file_splitting_recommendations,
             issues_count,
         })
+    }
+
+    /// Run structure analysis using pre-computed arena results (optimized path - avoids re-reading files)
+    pub async fn run_structure_analysis_with_arena_results(
+        &self,
+        paths: &[PathBuf],
+        arena_results: &[crate::core::arena_analysis::ArenaAnalysisResult],
+    ) -> Result<StructureAnalysisResults> {
+        debug!(
+            "Running optimized structure analysis with {} pre-computed file metrics",
+            arena_results.len()
+        );
+
+        // Convert arena results to pre-computed metrics
+        let metrics: Vec<crate::detectors::structure::PrecomputedFileMetrics> = arena_results
+            .iter()
+            .map(crate::detectors::structure::PrecomputedFileMetrics::from_arena_result)
+            .collect();
+
+        let mut all_recommendations = Vec::new();
+        let mut file_splitting_recommendations = Vec::new();
+
+        for path in paths {
+            match self
+                .structure_extractor
+                .generate_recommendations_with_metrics(path, &metrics)
+                .await
+            {
+                Ok(recommendations) => {
+                    for rec in recommendations {
+                        match rec.get("kind") {
+                            Some(serde_json::Value::String(kind)) if kind == "file_split" => {
+                                file_splitting_recommendations.push(rec);
+                            }
+                            _ => {
+                                all_recommendations.push(rec);
+                            }
+                        }
+                    }
+                }
+                Err(e) => warn!("Structure analysis failed for {}: {}", path.display(), e),
+            }
+        }
+
+        let issues_count = all_recommendations.len() + file_splitting_recommendations.len();
+
+        Ok(StructureAnalysisResults {
+            enabled: true,
+            directory_recommendations: all_recommendations,
+            file_splitting_recommendations,
+            issues_count,
+        })
+    }
+
+    /// Run cohesion analysis using pre-computed arena results (uses source code from arena)
+    pub async fn run_cohesion_analysis_with_arena_results(
+        &self,
+        paths: &[PathBuf],
+        arena_results: &[crate::core::arena_analysis::ArenaAnalysisResult],
+    ) -> Result<CohesionAnalysisResults> {
+        // Check if cohesion analysis is enabled
+        let cohesion_mutex = match &self.cohesion_extractor {
+            Some(m) => m,
+            None => return Ok(CohesionAnalysisResults::default()),
+        };
+
+        info!("Running cohesion analysis with {} pre-computed sources", arena_results.len());
+
+        // Build file sources from arena results (reusing already-read source code)
+        let file_sources: Vec<(PathBuf, String)> = arena_results
+            .iter()
+            .map(|r| (PathBuf::from(r.file_path_str()), r.source_code.clone()))
+            .collect();
+
+        let root_path = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
+        // Run cohesion analysis with mutex lock
+        let mut cohesion_extractor = cohesion_mutex.lock().await;
+        cohesion_extractor.analyze_with_sources(&file_sources, &root_path).await
     }
 
     /// Run complexity analysis from pre-extracted arena results (optimized path)
@@ -695,407 +1070,168 @@ impl AnalysisStages {
             files.len()
         );
 
-        if let Some(ref lsh_extractor) = self.lsh_extractor {
-            use crate::core::featureset::{CodeEntity, ExtractionContext};
+        let Some(ref lsh_extractor) = self.lsh_extractor else {
+            return Ok(LshAnalysisResults::disabled());
+        };
 
-            let mut context = ExtractionContext::new(Arc::clone(&self.valknut_config), "mixed");
+        use crate::core::featureset::ExtractionContext;
 
-            let lsh_settings = &self.valknut_config.lsh;
-            let verify_with_apted = lsh_settings.verify_with_apted;
-            let apted_max_nodes = lsh_settings.apted_max_nodes;
-            let apted_limit = if lsh_settings.apted_max_pairs_per_entity == 0 {
-                lsh_settings.max_candidates
-            } else if lsh_settings.max_candidates == 0 {
-                lsh_settings.apted_max_pairs_per_entity
-            } else {
-                lsh_settings
-                    .apted_max_pairs_per_entity
-                    .min(lsh_settings.max_candidates)
-            };
-            let apted_limit = if apted_limit == 0 {
-                None
-            } else {
-                Some(apted_limit)
-            };
+        let lsh_settings = &self.valknut_config.lsh;
+        let verify_with_apted = lsh_settings.verify_with_apted;
+        let apted_max_nodes = lsh_settings.apted_max_nodes;
+        let apted_limit = compute_apted_limit(lsh_settings);
 
-            let mut entities = Vec::new();
-            let mut entity_index = HashMap::new();
-            let mut ast_cache: HashMap<String, Arc<CachedTree>> = HashMap::new();
+        let collection = self
+            .collect_entities_for_lsh(
+                files,
+                lsh_extractor,
+                verify_with_apted,
+                MAX_ENTITIES_PER_FILE_FOR_LSH,
+            )
+            .await;
 
-            for file_path in files.iter() {
-                let content = match tokio::fs::read_to_string(file_path).await {
-                    Ok(content) => content,
-                    Err(e) => {
-                        warn!("Failed to read file {}: {}", file_path.display(), e);
-                        continue;
-                    }
-                };
+        let LshEntityCollection {
+            entities,
+            entity_index,
+            ast_cache,
+        } = collection;
 
-                let path_str = file_path.to_string_lossy().to_string();
-
-                if verify_with_apted {
-                    match self.ast_service.get_ast(&path_str, &content).await {
-                        Ok(tree) => {
-                            ast_cache.insert(path_str.clone(), tree);
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to parse AST for {}: {} – APTED verification will be skipped for entities in this file",
-                                file_path.display(),
-                                e
-                            );
-                        }
-                    }
-                }
-
-                if let Some(extracted_entities) =
-                    self.extract_entities_from_file(file_path, &content).await
-                {
-                    if extracted_entities.len() > MAX_ENTITIES_PER_FILE_FOR_LSH {
-                        info!(
-                            file = %file_path.display(),
-                            entities = extracted_entities.len(),
-                            "Skipping LSH for file with excessive entity count"
-                        );
-                        continue;
-                    }
-
-                    for entity in extracted_entities {
-                        // Apply fragment thresholds (tokens, AST nodes, blocks, stop motifs)
-                        if !lsh_extractor
-                            .entity_passes_thresholds(&entity)
-                            .await
-                            .unwrap_or(false)
-                        {
-                            continue;
-                        }
-
-                        entity_index.insert(entity.id.clone(), entity.clone());
-                        entities.push(entity);
-                    }
-                }
-            }
-
-            context.entity_index = entity_index;
-
-            if entities.is_empty() {
-                info!("No entities available for LSH after filtering; skipping clone analysis");
-                return Ok(LshAnalysisResults {
-                    enabled: true,
-                    clone_pairs: Vec::new(),
-                    max_similarity: 0.0,
-                    avg_similarity: 0.0,
-                    duplicate_count: 0,
-                    apted_verification_enabled: verify_with_apted,
-                    verification: None,
-                    denoising_enabled: denoise_enabled,
-                    tfidf_stats: None,
-                });
-            }
-
-            let partitions = SimilarityCliquePartitioner::new().partition(&entities);
-            if !partitions.is_empty() {
-                let partition_count = partitions.len();
-                let total_peers: usize = partitions.values().map(|group| group.len()).sum();
-                let max_peers = partitions
-                    .values()
-                    .map(|group| group.len())
-                    .max()
-                    .unwrap_or(0);
-                let avg_peers = if partition_count > 0 {
-                    total_peers as f64 / partition_count as f64
-                } else {
-                    0.0
-                };
-                info!(
-                    entities_with_peers = partition_count,
-                    avg_peers = avg_peers,
-                    max_peers = max_peers,
-                    "Similarity clique pre-filter enabled"
-                );
-                context.candidate_partitions = Some(Arc::new(partitions));
-            }
-
-            let similarity_context = lsh_extractor.similarity_context(&context);
-
-            if similarity_context.is_none() {
-                warn!("Unable to build LSH similarity context; clone pairs will not be generated");
-            }
-
-            let candidate_limit = lsh_extractor.max_candidates();
-            let min_ast_nodes = lsh_extractor.min_ast_nodes_threshold().unwrap_or(0);
-            info!(
-                min_ast_nodes,
-                "LSH clone pair filter min_ast_nodes threshold"
-            );
-
-            let mut clone_pairs = Vec::new();
-            let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
-            let mut max_similarity: f64 = 0.0;
-            let mut similarity_total: f64 = 0.0;
-            let mut similarity_count = 0usize;
-
-            let mut apted_similarity_total: f64 = 0.0;
-            let mut apted_similarity_count = 0usize;
-            let mut apted_pairs_requested = 0usize;
-            let mut apted_pairs_scored = 0usize;
-            let mut simple_ast_cache: HashMap<String, Option<CachedSimpleAst>> = HashMap::new();
-
-            let lsh_threshold = lsh_extractor.similarity_threshold();
-
-            for entity in &entities {
-                let Some(ctx) = similarity_context.as_ref() else {
-                    break;
-                };
-
-                let candidates = ctx.find_similar_entities(&entity.id, candidate_limit);
-                let mut apted_evaluated = 0usize;
-
-                for (candidate_id, similarity) in candidates {
-                    if similarity < lsh_threshold {
-                        continue;
-                    }
-
-                    let key = if entity.id <= candidate_id {
-                        (entity.id.clone(), candidate_id.clone())
-                    } else {
-                        (candidate_id.clone(), entity.id.clone())
-                    };
-
-                    if !seen_pairs.insert(key) {
-                        continue;
-                    }
-
-                    let Some(candidate_entity) = context.entity_index.get(&candidate_id) else {
-                        continue;
-                    };
-
-                    max_similarity = max_similarity.max(similarity);
-                    similarity_total += similarity;
-                    similarity_count += 1;
-
-                    let apted_allowed = verify_with_apted
-                        && apted_limit.map_or(true, |limit| apted_evaluated < limit);
-
-                    let verification_detail = if apted_allowed {
-                        apted_pairs_requested += 1;
-                        let source_ast = get_or_build_simple_ast(
-                            &mut simple_ast_cache,
-                            entity,
-                            &ast_cache,
-                            apted_max_nodes,
-                        );
-                        let target_ast = get_or_build_simple_ast(
-                            &mut simple_ast_cache,
-                            candidate_entity,
-                            &ast_cache,
-                            apted_max_nodes,
-                        );
-
-                        if let (Some(source_ast), Some(target_ast)) = (source_ast, target_ast) {
-                            apted_evaluated += 1;
-                            let nodes_total =
-                                (source_ast.node_count + target_ast.node_count).max(1);
-                            let truncated = source_ast.truncated || target_ast.truncated;
-                            let tree_a = Arc::clone(&source_ast.ast);
-                            let tree_b = Arc::clone(&target_ast.ast);
-                            let node_counts = Some((source_ast.node_count, target_ast.node_count));
-
-                            match tokio::task::spawn_blocking(move || {
-                                let (_, cost) = diff(&*tree_a, &*tree_b);
-                                cost
-                            })
-                            .await
-                            {
-                                Ok(cost) => {
-                                    apted_pairs_scored += 1;
-                                    let normalized =
-                                        (1.0 - (cost as f64 / nodes_total as f64)).clamp(0.0, 1.0);
-                                    apted_similarity_total += normalized;
-                                    apted_similarity_count += 1;
-                                    Some(CloneVerificationDetail {
-                                        similarity: Some(normalized),
-                                        edit_cost: Some(cost),
-                                        node_counts,
-                                        truncated,
-                                    })
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "APTED computation failed for {} -> {}: {}",
-                                        entity.id, candidate_entity.id, e,
-                                    );
-                                    Some(CloneVerificationDetail {
-                                        similarity: None,
-                                        edit_cost: None,
-                                        node_counts,
-                                        truncated: true,
-                                    })
-                                }
-                            }
-                        } else {
-                            Some(CloneVerificationDetail {
-                                similarity: None,
-                                edit_cost: None,
-                                node_counts: None,
-                                truncated: false,
-                            })
-                        }
-                    } else {
-                        None
-                    };
-
-                    let source_endpoint = CloneEndpoint {
-                        id: entity.id.clone(),
-                        name: entity.name.clone(),
-                        path: entity.file_path.clone(),
-                        range: entity.line_range,
-                    };
-                    let target_endpoint = CloneEndpoint {
-                        id: candidate_entity.id.clone(),
-                        name: candidate_entity.name.clone(),
-                        path: candidate_entity.file_path.clone(),
-                        range: candidate_entity.line_range,
-                    };
-
-                    // Skip extremely small verified pairs when a min_ast_nodes threshold is configured
-                    if let Some(ref detail) = verification_detail {
-                        if let Some(ref counts) = detail.node_counts {
-                            let observed_min = counts.0.min(counts.1);
-                            if min_ast_nodes > 0 && observed_min < min_ast_nodes {
-                                debug!(
-                                    "Skipping clone pair below min_ast_nodes (min {}): {} -> {} ({:?})",
-                                    min_ast_nodes,
-                                    entity.id,
-                                    candidate_entity.id,
-                                    counts
-                                );
-                                continue;
-                            }
-                        }
-                    }
-
-                    clone_pairs.push(ClonePairReport {
-                        source: source_endpoint,
-                        target: target_endpoint,
-                        similarity,
-                        verification: verification_detail,
-                    });
-                }
-            }
-
-            if min_ast_nodes > 0 {
-                let before = clone_pairs.len();
-                clone_pairs.retain(|pair| {
-                    if let Some(ref ver) = pair.verification {
-                        if let Some(counts) = ver.node_counts {
-                            return counts.0.min(counts.1) >= min_ast_nodes;
-                        }
-                    }
-                    true
-                });
-                let filtered = before.saturating_sub(clone_pairs.len());
-                if filtered > 0 {
-                    info!(
-                        filtered,
-                        min_ast_nodes, "Filtered clone pairs below min_ast_nodes"
-                    );
-                }
-            }
-
-            let avg_similarity = if similarity_count > 0 {
-                similarity_total / similarity_count as f64
-            } else {
-                0.0
-            };
-
-            let verification_summary = if verify_with_apted {
-                Some(CloneVerificationResults {
-                    method: "apted".to_string(),
-                    pairs_considered: similarity_count,
-                    pairs_evaluated: apted_pairs_requested,
-                    pairs_scored: apted_pairs_scored,
-                    avg_similarity: if apted_similarity_count > 0 {
-                        Some(apted_similarity_total / apted_similarity_count as f64)
-                    } else {
-                        None
-                    },
-                })
-            } else {
-                None
-            };
-
-            let tfidf_stats = if denoise_enabled {
-                use super::pipeline_results::TfIdfStats;
-
-                Some(TfIdfStats {
-                    total_grams: 0,
-                    unique_grams: 0,
-                    top1pct_contribution: 0.0,
-                })
-            } else {
-                None
-            };
-
-            let clone_pair_count = clone_pairs.len();
-            let mut serialized_pairs = Vec::with_capacity(clone_pairs.len());
-            // Enforce the configured min_ast_nodes (0 means no filter)
-            let min_ast_nodes_cfg = min_ast_nodes;
-
-            for pair in clone_pairs {
-                match serde_json::to_value(&pair) {
-                    Ok(value) => {
-                        // Final defensive filter so UI never sees sub-threshold clones.
-                        if min_ast_nodes_cfg > 0 {
-                            if let Some(ver) = value.get("verification") {
-                                if let Some(counts) = ver.get("node_counts") {
-                                    if let (Some(a), Some(b)) = (
-                                        counts.get(0).and_then(|v| v.as_u64()),
-                                        counts.get(1).and_then(|v| v.as_u64()),
-                                    ) {
-                                        if std::cmp::min(a, b) < min_ast_nodes_cfg as u64 {
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        serialized_pairs.push(value);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to serialize clone pair {} -> {}: {}",
-                            pair.source.id, pair.target.id, e
-                        );
-                    }
-                }
-            }
-
-            Ok(LshAnalysisResults {
-                enabled: true,
-                clone_pairs: serialized_pairs,
-                max_similarity,
-                avg_similarity,
-                duplicate_count: clone_pair_count,
-                apted_verification_enabled: verify_with_apted,
-                verification: verification_summary,
-                denoising_enabled: denoise_enabled,
-                tfidf_stats,
-            })
-        } else {
-            // LSH extractor not available
-            Ok(LshAnalysisResults {
-                enabled: false,
-                clone_pairs: Vec::new(),
-                max_similarity: 0.0,
-                avg_similarity: 0.0,
-                duplicate_count: 0,
-                apted_verification_enabled: false,
-                verification: None,
-                denoising_enabled: false,
-                tfidf_stats: None,
-            })
+        if entities.is_empty() {
+            info!("No entities available for LSH after filtering; skipping clone analysis");
+            return Ok(LshAnalysisResults::empty_with_settings(
+                verify_with_apted,
+                denoise_enabled,
+            ));
         }
+
+        let mut context = ExtractionContext::new(Arc::clone(&self.valknut_config), "mixed");
+        context.entity_index = entity_index;
+
+        let partitions = SimilarityCliquePartitioner::new().partition(&entities);
+        if !partitions.is_empty() {
+            log_partition_stats(&partitions);
+            context.candidate_partitions = Some(Arc::new(partitions));
+        }
+
+        let similarity_context = lsh_extractor.similarity_context(&context);
+        if similarity_context.is_none() {
+            warn!("Unable to build LSH similarity context; clone pairs will not be generated");
+        }
+
+        let candidate_limit = lsh_extractor.max_candidates();
+        let min_ast_nodes = lsh_extractor.min_ast_nodes_threshold().unwrap_or(0);
+        info!(min_ast_nodes, "LSH clone pair filter min_ast_nodes threshold");
+
+        let lsh_threshold = lsh_extractor.similarity_threshold();
+
+        let (clone_pairs, stats) = self
+            .detect_clone_pairs(
+                &entities,
+                &context,
+                similarity_context.as_deref(),
+                &ast_cache,
+                LshDetectionParams {
+                    candidate_limit,
+                    min_ast_nodes,
+                    lsh_threshold,
+                    verify_with_apted,
+                    apted_limit,
+                    apted_max_nodes,
+                },
+            )
+            .await;
+
+        let clone_pairs = filter_small_pairs(clone_pairs, min_ast_nodes);
+        let clone_pair_count = clone_pairs.len();
+        let serialized_pairs = serialize_clone_pairs(clone_pairs, min_ast_nodes);
+
+        Ok(LshAnalysisResults {
+            enabled: true,
+            clone_pairs: serialized_pairs,
+            max_similarity: stats.max_similarity,
+            avg_similarity: stats.avg_similarity(),
+            duplicate_count: clone_pair_count,
+            apted_verification_enabled: verify_with_apted,
+            verification: stats.verification_summary(verify_with_apted),
+            denoising_enabled: denoise_enabled,
+            tfidf_stats: if denoise_enabled {
+                Some(super::pipeline_results::TfIdfStats::default())
+            } else {
+                None
+            },
+        })
+    }
+
+    async fn detect_clone_pairs(
+        &self,
+        entities: &[crate::core::featureset::CodeEntity],
+        context: &crate::core::featureset::ExtractionContext,
+        similarity_context: Option<&crate::detectors::lsh::LshSimilarityContext>,
+        ast_cache: &HashMap<String, Arc<CachedTree>>,
+        params: LshDetectionParams,
+    ) -> (Vec<ClonePairReport>, CloneDetectionStats) {
+        let mut clone_pairs = Vec::new();
+        let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
+        let mut stats = CloneDetectionStats::default();
+        let mut simple_ast_cache: HashMap<String, Option<CachedSimpleAst>> = HashMap::new();
+
+        let Some(ctx) = similarity_context else {
+            return (clone_pairs, stats);
+        };
+
+        for entity in entities {
+            let candidates = ctx.find_similar_entities(&entity.id, params.candidate_limit);
+            let mut apted_evaluated = 0usize;
+
+            for (candidate_id, similarity) in candidates {
+                if similarity < params.lsh_threshold {
+                    continue;
+                }
+
+                let key = ordered_pair_key(&entity.id, &candidate_id);
+                if !seen_pairs.insert(key) {
+                    continue;
+                }
+
+                let Some(candidate_entity) = context.entity_index.get(&candidate_id) else {
+                    continue;
+                };
+
+                stats.record_similarity(similarity);
+
+                let apted_allowed = params.verify_with_apted
+                    && params.apted_limit.map_or(true, |limit| apted_evaluated < limit);
+
+                let verification_detail = if apted_allowed {
+                    stats.apted_pairs_requested += 1;
+                    let detail = compute_apted_verification(
+                        entity,
+                        candidate_entity,
+                        &mut simple_ast_cache,
+                        ast_cache,
+                        params.apted_max_nodes,
+                    )
+                    .await;
+                    stats.record_verification(&detail, &mut apted_evaluated);
+                    detail
+                } else {
+                    None
+                };
+
+                if should_skip_small_pair(&verification_detail, params.min_ast_nodes, entity, candidate_entity) {
+                    continue;
+                }
+
+                clone_pairs.push(ClonePairReport {
+                    source: CloneEndpoint::from_entity(entity),
+                    target: CloneEndpoint::from_entity(candidate_entity),
+                    similarity,
+                    verification: verification_detail,
+                });
+            }
+        }
+
+        (clone_pairs, stats)
     }
 
     /// Run coverage analysis with automatic file discovery
@@ -1360,6 +1496,78 @@ impl AnalysisStages {
         }
     }
 
+    /// Collect entities from files for LSH clone detection analysis.
+    ///
+    /// This method reads files, extracts entities, and optionally builds an AST cache
+    /// for APTED verification. Entities are filtered through the LSH extractor's thresholds.
+    async fn collect_entities_for_lsh(
+        &self,
+        files: &[PathBuf],
+        lsh_extractor: &LshExtractor,
+        verify_with_apted: bool,
+        max_entities_per_file: usize,
+    ) -> LshEntityCollection {
+        let mut collection = LshEntityCollection::new();
+
+        for file_path in files.iter() {
+            let content = match tokio::fs::read_to_string(file_path).await {
+                Ok(content) => content,
+                Err(e) => {
+                    warn!("Failed to read file {}: {}", file_path.display(), e);
+                    continue;
+                }
+            };
+
+            let path_str = file_path.to_string_lossy().to_string();
+
+            // Build AST cache if APTED verification is enabled
+            if verify_with_apted {
+                match self.ast_service.get_ast(&path_str, &content).await {
+                    Ok(tree) => {
+                        collection.ast_cache.insert(path_str.clone(), tree);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to parse AST for {}: {} – APTED verification will be skipped for entities in this file",
+                            file_path.display(),
+                            e
+                        );
+                    }
+                }
+            }
+
+            // Extract entities from the file
+            let Some(extracted_entities) = self.extract_entities_from_file(file_path, &content).await else {
+                continue;
+            };
+
+            if extracted_entities.len() > max_entities_per_file {
+                info!(
+                    file = %file_path.display(),
+                    entities = extracted_entities.len(),
+                    "Skipping LSH for file with excessive entity count"
+                );
+                continue;
+            }
+
+            // Filter entities through LSH thresholds
+            for entity in extracted_entities {
+                if !lsh_extractor
+                    .entity_passes_thresholds(&entity)
+                    .await
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+
+                collection.entity_index.insert(entity.id.clone(), entity.clone());
+                collection.entities.push(entity);
+            }
+        }
+
+        collection
+    }
+
     /// Run arena-based file analysis for optimal memory performance
     ///
     /// This method demonstrates arena allocation benefits by processing files
@@ -1481,10 +1689,16 @@ impl StageOrchestrator for AnalysisStages {
     ) -> Result<StageResultsBundle> {
         use futures::future;
 
+        info!("Starting run_all_stages with {} paths, {} files, {} arena results",
+              paths.len(), files.len(), arena_results.len());
+
         let group1_future = async {
             let structure_future = async {
                 if config.enable_structure_analysis {
-                    self.run_structure_analysis(paths).await
+                    info!("Starting structure analysis...");
+                    let result = self.run_structure_analysis_with_arena_results(paths, arena_results).await;
+                    info!("Structure analysis completed");
+                    result
                 } else {
                     Ok(StructureAnalysisResults {
                         enabled: false,
@@ -1497,11 +1711,14 @@ impl StageOrchestrator for AnalysisStages {
 
             let coverage_future = async {
                 if config.enable_coverage_analysis {
+                    info!("Starting coverage analysis...");
                     let coverage_config = self.valknut_config.coverage.clone();
                     let default_path = PathBuf::from(".");
                     let root_path = paths.first().unwrap_or(&default_path);
-                    self.run_coverage_analysis(root_path, &coverage_config)
-                        .await
+                    let result = self.run_coverage_analysis(root_path, &coverage_config)
+                        .await;
+                    info!("Coverage analysis completed");
+                    result
                 } else {
                     Ok(CoverageAnalysisResults {
                         enabled: false,
@@ -1520,8 +1737,11 @@ impl StageOrchestrator for AnalysisStages {
         let group2_future = async {
             let complexity_future = async {
                 if config.enable_complexity_analysis {
-                    self.run_complexity_analysis_from_arena_results(arena_results)
-                        .await
+                    info!("Starting complexity analysis...");
+                    let result = self.run_complexity_analysis_from_arena_results(arena_results)
+                        .await;
+                    info!("Complexity analysis completed");
+                    result
                 } else {
                     Ok(ComplexityAnalysisResults {
                         enabled: false,
@@ -1537,7 +1757,10 @@ impl StageOrchestrator for AnalysisStages {
 
             let refactoring_future = async {
                 if config.enable_refactoring_analysis {
-                    self.run_refactoring_analysis(files).await
+                    info!("Starting refactoring analysis...");
+                    let result = self.run_refactoring_analysis(files).await;
+                    info!("Refactoring analysis completed");
+                    result
                 } else {
                     Ok(RefactoringAnalysisResults {
                         enabled: false,
@@ -1549,7 +1772,10 @@ impl StageOrchestrator for AnalysisStages {
 
             let impact_future = async {
                 if config.enable_impact_analysis {
-                    self.run_impact_analysis(files).await
+                    info!("Starting impact analysis...");
+                    let result = self.run_impact_analysis(files).await;
+                    info!("Impact analysis completed");
+                    result
                 } else {
                     Ok(ImpactAnalysisResults {
                         enabled: false,
@@ -1563,8 +1789,11 @@ impl StageOrchestrator for AnalysisStages {
 
             let lsh_future = async {
                 if config.enable_lsh_analysis && self.lsh_extractor.is_some() {
+                    info!("Starting LSH analysis...");
                     let denoise_enabled = self.valknut_config.denoise.enabled;
-                    self.run_lsh_analysis(files, denoise_enabled).await
+                    let result = self.run_lsh_analysis(files, denoise_enabled).await;
+                    info!("LSH analysis completed");
+                    result
                 } else {
                     Ok(LshAnalysisResults {
                         enabled: false,
@@ -1589,11 +1818,25 @@ impl StageOrchestrator for AnalysisStages {
             .await
         };
 
+        info!("Waiting for all analysis stages to complete...");
         let (
             (structure_result, coverage_result),
             (complexity_result, refactoring_result, impact_result, lsh_result),
         ) = future::join(group1_future, group2_future).await;
 
+        info!("All analysis stages completed");
+
+        // Run cohesion analysis (requires mutable access via mutex, so run after other stages)
+        let cohesion_result = if self.cohesion_extractor.is_some() {
+            info!("Starting cohesion analysis...");
+            let result = self.run_cohesion_analysis_with_arena_results(paths, arena_results).await;
+            info!("Cohesion analysis completed");
+            result?
+        } else {
+            CohesionAnalysisResults::default()
+        };
+
+        info!("Building results bundle");
         Ok(StageResultsBundle {
             structure: structure_result?,
             coverage: coverage_result?,
@@ -1601,774 +1844,12 @@ impl StageOrchestrator for AnalysisStages {
             refactoring: refactoring_result?,
             impact: impact_result?,
             lsh: lsh_result?,
+            cohesion: cohesion_result,
         })
     }
 }
 
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::arena_analysis::ArenaAnalysisResult;
-    use crate::core::dependency::ProjectDependencyAnalysis;
-    use crate::core::featureset::CodeEntity;
-    use crate::core::file_utils::{CoverageFile, CoverageFormat};
-    use crate::core::interning::intern;
-    use crate::detectors::complexity::ComplexityConfig;
-    use crate::detectors::lsh::LshExtractor;
-    use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
-    use crate::detectors::structure::StructureConfig;
-    use std::collections::HashMap;
-    use std::fs;
-    use std::sync::Arc;
-    use std::time::Duration;
-    use std::time::SystemTime;
-    use tempfile::tempdir;
-
-    fn build_test_stages() -> AnalysisStages {
-        let ast_service = Arc::new(AstService::new());
-        let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
-        let complexity_analyzer =
-            ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-        let refactoring_analyzer =
-            RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-        let coverage_extractor =
-            CoverageExtractor::new(CoverageDetectorConfig::default(), ast_service.clone());
-        let config = Arc::new(ValknutConfig::default());
-
-        AnalysisStages::new(
-            structure_extractor,
-            complexity_analyzer,
-            refactoring_analyzer,
-            coverage_extractor,
-            ast_service,
-            config,
-        )
-    }
-
-    fn build_test_stages_with_lsh() -> AnalysisStages {
-        let ast_service = Arc::new(AstService::new());
-        let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
-        let complexity_analyzer =
-            ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-        let refactoring_analyzer =
-            RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-        let mut valknut_config = ValknutConfig::default();
-        valknut_config.lsh.similarity_threshold = 0.0;
-        valknut_config.lsh.num_hashes = 32;
-        valknut_config.lsh.num_bands = 4;
-        valknut_config.lsh.max_candidates = 8;
-        valknut_config.lsh.apted_max_nodes = 512;
-        let lsh_config = valknut_config.lsh.clone();
-
-        let lsh_extractor = LshExtractor::new()
-            .with_shared_ast_service(ast_service.clone())
-            .with_lsh_config(lsh_config.clone().into());
-        let coverage_extractor =
-            CoverageExtractor::new(CoverageDetectorConfig::default(), ast_service.clone());
-
-        AnalysisStages::new_with_lsh(
-            structure_extractor,
-            complexity_analyzer,
-            refactoring_analyzer,
-            lsh_extractor,
-            coverage_extractor,
-            ast_service,
-            Arc::new(valknut_config),
-        )
-    }
-
-    #[test]
-    fn hash_kind_is_stable_for_identical_input() {
-        let first = hash_kind("function_declaration");
-        let second = hash_kind("function_declaration");
-
-        assert_eq!(first, second);
-        let different = hash_kind("struct_declaration");
-        assert_ne!(first, different);
-    }
-
-    #[test]
-    fn parse_byte_range_extracts_start_and_end() {
-        let mut entity = CodeEntity::new("id", "function", "sample", "src/lib.rs");
-        entity.add_property("byte_range", serde_json::json!([12, 48]));
-        assert_eq!(parse_byte_range(&entity), Some((12, 48)));
-
-        entity
-            .properties
-            .insert("byte_range".to_string(), serde_json::json!([12]));
-        assert_eq!(parse_byte_range(&entity), None);
-    }
-
-    #[tokio::test]
-    async fn calculate_overall_coverage_parses_lcov_percentage() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let lcov_path = tmp.path().join("lcov.info");
-        let lcov_content = r#"TN:
-SF:src/lib.rs
-DA:1,1
-DA:2,0
-DA:3,2
-end_of_record
-"#;
-        std::fs::write(&lcov_path, lcov_content).expect("write lcov");
-
-        let coverage_file = CoverageFile {
-            path: lcov_path,
-            format: CoverageFormat::Lcov,
-            modified: std::time::SystemTime::now(),
-            size: lcov_content.len() as u64,
-        };
-
-        let percentage = stages
-            .calculate_overall_coverage(&[coverage_file])
-            .await
-            .expect("coverage calc");
-
-        assert!(percentage.is_some());
-        let pct = percentage.unwrap();
-        assert!(
-            pct > 60.0 && pct < 80.0,
-            "expected coverage around 66%, got {pct}"
-        );
-    }
-
-    #[tokio::test]
-    async fn analyze_xml_coverage_counts_uncovered_lines() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let xml_path = tmp.path().join("coverage.xml");
-        let xml_content = r#"
-<coverage>
-  <line number="1" hits="0"/>
-  <line number="2" hits="0"/>
-  <line number="3" hits="1"/>
-</coverage>
-"#;
-        std::fs::write(&xml_path, xml_content).expect("write xml");
-
-        let gaps = stages
-            .analyze_xml_coverage(&xml_path)
-            .await
-            .expect("xml analysis");
-
-        assert_eq!(gaps, 1);
-    }
-
-    #[tokio::test]
-    async fn analyze_json_coverage_returns_zero() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let json_path = tmp.path().join("coverage.json");
-        std::fs::write(&json_path, r#"{"result": "placeholder"}"#).expect("write json");
-
-        let gaps = stages
-            .analyze_json_coverage(&json_path)
-            .await
-            .expect("json analysis");
-
-        assert_eq!(gaps, 0);
-    }
-
-    #[tokio::test]
-    async fn analyze_xml_coverage_warns_on_missing_file() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let missing_path = tmp.path().join("missing.xml");
-        // Do not create the file
-
-        let gaps = stages
-            .analyze_xml_coverage(&missing_path)
-            .await
-            .expect("xml analysis");
-
-        assert_eq!(gaps, 0, "missing files should yield zero gaps");
-    }
-
-    #[tokio::test]
-    async fn analyze_lcov_coverage_counts_gaps() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let lcov_path = tmp.path().join("coverage.lcov");
-        let content = "\
-TN:\n\
-SF:src/main.rs\n\
-DA:1,1\n\
-DA:2,0\n\
-DA:3,0\n\
-DA:4,1\n\
-end_of_record\n";
-        std::fs::write(&lcov_path, content).expect("write lcov");
-
-        let gaps = stages
-            .analyze_lcov_coverage(&lcov_path)
-            .await
-            .expect("lcov gaps");
-        assert_eq!(
-            gaps, 0,
-            "expected zero gaps until dedicated LCOV parser support is added"
-        );
-    }
-
-    #[tokio::test]
-    async fn analyze_lcov_coverage_propagates_errors() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let lcov_path = tmp.path().join("coverage.lcov");
-        std::fs::write(&lcov_path, "malformed").expect("write malformed lcov");
-
-        let result = stages.analyze_lcov_coverage(&lcov_path).await;
-        assert!(
-            result.is_err(),
-            "malformed LCOV input should surface extractor errors"
-        );
-    }
-
-    #[tokio::test]
-    async fn analyze_coverage_gaps_combines_multiple_formats() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-
-        // Prepare source file and LCOV report
-        let source_path = tmp.path().join("sample.rs");
-        let source = r#"pub fn add(a: i32, b: i32) -> i32 {
-    if a > 0 {
-        a + b
-    } else {
-        b - a
-    }
-}
-"#;
-        std::fs::write(&source_path, source).expect("write source file");
-
-        let lcov_path = tmp.path().join("coverage.lcov");
-        let lcov_report = format!(
-            "TN:\nSF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:4,1\nend_of_record\n",
-            source_path.display()
-        );
-        std::fs::write(&lcov_path, lcov_report).expect("write lcov file");
-
-        // XML coverage with two uncovered lines
-        let xml_path = tmp.path().join("coverage.xml");
-        let xml_content = r#"
-<coverage>
-  <line number="10" hits="0"/>
-  <line number="11" hits="0"/>
-  <line number="12" hits="1"/>
-</coverage>
-"#;
-        std::fs::write(&xml_path, xml_content).expect("write xml file");
-
-        // Placeholder JSON coverage (currently treated as zero gaps)
-        let json_path = tmp.path().join("coverage.json");
-        std::fs::write(&json_path, r#"{"files": []}"#).expect("write json file");
-
-        let coverage_files = vec![
-            CoverageFile {
-                path: lcov_path,
-                format: CoverageFormat::Lcov,
-                modified: SystemTime::now(),
-                size: 64,
-            },
-            CoverageFile {
-                path: xml_path,
-                format: CoverageFormat::CoveragePyXml,
-                modified: SystemTime::now(),
-                size: 64,
-            },
-            CoverageFile {
-                path: json_path,
-                format: CoverageFormat::IstanbulJson,
-                modified: SystemTime::now(),
-                size: 16,
-            },
-        ];
-
-        let gap_count = stages
-            .analyze_coverage_gaps(&coverage_files)
-            .await
-            .expect("gap analysis");
-
-        assert!(
-            gap_count >= 1,
-            "expected at least one gap from LCOV or XML, got {gap_count}"
-        );
-    }
-
-    #[tokio::test]
-    async fn analyze_coverage_gaps_skips_unknown_formats() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let unknown_path = tmp.path().join("mystery.dat");
-        std::fs::write(&unknown_path, "opaque").expect("write unknown coverage stub");
-
-        let coverage_files = vec![CoverageFile {
-            path: unknown_path,
-            format: CoverageFormat::Unknown,
-            modified: SystemTime::now(),
-            size: 6,
-        }];
-
-        let gap_count = stages
-            .analyze_coverage_gaps(&coverage_files)
-            .await
-            .expect("gap analysis");
-
-        assert_eq!(
-            gap_count, 0,
-            "unknown coverage formats should be ignored without contributing gaps"
-        );
-    }
-
-    #[tokio::test]
-    async fn calculate_overall_coverage_returns_none_without_lcov() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let json_path = tmp.path().join("coverage.json");
-        std::fs::write(&json_path, "{}").expect("write json coverage");
-
-        let coverage_files = vec![CoverageFile {
-            path: json_path,
-            format: CoverageFormat::IstanbulJson,
-            modified: SystemTime::now(),
-            size: 2,
-        }];
-
-        let coverage = stages
-            .calculate_overall_coverage(&coverage_files)
-            .await
-            .expect("coverage calc");
-
-        assert!(
-            coverage.is_none(),
-            "non-LCOV coverage inputs should not produce a coverage percentage"
-        );
-    }
-
-    #[tokio::test]
-    async fn analyze_xml_coverage_returns_zero_when_file_missing() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let missing_path = tmp.path().join("missing.xml");
-
-        let gaps = stages
-            .analyze_xml_coverage(&missing_path)
-            .await
-            .expect("xml analysis");
-
-        assert_eq!(
-            gaps, 0,
-            "missing coverage files should be treated as having no measurable gaps"
-        );
-    }
-
-    #[tokio::test]
-    async fn run_lsh_analysis_disabled_without_extractor() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let file_path = tmp.path().join("sample.rs");
-        std::fs::write(&file_path, "pub fn demo() {}").expect("write sample");
-
-        let analysis = stages
-            .run_lsh_analysis(&[file_path], false)
-            .await
-            .expect("lsh analysis");
-
-        assert!(!analysis.enabled);
-        assert!(analysis.clone_pairs.is_empty());
-    }
-
-    #[tokio::test]
-    async fn run_lsh_analysis_with_extractor_handles_empty_entities() {
-        let stages = build_test_stages_with_lsh();
-        let tmp = tempdir().expect("temp dir");
-        let file_path = tmp.path().join("notes.txt");
-        std::fs::write(&file_path, "plain text that yields no entities").expect("write stub");
-
-        let analysis = stages
-            .run_lsh_analysis(&[file_path], true)
-            .await
-            .expect("lsh analysis");
-
-        assert!(analysis.enabled);
-        assert!(analysis.clone_pairs.is_empty());
-        assert!(analysis.verification.is_none());
-    }
-
-    #[tokio::test]
-    async fn run_impact_analysis_handles_empty_and_non_empty_inputs() {
-        let stages = build_test_stages();
-
-        let empty = stages
-            .run_impact_analysis(&[])
-            .await
-            .expect("empty impact analysis");
-        assert!(!empty.enabled);
-
-        let tmp = tempdir().expect("temp dir");
-        let file_path = tmp.path().join("deps.rs");
-        let content = r#"
-pub mod deps {
-    pub fn alpha() {
-        beta();
-    }
-
-    pub fn beta() {
-        alpha();
-    }
-}
-"#;
-        std::fs::write(&file_path, content).expect("write deps");
-
-        let non_empty = stages
-            .run_impact_analysis(&[file_path.clone()])
-            .await
-            .expect("impact analysis");
-
-        assert!(non_empty.enabled);
-        assert_eq!(non_empty.clone_groups.len(), 0);
-        assert!(
-            non_empty.issues_count >= 0,
-            "issues_count should be non-negative"
-        );
-    }
-
-    #[test]
-    fn dependency_analysis_collects_metrics() {
-        let tmp = tempdir().expect("temp dir");
-        let file_path = tmp.path().join("analysis.rs");
-        let content = r#"
-pub mod cycle {
-    pub fn first() {
-        second();
-    }
-
-    pub fn second() {
-        first();
-    }
-}
-"#;
-        std::fs::write(&file_path, content).expect("write analysis file");
-
-        let analysis =
-            ProjectDependencyAnalysis::analyze(&[file_path]).expect("perform dependency analysis");
-
-        assert!(
-            !analysis.is_empty(),
-            "analysis should contain at least one function node"
-        );
-        assert!(analysis.metrics_iter().count() > 0, "metrics should exist");
-        // Chokepoints may be empty depending on AST metadata, but call ensures accessor coverage.
-        let _ = analysis.chokepoints();
-    }
-
-    #[tokio::test]
-    async fn simple_ast_cache_reuses_entries_and_handles_truncation() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let file_path = tmp.path().join("ast_sample.rs");
-        let content = r#"
-pub fn compute(limit: i32) -> i32 {
-    let mut acc = 0;
-    for i in 0..limit {
-        acc += i;
-    }
-    acc
-}
-"#;
-        std::fs::write(&file_path, content).expect("write rust sample");
-        let path_str = file_path.to_string_lossy().to_string();
-
-        let entities = stages
-            .extract_entities_from_file(&file_path, content)
-            .await
-            .expect("extract entities");
-        let entity = entities
-            .into_iter()
-            .find(|e| e.entity_type.to_lowercase().contains("function"))
-            .expect("function entity");
-
-        let mut ast_cache = HashMap::new();
-        let cached_tree = stages
-            .ast_service
-            .get_ast(&path_str, content)
-            .await
-            .expect("cached tree");
-        ast_cache.insert(path_str.clone(), cached_tree);
-
-        let mut cache = HashMap::new();
-        let simple =
-            get_or_build_simple_ast(&mut cache, &entity, &ast_cache, 10_000).expect("simple ast");
-        assert!(!simple.truncated);
-        assert!(simple.node_count > 0);
-        assert_eq!(cache.len(), 1);
-
-        let reused =
-            get_or_build_simple_ast(&mut cache, &entity, &ast_cache, 10_000).expect("reuse ast");
-        assert_eq!(reused.node_count, simple.node_count);
-
-        let mut truncated_cache = HashMap::new();
-        let truncated =
-            get_or_build_simple_ast(&mut truncated_cache, &entity, &ast_cache, 1).expect("trunc");
-        assert!(truncated.truncated);
-
-        let mut without_range = entity.clone();
-        without_range.properties.remove("byte_range");
-        let mut cache_without_range = HashMap::new();
-        assert!(get_or_build_simple_ast(
-            &mut cache_without_range,
-            &without_range,
-            &ast_cache,
-            10_000
-        )
-        .is_none());
-
-        let mut cache_missing_ast = HashMap::new();
-        let empty_ast_cache: HashMap<String, Arc<CachedTree>> = HashMap::new();
-        assert!(
-            get_or_build_simple_ast(&mut cache_missing_ast, &entity, &empty_ast_cache, 10_000)
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn run_lsh_analysis_produces_verified_clone_pairs() {
-        let stages = build_test_stages_with_lsh();
-        let tmp = tempdir().expect("temp dir");
-        let file_a = tmp.path().join("clone_a.rs");
-        let file_b = tmp.path().join("clone_b.rs");
-        let function_src = r#"
-pub fn compute() -> i32 {
-    let mut total = 0;
-    for value in 0..10 {
-        total += value * 2;
-    }
-    total
-}
-"#;
-        std::fs::write(&file_a, function_src).expect("write clone sample a");
-        std::fs::write(&file_b, function_src).expect("write clone sample b");
-
-        let analysis = stages
-            .run_lsh_analysis(&[file_a.clone(), file_b.clone()], false)
-            .await
-            .expect("lsh analysis");
-
-        assert!(analysis.enabled, "expected LSH analysis to be enabled");
-        assert!(
-            analysis.apted_verification_enabled,
-            "APTED verification should be enabled"
-        );
-        assert!(
-            analysis.duplicate_count > 0,
-            "expected at least one clone pair"
-        );
-
-        let verification_summary = analysis.verification.expect("verification summary present");
-        assert!(
-            verification_summary.pairs_scored > 0,
-            "expected structural verification to score at least one pair"
-        );
-
-        let first_pair = analysis.clone_pairs.first().expect("clone pair present");
-        let similarity = first_pair
-            .get("similarity")
-            .and_then(|value| value.as_f64())
-            .expect("similarity value recorded");
-        assert!(
-            similarity >= 0.0,
-            "similarity scores should be non-negative"
-        );
-
-        let verification_detail = first_pair
-            .get("verification")
-            .and_then(|value| value.as_object())
-            .expect("verification detail recorded");
-        assert!(
-            verification_detail.contains_key("node_counts"),
-            "expected node count metadata"
-        );
-        assert!(
-            verification_detail.contains_key("similarity")
-                || verification_detail.contains_key("edit_cost"),
-            "verification detail should include similarity or cost"
-        );
-    }
-
-    #[tokio::test]
-    async fn run_lsh_analysis_marks_truncated_asts() {
-        let ast_service = Arc::new(AstService::new());
-        let structure_extractor = StructureExtractor::with_config(StructureConfig::default());
-        let complexity_analyzer =
-            ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
-        let refactoring_analyzer =
-            RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
-
-        let mut valknut_config = ValknutConfig::default();
-        valknut_config.lsh.similarity_threshold = 0.0;
-        valknut_config.lsh.num_hashes = 16;
-        valknut_config.lsh.num_bands = 2;
-        valknut_config.lsh.max_candidates = 4;
-        valknut_config.lsh.apted_max_pairs_per_entity = 2;
-        valknut_config.lsh.apted_max_nodes = 8;
-        valknut_config.lsh.verify_with_apted = true;
-        let lsh_config = valknut_config.lsh.clone();
-
-        let lsh_extractor = LshExtractor::new()
-            .with_shared_ast_service(ast_service.clone())
-            .with_lsh_config(lsh_config.into());
-        let coverage_extractor =
-            CoverageExtractor::new(CoverageDetectorConfig::default(), ast_service.clone());
-
-        let stages = AnalysisStages::new_with_lsh(
-            structure_extractor,
-            complexity_analyzer,
-            refactoring_analyzer,
-            lsh_extractor,
-            coverage_extractor,
-            ast_service,
-            Arc::new(valknut_config),
-        );
-
-        let tmp = tempdir().expect("temp dir");
-        let file_a = tmp.path().join("truncated_a.rs");
-        let file_b = tmp.path().join("truncated_b.rs");
-        let big_function = r#"
-pub fn heavy() -> i32 {
-    let mut value = 0;
-    for outer in 0..20 {
-        value += outer;
-        for inner in 0..20 {
-            if inner % 3 == 0 {
-                value -= inner;
-            } else {
-                value += inner;
-            }
-        }
-    }
-    value
-}
-"#;
-        std::fs::write(&file_a, big_function).expect("write truncated sample a");
-        std::fs::write(&file_b, big_function).expect("write truncated sample b");
-
-        let analysis = stages
-            .run_lsh_analysis(&[file_a, file_b], true)
-            .await
-            .expect("lsh analysis");
-
-        let first_pair = analysis
-            .clone_pairs
-            .first()
-            .expect("expected at least one clone pair");
-        let truncated_flag = first_pair
-            .get("verification")
-            .and_then(|value| value.get("truncated"))
-            .and_then(|flag| flag.as_bool())
-            .unwrap_or(false);
-        assert!(
-            truncated_flag,
-            "verification detail should mark ASTs as truncated when node budget is exceeded"
-        );
-    }
-
-    #[tokio::test]
-    async fn run_arena_file_analysis_with_content_returns_empty_for_none() {
-        let stages = build_test_stages();
-        let results = stages
-            .run_arena_file_analysis_with_content(&[])
-            .await
-            .expect("arena analysis");
-
-        assert!(results.is_empty());
-    }
-
-    #[tokio::test]
-    async fn run_arena_file_analysis_skips_missing_files() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-        let missing_path = tmp.path().join("does_not_exist.rs");
-        let results = stages
-            .run_arena_file_analysis(&[missing_path])
-            .await
-            .expect("arena analysis");
-
-        assert!(results.is_empty());
-    }
-
-    #[tokio::test]
-    async fn run_complexity_analysis_from_arena_results_handles_mix_of_inputs() {
-        let stages = build_test_stages();
-        let tmp = tempdir().expect("temp dir");
-
-        // Existing file to drive successful analysis
-        let existing_path = tmp.path().join("metrics.rs");
-        let existing_source = r#"
-pub fn compute(limit: i32) -> i32 {
-    let mut acc = 0;
-    for i in 0..limit {
-        if i % 2 == 0 {
-            acc += i;
-        } else {
-            acc -= 1;
-        }
-    }
-    acc
-}
-"#;
-        std::fs::write(&existing_path, existing_source).expect("write metrics file");
-
-        // Missing file triggers warning path
-        let missing_path = tmp.path().join("missing.rs");
-
-        let mut entity = CodeEntity::new(
-            "metrics::compute",
-            "function",
-            "compute",
-            existing_path.to_string_lossy(),
-        )
-        .with_line_range(1, 12)
-        .with_source_code(existing_source);
-
-        entity.add_property("byte_range", serde_json::json!([0, existing_source.len()]));
-
-        let arena_results = vec![
-            ArenaAnalysisResult {
-                entity_count: 0,
-                file_path: intern(missing_path.to_string_lossy()),
-                entity_extraction_time: Duration::from_millis(1),
-                total_analysis_time: Duration::from_millis(1),
-                arena_bytes_used: 0,
-                memory_efficiency_score: 0.0,
-                entities: Vec::new(),
-            },
-            ArenaAnalysisResult {
-                entity_count: 1,
-                file_path: intern(existing_path.to_string_lossy()),
-                entity_extraction_time: Duration::from_millis(2),
-                total_analysis_time: Duration::from_millis(5),
-                arena_bytes_used: 2 * 1024,
-                memory_efficiency_score: 0.0,
-                entities: vec![entity],
-            },
-        ];
-
-        let analysis = stages
-            .run_complexity_analysis_from_arena_results(&arena_results)
-            .await
-            .expect("complexity analysis");
-
-        assert!(
-            analysis.enabled,
-            "analysis should be enabled with valid input"
-        );
-        assert!(
-            analysis.detailed_results.len() >= 1,
-            "expected at least one per-file complexity result"
-        );
-        assert!(
-            analysis.average_cyclomatic_complexity >= 0.0,
-            "averages should be non-negative"
-        );
-    }
-}
+#[path = "pipeline_stages_tests.rs"]
+mod tests;
