@@ -11,7 +11,78 @@ use serde::{Deserialize, Serialize};
 // Removed unused regex import
 
 use crate::core::errors::{Result, ValknutError};
+use crate::detectors::cohesion::CohesionConfig;
 use crate::detectors::structure::StructureConfig;
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/// Validate that a usize value is greater than zero.
+fn validate_positive_usize(value: usize, field: &str) -> Result<()> {
+    if value == 0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be greater than 0",
+            field
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that an i64 value is greater than zero.
+fn validate_positive_i64(value: i64, field: &str) -> Result<()> {
+    if value <= 0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be greater than 0",
+            field
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that an f64 value is greater than zero.
+fn validate_positive_f64(value: f64, field: &str) -> Result<()> {
+    if value <= 0.0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be greater than 0.0",
+            field
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that an f64 value is non-negative.
+fn validate_non_negative(value: f64, field: &str) -> Result<()> {
+    if value < 0.0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be non-negative",
+            field
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that an f64 value is in the unit range [0.0, 1.0].
+fn validate_unit_range(value: f64, field: &str) -> Result<()> {
+    if !(0.0..=1.0).contains(&value) {
+        return Err(ValknutError::validation(format!(
+            "{} must be between 0.0 and 1.0",
+            field
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that a u32 value is greater than zero.
+fn validate_positive_u32(value: u32, field: &str) -> Result<()> {
+    if value == 0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be greater than 0",
+            field
+        )));
+    }
+    Ok(())
+}
 // use crate::detectors::names::NamesConfig;
 
 /// Documentation health thresholds and penalties
@@ -95,6 +166,10 @@ pub struct ValknutConfig {
     #[serde(default)]
     pub docs: DocHealthConfig,
 
+    /// Semantic cohesion analysis configuration
+    #[serde(default)]
+    pub cohesion: CohesionConfig,
+
     /// Live reachability analysis configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub live_reach: Option<LiveReachConfig>,
@@ -130,6 +205,7 @@ impl ValknutConfig {
             structure: StructureConfig::default(),
             coverage: CoverageConfig::default(),
             docs: DocHealthConfig::default(),
+            cohesion: CohesionConfig::default(),
             live_reach: None,
             // names: NamesConfig::default(),
             _names_placeholder: None,
@@ -290,6 +366,10 @@ pub struct AnalysisConfig {
     #[serde(default)]
     pub enable_names_analysis: bool,
 
+    /// Enable semantic cohesion analysis (experimental - uses local embeddings)
+    #[serde(default)]
+    pub enable_cohesion_analysis: bool,
+
     /// Minimum confidence threshold for results
     #[serde(default)]
     pub confidence_threshold: f64,
@@ -326,6 +406,7 @@ impl Default for AnalysisConfig {
             enable_coverage_analysis: true,
             enable_structure_analysis: true,
             enable_names_analysis: true,
+            enable_cohesion_analysis: false, // Disabled by default - experimental
             confidence_threshold: 0.7,
             max_files: 0,
             exclude_patterns: vec![
@@ -725,19 +806,8 @@ impl LanguageConfig {
         if self.file_extensions.is_empty() {
             return Err(ValknutError::validation("file_extensions cannot be empty"));
         }
-
-        if self.max_file_size_mb <= 0.0 {
-            return Err(ValknutError::validation(
-                "max_file_size_mb must be positive",
-            ));
-        }
-
-        if self.complexity_threshold <= 0.0 {
-            return Err(ValknutError::validation(
-                "complexity_threshold must be positive",
-            ));
-        }
-
+        validate_positive_f64(self.max_file_size_mb, "max_file_size_mb")?;
+        validate_positive_f64(self.complexity_threshold, "complexity_threshold")?;
         Ok(())
     }
 }
@@ -1109,43 +1179,24 @@ impl Default for IslandConfig {
     }
 }
 
+/// Valid language identifiers for live reachability analysis.
+const VALID_LANGUAGES: &[&str] = &["auto", "jvm", "py", "go", "node", "native"];
+
 impl LiveReachConfig {
     /// Validate the live reachability configuration
     pub fn validate(&self) -> Result<()> {
-        // Validate language
-        if !["auto", "jvm", "py", "go", "node", "native"].contains(&self.ingest.lang.as_str()) {
+        if !VALID_LANGUAGES.contains(&self.ingest.lang.as_str()) {
             return Err(ValknutError::validation(format!(
                 "Invalid language: {}",
                 self.ingest.lang
             )));
         }
 
-        // Validate build config
-        if self.build.since_days == 0 {
-            return Err(ValknutError::validation(
-                "since_days must be greater than 0",
-            ));
-        }
-
-        if self.build.weight_static < 0.0 {
-            return Err(ValknutError::validation(
-                "weight_static must be non-negative",
-            ));
-        }
-
-        if self.build.island.min_size == 0 {
-            return Err(ValknutError::validation("min_size must be greater than 0"));
-        }
-
-        if self.build.island.min_score < 0.0 || self.build.island.min_score > 1.0 {
-            return Err(ValknutError::validation(
-                "min_score must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.build.island.resolution <= 0.0 {
-            return Err(ValknutError::validation("resolution must be positive"));
-        }
+        validate_positive_u32(self.build.since_days, "since_days")?;
+        validate_non_negative(self.build.weight_static, "weight_static")?;
+        validate_positive_usize(self.build.island.min_size, "min_size")?;
+        validate_unit_range(self.build.island.min_score, "min_score")?;
+        validate_positive_f64(self.build.island.resolution, "resolution")?;
 
         Ok(())
     }
@@ -1427,41 +1478,12 @@ impl DenoiseConfig {
             return Ok(());
         }
 
-        if self.min_function_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_function_tokens must be greater than 0",
-            ));
-        }
-
-        if self.min_match_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_match_tokens must be greater than 0",
-            ));
-        }
-
-        if self.require_blocks == 0 {
-            return Err(ValknutError::validation(
-                "require_blocks must be greater than 0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.similarity) {
-            return Err(ValknutError::validation(
-                "similarity must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.threshold_s) {
-            return Err(ValknutError::validation(
-                "threshold_s must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.io_mismatch_penalty) {
-            return Err(ValknutError::validation(
-                "io_mismatch_penalty must be between 0.0 and 1.0",
-            ));
-        }
+        validate_positive_usize(self.min_function_tokens, "min_function_tokens")?;
+        validate_positive_usize(self.min_match_tokens, "min_match_tokens")?;
+        validate_positive_usize(self.require_blocks, "require_blocks")?;
+        validate_unit_range(self.similarity, "similarity")?;
+        validate_unit_range(self.threshold_s, "threshold_s")?;
+        validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
 
         // Validate weights sum to approximately 1.0
         let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
@@ -1471,57 +1493,16 @@ impl DenoiseConfig {
             ));
         }
 
-        // Validate individual weights are non-negative
-        if self.weights.ast < 0.0 || self.weights.pdg < 0.0 || self.weights.emb < 0.0 {
-            return Err(ValknutError::validation(
-                "denoise weights must be non-negative",
-            ));
-        }
-
-        // Validate stop motifs config
-        if !(0.0..=1.0).contains(&self.stop_motifs.percentile) {
-            return Err(ValknutError::validation(
-                "stop_motifs.percentile must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.stop_motifs.refresh_days <= 0 {
-            return Err(ValknutError::validation(
-                "stop_motifs.refresh_days must be greater than 0",
-            ));
-        }
-
-        // Validate auto-calibration config
-        if !(0.0..=1.0).contains(&self.auto_calibration.quality_target) {
-            return Err(ValknutError::validation(
-                "auto_calibration.quality_target must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.auto_calibration.sample_size == 0 {
-            return Err(ValknutError::validation(
-                "auto_calibration.sample_size must be greater than 0",
-            ));
-        }
-
-        if self.auto_calibration.max_iterations == 0 {
-            return Err(ValknutError::validation(
-                "auto_calibration.max_iterations must be greater than 0",
-            ));
-        }
-
-        // Validate ranking config
-        if self.ranking.min_saved_tokens == 0 {
-            return Err(ValknutError::validation(
-                "ranking.min_saved_tokens must be greater than 0",
-            ));
-        }
-
-        if self.ranking.min_rarity_gain <= 0.0 {
-            return Err(ValknutError::validation(
-                "ranking.min_rarity_gain must be greater than 0.0",
-            ));
-        }
+        validate_non_negative(self.weights.ast, "weights.ast")?;
+        validate_non_negative(self.weights.pdg, "weights.pdg")?;
+        validate_non_negative(self.weights.emb, "weights.emb")?;
+        validate_unit_range(self.stop_motifs.percentile, "stop_motifs.percentile")?;
+        validate_positive_i64(self.stop_motifs.refresh_days, "stop_motifs.refresh_days")?;
+        validate_unit_range(self.auto_calibration.quality_target, "auto_calibration.quality_target")?;
+        validate_positive_usize(self.auto_calibration.sample_size, "auto_calibration.sample_size")?;
+        validate_positive_usize(self.auto_calibration.max_iterations, "auto_calibration.max_iterations")?;
+        validate_positive_usize(self.ranking.min_saved_tokens, "ranking.min_saved_tokens")?;
+        validate_positive_f64(self.ranking.min_rarity_gain, "ranking.min_rarity_gain")?;
 
         Ok(())
     }
@@ -1799,125 +1780,4 @@ impl DedupeConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::errors::ValknutError;
-    use std::collections::HashMap;
-
-    fn expect_validation_error<T: std::fmt::Debug>(result: Result<T>) -> ValknutError {
-        result.expect_err("expected validation failure")
-    }
-
-    #[test]
-    fn default_configs_validate_successfully() {
-        ValknutConfig::default()
-            .validate()
-            .expect("valknut default");
-        AnalysisConfig::default()
-            .validate()
-            .expect("analysis default");
-        ScoringConfig::default()
-            .validate()
-            .expect("scoring default");
-        CoverageConfig::default()
-            .validate()
-            .expect("coverage default");
-        PerformanceConfig::default()
-            .validate()
-            .expect("performance default");
-        DedupeConfig::default().validate().expect("dedupe default");
-        DenoiseConfig::default()
-            .validate()
-            .expect("denoise default");
-    }
-
-    #[test]
-    fn analysis_config_confidence_threshold_bounds() {
-        let mut config = AnalysisConfig::default();
-        config.confidence_threshold = 1.5;
-        let err = expect_validation_error(config.validate());
-        assert!(matches!(err, ValknutError::Validation { .. }));
-    }
-
-    #[test]
-    fn coverage_config_requires_patterns_when_auto_discovering() {
-        let mut config = CoverageConfig::default();
-        config.file_patterns.clear();
-        let err = expect_validation_error(config.validate());
-        assert!(
-            format!("{err}").contains("file_patterns"),
-            "unexpected error message: {err}"
-        );
-
-        config.file_patterns = vec!["coverage.xml".into()];
-        config.search_paths.clear();
-        let err = expect_validation_error(config.validate());
-        assert!(
-            format!("{err}").contains("search_paths"),
-            "unexpected error message: {err}"
-        );
-    }
-
-    #[test]
-    fn performance_config_rejects_zero_limits() {
-        let mut config = PerformanceConfig::default();
-        config.max_threads = Some(0);
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("max_threads"));
-
-        config.max_threads = Some(4);
-        config.batch_size = 0;
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("batch_size"));
-    }
-
-    #[test]
-    fn language_config_requires_extensions_and_thresholds() {
-        let config = LanguageConfig {
-            enabled: true,
-            file_extensions: Vec::new(),
-            tree_sitter_language: "rust".into(),
-            max_file_size_mb: 10.0,
-            complexity_threshold: 5.0,
-            additional_settings: HashMap::new(),
-        };
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("file_extensions"));
-
-        let config = LanguageConfig {
-            enabled: true,
-            file_extensions: vec![".rs".into()],
-            tree_sitter_language: "rust".into(),
-            max_file_size_mb: -1.0,
-            complexity_threshold: 5.0,
-            additional_settings: HashMap::new(),
-        };
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("max_file_size_mb"));
-    }
-
-    #[test]
-    fn denoise_config_validates_weight_sum() {
-        let mut config = DenoiseConfig::default();
-        config.enabled = true;
-        config.weights.ast = -0.1;
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("weights"), "{err}");
-    }
-
-    #[test]
-    fn dedupe_config_enforces_positive_thresholds() {
-        let mut config = DedupeConfig::default();
-        config.min_match_tokens = 0;
-        let err = expect_validation_error(config.validate());
-        assert!(format!("{err}").contains("min_match_tokens"), "{err}");
-
-        let mut config = DedupeConfig::default();
-        config.adaptive.hub_suppression_threshold = 1.5;
-        let err = expect_validation_error(config.validate());
-        assert!(
-            format!("{err}").contains("hub_suppression_threshold"),
-            "{err}"
-        );
-    }
-}
+mod tests;

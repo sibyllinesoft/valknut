@@ -401,6 +401,49 @@ impl RefactoringAnalyzer {
         Ok((Some(u64::from_le_bytes(bytes)), Some(token_count)))
     }
 
+    /// Comment node kinds to skip during fingerprinting.
+    const COMMENT_KINDS: [&'static str; 3] = ["comment", "block_comment", "line_comment"];
+
+    /// Mapping from node kinds to normalized token names.
+    const TOKEN_MAPPINGS: [(&'static str, &'static [&'static str]); 6] = [
+        ("IDENT", &["identifier", "field_identifier", "property_identifier",
+                   "shorthand_property_identifier_pattern", "member_expression", "scoped_identifier"]),
+        ("TYPE", &["type_identifier", "primitive_type"]),
+        ("STRING", &["string", "string_literal", "raw_string_literal"]),
+        ("NUMBER", &["number", "integer", "float", "decimal_literal", "float_literal"]),
+        ("BOOL", &["true", "false"]),
+        ("NULL", &["null", "nil"]),
+    ];
+
+    /// Normalize a node kind to a token name, or None if it should be skipped.
+    fn normalize_token_kind(kind: &str) -> Option<String> {
+        if Self::COMMENT_KINDS.contains(&kind) {
+            return None;
+        }
+        for (token, kinds) in &Self::TOKEN_MAPPINGS {
+            if kinds.contains(&kind) {
+                return Some((*token).to_string());
+            }
+        }
+        Some(kind.to_string())
+    }
+
+    /// Count arguments in a call expression.
+    fn count_call_arguments(node: &tree_sitter::Node<'_>) -> usize {
+        node.child_by_field_name("arguments")
+            .map(|args| args.named_child_count())
+            .unwrap_or_else(|| {
+                let mut cnt = 0;
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind().ends_with("argument") {
+                        cnt += 1;
+                    }
+                }
+                cnt
+            })
+    }
+
     fn collect_fingerprint_tokens(
         &self,
         node: tree_sitter::Node<'_>,
@@ -412,28 +455,13 @@ impl RefactoringAnalyzer {
         }
 
         let kind = node.kind();
-        match kind {
-            "comment" | "block_comment" | "line_comment" => return,
-            "identifier"
-            | "field_identifier"
-            | "property_identifier"
-            | "shorthand_property_identifier_pattern"
-            | "member_expression"
-            | "scoped_identifier" => tokens.push("IDENT".to_string()),
-            "type_identifier" | "primitive_type" => tokens.push("TYPE".to_string()),
-            "string" | "string_literal" | "raw_string_literal" => tokens.push("STRING".to_string()),
-            "number" | "integer" | "float" | "decimal_literal" | "float_literal" => {
-                tokens.push("NUMBER".to_string())
-            }
-            "true" | "false" => tokens.push("BOOL".to_string()),
-            "null" | "nil" => tokens.push("NULL".to_string()),
-            _ => tokens.push(kind.to_string()),
+        if let Some(token) = Self::normalize_token_kind(kind) {
+            tokens.push(token);
+        } else {
+            return; // Comment node, skip children too
         }
 
-        if matches!(
-            kind,
-            "binary_expression" | "assignment_expression" | "logical_expression"
-        ) {
+        if matches!(kind, "binary_expression" | "assignment_expression" | "logical_expression") {
             if let Some(operator) = node.child_by_field_name("operator") {
                 if let Some(text) = node_text(operator, source) {
                     tokens.push(format!("OP:{}", text.trim()));
@@ -442,20 +470,7 @@ impl RefactoringAnalyzer {
         }
 
         if matches!(kind, "call_expression" | "call") {
-            let arg_count = node
-                .child_by_field_name("arguments")
-                .map(|args| args.named_child_count())
-                .unwrap_or_else(|| {
-                    let mut cnt = 0;
-                    let mut cursor = node.walk();
-                    for child in node.children(&mut cursor) {
-                        if child.kind().ends_with("argument") {
-                            cnt += 1;
-                        }
-                    }
-                    cnt
-                });
-            tokens.push(format!("CALL_ARGS:{}", arg_count));
+            tokens.push(format!("CALL_ARGS:{}", Self::count_call_arguments(&node)));
         }
 
         let mut cursor = node.walk();
@@ -943,226 +958,4 @@ fn estimate_logical_operator_complexity(snippet: &str) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::sync::Arc;
-    use tempfile::TempDir;
-
-    use crate::core::config::ValknutConfig;
-    use crate::core::featureset::{CodeEntity, ExtractionContext};
-
-    fn analyzer() -> RefactoringAnalyzer {
-        RefactoringAnalyzer::new(RefactoringConfig::default(), Arc::new(AstService::new()))
-    }
-
-    #[test]
-    fn test_refactoring_config_default() {
-        let config = RefactoringConfig::default();
-        assert!(config.enabled);
-        assert_eq!(config.min_impact_threshold, 5.0);
-    }
-
-    #[test]
-    fn test_refactoring_analyzer_creation() {
-        let ast_service = Arc::new(AstService::new());
-        let analyzer = RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service);
-        assert!(analyzer.config.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_analyze_files_disabled() {
-        let config = RefactoringConfig {
-            enabled: false,
-            min_impact_threshold: 5.0,
-        };
-        let analyzer = RefactoringAnalyzer::new(config, Arc::new(AstService::new()));
-
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.py");
-        fs::write(&file_path, "def test_function():\n    pass").unwrap();
-
-        let paths = vec![file_path];
-        let results = analyzer.analyze_files(&paths).await.unwrap();
-        assert!(results.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_detects_long_method() {
-        let dir = TempDir::new().unwrap();
-        let file_path = dir.path().join("long_function.py");
-        let mut content = String::from("def long_function():\n");
-        for i in 0..65 {
-            content.push_str(&format!("    value = {}\n", i));
-        }
-        fs::write(&file_path, content).unwrap();
-
-        let analyzer = analyzer();
-        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
-        assert_eq!(results.len(), 1);
-        let has_extract_method = results[0]
-            .recommendations
-            .iter()
-            .any(|rec| rec.refactoring_type == RefactoringType::ExtractMethod);
-        assert!(has_extract_method, "Expected long method recommendation");
-    }
-
-    #[tokio::test]
-    async fn test_detects_complex_conditionals() {
-        let dir = TempDir::new().unwrap();
-        let file_path = dir.path().join("complex_condition.py");
-        let content = r#"
-def complex_condition(a, b, c, d):
-    if (a and b) or (c and d) or (a and c and d):
-        return True
-    return False
-"#;
-        fs::write(&file_path, content).unwrap();
-
-        let analyzer = analyzer();
-        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
-        assert_eq!(results.len(), 1);
-        let has_complexity = results[0]
-            .recommendations
-            .iter()
-            .any(|rec| rec.refactoring_type == RefactoringType::SimplifyConditionals);
-        assert!(
-            has_complexity,
-            "Expected complex conditional recommendation"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_detects_duplicate_functions() {
-        let dir = TempDir::new().unwrap();
-        let file_path = dir.path().join("duplicates.py");
-        let content = r#"
-def helper():
-    total = 0
-    for i in range(10):
-        total += i * 2
-        if total % 3 == 0:
-            total -= 1
-        else:
-            total += 1
-    return total
-
-def helper_copy():
-    total = 0
-    for i in range(10):
-        total += i * 2
-        if total % 3 == 0:
-            total -= 1
-        else:
-            total += 1
-    return total
-"#;
-        fs::write(&file_path, content).unwrap();
-
-        let analyzer = analyzer();
-        let source = fs::read_to_string(&file_path).unwrap();
-        let mut adapter = crate::lang::python::PythonAdapter::new().unwrap();
-        let file_path_str = file_path.to_string_lossy().to_string();
-        let parse_index = adapter.parse_source(&source, &file_path_str).unwrap();
-        let ast_service = Arc::new(AstService::new());
-        let cached_tree = ast_service.get_ast(&file_path_str, &source).await.unwrap();
-        let ast_context = ast_service.create_context(&cached_tree, &file_path_str);
-        let complexity_map = HashMap::<String, ComplexityAnalysisResult>::new();
-        let summaries = analyzer
-            .collect_entity_summaries(&parse_index, &source, &complexity_map, &ast_context)
-            .unwrap();
-        assert!(
-            summaries
-                .iter()
-                .filter(|s| RefactoringAnalyzer::is_function_entity(s))
-                .count()
-                >= 2
-        );
-        let duplicate_ready = summaries
-            .iter()
-            .filter(|s| RefactoringAnalyzer::is_function_entity(s))
-            .filter(|s| RefactoringAnalyzer::duplicate_signature(s).is_some())
-            .count();
-        assert!(
-            duplicate_ready >= 2,
-            "expected duplicate fingerprints to be present"
-        );
-
-        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
-        assert_eq!(results.len(), 1);
-        let has_duplicate = results[0]
-            .recommendations
-            .iter()
-            .any(|rec| rec.refactoring_type == RefactoringType::EliminateDuplication);
-        assert!(has_duplicate, "Expected duplicate code recommendation");
-    }
-
-    #[tokio::test]
-    async fn test_detects_large_class() {
-        let dir = TempDir::new().unwrap();
-        let file_path = dir.path().join("large_class.py");
-        let mut content = String::from("class HugeClass:\n");
-        for i in 0..30 {
-            content.push_str(&format!("    def method_{}(self):\n", i));
-            content.push_str("        result = 0\n");
-            for j in 0..10 {
-                content.push_str(&format!("        result += {}\n", j));
-            }
-            content.push_str("        return result\n\n");
-        }
-        fs::write(&file_path, content).unwrap();
-
-        let analyzer = analyzer();
-        let results = analyzer.analyze_files(&[file_path.clone()]).await.unwrap();
-        assert_eq!(results.len(), 1);
-        let has_large_class = results[0]
-            .recommendations
-            .iter()
-            .any(|rec| rec.refactoring_type == RefactoringType::ExtractClass);
-        assert!(has_large_class, "Expected large class recommendation");
-    }
-
-    #[tokio::test]
-    async fn test_refactoring_extractor_produces_features() {
-        use crate::core::config::ValknutConfig;
-        use crate::core::featureset::{CodeEntity, ExtractionContext};
-
-        let dir = TempDir::new().unwrap();
-        let file_path = dir.path().join("long_refactor.py");
-
-        let mut content = String::from("def long_function():\n");
-        for i in 0..70 {
-            content.push_str(&format!("    value = {}\n", i));
-        }
-        tokio::fs::write(&file_path, &content).await.unwrap();
-
-        let entity = CodeEntity::new(
-            "entity::long_function",
-            "function",
-            "long_function",
-            file_path.to_string_lossy(),
-        )
-        .with_line_range(1, content.lines().count())
-        .with_source_code(content.clone());
-
-        let mut context = ExtractionContext::new(Arc::new(ValknutConfig::default()), "python");
-        context.add_entity(entity.clone());
-
-        let extractor = RefactoringExtractor::default();
-        let features = extractor.extract(&entity, &context).await.unwrap();
-
-        let recommendation_count = features
-            .get("refactoring_recommendation_count")
-            .copied()
-            .unwrap_or_default();
-        assert!(recommendation_count >= 1.0);
-
-        assert!(
-            features
-                .get("refactoring_file_score")
-                .copied()
-                .unwrap_or_default()
-                >= 0.0
-        );
-    }
-}
+mod tests;

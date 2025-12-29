@@ -204,3 +204,4 @@ coverage.lcov
 !src/detectors/coverage/
 
 node_modules/
+.fastembed_cache/

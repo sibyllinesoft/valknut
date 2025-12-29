@@ -7,10 +7,22 @@ use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// Directories to skip during directory analysis
+const SKIP_DIRECTORIES: &[&str] = &[
+    "node_modules", "target", ".git", "__pycache__", "dist", "build", ".next", "vendor", "venv",
+];
+
+/// Code file extensions recognized for analysis
+const CODE_EXTENSIONS: &[&str] = &[
+    "py", "js", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
+];
+
 use crate::core::errors::{Result, ValknutError};
 use crate::core::file_utils::FileReader;
 use crate::lang::registry::adapter_for_file;
 use tracing::warn;
+
+use super::PrecomputedFileMetrics;
 
 use super::config::{
     BranchReorgPack, DependencyEdge, DependencyGraph, DirectoryMetrics, DirectoryPartition,
@@ -50,6 +62,19 @@ impl DirectoryAnalyzer {
             (subdirs as f64 / self.config.fsdir.max_subdirs_per_dir as f64).min(1.0);
         let size_pressure = (total_loc as f64 / self.config.fsdir.max_dir_loc as f64).min(1.0);
 
+        // Calculate distribution-based optimality scores
+        // These score how close the directory is to "optimal" size based on a normal distribution
+        let file_count_score = self.calculate_distribution_score(
+            files,
+            self.config.fsdir.optimal_files,
+            self.config.fsdir.optimal_files_stddev,
+        );
+        let subdir_count_score = self.calculate_distribution_score(
+            subdirs,
+            self.config.fsdir.optimal_subdirs,
+            self.config.fsdir.optimal_subdirs_stddev,
+        );
+
         // Calculate dispersion combining gini and entropy
         let max_entropy = if files > 0 {
             (files as f64).log2()
@@ -67,10 +92,17 @@ impl DirectoryAnalyzer {
         let size_normalization_factor = self.calculate_size_normalization_factor(files, total_loc);
 
         // Calculate overall imbalance score with normalization
-        let raw_imbalance = 0.35 * file_pressure
-            + 0.25 * branch_pressure
-            + 0.25 * size_pressure
-            + 0.15 * dispersion;
+        // Incorporate distribution scores: lower scores (further from optimal) increase imbalance
+        // We use (1.0 - score) to convert optimality score to a "deviation" metric
+        let file_deviation = 1.0 - file_count_score;
+        let subdir_deviation = 1.0 - subdir_count_score;
+
+        let raw_imbalance = 0.25 * file_pressure
+            + 0.15 * branch_pressure
+            + 0.20 * size_pressure
+            + 0.10 * dispersion
+            + 0.20 * file_deviation
+            + 0.10 * subdir_deviation;
 
         let imbalance = raw_imbalance * size_normalization_factor;
 
@@ -84,6 +116,8 @@ impl DirectoryAnalyzer {
             branch_pressure,
             size_pressure,
             dispersion,
+            file_count_score,
+            subdir_count_score,
             imbalance,
         };
 
@@ -122,10 +156,7 @@ impl DirectoryAnalyzer {
 
     /// Check if file extension indicates a code file
     fn is_code_file(&self, extension: &str) -> bool {
-        matches!(
-            extension,
-            "py" | "js" | "ts" | "jsx" | "tsx" | "rs" | "go" | "java" | "cpp" | "c" | "h" | "hpp"
-        )
+        CODE_EXTENSIONS.contains(&extension)
     }
 
     /// Count lines of code in a file
@@ -135,6 +166,206 @@ impl DirectoryAnalyzer {
             .lines()
             .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//"))
             .count())
+    }
+
+    /// Gather directory stats using pre-computed metrics (avoids file I/O)
+    fn gather_directory_stats_with_metrics(
+        &self,
+        dir_path: &Path,
+        metrics_map: &HashMap<PathBuf, &PrecomputedFileMetrics>,
+    ) -> Result<(usize, usize, Vec<usize>)> {
+        let mut files = 0;
+        let mut subdirs = 0;
+        let mut loc_distribution = Vec::new();
+
+        for entry in std::fs::read_dir(dir_path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                subdirs += 1;
+            } else if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    if self.is_code_file(ext) {
+                        files += 1;
+                        // Use pre-computed LOC if available, otherwise fall back to reading
+                        let loc = if let Some(metrics) = metrics_map.get(&path) {
+                            metrics.loc
+                        } else {
+                            self.count_lines_of_code(&path)?
+                        };
+                        loc_distribution.push(loc);
+                    }
+                }
+            }
+        }
+
+        Ok((files, subdirs, loc_distribution))
+    }
+
+    /// Calculate directory metrics using pre-computed file data
+    pub fn calculate_directory_metrics_with_metrics(
+        &self,
+        dir_path: &Path,
+        metrics_map: &HashMap<PathBuf, &PrecomputedFileMetrics>,
+    ) -> Result<DirectoryMetrics> {
+        // Check cache first
+        if let Some(cached) = self.metrics_cache.get(dir_path) {
+            return Ok(cached.clone());
+        }
+
+        let (files, subdirs, loc_distribution) =
+            self.gather_directory_stats_with_metrics(dir_path, metrics_map)?;
+        let total_loc = loc_distribution.iter().sum::<usize>();
+
+        // Calculate dispersion metrics
+        let gini = self.calculate_gini_coefficient(&loc_distribution);
+        let entropy = self.calculate_entropy(&loc_distribution);
+
+        // Calculate pressure metrics (clipped to [0,1])
+        let file_pressure = (files as f64 / self.config.fsdir.max_files_per_dir as f64).min(1.0);
+        let branch_pressure =
+            (subdirs as f64 / self.config.fsdir.max_subdirs_per_dir as f64).min(1.0);
+        let size_pressure = (total_loc as f64 / self.config.fsdir.max_dir_loc as f64).min(1.0);
+
+        // Calculate distribution-based optimality scores
+        let file_count_score = self.calculate_distribution_score(
+            files,
+            self.config.fsdir.optimal_files,
+            self.config.fsdir.optimal_files_stddev,
+        );
+        let subdir_count_score = self.calculate_distribution_score(
+            subdirs,
+            self.config.fsdir.optimal_subdirs,
+            self.config.fsdir.optimal_subdirs_stddev,
+        );
+
+        // Calculate dispersion combining gini and entropy
+        let max_entropy = if files > 0 {
+            (files as f64).log2()
+        } else {
+            1.0
+        };
+        let normalized_entropy = if max_entropy > 0.0 {
+            entropy / max_entropy
+        } else {
+            0.0
+        };
+        let dispersion = gini.max(1.0 - normalized_entropy);
+
+        // Apply size normalization
+        let size_normalization_factor = self.calculate_size_normalization_factor(files, total_loc);
+
+        // Calculate overall imbalance score
+        let file_deviation = 1.0 - file_count_score;
+        let subdir_deviation = 1.0 - subdir_count_score;
+
+        let raw_imbalance = 0.25 * file_pressure
+            + 0.15 * branch_pressure
+            + 0.20 * size_pressure
+            + 0.10 * dispersion
+            + 0.20 * file_deviation
+            + 0.10 * subdir_deviation;
+
+        let imbalance = (raw_imbalance * size_normalization_factor).min(1.0);
+
+        let metrics = DirectoryMetrics {
+            files,
+            subdirs,
+            loc: total_loc,
+            gini,
+            entropy,
+            file_pressure,
+            branch_pressure,
+            size_pressure,
+            dispersion,
+            file_count_score,
+            subdir_count_score,
+            imbalance,
+        };
+
+        // Cache the result
+        self.metrics_cache.insert(dir_path.to_path_buf(), metrics.clone());
+
+        Ok(metrics)
+    }
+
+    /// Analyze directory for reorganization using pre-computed metrics
+    pub fn analyze_directory_for_reorg_with_metrics(
+        &self,
+        dir_path: &Path,
+        metrics_map: &HashMap<PathBuf, &PrecomputedFileMetrics>,
+    ) -> Result<Option<BranchReorgPack>> {
+        let metrics = self.calculate_directory_metrics_with_metrics(dir_path, metrics_map)?;
+
+        // Check if directory meets threshold for consideration
+        if metrics.imbalance < 0.6 {
+            return Ok(None);
+        }
+
+        // Additional conditions
+        let meets_conditions = metrics.files > self.config.fsdir.max_files_per_dir
+            || metrics.loc > self.config.fsdir.max_dir_loc
+            || metrics.dispersion >= 0.5;
+
+        if !meets_conditions {
+            return Ok(None);
+        }
+
+        // Skip small directories
+        if metrics.files <= 5 && metrics.loc <= 600 {
+            return Ok(None);
+        }
+
+        // Build dependency graph and partition
+        let dependency_graph = self.build_dependency_graph(dir_path)?;
+        let partitions = self.partition_directory(&dependency_graph, &metrics)?;
+
+        if partitions.is_empty() {
+            return Ok(None);
+        }
+
+        // Calculate expected gains
+        let gain = self.calculate_reorganization_gain(&metrics, &partitions, dir_path)?;
+
+        if gain.imbalance_delta < self.config.fsdir.min_branch_recommendation_gain {
+            return Ok(None);
+        }
+
+        // Calculate effort estimation and file moves
+        let effort = self.calculate_reorganization_effort(&partitions, dir_path)?;
+        let file_moves = self.generate_file_moves(&partitions, dir_path)?;
+
+        let pack = BranchReorgPack {
+            kind: "branch_reorg".to_string(),
+            dir: dir_path.to_path_buf(),
+            current: metrics,
+            proposal: partitions,
+            file_moves,
+            gain,
+            effort,
+            rules: self.generate_reorganization_rules(dir_path),
+        };
+
+        Ok(Some(pack))
+    }
+
+    /// Calculate a distribution-based optimality score.
+    ///
+    /// Returns a score in [0, 1] where 1.0 means the value equals the optimal (mean),
+    /// and the score decreases as the value deviates from optimal. The score is
+    /// computed as the ratio of the normal distribution density at the given value
+    /// to the density at the mean (which is the maximum density).
+    ///
+    /// This simplifies to: `score = exp(-0.5 * ((value - optimal) / stddev)²)`
+    pub fn calculate_distribution_score(&self, value: usize, optimal: usize, stddev: f64) -> f64 {
+        if stddev <= 0.0 {
+            // If stddev is zero or negative, return 1.0 only if value equals optimal
+            return if value == optimal { 1.0 } else { 0.0 };
+        }
+
+        let z = (value as f64 - optimal as f64) / stddev;
+        (-0.5 * z * z).exp()
     }
 
     /// Calculate Gini coefficient for LOC distribution with O(n log n) optimization
@@ -1024,1079 +1255,11 @@ impl DirectoryAnalyzer {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("");
-
         // Skip common ignore patterns
-        matches!(
-            filename,
-            "node_modules"
-                | "target"
-                | ".git"
-                | "__pycache__"
-                | "dist"
-                | "build"
-                | ".next"
-                | "vendor"
-                | "venv"
-        )
+        SKIP_DIRECTORIES.contains(&filename)
     }
 }
+
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::detectors::structure::config::{
-        FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig, StructureToggles,
-    };
-    use crate::lang::registry::adapter_for_language;
-    use petgraph::graph::Graph;
-    use std::fs;
-    use tempfile::TempDir;
-
-    fn create_test_config() -> StructureConfig {
-        StructureConfig {
-            enable_branch_packs: true,
-            enable_file_split_packs: true,
-            top_packs: 20,
-            fsdir: FsDirectoryConfig {
-                max_files_per_dir: 20,
-                max_subdirs_per_dir: 10,
-                max_dir_loc: 2000,
-                target_loc_per_subdir: 500,
-                min_branch_recommendation_gain: 0.1,
-                min_files_for_split: 5,
-            },
-            fsfile: FsFileConfig {
-                huge_loc: 800,
-                huge_bytes: 128_000,
-                min_split_loc: 200,
-                min_entities_per_split: 3,
-            },
-            partitioning: PartitioningConfig {
-                max_clusters: 8,
-                min_clusters: 2,
-                balance_tolerance: 0.3,
-                naming_fallbacks: vec![
-                    "core".to_string(),
-                    "utils".to_string(),
-                    "components".to_string(),
-                    "services".to_string(),
-                ],
-            },
-        }
-    }
-
-    fn setup_test_directory() -> TempDir {
-        let temp_dir = TempDir::new().unwrap();
-        let dir_path = temp_dir.path();
-
-        // Create test files with different sizes
-        fs::write(dir_path.join("small.py"), "# Small file\nprint('hello')").unwrap();
-        fs::write(dir_path.join("medium.py"), "# Medium file\n".repeat(50)).unwrap();
-        fs::write(dir_path.join("large.py"), "# Large file\n".repeat(200)).unwrap();
-        fs::write(
-            dir_path.join("test.js"),
-            "// JavaScript file\nconsole.log('test');",
-        )
-        .unwrap();
-        fs::write(
-            dir_path.join("app.rs"),
-            "// Rust file\nfn main() { println!(\"Hello\"); }",
-        )
-        .unwrap();
-
-        // Create subdirectory
-        fs::create_dir(dir_path.join("subdir")).unwrap();
-        fs::write(dir_path.join("subdir/nested.py"), "# Nested file").unwrap();
-
-        temp_dir
-    }
-
-    #[test]
-    fn test_directory_analyzer_new() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config.clone());
-
-        assert_eq!(
-            analyzer.config.fsdir.max_files_per_dir,
-            config.fsdir.max_files_per_dir
-        );
-        assert!(analyzer.metrics_cache.is_empty());
-    }
-
-    #[test]
-    fn test_is_code_file() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        assert!(analyzer.is_code_file("py"));
-        assert!(analyzer.is_code_file("js"));
-        assert!(analyzer.is_code_file("ts"));
-        assert!(analyzer.is_code_file("rs"));
-        assert!(!analyzer.is_code_file("txt"));
-        assert!(!analyzer.is_code_file("md"));
-    }
-
-    #[test]
-    fn test_count_lines_of_code() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.py");
-
-        let content = r#"# Comment line
-import os
-
-def hello():
-    print("Hello world")
-    # Another comment
-    return True
-
-    # Empty line above
-"#;
-        fs::write(&file_path, content).unwrap();
-
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-        let loc = analyzer.count_lines_of_code(&file_path).unwrap();
-
-        // Should count non-empty, non-comment lines
-        assert!(loc > 0);
-        assert!(loc < content.lines().count()); // Less than total lines due to comments
-    }
-
-    #[test]
-    fn test_gather_directory_stats() {
-        let temp_dir = setup_test_directory();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let (files, subdirs, loc_distribution) =
-            analyzer.gather_directory_stats(temp_dir.path()).unwrap();
-
-        assert_eq!(files, 5); // 5 code files
-        assert_eq!(subdirs, 1); // 1 subdirectory
-        assert_eq!(loc_distribution.len(), 5);
-        assert!(loc_distribution.iter().all(|&loc| loc > 0));
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[]);
-        assert_eq!(gini, 0.0);
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_single_value() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[100]);
-        assert_eq!(gini, 0.0);
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_equal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[50, 50, 50, 50]);
-        assert!(gini < 0.1); // Should be close to 0 for equal distribution
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_unequal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[10, 20, 30, 100]);
-        assert!(gini > 0.1); // Should be higher for unequal distribution
-    }
-
-    #[test]
-    fn test_calculate_entropy_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[]);
-        assert_eq!(entropy, 0.0);
-    }
-
-    #[test]
-    fn test_calculate_entropy_single_value() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[100]);
-        assert_eq!(entropy, 0.0);
-    }
-
-    #[test]
-    fn test_calculate_entropy_equal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[25, 25, 25, 25]);
-        assert!(entropy > 1.0); // Should be high for uniform distribution
-    }
-
-    #[test]
-    fn test_calculate_size_normalization_factor() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let factor1 = analyzer.calculate_size_normalization_factor(5, 500);
-        let factor2 = analyzer.calculate_size_normalization_factor(10, 1000);
-        let factor3 = analyzer.calculate_size_normalization_factor(20, 2000);
-
-        // Normalization factor should be within reasonable range
-        assert!(factor1 >= 0.5 && factor1 <= 1.5);
-        assert!(factor2 >= 0.5 && factor2 <= 1.5);
-        assert!(factor3 >= 0.5 && factor3 <= 1.5);
-    }
-
-    #[test]
-    fn test_calculate_directory_metrics() {
-        let temp_dir = setup_test_directory();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let metrics = analyzer
-            .calculate_directory_metrics(temp_dir.path())
-            .unwrap();
-
-        assert_eq!(metrics.files, 5);
-        assert_eq!(metrics.subdirs, 1);
-        assert!(metrics.loc > 0);
-        assert!(metrics.gini >= 0.0 && metrics.gini <= 1.0);
-        assert!(metrics.entropy >= 0.0);
-        assert!(metrics.file_pressure >= 0.0 && metrics.file_pressure <= 1.0);
-        assert!(metrics.branch_pressure >= 0.0 && metrics.branch_pressure <= 1.0);
-        assert!(metrics.size_pressure >= 0.0 && metrics.size_pressure <= 1.0);
-        assert!(metrics.dispersion >= 0.0 && metrics.dispersion <= 1.0);
-        assert!(metrics.imbalance >= 0.0);
-    }
-
-    #[test]
-    fn test_calculate_directory_metrics_caching() {
-        let temp_dir = setup_test_directory();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // First call
-        let metrics1 = analyzer
-            .calculate_directory_metrics(temp_dir.path())
-            .unwrap();
-
-        // Second call should return cached result
-        let metrics2 = analyzer
-            .calculate_directory_metrics(temp_dir.path())
-            .unwrap();
-
-        assert_eq!(metrics1.files, metrics2.files);
-        assert_eq!(metrics1.subdirs, metrics2.subdirs);
-        assert_eq!(metrics1.loc, metrics2.loc);
-        assert!(!analyzer.metrics_cache.is_empty());
-    }
-
-    #[test]
-    fn test_should_skip_directory() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        assert!(analyzer.should_skip_directory(Path::new("node_modules")));
-        assert!(analyzer.should_skip_directory(Path::new("target")));
-        assert!(analyzer.should_skip_directory(Path::new(".git")));
-        assert!(analyzer.should_skip_directory(Path::new("__pycache__")));
-        assert!(!analyzer.should_skip_directory(Path::new("src")));
-        assert!(!analyzer.should_skip_directory(Path::new("lib")));
-    }
-
-    #[test]
-    fn test_extract_python_imports_basic() {
-        let content = r#"import os
-import sys
-from pathlib import Path
-from collections import OrderedDict, defaultdict
-"#;
-
-        let mut adapter = adapter_for_language("py").unwrap();
-        let imports = adapter.extract_imports(content).unwrap();
-
-        assert_eq!(imports.len(), 4);
-
-        assert_eq!(imports[0].module, "os");
-        assert_eq!(imports[0].import_type, "module");
-
-        assert_eq!(imports[2].module, "pathlib");
-        assert_eq!(imports[2].import_type, "named");
-        assert!(imports[2]
-            .imports
-            .as_ref()
-            .unwrap()
-            .contains(&"Path".to_string()));
-    }
-
-    #[test]
-    fn test_extract_python_imports_star_import() {
-        let content = "from module import *";
-        let mut adapter = adapter_for_language("py").unwrap();
-        let imports = adapter.extract_imports(content).unwrap();
-
-        assert_eq!(imports.len(), 1);
-        assert_eq!(imports[0].import_type, "star");
-        assert!(imports[0].imports.is_none());
-    }
-
-    #[test]
-    fn test_extract_javascript_imports_basic() {
-        let content = r#"import React from 'react';
-import { useState, useEffect } from 'react';
-import * as utils from './utils';
-"#;
-
-        let mut adapter = adapter_for_language("js").unwrap();
-        let imports = adapter.extract_imports(content).unwrap();
-
-        assert_eq!(imports.len(), 3);
-        assert_eq!(imports[0].module, "react");
-        assert_eq!(imports[1].import_type, "named");
-        assert_eq!(imports[2].import_type, "star");
-    }
-
-    #[test]
-    fn test_extract_rust_imports_basic() {
-        let content = r#"use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use serde::{Serialize, Deserialize};
-"#;
-
-        let mut adapter = adapter_for_language("rs").unwrap();
-        let imports = adapter.extract_imports(content).unwrap();
-
-        assert_eq!(imports.len(), 3);
-        assert_eq!(imports[0].module, "std::collections::HashMap");
-        assert_eq!(imports[0].import_type, "module");
-
-        assert_eq!(imports[1].module, "std::fs::");
-        assert_eq!(imports[1].import_type, "named");
-        assert!(imports[1]
-            .imports
-            .as_ref()
-            .unwrap()
-            .contains(&"File".to_string()));
-    }
-
-    #[test]
-    fn test_generate_partition_name_with_common_tokens() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let files = vec![
-            PathBuf::from("user_service.py"),
-            PathBuf::from("user_model.py"),
-            PathBuf::from("user_controller.py"),
-        ];
-
-        let name = analyzer.generate_partition_name(&files, 0);
-        assert_eq!(name, "user");
-    }
-
-    #[test]
-    fn test_generate_partition_name_fallback() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let files = vec![PathBuf::from("a.py"), PathBuf::from("b.py")];
-
-        let name = analyzer.generate_partition_name(&files, 0);
-        assert_eq!(name, "core"); // First fallback name
-    }
-
-    #[test]
-    fn test_calculate_cut_size() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create a simple graph for testing
-        let mut graph = petgraph::Graph::new();
-        let node1 = graph.add_node(FileNode {
-            path: PathBuf::from("file1.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-        let node2 = graph.add_node(FileNode {
-            path: PathBuf::from("file2.py"),
-            loc: 200,
-            size_bytes: 2000,
-        });
-
-        graph.add_edge(
-            node1,
-            node2,
-            DependencyEdge {
-                weight: 3,
-                relationship_type: "import".to_string(),
-            },
-        );
-
-        let part1 = vec![node1];
-        let part2 = vec![node2];
-
-        let cut_size = analyzer.calculate_cut_size(&graph, &part1, &part2);
-        assert_eq!(cut_size, 3);
-    }
-
-    #[test]
-    fn test_random_partition() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create test node indices
-        let mut graph: DependencyGraph = petgraph::Graph::new();
-        let nodes: Vec<_> = (0..6)
-            .map(|i| {
-                graph.add_node(FileNode {
-                    path: PathBuf::from(format!("file{}.py", i)),
-                    loc: 100,
-                    size_bytes: 1000,
-                })
-            })
-            .collect();
-
-        let communities = analyzer.random_partition(&nodes, 3).unwrap();
-
-        assert_eq!(communities.len(), 3);
-        assert_eq!(communities.iter().map(|c| c.len()).sum::<usize>(), 6);
-    }
-
-    #[tokio::test]
-    async fn test_discover_directories() {
-        let temp_dir = TempDir::new().unwrap();
-        let root_path = temp_dir.path();
-
-        // Create nested directory structure
-        fs::create_dir(root_path.join("src")).unwrap();
-        fs::create_dir(root_path.join("src/lib")).unwrap();
-        fs::create_dir(root_path.join("tests")).unwrap();
-        fs::create_dir(root_path.join("node_modules")).unwrap(); // Should be skipped
-
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let directories = analyzer.discover_directories(root_path).await.unwrap();
-
-        // Should find src, src/lib, and tests, but not node_modules
-        assert!(directories.len() >= 3);
-        assert!(directories.iter().any(|d| d.file_name().unwrap() == "src"));
-        assert!(directories
-            .iter()
-            .any(|d| d.file_name().unwrap() == "tests"));
-        assert!(!directories
-            .iter()
-            .any(|d| d.file_name().unwrap() == "node_modules"));
-    }
-
-    #[test]
-    fn test_analyze_directory_for_reorg_low_imbalance() {
-        let temp_dir = setup_test_directory();
-        let mut config = create_test_config();
-        // Set very high thresholds so imbalance will be low
-        config.fsdir.max_files_per_dir = 1000;
-        config.fsdir.max_dir_loc = 100000;
-
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let result = analyzer
-            .analyze_directory_for_reorg(temp_dir.path())
-            .unwrap();
-
-        // Should return None due to low imbalance
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_calculate_reorganization_effort() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let partitions = vec![
-            DirectoryPartition {
-                name: "partition1".to_string(),
-                files: vec![PathBuf::from("file1.py"), PathBuf::from("file2.py")],
-                loc: 200,
-            },
-            DirectoryPartition {
-                name: "partition2".to_string(),
-                files: vec![PathBuf::from("file3.py")],
-                loc: 100,
-            },
-        ];
-
-        let effort = analyzer
-            .calculate_reorganization_effort(&partitions, Path::new("."))
-            .unwrap();
-
-        assert_eq!(effort.files_moved, 3);
-        assert_eq!(effort.import_updates_est, 6); // 2 * files_moved
-    }
-
-    #[test]
-    fn test_generate_file_moves() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let partitions = vec![DirectoryPartition {
-            name: "core".to_string(),
-            files: vec![
-                temp_dir.path().join("file1.py"),
-                temp_dir.path().join("file2.py"),
-            ],
-            loc: 200,
-        }];
-
-        let moves = analyzer
-            .generate_file_moves(&partitions, temp_dir.path())
-            .unwrap();
-
-        assert_eq!(moves.len(), 2);
-        assert!(moves[0].to.starts_with(temp_dir.path().join("core")));
-        assert!(moves[1].to.starts_with(temp_dir.path().join("core")));
-    }
-
-    #[test]
-    fn test_resolve_import_to_local_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create a test file
-        fs::write(temp_dir.path().join("utils.py"), "# Utils module").unwrap();
-
-        let import = ImportStatement {
-            module: "utils".to_string(),
-            imports: None,
-            import_type: "module".to_string(),
-            line_number: 1,
-        };
-
-        let resolved = analyzer.resolve_import_to_local_file(&import, temp_dir.path());
-
-        assert!(resolved.is_some());
-        assert_eq!(resolved.unwrap(), temp_dir.path().join("utils.py"));
-    }
-
-    #[test]
-    fn test_resolve_import_to_local_file_not_found() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let import = ImportStatement {
-            module: "nonexistent".to_string(),
-            imports: None,
-            import_type: "module".to_string(),
-            line_number: 1,
-        };
-
-        let resolved = analyzer.resolve_import_to_local_file(&import, temp_dir.path());
-        assert!(resolved.is_none());
-    }
-
-    #[test]
-    fn test_resolve_import_relative_import_skipped() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let import = ImportStatement {
-            module: ".relative_module".to_string(),
-            imports: None,
-            import_type: "module".to_string(),
-            line_number: 1,
-        };
-
-        let resolved = analyzer.resolve_import_to_local_file(&import, temp_dir.path());
-        assert!(resolved.is_none()); // Relative imports are skipped
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_large_array_parallel() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create array with >= 32 elements to trigger parallel computation
-        let values: Vec<usize> = (1..50).collect();
-        let gini = analyzer.calculate_gini_coefficient(&values);
-
-        assert!(gini >= 0.0 && gini <= 1.0);
-        assert!(gini > 0.1); // Should show some inequality
-    }
-
-    #[test]
-    fn test_calculate_gini_coefficient_sum_zero() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[0, 0, 0, 0]);
-        assert_eq!(gini, 0.0);
-    }
-
-    #[test]
-    fn test_calculate_entropy_large_array_parallel() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create array with >= 100 elements to trigger parallel computation
-        let values: Vec<usize> = (1..150).collect();
-        let entropy = analyzer.calculate_entropy(&values);
-
-        assert!(entropy > 0.0);
-    }
-
-    #[test]
-    fn test_calculate_entropy_total_zero() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[0, 0, 0, 0]);
-        assert_eq!(entropy, 0.0);
-    }
-
-    #[test]
-    fn test_analyze_directory_for_reorg_meets_conditions() {
-        // Create a directory with multiple files to ensure imbalance and meet size requirements
-        let temp_dir = TempDir::new().unwrap();
-
-        // Create files with extreme imbalance to ensure imbalance >= 0.6
-        let files = [
-            ("file1.py", "# Very large file\n".repeat(100)), // 100 lines
-            ("file2.py", "# Tiny file\npass\n".to_string()), // 2 lines
-            ("file3.py", "# Small file\npass\n".to_string()), // 2 lines
-            ("file4.py", "# Small file\npass\n".to_string()), // 2 lines
-            ("file5.py", "# Small file\npass\n".to_string()), // 2 lines
-            ("file6.py", "# Small file\npass\n".to_string()), // 2 lines
-        ];
-
-        for (name, content) in &files {
-            std::fs::write(temp_dir.path().join(name), content).unwrap();
-        }
-
-        let mut config = create_test_config();
-        // Set thresholds to ensure conditions are met
-        config.fsdir.max_files_per_dir = 4; // Less than 6 files created
-        config.fsdir.max_dir_loc = 90; // Less than total LOC (~110)
-
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let result = analyzer
-            .analyze_directory_for_reorg(temp_dir.path())
-            .unwrap();
-
-        // Should return Some since conditions are met (high imbalance from mixed file sizes)
-        assert!(result.is_some());
-        let reorg_pack = result.unwrap();
-        assert!(!reorg_pack.proposal.is_empty());
-    }
-
-    #[test]
-    fn test_analyze_directory_for_reorg_small_directory_skipped() {
-        let temp_dir = TempDir::new().unwrap();
-        // Create a very small directory
-        fs::write(
-            temp_dir.path().join("small.py"),
-            "# Small file\nprint('hi')",
-        )
-        .unwrap();
-
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let result = analyzer
-            .analyze_directory_for_reorg(temp_dir.path())
-            .unwrap();
-
-        // Should return None for small directory
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_build_dependency_graph_basic() {
-        let temp_dir = TempDir::new().unwrap();
-
-        // Create files with imports
-        fs::write(
-            temp_dir.path().join("main.py"),
-            "import utils\nfrom helpers import helper",
-        )
-        .unwrap();
-        fs::write(temp_dir.path().join("utils.py"), "def utility(): pass").unwrap();
-        fs::write(temp_dir.path().join("helpers.py"), "def helper(): pass").unwrap();
-
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
-
-        assert!(graph.node_count() > 0);
-        // Graph may have edges if imports are resolved - no need to check >= 0 for unsigned
-    }
-
-    #[test]
-    fn test_build_dependency_graph_records_edges() {
-        let temp_dir = TempDir::new().unwrap();
-        fs::write(
-            temp_dir.path().join("main.py"),
-            "import helpers\nfrom helpers import helper\n",
-        )
-        .unwrap();
-        fs::write(
-            temp_dir.path().join("helpers.py"),
-            "def helper():\n    return 42\n",
-        )
-        .unwrap();
-
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
-        assert_eq!(graph.node_count(), 2);
-        assert!(
-            graph.edge_count() > 0,
-            "expected at least one dependency edge between modules"
-        );
-    }
-
-    #[test]
-    fn test_partition_directory_basic() {
-        let temp_dir = setup_test_directory();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
-        let metrics = analyzer
-            .calculate_directory_metrics(temp_dir.path())
-            .unwrap();
-
-        let partitions = analyzer.partition_directory(&graph, &metrics).unwrap();
-
-        assert!(!partitions.is_empty());
-        assert!(partitions.iter().all(|p| !p.files.is_empty()));
-    }
-
-    #[test]
-    fn test_brute_force_partition_uses_random_fallback_for_multi_cluster() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let mut graph: DependencyGraph = Graph::new();
-        let nodes: Vec<_> = (0..4)
-            .map(|i| {
-                graph.add_node(FileNode {
-                    path: PathBuf::from(format!("file{i}.py")),
-                    loc: 10,
-                    size_bytes: 100,
-                })
-            })
-            .collect();
-
-        let communities = analyzer
-            .brute_force_partition(&nodes, &graph, 3)
-            .expect("partitioning should succeed");
-        assert_eq!(communities.len(), 3);
-        assert_eq!(
-            communities.iter().map(|c| c.len()).sum::<usize>(),
-            nodes.len()
-        );
-    }
-
-    #[test]
-    fn test_brute_force_partition_falls_back_to_simple_split() {
-        let mut config = create_test_config();
-        config.partitioning.balance_tolerance = 0.0;
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let mut graph: DependencyGraph = Graph::new();
-        let node_a = graph.add_node(FileNode {
-            path: PathBuf::from("a.py"),
-            loc: 10,
-            size_bytes: 100,
-        });
-        let node_b = graph.add_node(FileNode {
-            path: PathBuf::from("b.py"),
-            loc: 40,
-            size_bytes: 400,
-        });
-        let partitions = analyzer
-            .brute_force_partition(&[node_a, node_b], &graph, 2)
-            .expect("partitioning should succeed");
-        assert_eq!(partitions.len(), 2);
-        assert!(partitions.iter().all(|part| !part.is_empty()));
-    }
-
-    #[test]
-    fn test_kernighan_lin_refinement_applies_improving_swap() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-        let mut graph: DependencyGraph = Graph::new();
-
-        let node_a = graph.add_node(FileNode {
-            path: PathBuf::from("a.py"),
-            loc: 10,
-            size_bytes: 100,
-        });
-        let node_b = graph.add_node(FileNode {
-            path: PathBuf::from("b.py"),
-            loc: 12,
-            size_bytes: 120,
-        });
-        let node_c = graph.add_node(FileNode {
-            path: PathBuf::from("c.py"),
-            loc: 15,
-            size_bytes: 150,
-        });
-        let node_d = graph.add_node(FileNode {
-            path: PathBuf::from("d.py"),
-            loc: 18,
-            size_bytes: 180,
-        });
-
-        // Connect node_a strongly to community 2 and weakly to community 1
-        for &(from, to, weight) in &[
-            (node_a, node_c, 3),
-            (node_c, node_a, 3),
-            (node_a, node_d, 2),
-            (node_d, node_a, 2),
-            (node_a, node_b, 1),
-            (node_b, node_a, 1),
-        ] {
-            graph.add_edge(
-                from,
-                to,
-                DependencyEdge {
-                    weight,
-                    relationship_type: "module".to_string(),
-                },
-            );
-        }
-
-        let refined = analyzer
-            .kernighan_lin_refinement(&graph, vec![vec![node_a, node_b], vec![node_c, node_d]])
-            .expect("refinement should succeed");
-
-        let total_nodes: usize = refined.iter().map(|c| c.len()).sum();
-        assert_eq!(
-            total_nodes, 4,
-            "refinement should preserve the number of nodes"
-        );
-        assert!(
-            refined[0].len() < 2 || refined[1].len() > 2,
-            "expected Kernighan-Lin refinement to rebalance partitions"
-        );
-    }
-
-    #[test]
-    fn test_calculate_reorganization_gain() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let partitions = vec![
-            DirectoryPartition {
-                name: "core".to_string(),
-                files: vec![PathBuf::from("file1.py"), PathBuf::from("file2.py")],
-                loc: 200,
-            },
-            DirectoryPartition {
-                name: "utils".to_string(),
-                files: vec![PathBuf::from("file3.py")],
-                loc: 100,
-            },
-        ];
-
-        let current_metrics = DirectoryMetrics {
-            files: 3,
-            subdirs: 0,
-            loc: 300,
-            gini: 0.5,
-            entropy: 1.5,
-            file_pressure: 0.6,
-            branch_pressure: 0.0,
-            size_pressure: 0.3,
-            dispersion: 0.4,
-            imbalance: 0.8,
-        };
-
-        let gain = analyzer
-            .calculate_reorganization_gain(&current_metrics, &partitions, Path::new("."))
-            .unwrap();
-
-        assert!(gain.imbalance_delta >= 0.0);
-        // cross_edges_reduced is unsigned, always >= 0
-    }
-
-    #[test]
-    fn test_communities_to_partitions() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create a simple graph
-        let mut graph = petgraph::Graph::new();
-        let node1 = graph.add_node(FileNode {
-            path: PathBuf::from("file1.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-        let node2 = graph.add_node(FileNode {
-            path: PathBuf::from("file2.py"),
-            loc: 150,
-            size_bytes: 1500,
-        });
-
-        let communities = vec![vec![node1], vec![node2]];
-
-        let partitions = analyzer
-            .communities_to_partitions(&graph, communities, 2)
-            .unwrap();
-
-        assert_eq!(partitions.len(), 2);
-        assert_eq!(partitions[0].files.len(), 1);
-        assert_eq!(partitions[1].files.len(), 1);
-        assert_eq!(partitions[0].loc, 100);
-        assert_eq!(partitions[1].loc, 150);
-    }
-
-    #[test]
-    fn test_label_propagation_partition_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let graph = petgraph::Graph::new();
-        let result = analyzer.label_propagation_partition(&graph).unwrap();
-
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_brute_force_partition() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create test node indices
-        let mut graph: DependencyGraph = petgraph::Graph::new();
-        let nodes: Vec<_> = (0..4)
-            .map(|i| {
-                graph.add_node(FileNode {
-                    path: PathBuf::from(format!("file{}.py", i)),
-                    loc: 100,
-                    size_bytes: 1000,
-                })
-            })
-            .collect();
-
-        let partitions = analyzer.brute_force_partition(&nodes, &graph, 2).unwrap();
-
-        assert_eq!(partitions.len(), 2);
-        assert_eq!(partitions.iter().map(|p| p.len()).sum::<usize>(), 4);
-    }
-
-    #[test]
-    fn test_find_optimal_bipartition() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create a simple connected graph
-        let mut graph = petgraph::Graph::new();
-        let node1 = graph.add_node(FileNode {
-            path: PathBuf::from("file1.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-        let node2 = graph.add_node(FileNode {
-            path: PathBuf::from("file2.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-        let node3 = graph.add_node(FileNode {
-            path: PathBuf::from("file3.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-
-        graph.add_edge(
-            node1,
-            node2,
-            DependencyEdge {
-                weight: 1,
-                relationship_type: "import".to_string(),
-            },
-        );
-
-        let nodes = vec![node1, node2, node3];
-        let (part1, part2) = analyzer.find_optimal_bipartition(&nodes, &graph).unwrap();
-
-        assert!(!part1.is_empty());
-        assert!(!part2.is_empty());
-        assert_eq!(part1.len() + part2.len(), 3);
-    }
-
-    #[test]
-    fn test_extract_imports_by_extension() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Test Python file
-        let py_file = temp_dir.path().join("test.py");
-        fs::write(&py_file, "import os\nfrom sys import path").unwrap();
-
-        let imports = analyzer.extract_imports(&py_file).unwrap();
-        assert_eq!(imports.len(), 2);
-
-        // Test JavaScript file
-        let js_file = temp_dir.path().join("test.js");
-        fs::write(
-            &js_file,
-            "import React from 'react';\nimport {useState} from 'react';",
-        )
-        .unwrap();
-
-        let imports = analyzer.extract_imports(&js_file).unwrap();
-        assert_eq!(imports.len(), 2);
-
-        // Test Rust file
-        let rs_file = temp_dir.path().join("test.rs");
-        fs::write(
-            &rs_file,
-            "use std::collections::HashMap;\nuse serde::Serialize;",
-        )
-        .unwrap();
-
-        let imports = analyzer.extract_imports(&rs_file).unwrap();
-        assert_eq!(imports.len(), 2);
-
-        // Test unsupported extension
-        let txt_file = temp_dir.path().join("test.txt");
-        fs::write(&txt_file, "Some text content").unwrap();
-
-        let imports = analyzer.extract_imports(&txt_file).unwrap();
-        assert!(imports.is_empty());
-    }
-
-    #[test]
-    fn test_estimate_cross_edges_reduced() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let partitions = vec![DirectoryPartition {
-            name: "core".to_string(),
-            files: vec![PathBuf::from("main.py"), PathBuf::from("utils.py")],
-            loc: 200,
-        }];
-
-        let result = analyzer
-            .estimate_cross_edges_reduced(&partitions, Path::new("."))
-            .unwrap();
-        // result is unsigned, always >= 0
-    }
-}
+mod tests;
