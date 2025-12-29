@@ -1061,48 +1061,52 @@ impl LshExtractor {
         false
     }
 
+    /// Check if text matches any pattern in the list.
+    fn matches_any(text: &str, patterns: &[&str]) -> bool {
+        patterns.iter().any(|p| text.contains(p))
+    }
+
+    /// Check if text matches all patterns in the list.
+    fn matches_all(text: &str, patterns: &[&str]) -> bool {
+        patterns.iter().all(|p| text.contains(p))
+    }
+
     fn node_matches_stop_motif(
         &self,
         context: &crate::core::ast_service::AstContext<'_>,
         node: Node<'_>,
     ) -> bool {
-        let language = context.language;
-
         let text = node_text(node, context.source)
             .unwrap_or_default()
             .to_lowercase();
+        let kind = node.kind();
 
-        match language {
-            "py" | "pyw" => match node.kind() {
+        match context.language {
+            "py" | "pyw" => match kind {
                 "import_statement" | "import_from_statement" => {
-                    text.contains("import os")
-                        || text.contains("import sys")
-                        || text.contains("from typing")
+                    Self::matches_any(&text, &["import os", "import sys", "from typing"])
                 }
-                "if_statement" => text.contains("__name__") && text.contains("__main__"),
+                "if_statement" => Self::matches_all(&text, &["__name__", "__main__"]),
                 "function_definition" => text.contains("__init__"),
                 _ => false,
             },
-            "js" | "jsx" => match node.kind() {
-                "call_expression" => text.contains("console.log") || text.contains("require("),
+            "js" | "jsx" => match kind {
+                "call_expression" => Self::matches_any(&text, &["console.log", "require("]),
                 "assignment_expression" => text.contains("module.exports"),
                 _ => false,
             },
-            "ts" | "tsx" => match node.kind() {
+            "ts" | "tsx" => match kind {
                 "call_expression" => text.contains("console.log"),
                 "import_statement" => text.contains("from \"@angular/core\""),
                 _ => false,
             },
-            "rs" => match node.kind() {
+            "rs" => match kind {
                 "macro_invocation" | "macro_invocation_body" => {
-                    text.contains("println!") || text.contains("dbg!") || text.contains("todo!")
+                    Self::matches_any(&text, &["println!", "dbg!", "todo!"])
                 }
                 _ => false,
             },
-            "go" => match node.kind() {
-                "call_expression" => text.contains("fmt.println"),
-                _ => false,
-            },
+            "go" => kind == "call_expression" && text.contains("fmt.println"),
             _ => false,
         }
     }
@@ -1149,19 +1153,7 @@ impl LshExtractor {
 
     /// Detect programming language from file path
     fn detect_language_from_path(&self, file_path: &str) -> String {
-        let path = std::path::Path::new(file_path);
-        if let Some(extension) = path.extension() {
-            match extension.to_str().unwrap_or("") {
-                "py" => "python".to_string(),
-                "js" => "javascript".to_string(),
-                "ts" | "tsx" => "typescript".to_string(),
-                "go" => "go".to_string(),
-                "rs" => "rust".to_string(),
-                _ => "unknown".to_string(),
-            }
-        } else {
-            "unknown".to_string()
-        }
+        crate::lang::registry::detect_language_from_path(file_path)
     }
 
     /// Count AST nodes from language adapter index
@@ -1357,120 +1349,22 @@ impl LshExtractor {
         signature: &[u64],
         candidate_filter: Option<&Vec<EntityId>>,
     ) -> (f64, f64, f64) {
+        let comparison_start = std::time::Instant::now();
         let candidate_count =
             candidate_filter.map_or(context.entity_index.len(), |filter| filter.len());
-        let mut similarities = Vec::with_capacity(candidate_count.min(100));
-        let comparison_start = std::time::Instant::now();
+        let max_candidates = self.effective_max_candidates(candidate_count);
 
-        if let Some(ref analyzer) = self.weighted_analyzer {
-            let context_entities: Vec<&CodeEntity> = context.entity_index.values().collect();
-            if let Ok(weighted_signatures) =
-                self.get_or_compute_weighted_signatures_with_current(&context_entities, entity)
-            {
-                if let Some(entity_sig) = weighted_signatures.get(&entity.id) {
-                    let max_candidates = if self.lsh_config.max_candidates == 0 {
-                        candidate_count
-                    } else {
-                        self.lsh_config.max_candidates.min(candidate_count)
-                    };
+        // Try weighted comparison first
+        let similarities = self
+            .try_weighted_comparison(entity, context, candidate_filter, max_candidates)
+            .unwrap_or_default();
 
-                    let mut processed = 0usize;
-
-                    if let Some(filter) = candidate_filter {
-                        for other_id in filter {
-                            if processed >= max_candidates {
-                                break;
-                            }
-
-                            if other_id == &entity.id {
-                                continue;
-                            }
-
-                            if let Some(other_sig) = weighted_signatures.get(other_id) {
-                                let similarity =
-                                    analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                                if similarity >= self.lsh_config.similarity_threshold {
-                                    similarities.push(similarity);
-                                }
-                                processed += 1;
-                            }
-                        }
-                    } else {
-                        for (other_id, _) in &context.entity_index {
-                            if processed >= max_candidates {
-                                break;
-                            }
-
-                            if other_id == &entity.id {
-                                continue;
-                            }
-
-                            if let Some(other_sig) = weighted_signatures.get(other_id) {
-                                let similarity =
-                                    analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                                if similarity >= self.lsh_config.similarity_threshold {
-                                    similarities.push(similarity);
-                                }
-                                processed += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if similarities.is_empty() {
-            let max_comparisons = if self.lsh_config.max_candidates == 0 {
-                candidate_count
-            } else {
-                self.lsh_config.max_candidates.min(candidate_count)
-            };
-
-            let mut comparison_count = 0usize;
-
-            if let Some(filter) = candidate_filter {
-                for other_id in filter {
-                    if comparison_count >= max_comparisons {
-                        break;
-                    }
-
-                    if other_id == &entity.id {
-                        continue;
-                    }
-
-                    if let Some(other_entity) = context.entity_index.get(other_id) {
-                        let other_signature = self
-                            .generate_minhash_signature_cached(&other_entity.source_code, other_id);
-                        let similarity = self.jaccard_similarity(signature, &other_signature);
-
-                        if similarity >= self.lsh_config.similarity_threshold {
-                            similarities.push(similarity);
-                        }
-                        comparison_count += 1;
-                    }
-                }
-            } else {
-                for (other_id, other_entity) in &context.entity_index {
-                    if comparison_count >= max_comparisons {
-                        break;
-                    }
-
-                    if other_id == &entity.id {
-                        continue;
-                    }
-
-                    let other_signature =
-                        self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
-                    let similarity = self.jaccard_similarity(signature, &other_signature);
-
-                    if similarity >= self.lsh_config.similarity_threshold {
-                        similarities.push(similarity);
-                    }
-
-                    comparison_count += 1;
-                }
-            }
-        }
+        // Fall back to basic minhash if weighted produced no results
+        let similarities = if similarities.is_empty() {
+            self.fallback_minhash_comparison(entity, context, signature, candidate_filter, max_candidates)
+        } else {
+            similarities
+        };
 
         debug!(
             "Fallback similarity comparison for {} completed in {:?} with {} matches",
@@ -1480,6 +1374,105 @@ impl LshExtractor {
         );
 
         summarise_similarities(&similarities)
+    }
+
+    /// Compute effective max candidates based on config and available count.
+    fn effective_max_candidates(&self, candidate_count: usize) -> usize {
+        if self.lsh_config.max_candidates == 0 {
+            candidate_count
+        } else {
+            self.lsh_config.max_candidates.min(candidate_count)
+        }
+    }
+
+    /// Try weighted similarity comparison using TF-IDF weighted shingles.
+    fn try_weighted_comparison(
+        &self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+        candidate_filter: Option<&Vec<EntityId>>,
+        max_candidates: usize,
+    ) -> Option<Vec<f64>> {
+        let analyzer = self.weighted_analyzer.as_ref()?;
+        let context_entities: Vec<&CodeEntity> = context.entity_index.values().collect();
+        let weighted_signatures = self
+            .get_or_compute_weighted_signatures_with_current(&context_entities, entity)
+            .ok()?;
+        let entity_sig = weighted_signatures.get(&entity.id)?;
+
+        let similarities = self.collect_weighted_similarities(
+            &entity.id,
+            entity_sig,
+            &weighted_signatures,
+            analyzer,
+            context,
+            candidate_filter,
+            max_candidates,
+        );
+
+        Some(similarities)
+    }
+
+    /// Collect similarities using weighted Jaccard from candidate iterator.
+    fn collect_weighted_similarities(
+        &self,
+        entity_id: &EntityId,
+        entity_sig: &WeightedMinHashSignature,
+        weighted_signatures: &HashMap<EntityId, WeightedMinHashSignature>,
+        analyzer: &WeightedShingleAnalyzer,
+        context: &ExtractionContext,
+        candidate_filter: Option<&Vec<EntityId>>,
+        max_candidates: usize,
+    ) -> Vec<f64> {
+        let threshold = self.lsh_config.similarity_threshold;
+
+        self.iterate_candidates(context, candidate_filter, entity_id, max_candidates)
+            .filter_map(|other_id| {
+                let other_sig = weighted_signatures.get(other_id)?;
+                let similarity = analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
+                (similarity >= threshold).then_some(similarity)
+            })
+            .collect()
+    }
+
+    /// Fallback to basic minhash similarity comparison.
+    fn fallback_minhash_comparison(
+        &self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+        signature: &[u64],
+        candidate_filter: Option<&Vec<EntityId>>,
+        max_candidates: usize,
+    ) -> Vec<f64> {
+        let threshold = self.lsh_config.similarity_threshold;
+
+        self.iterate_candidates(context, candidate_filter, &entity.id, max_candidates)
+            .filter_map(|other_id| {
+                let other_entity = context.entity_index.get(other_id)?;
+                let other_signature =
+                    self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
+                let similarity = self.jaccard_similarity(signature, &other_signature);
+                (similarity >= threshold).then_some(similarity)
+            })
+            .collect()
+    }
+
+    /// Iterate over candidate entity IDs, excluding self and respecting max limit.
+    fn iterate_candidates<'a>(
+        &'a self,
+        context: &'a ExtractionContext,
+        candidate_filter: Option<&'a Vec<EntityId>>,
+        exclude_id: &'a EntityId,
+        max_candidates: usize,
+    ) -> impl Iterator<Item = &'a EntityId> + 'a {
+        let filtered_iter: Box<dyn Iterator<Item = &'a EntityId> + 'a> = match candidate_filter {
+            Some(filter) => Box::new(filter.iter()),
+            None => Box::new(context.entity_index.keys()),
+        };
+
+        filtered_iter
+            .filter(move |id| *id != exclude_id)
+            .take(max_candidates)
     }
 
     /// Calculate Jaccard similarity between two MinHash signatures
@@ -1834,79 +1827,109 @@ impl WeightedShingleAnalyzer {
             self.k
         );
 
-        // Reset state
-        self.document_frequencies.clear();
-        self.idf_weights.clear();
-        self.total_documents = entities.len();
+        self.reset_idf_state(entities.len());
 
         if self.total_documents == 0 {
             return Err("No entities provided for IDF table construction".to_string());
         }
 
-        // Count document frequencies for each k-gram using parallel map-reduce
+        self.count_document_frequencies(entities);
+        self.compute_idf_weights();
+        self.log_idf_statistics();
+
+        Ok(())
+    }
+
+    /// Reset IDF state for a new build
+    fn reset_idf_state(&mut self, document_count: usize) {
+        self.document_frequencies.clear();
+        self.idf_weights.clear();
+        self.total_documents = document_count;
+    }
+
+    /// Count document frequencies for all k-grams across entities
+    fn count_document_frequencies(&mut self, entities: &[&CodeEntity]) {
         #[cfg(feature = "parallel")]
-        {
-            use rayon::prelude::*;
-            use std::collections::HashMap;
+        self.count_document_frequencies_parallel(entities);
 
-            // Parallel map: process entities in chunks to generate local frequency maps
-            let local_frequency_maps: Vec<HashMap<String, usize>> = entities
-                .par_chunks(50) // Process in chunks of 50 entities for good load balancing
-                .map(|chunk| {
-                    let mut local_frequencies = HashMap::new();
-
-                    for entity in chunk {
-                        let kgrams = self.generate_kgrams(&entity.source_code);
-                        let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
-
-                        // Increment local document frequency for each unique k-gram
-                        for kgram in unique_kgrams {
-                            *local_frequencies.entry(kgram).or_insert(0) += 1;
-                        }
-                    }
-
-                    local_frequencies
-                })
-                .collect();
-
-            // Reduce: merge all local frequency maps into the global one
-            for local_map in local_frequency_maps {
-                for (kgram, local_count) in local_map {
-                    *self.document_frequencies.entry(kgram).or_insert(0) += local_count;
-                }
-            }
-        }
-
-        // Fallback to sequential processing if parallel feature is disabled
         #[cfg(not(feature = "parallel"))]
-        {
-            for entity in entities {
-                let kgrams = self.generate_kgrams(&entity.source_code);
-                let unique_kgrams: std::collections::HashSet<String> = kgrams.into_iter().collect();
+        self.count_document_frequencies_sequential(entities);
+    }
 
-                // Increment document frequency for each unique k-gram in this function
-                for kgram in unique_kgrams {
-                    *self.document_frequencies.entry(kgram).or_insert(0) += 1;
-                }
+    /// Parallel document frequency counting using map-reduce
+    #[cfg(feature = "parallel")]
+    fn count_document_frequencies_parallel(&mut self, entities: &[&CodeEntity]) {
+        use rayon::prelude::*;
+        use std::collections::HashMap;
+
+        let local_frequency_maps: Vec<HashMap<String, usize>> = entities
+            .par_chunks(50)
+            .map(|chunk| self.count_chunk_frequencies(chunk))
+            .collect();
+
+        self.merge_frequency_maps(local_frequency_maps);
+    }
+
+    /// Count frequencies for a chunk of entities
+    #[cfg(feature = "parallel")]
+    fn count_chunk_frequencies(&self, chunk: &[&CodeEntity]) -> std::collections::HashMap<String, usize> {
+        let mut local_frequencies = std::collections::HashMap::new();
+
+        for entity in chunk {
+            let unique_kgrams = self.get_unique_kgrams(&entity.source_code);
+            for kgram in unique_kgrams {
+                *local_frequencies.entry(kgram).or_insert(0) += 1;
             }
         }
 
-        // Compute IDF weights: idf[g] = log((1 + N) / (1 + df[g])) + 1
+        local_frequencies
+    }
+
+    /// Merge local frequency maps into global document_frequencies
+    #[cfg(feature = "parallel")]
+    fn merge_frequency_maps(&mut self, maps: Vec<std::collections::HashMap<String, usize>>) {
+        for local_map in maps {
+            for (kgram, local_count) in local_map {
+                *self.document_frequencies.entry(kgram).or_insert(0) += local_count;
+            }
+        }
+    }
+
+    /// Sequential document frequency counting
+    #[cfg(not(feature = "parallel"))]
+    fn count_document_frequencies_sequential(&mut self, entities: &[&CodeEntity]) {
+        for entity in entities {
+            let unique_kgrams = self.get_unique_kgrams(&entity.source_code);
+            for kgram in unique_kgrams {
+                *self.document_frequencies.entry(kgram).or_insert(0) += 1;
+            }
+        }
+    }
+
+    /// Get unique k-grams from source code
+    fn get_unique_kgrams(&self, source_code: &str) -> std::collections::HashSet<String> {
+        self.generate_kgrams(source_code).into_iter().collect()
+    }
+
+    /// Compute IDF weights from document frequencies
+    fn compute_idf_weights(&mut self) {
         let n = self.total_documents as f64;
         for (kgram, df) in &self.document_frequencies {
             let idf = ((1.0 + n) / (1.0 + *df as f64)).ln() + 1.0;
             self.idf_weights.insert(kgram.clone(), idf);
         }
+    }
 
-        // Log some statistics for analysis
+    /// Log IDF statistics for analysis
+    fn log_idf_statistics(&self) {
         let stats = self.statistics();
-        let mut kgram_freqs: Vec<_> = self.document_frequencies.iter().collect();
-        kgram_freqs.sort_by(|a, b| b.1.cmp(a.1)); // Sort by frequency descending
-
         info!(
             "grams_total: {}, grams_top1pct_pctcontrib: {:.1}%",
             stats.unique_grams, stats.top1pct_contribution
         );
+
+        let mut kgram_freqs: Vec<_> = self.document_frequencies.iter().collect();
+        kgram_freqs.sort_by(|a, b| b.1.cmp(a.1));
 
         debug!("Top 5 most frequent k-grams:");
         for (i, (kgram, freq)) in kgram_freqs.iter().take(5).enumerate() {
@@ -1918,8 +1941,6 @@ impl WeightedShingleAnalyzer {
                 self.idf_weights.get(*kgram).unwrap_or(&0.0)
             );
         }
-
-        Ok(())
     }
 
     /// Generate k-grams from source code tokens
@@ -2181,578 +2202,6 @@ impl WeightedMinHashSignature {
     }
 }
 
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::config::ValknutConfig;
-    use std::collections::HashMap;
-    use std::fs;
-    use std::sync::Arc;
-    use std::time::Duration;
-    use tempfile::tempdir;
-
-    fn entity(id: &str, code: &str) -> CodeEntity {
-        CodeEntity::new(id, "function", id, format!("{id}.rs")).with_source_code(code)
-    }
-
-    #[tokio::test]
-    async fn test_lsh_extractor() {
-        let extractor = LshExtractor::new();
-
-        assert_eq!(extractor.name(), "lsh");
-        assert!(!extractor.features().is_empty());
-
-        let entity = CodeEntity::new("test_function", "function", "test_func", "/test/file.py")
-            .with_source_code("def test_func():\n    x = 1\n    y = 2\n    return x + y");
-
-        let config = Arc::new(ValknutConfig::default());
-        let context = ExtractionContext::new(config, "python");
-
-        let features = extractor.extract(&entity, &context).await.unwrap();
-
-        assert!(features.contains_key("clone_mass"));
-        assert!(features.contains_key("max_similarity"));
-        assert!(features.contains_key("avg_similarity"));
-        assert!(features.contains_key("duplicate_count"));
-    }
-
-    #[test]
-    fn test_shingle_creation() {
-        let extractor = LshExtractor::with_params(64, 2);
-        let code = "def func():\n    return 1";
-        let shingles = extractor.create_shingles(code);
-
-        assert!(!shingles.is_empty());
-    }
-
-    #[test]
-    fn test_interned_shingle_creation() {
-        let extractor = LshExtractor::with_params(64, 2);
-        let code = "def func():\n    return 1";
-
-        // Test interned shingles
-        let interned_shingles = extractor.create_shingles_interned(code);
-        assert!(!interned_shingles.is_empty());
-
-        // Test normal shingles for comparison
-        let normal_shingles = extractor.create_shingles(code);
-        assert_eq!(interned_shingles.len(), normal_shingles.len());
-
-        // Verify content matches by resolving interned strings
-        for (interned, normal) in interned_shingles.iter().zip(normal_shingles.iter()) {
-            let resolved = resolve(*interned);
-            assert_eq!(resolved, normal);
-        }
-    }
-
-    #[test]
-    fn test_interned_minhash_signature() {
-        let extractor = LshExtractor::with_params(16, 2);
-        let code = "def test(): return 1";
-
-        // Test interned signature
-        let interned_signature = extractor.generate_minhash_signature_interned(code);
-        assert_eq!(interned_signature.len(), 16);
-        assert!(interned_signature.iter().any(|&x| x != u64::MAX));
-
-        // Test normal signature for comparison
-        let normal_signature = extractor.generate_minhash_signature(code);
-        assert_eq!(interned_signature.len(), normal_signature.len());
-
-        // Both should produce identical results
-        assert_eq!(interned_signature, normal_signature);
-    }
-
-    #[test]
-    fn test_minhash_signature() {
-        let extractor = LshExtractor::with_params(16, 2);
-        let code = "def test(): return 1";
-        let signature = extractor.generate_minhash_signature(code);
-
-        assert_eq!(signature.len(), 16);
-        assert!(signature.iter().any(|&x| x != u64::MAX));
-    }
-
-    #[test]
-    fn test_jaccard_similarity() {
-        let sig1 = vec![1, 2, 3, 4];
-        let sig2 = vec![1, 2, 5, 6];
-        let sig3 = vec![1, 2, 3, 4];
-
-        let extractor = LshExtractor::new();
-
-        let sim12 = extractor.jaccard_similarity(&sig1, &sig2);
-        let sim13 = extractor.jaccard_similarity(&sig1, &sig3);
-
-        assert_eq!(sim12, 0.5); // 2 out of 4 match
-        assert_eq!(sim13, 1.0); // Perfect match
-    }
-
-    #[test]
-    fn test_lsh_index() {
-        let mut index = LshIndex::new(4);
-
-        let sig1 = MinHashSignature::new(vec![1, 2, 3, 4, 5, 6, 7, 8], 8, 2);
-        let sig2 = MinHashSignature::new(vec![1, 2, 3, 4, 9, 10, 11, 12], 8, 2);
-
-        index.add_entity("entity1".to_string(), sig1);
-        index.add_entity("entity2".to_string(), sig2);
-
-        let candidates = index.find_candidates("entity1");
-        assert!(!candidates.is_empty());
-    }
-
-    #[test]
-    fn test_lsh_index_returns_empty_for_missing_entity() {
-        let index = LshIndex::new(2);
-        assert!(index.find_candidates("unknown").is_empty());
-    }
-
-    #[test]
-    fn test_weighted_shingle_analyzer() {
-        let mut analyzer = WeightedShingleAnalyzer::new(3);
-
-        // Create test entities
-        let entity1 = entity("test1", "def func1():\n    x = 1\n    return x\n");
-        let entity2 = entity("test2", "def func2():\n    y = 2\n    return y\n");
-
-        let entities = vec![&entity1, &entity2];
-
-        // Test IDF table construction
-        let result = analyzer.build_idf_table(&entities);
-        assert!(result.is_ok());
-
-        // Test signature computation
-        let signatures_result = analyzer.compute_weighted_signatures(&entities);
-        assert!(signatures_result.is_ok());
-
-        let signatures = signatures_result.unwrap();
-        assert_eq!(signatures.len(), 2);
-        assert!(signatures.contains_key("test1"));
-        assert!(signatures.contains_key("test2"));
-
-        let stats = analyzer.statistics();
-        assert_eq!(stats.total_documents, 2);
-        assert!(stats.unique_grams > 0);
-        assert!(stats.top1pct_contribution >= 0.0);
-    }
-
-    #[test]
-    fn test_weighted_jaccard_similarity() {
-        let analyzer = WeightedShingleAnalyzer::new(2);
-
-        let sig1 = WeightedMinHashSignature::new(vec![1.0, 2.0, 3.0, 4.0]);
-        let sig2 = WeightedMinHashSignature::new(vec![1.0, 2.0, 5.0, 6.0]);
-        let sig3 = WeightedMinHashSignature::new(vec![1.0, 2.0, 3.0, 4.0]);
-
-        let sim12 = analyzer.weighted_jaccard_similarity(&sig1, &sig2);
-        let sim13 = analyzer.weighted_jaccard_similarity(&sig1, &sig3);
-        let sim_mismatch = analyzer
-            .weighted_jaccard_similarity(&WeightedMinHashSignature::new(vec![1.0, 2.0]), &sig3);
-
-        assert_eq!(sim12, 0.5); // 2 out of 4 match
-        assert_eq!(sim13, 1.0); // Perfect match
-        assert_eq!(sim_mismatch, 0.0);
-    }
-
-    #[test]
-    fn test_kgram_generation() {
-        let analyzer = WeightedShingleAnalyzer::new(2);
-        let code = "def func():\n    return 1";
-        let kgrams = analyzer.generate_kgrams(code);
-
-        assert!(!kgrams.is_empty());
-        // Should contain k-grams like "def func", "func (", etc.
-    }
-
-    #[test]
-    fn test_weighted_shingle_analyzer_handles_edge_cases() {
-        let mut analyzer = WeightedShingleAnalyzer::new(4);
-        assert!(analyzer.build_idf_table(&[]).is_err());
-
-        let short_entity = entity("short", "fn a() {}");
-        let signature = analyzer
-            .compute_weighted_signature_for_entity(&short_entity)
-            .expect("signature for short entity");
-        assert!(signature.signature.is_empty());
-    }
-
-    #[test]
-    fn test_lsh_extractor_with_denoise() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-
-        // Should have weighted analyzer enabled
-        assert!(extractor.weighted_analyzer.is_some());
-
-        let extractor_disabled = LshExtractor::new().with_denoise_enabled(false);
-        assert!(extractor_disabled.weighted_analyzer.is_none());
-    }
-
-    #[test]
-    fn test_lsh_performance_metrics_validation_paths() {
-        let mut metrics = LshPerformanceMetrics::new();
-        metrics.entities_processed = 1;
-        metrics.signature_generation_time = Duration::from_millis(150);
-        metrics.comparisons_performed = 1;
-        metrics.comparison_time = Duration::from_millis(40);
-        metrics.log_summary();
-        assert!(metrics.validate_performance().is_err());
-
-        metrics.signature_generation_time = Duration::from_millis(50);
-        assert!(metrics.validate_performance().is_ok());
-
-        metrics.comparison_time = Duration::from_millis(80);
-        assert!(metrics.validate_performance().is_err());
-    }
-
-    #[test]
-    fn test_lsh_extractor_configuration_helpers() {
-        let mut custom_config = LshConfig::default();
-        custom_config.num_hashes = 64;
-        custom_config.num_bands = 8;
-        custom_config.shingle_size = 4;
-        custom_config.similarity_threshold = 0.85;
-        custom_config.max_candidates = 0;
-
-        let extractor = LshExtractor::new().with_lsh_config(custom_config.clone());
-        assert_eq!(extractor.similarity_threshold(), 0.85);
-        assert!(extractor.max_candidates().is_none());
-
-        let mut metrics_clone = extractor.get_performance_metrics().clone();
-        metrics_clone.entities_processed = 1;
-        metrics_clone.signature_generation_time = Duration::from_millis(10);
-        metrics_clone.comparisons_performed = 1;
-        metrics_clone.comparison_time = Duration::from_millis(5);
-        metrics_clone.log_summary();
-
-        let mut other_config = custom_config.clone();
-        other_config.max_candidates = 5;
-        let mut second_extractor = LshExtractor::new().with_lsh_config(other_config);
-        assert_eq!(second_extractor.max_candidates(), Some(5));
-
-        second_extractor.reset_performance_metrics();
-        second_extractor.log_performance_statistics();
-    }
-
-    #[test]
-    fn test_weighted_signature_statistics_helpers() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-        let entity1 = CodeEntity::new("w1", "function", "alpha", "alpha.rs")
-            .with_source_code("fn alpha() { let value = 1; value }");
-        let entity2 = CodeEntity::new("w2", "function", "beta", "beta.rs")
-            .with_source_code("fn beta() { let other = 2; other }");
-
-        let entities = vec![&entity1, &entity2];
-        let (signatures, stats) = extractor
-            .weighted_signatures_with_stats(&entities)
-            .expect("compute weighted signatures");
-        assert_eq!(signatures.len(), 2);
-        assert!(stats.total_documents >= 2);
-
-        let stats_only = extractor
-            .weighted_statistics(&entities)
-            .expect("weighted stats");
-        assert_eq!(stats_only.total_documents, stats.total_documents);
-    }
-
-    #[tokio::test]
-    async fn test_entity_threshold_short_circuit_behavior() {
-        let extractor = LshExtractor::new();
-        let entity = CodeEntity::new("e1", "function", "gamma", "gamma.rs")
-            .with_source_code("fn gamma() -> usize { 1 }");
-
-        assert!(extractor
-            .entity_passes_thresholds(&entity)
-            .await
-            .expect("no config should bypass thresholds"));
-
-        let config = DedupeConfig::default();
-        let extractor_with_config = LshExtractor::with_dedupe_config(config);
-        assert!(!extractor_with_config
-            .entity_passes_thresholds(&entity)
-            .await
-            .expect("default thresholds should reject short snippet"));
-    }
-
-    #[test]
-    fn test_similarity_context_cache_is_invalidateable() {
-        let extractor = LshExtractor::new();
-        let config = Arc::new(ValknutConfig::default());
-        let mut context = ExtractionContext::new(config, "rust");
-
-        let entity_a = CodeEntity::new("entity_a", "function", "entity_a", "a.rs")
-            .with_source_code("fn alpha() { 1 + 2 }");
-        let entity_b = CodeEntity::new("entity_b", "function", "entity_b", "b.rs")
-            .with_source_code("fn beta() { 1 + 2 }");
-
-        context.add_entity(entity_a.clone());
-        context.add_entity(entity_b.clone());
-
-        let cached = extractor
-            .similarity_context(&context)
-            .expect("context should be built");
-        let cached_again = extractor
-            .similarity_context(&context)
-            .expect("context should be cached");
-        assert!(Arc::ptr_eq(&cached, &cached_again));
-
-        extractor.clear_caches();
-
-        let rebuilt = extractor
-            .similarity_context(&context)
-            .expect("context should rebuild after clearing caches");
-        assert!(
-            !Arc::ptr_eq(&cached, &rebuilt),
-            "clearing caches should invalidate similarity context"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_candidate_filter_bruteforce_uses_weighted_cache() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-        let config = Arc::new(ValknutConfig::default());
-
-        let entity_a = CodeEntity::new("entity_a", "function", "entity_a", "a.rs")
-            .with_source_code("fn duplicated() { let value = 42; value }");
-        let entity_b = CodeEntity::new("entity_b", "function", "entity_b", "b.rs")
-            .with_source_code("fn duplicated() { let value = 42; value }");
-
-        let mut context = ExtractionContext::new(config.clone(), "rust");
-        context.add_entity(entity_a.clone());
-        context.add_entity(entity_b.clone());
-
-        let partitions = Arc::new(HashMap::from([
-            (entity_a.id.clone(), vec![entity_b.id.clone()]),
-            (entity_b.id.clone(), vec![entity_a.id.clone()]),
-        ]));
-        let context = context.with_candidate_partitions(partitions);
-
-        let first = extractor
-            .extract(&entity_a, &context)
-            .await
-            .expect("first extraction succeeds");
-        assert!(first.get("duplicate_count").copied().unwrap_or_default() >= 1.0);
-
-        let second = extractor
-            .extract(&entity_a, &context)
-            .await
-            .expect("second extraction succeeds");
-        assert_eq!(
-            first.get("duplicate_count"),
-            second.get("duplicate_count"),
-            "cached weighted signatures should produce stable results"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_partitions_without_entry_skip_similarity_search() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-        let config = Arc::new(ValknutConfig::default());
-
-        let entity_a = CodeEntity::new("entity_a", "function", "entity_a", "a.rs")
-            .with_source_code("fn alpha() { 1 + 2 }");
-        let entity_b = CodeEntity::new("entity_b", "function", "entity_b", "b.rs")
-            .with_source_code("fn beta() { 2 + 3 }");
-
-        let mut context = ExtractionContext::new(config.clone(), "rust");
-        context.add_entity(entity_a.clone());
-        context.add_entity(entity_b.clone());
-
-        let partitions = Arc::new(HashMap::from([(
-            entity_b.id.clone(),
-            vec![entity_a.id.clone()],
-        )]));
-        let context = context.with_candidate_partitions(partitions);
-
-        let scores = extractor
-            .extract(&entity_a, &context)
-            .await
-            .expect("extraction succeeds");
-
-        assert_eq!(scores.get("max_similarity"), Some(&0.0));
-        assert_eq!(scores.get("duplicate_count"), Some(&0.0));
-    }
-
-    #[tokio::test]
-    async fn test_similarity_context_path_produces_matches() {
-        let extractor = LshExtractor::new();
-        let config = Arc::new(ValknutConfig::default());
-
-        let entity_a = CodeEntity::new("entity_a", "function", "entity_a", "a.rs")
-            .with_source_code("fn mirrored() { let n = 5; n * 2 }");
-        let entity_b = CodeEntity::new("entity_b", "function", "entity_b", "b.rs")
-            .with_source_code("fn mirrored() { let n = 5; n * 2 }");
-
-        let mut context = ExtractionContext::new(config.clone(), "rust");
-        context.add_entity(entity_a.clone());
-        context.add_entity(entity_b.clone());
-
-        let results = extractor
-            .extract(&entity_a, &context)
-            .await
-            .expect("extraction succeeds");
-
-        assert!(
-            results.get("max_similarity").copied().unwrap_or_default()
-                >= extractor.similarity_threshold()
-        );
-        assert!(results.get("duplicate_count").copied().unwrap_or_default() >= 1.0);
-    }
-
-    #[tokio::test]
-    async fn test_meets_fragment_thresholds_respects_ast_stats() {
-        let tmp = tempdir().expect("temp dir");
-        let short_path = tmp.path().join("short.rs");
-        fs::write(&short_path, "fn short() {}").expect("write short file");
-
-        let detailed_source = "\
-fn long_enough() {\n    let mut total = 0;\n    for value in 0..5 {\n        total += process(value);\n    }\n    if total > 3 {\n        finalize(total);\n    }\n}\n";
-        let acceptable_path = tmp.path().join("long.rs");
-        fs::write(&acceptable_path, detailed_source).expect("write long file");
-
-        let mut config = DedupeConfig::default();
-        config.min_function_tokens = 5;
-        config.min_ast_nodes = 20;
-        config.require_distinct_blocks = 1;
-
-        let extractor = LshExtractor::with_dedupe_config(config.clone());
-
-        let short_entity = CodeEntity::new(
-            "short",
-            "function",
-            "short",
-            short_path.to_string_lossy().into_owned(),
-        )
-        .with_source_code("fn short() {}");
-        assert!(
-            !extractor
-                .entity_passes_thresholds(&short_entity)
-                .await
-                .expect("threshold evaluation"),
-            "short snippet should be filtered out"
-        );
-
-        let mut acceptable = CodeEntity::new(
-            "ok",
-            "function",
-            "ok",
-            acceptable_path.to_string_lossy().into_owned(),
-        )
-        .with_source_code(detailed_source);
-        let total_len = detailed_source.as_bytes().len();
-        acceptable.add_property("start_byte", serde_json::json!(0));
-        acceptable.add_property("end_byte", serde_json::json!(total_len));
-        acceptable.add_property("ast_kind", serde_json::json!("function_item"));
-
-        let stats = extractor
-            .compute_entity_ast_stats(&acceptable)
-            .await
-            .expect("ast stats lookup")
-            .expect("ast stats present");
-        assert!(
-            stats.node_count >= config.min_ast_nodes,
-            "node_count {}",
-            stats.node_count
-        );
-        assert!(
-            stats.block_count >= config.require_distinct_blocks,
-            "block_count {}",
-            stats.block_count
-        );
-        assert!(!stats.has_stop_motif, "stop motif incorrectly detected");
-
-        assert!(
-            extractor
-                .entity_passes_thresholds(&acceptable)
-                .await
-                .expect("threshold evaluation"),
-            "entity meeting thresholds should be accepted"
-        );
-    }
-
-    #[test]
-    fn test_similarity_context_cache_reuses_last_context() {
-        let extractor = LshExtractor::new();
-        let config = Arc::new(ValknutConfig::default());
-        let mut context = ExtractionContext::new(config, "rust");
-
-        let entity_a = CodeEntity::new("entity_a", "function", "entity_a", "a.rs")
-            .with_source_code("fn entity_a() { let x = 1; x + 2; }");
-        let entity_b = CodeEntity::new("entity_b", "function", "entity_b", "b.rs")
-            .with_source_code("fn entity_b() { let y = 2; y * 3; }");
-
-        context.add_entity(entity_a);
-        context.add_entity(entity_b);
-
-        let first = extractor
-            .similarity_context(&context)
-            .expect("context should exist");
-        let second = extractor
-            .similarity_context(&context)
-            .expect("cached context should exist");
-
-        assert!(Arc::ptr_eq(&first, &second));
-    }
-
-    #[test]
-    fn test_generate_cache_key_is_order_insensitive() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-        let entity_a = CodeEntity::new("alpha", "function", "alpha", "alpha.rs")
-            .with_source_code("fn alpha() { 1 }");
-        let entity_b = CodeEntity::new("beta", "function", "beta", "beta.rs")
-            .with_source_code("fn beta() { 2 }");
-
-        let forward_key = extractor.generate_cache_key(&[&entity_a, &entity_b]);
-        let reverse_key = extractor.generate_cache_key(&[&entity_b, &entity_a]);
-
-        assert_eq!(forward_key, reverse_key);
-    }
-
-    #[test]
-    fn test_weighted_signature_cache_hits() {
-        let extractor = LshExtractor::new().with_denoise_enabled(true);
-        let entity_a = CodeEntity::new("w_alpha", "function", "alpha", "alpha.rs")
-            .with_source_code("fn alpha() { let mut v = 0; v += 1; v }");
-        let entity_b = CodeEntity::new("w_beta", "function", "beta", "beta.rs")
-            .with_source_code("fn beta() { let mut v = 1; v += 2; v }");
-        let entities = vec![&entity_a, &entity_b];
-
-        let first = extractor
-            .get_or_compute_weighted_signatures(&entities)
-            .expect("initial signatures");
-
-        {
-            let cached = extractor
-                .cached_weighted_signatures
-                .read()
-                .expect("cache guard");
-            assert!(cached
-                .as_ref()
-                .map(|map| !map.is_empty())
-                .unwrap_or_default());
-        }
-
-        let second = extractor
-            .get_or_compute_weighted_signatures(&entities)
-            .expect("cached signatures");
-
-        assert_eq!(first.len(), second.len());
-        for (key, sig) in &first {
-            let cached = second
-                .get(key)
-                .expect("signature for key should be present on cache hit");
-            assert_eq!(sig.signature, cached.signature);
-        }
-    }
-
-    #[test]
-    fn test_shingle_variants_produce_consistent_lengths() {
-        let extractor = LshExtractor::with_params(32, 3);
-        let code = "fn compute(value: i32) -> i32 { if value > 0 { value } else { -value } }";
-        let standard = extractor.create_shingles(code);
-        let interned = extractor.create_shingles_interned(code);
-
-        assert_eq!(standard.len(), interned.len());
-        assert!(!standard.is_empty());
-    }
-}
+mod tests;
