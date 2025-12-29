@@ -1,18 +1,92 @@
-//! AI Refactoring Oracle - Gemini 2.5 Pro integration for intelligent refactoring suggestions
+//! AI Refactoring Oracle - Gemini integration for intelligent refactoring suggestions
 //!
-//! This module provides intelligent refactoring suggestions by using scribe-analyzer to bundle
-//! codebase contents and sending them to Gemini 2.5 Pro along with valknut analysis results.
+//! This module provides intelligent refactoring suggestions by bundling codebase contents
+//! and sending them to Gemini along with valknut analysis results. For large codebases,
+//! the oracle partitions the code into coherent slices based on import graphs.
+//!
+//! Key features:
+//! - Import graph-based codebase partitioning for scalability
+//! - Token-budget-aware slice generation
+//! - Per-slice analysis with result aggregation
+//! - Configurable models for different slice sizes
 
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
+use crate::core::partitioning::{CodeSlice, ImportGraphPartitioner, PartitionConfig, PartitionResult};
 use crate::core::pipeline::{AnalysisResults, CodeDictionary, StageResultsBundle};
 use crate::core::scoring::Priority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Token budget for valknut analysis output (70k tokens)
 const VALKNUT_OUTPUT_TOKEN_BUDGET: usize = 70_000;
+
+/// Directories to skip when walking the project tree
+const SKIP_DIRS: &[&str] = &[
+    "target", "node_modules", "__pycache__", "dist", "build", "coverage", "tmp", "temp",
+];
+
+/// Source file extensions to include in codebase bundles
+const SOURCE_EXTENSIONS: &[&str] = &[
+    "rs", "py", "js", "ts", "tsx", "jsx", "go", "java", "cpp", "c", "h", "hpp", "cs", "php",
+];
+
+/// High-priority file patterns (boost priority significantly)
+const HIGH_PRIORITY_PATTERNS: &[&str] = &["main.rs", "lib.rs", "mod.rs"];
+
+/// Medium-priority file patterns (moderate boost)
+const MEDIUM_PRIORITY_PATTERNS: &[&str] = &["config", "error", "api"];
+
+/// Low-priority file patterns (small boost)
+const LOW_PRIORITY_PATTERNS: &[&str] = &["core", "engine"];
+
+/// Extension priority boosts (extension, boost amount)
+const EXTENSION_PRIORITIES: &[(&str, f32)] = &[
+    ("rs", 2.0), ("py", 1.5), ("js", 1.5), ("ts", 1.5),
+    ("go", 1.0), ("java", 1.0), ("cpp", 1.0),
+];
+
+/// Penalty patterns for low-value files
+const PENALTY_PATTERNS: &[&str] = &["test", "spec", "_test"];
+
+/// Strong penalty patterns for generated/build files
+const STRONG_PENALTY_PATTERNS: &[&str] = &["generated", "target/", "build/"];
+
+/// Codebook for oracle request/response - reduces token usage by using short codes
+/// Include this in prompts so the model knows the mapping
+const ORACLE_CODEBOOK: &str = r#"## Codebook (use these codes in your response)
+
+### Severity/Priority (SEV)
+- S1: critical - Must fix immediately, blocking issues
+- S2: high - Important, should address soon
+- S3: medium - Address when convenient
+- S4: low - Nice to have, minor improvement
+
+### Task Categories (CAT)
+- C1: readability - Improving code clarity, naming, structure
+- C2: maintainability - Reducing coupling, improving modularity
+- C3: error-handling - Better error types, propagation, recovery
+- C4: logging - Structured logging, observability improvements
+- C5: simplification - Removing complexity, using stdlib/libraries
+- C6: cleanup - Dead code, deprecated patterns, consolidation
+- C7: typing - Type safety, generics, trait bounds
+
+### Risk Level (RISK)
+- R1: low - Safe, localized change
+- R2: medium - Some coordination needed, moderate scope
+- R3: high - Significant change, needs careful review
+
+### Impact (IMP)
+- I1: low - Minor improvement
+- I2: medium - Noticeable improvement
+- I3: high - Significant improvement
+
+### Effort (EFF)
+- E1: low - Quick fix, < 1 hour
+- E2: medium - Few hours to a day
+- E3: high - Multiple days
+"#;
 
 /// AI refactoring oracle that provides intelligent suggestions using Gemini 2.5 Pro
 pub struct RefactoringOracle {
@@ -25,12 +99,20 @@ pub struct RefactoringOracle {
 pub struct OracleConfig {
     /// Gemini API key
     pub api_key: String,
-    /// Maximum tokens to send to Gemini (default: 500_000)
+    /// Maximum tokens to send to Gemini for full codebase analysis (default: 400_000)
     pub max_tokens: usize,
     /// Gemini API endpoint
     pub api_endpoint: String,
-    /// Model name to use
+    /// Model name to use for full codebase analysis
     pub model: String,
+    /// Whether to use sliced analysis for large codebases
+    pub enable_slicing: bool,
+    /// Token budget per slice (default: 200_000)
+    pub slice_token_budget: usize,
+    /// Model to use for slice analysis (default: gemini-2.0-flash)
+    pub slice_model: String,
+    /// Threshold for enabling slicing (if total tokens > this, use slices)
+    pub slicing_threshold: usize,
 }
 
 impl OracleConfig {
@@ -44,7 +126,11 @@ impl OracleConfig {
             api_key,
             max_tokens: 400_000, // Default 400k tokens for codebase bundle
             api_endpoint: "https://generativelanguage.googleapis.com/v1beta/models".to_string(),
-            model: "gemini-3-pro-preview".to_string(),
+            model: "gemini-3-flash-preview".to_string(),
+            enable_slicing: true,
+            slice_token_budget: 200_000,
+            slice_model: "gemini-3-flash-preview".to_string(),
+            slicing_threshold: 300_000, // Use slicing if codebase > 300k tokens
         })
     }
 
@@ -52,58 +138,125 @@ impl OracleConfig {
         self.max_tokens = max_tokens;
         self
     }
+
+    pub fn with_slice_budget(mut self, budget: usize) -> Self {
+        self.slice_token_budget = budget;
+        self
+    }
+
+    pub fn with_slice_model(mut self, model: String) -> Self {
+        self.slice_model = model;
+        self
+    }
+
+    pub fn with_slicing(mut self, enabled: bool) -> Self {
+        self.enable_slicing = enabled;
+        self
+    }
 }
 
 /// Response from the AI refactoring oracle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefactoringOracleResponse {
-    /// Overall assessment of the codebase architecture
+    /// Overall assessment of the codebase
     pub assessment: CodebaseAssessment,
-    /// Flat list of refactoring tasks in recommended order
-    pub refactoring_roadmap: RefactoringRoadmap,
+    /// Flat list of tasks (new schema)
+    #[serde(default)]
+    pub tasks: Vec<RefactoringTask>,
+    /// Legacy: flat list in roadmap wrapper (for backwards compat)
+    #[serde(default)]
+    pub refactoring_roadmap: Option<RefactoringRoadmap>,
+}
+
+impl RefactoringOracleResponse {
+    /// Get all tasks, whether from new `tasks` field or legacy `refactoring_roadmap`
+    pub fn all_tasks(&self) -> &[RefactoringTask] {
+        if !self.tasks.is_empty() {
+            &self.tasks
+        } else if let Some(ref roadmap) = self.refactoring_roadmap {
+            &roadmap.tasks
+        } else {
+            &[]
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodebaseAssessment {
-    /// Brief narrative describing the architectural state and recommended direction
-    pub architectural_narrative: String,
-    /// The detected or recommended architectural style of the project
-    pub architectural_style: String,
+    /// Brief summary of code quality (new schema)
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// Legacy: narrative field
+    #[serde(default)]
+    pub architectural_narrative: Option<String>,
+    /// Legacy: architectural style
+    #[serde(default)]
+    pub architectural_style: Option<String>,
+    /// Code strengths identified
+    #[serde(default)]
+    pub strengths: Vec<String>,
     /// Key issues identified
+    #[serde(default)]
     pub issues: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl CodebaseAssessment {
+    /// Get summary text, preferring new field, falling back to legacy
+    pub fn get_summary(&self) -> &str {
+        self.summary
+            .as_deref()
+            .or(self.architectural_narrative.as_deref())
+            .unwrap_or("No summary provided")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RefactoringRoadmap {
     /// Flat list of tasks in safe execution order
+    #[serde(default)]
     pub tasks: Vec<RefactoringTask>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefactoringTask {
+    /// Task ID (e.g., "T1", "T2")
     pub id: String,
     pub title: String,
     pub description: String,
-    /// Category of architectural change: "pattern", "structure", "abstraction", "cleanup", "optimization"
+    /// Category code (C1-C7) or legacy string
     pub category: String,
     pub files: Vec<String>,
-    /// Risk level: "low", "medium", "high"
-    pub risk_level: String,
-    /// Expected impact: "low", "medium", "high"
+    /// Risk code (R1-R3) - new field name
+    #[serde(default, alias = "risk_level")]
+    pub risk: Option<String>,
+    /// Legacy risk_level field
+    #[serde(default)]
+    pub risk_level: Option<String>,
+    /// Impact code (I1-I3)
     #[serde(default)]
     pub impact: Option<String>,
-    /// Expected effort: "low", "medium", "high"
+    /// Effort code (E1-E3)
     #[serde(default)]
     pub effort: Option<String>,
     /// Mitigation strategy for this task's risks
     #[serde(default)]
     pub mitigation: Option<String>,
-    /// Whether this task is required (true) or optional/suggested (false)
-    pub required: bool,
+    /// Whether this task is required (legacy, optional now)
+    #[serde(default)]
+    pub required: Option<bool>,
     /// Dependencies on other task IDs that must be completed first
+    #[serde(default)]
     pub depends_on: Vec<String>,
-    /// Expected benefits from this change
+    /// Expected benefits from this change (legacy, optional now)
+    #[serde(default)]
     pub benefits: Vec<String>,
+}
+
+impl RefactoringTask {
+    /// Get risk level, checking both new and legacy field names
+    pub fn get_risk(&self) -> Option<&str> {
+        self.risk.as_deref().or(self.risk_level.as_deref())
+    }
 }
 
 #[derive(Serialize)]
@@ -156,11 +309,138 @@ struct GeminiResponsePart {
     text: String,
 }
 
+/// Result from analyzing a single slice
+#[derive(Debug, Clone)]
+struct SliceAnalysisResult {
+    /// Slice identifier
+    slice_id: usize,
+    /// Primary module/directory this slice covers
+    primary_module: Option<String>,
+    /// Oracle response for this slice
+    response: RefactoringOracleResponse,
+}
+
 impl RefactoringOracle {
     /// Create a new refactoring oracle with the given configuration
     pub fn new(config: OracleConfig) -> Self {
         let client = reqwest::Client::new();
         Self { config, client }
+    }
+
+    /// Dry-run mode: show slicing plan without calling the API
+    pub fn dry_run(&self, project_path: &Path) -> Result<()> {
+        let files = self.collect_source_files(project_path)?;
+        let total_tokens: usize = files
+            .iter()
+            .filter_map(|f| {
+                let full_path = project_path.join(f);
+                std::fs::read_to_string(&full_path).ok()
+            })
+            .map(|content| content.len() / 4)
+            .sum();
+
+        println!("\n🔍 [ORACLE DRY-RUN] Codebase Analysis");
+        println!("   📁 Total source files: {}", files.len());
+        println!("   📊 Estimated tokens: {}", total_tokens);
+        println!(
+            "   🎯 Slicing threshold: {}",
+            self.config.slicing_threshold
+        );
+        println!(
+            "   💰 Slice token budget: {}",
+            self.config.slice_token_budget
+        );
+
+        if !self.config.enable_slicing {
+            println!("\n⚠️  Slicing is disabled. Would analyze as single bundle.");
+            return Ok(());
+        }
+
+        if total_tokens <= self.config.slicing_threshold {
+            println!("\n📦 Codebase is under threshold. Would analyze as single bundle.");
+            return Ok(());
+        }
+
+        println!("\n✂️  Would use sliced analysis. Partitioning codebase...\n");
+
+        // Partition the codebase
+        let partition_config = PartitionConfig::default()
+            .with_token_budget(self.config.slice_token_budget);
+        let partitioner = ImportGraphPartitioner::new(partition_config);
+        let partition_result = partitioner.partition(project_path, &files)?;
+
+        // Print partition statistics
+        println!("📊 Partition Statistics:");
+        println!("   - Total files: {}", partition_result.stats.total_files);
+        println!("   - Total tokens: {}", partition_result.stats.total_tokens);
+        println!("   - Slices created: {}", partition_result.stats.slice_count);
+        println!("   - SCCs found: {}", partition_result.stats.scc_count);
+        println!("   - Largest SCC: {} files", partition_result.stats.largest_scc);
+        println!(
+            "   - Cross-slice imports: {}",
+            partition_result.stats.cross_slice_imports
+        );
+
+        if !partition_result.unassigned.is_empty() {
+            println!(
+                "   - Unassigned files: {}",
+                partition_result.unassigned.len()
+            );
+        }
+
+        // Print each slice
+        println!("\n🗂️  Slice Details:\n");
+        for slice in &partition_result.slices {
+            let module_name = slice
+                .primary_module
+                .clone()
+                .unwrap_or_else(|| format!("slice_{}", slice.id));
+            println!(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+            println!(
+                "📦 Slice {} - {} ({} files, ~{} tokens)",
+                slice.id,
+                module_name,
+                slice.files.len(),
+                slice.token_count
+            );
+            println!("   Files:");
+            for (i, file) in slice.files.iter().enumerate() {
+                let tokens = slice
+                    .contents
+                    .get(file)
+                    .map(|c| c.len() / 4)
+                    .unwrap_or(0);
+                if i < 20 {
+                    println!("     - {} (~{} tokens)", file.display(), tokens);
+                } else if i == 20 {
+                    println!("     ... and {} more files", slice.files.len() - 20);
+                    break;
+                }
+            }
+            if !slice.bridge_dependencies.is_empty() {
+                println!("   Bridge dependencies:");
+                for dep in slice.bridge_dependencies.iter().take(5) {
+                    println!("     - {}", dep.display());
+                }
+                if slice.bridge_dependencies.len() > 5 {
+                    println!(
+                        "     ... and {} more",
+                        slice.bridge_dependencies.len() - 5
+                    );
+                }
+            }
+        }
+
+        println!(
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        );
+        println!("✅ Dry-run complete. {} slices would be sent to the API.", partition_result.slices.len());
+        println!("   Estimated API calls: {}", partition_result.slices.len());
+        println!("   Run with --oracle (without --oracle-dry-run) to execute.");
+
+        Ok(())
     }
 
     /// Generate refactoring suggestions for the given codebase
@@ -169,15 +449,453 @@ impl RefactoringOracle {
         project_path: &Path,
         analysis_results: &AnalysisResults,
     ) -> Result<RefactoringOracleResponse> {
-        // Use scribe-analyzer to bundle the codebase
+        // First, estimate total codebase size to decide on slicing strategy
+        let files = self.collect_source_files(project_path)?;
+        let total_tokens: usize = files
+            .iter()
+            .filter_map(|f| std::fs::read_to_string(f).ok())
+            .map(|content| content.len() / 4)
+            .sum();
+
+        println!("\n🔍 [ORACLE] Codebase analysis");
+        println!("   📁 Total files: {}", files.len());
+        println!("   📊 Estimated tokens: {}", total_tokens);
+        println!(
+            "   🎯 Slicing threshold: {}",
+            self.config.slicing_threshold
+        );
+
+        // Decide whether to use sliced analysis
+        if self.config.enable_slicing && total_tokens > self.config.slicing_threshold {
+            println!("   ✂️  Using sliced analysis (codebase exceeds threshold)");
+            self.generate_suggestions_sliced(project_path, analysis_results, &files)
+                .await
+        } else {
+            println!("   📦 Using single-bundle analysis");
+            self.generate_suggestions_single(project_path, analysis_results)
+                .await
+        }
+    }
+
+    /// Generate suggestions using single-bundle approach (for smaller codebases)
+    async fn generate_suggestions_single(
+        &self,
+        project_path: &Path,
+        analysis_results: &AnalysisResults,
+    ) -> Result<RefactoringOracleResponse> {
         let bundle = self
             .create_codebase_bundle(project_path, analysis_results)
             .await?;
 
-        // Send to Gemini for analysis
-        let response = self.query_gemini(&bundle).await?;
+        self.query_gemini(&bundle, &self.config.model).await
+    }
 
-        Ok(response)
+    /// Generate suggestions using sliced analysis (for larger codebases)
+    async fn generate_suggestions_sliced(
+        &self,
+        project_path: &Path,
+        analysis_results: &AnalysisResults,
+        files: &[PathBuf],
+    ) -> Result<RefactoringOracleResponse> {
+        let partition_result = self.partition_codebase(project_path, files)?;
+
+        if partition_result.slices.is_empty() {
+            return Err(ValknutError::internal(
+                "Failed to create any slices from codebase".to_string(),
+            ));
+        }
+
+        let slice_results = self
+            .analyze_all_slices(&partition_result, project_path, analysis_results)
+            .await;
+
+        if slice_results.is_empty() {
+            return Err(ValknutError::internal(
+                "All slice analyses failed".to_string(),
+            ));
+        }
+
+        println!(
+            "\n🔗 [ORACLE] Aggregating {} slice results...",
+            slice_results.len()
+        );
+        self.aggregate_slice_results(slice_results, project_path)
+    }
+
+    fn partition_codebase(
+        &self,
+        project_path: &Path,
+        files: &[PathBuf],
+    ) -> Result<PartitionResult> {
+        let partition_config =
+            PartitionConfig::default().with_token_budget(self.config.slice_token_budget);
+        let partitioner = ImportGraphPartitioner::new(partition_config);
+
+        println!("\n🔪 [ORACLE] Partitioning codebase...");
+        let result = partitioner.partition(project_path, files)?;
+
+        println!("   📊 Partition stats:");
+        println!("      - Slices created: {}", result.stats.slice_count);
+        println!("      - SCCs found: {}", result.stats.scc_count);
+        println!(
+            "      - Largest SCC: {} files",
+            result.stats.largest_scc
+        );
+
+        Ok(result)
+    }
+
+    async fn analyze_all_slices(
+        &self,
+        partition_result: &PartitionResult,
+        project_path: &Path,
+        analysis_results: &AnalysisResults,
+    ) -> Vec<SliceAnalysisResult> {
+        let total_slices = partition_result.slices.len();
+        let mut results = Vec::new();
+
+        for (i, slice) in partition_result.slices.iter().enumerate() {
+            self.print_slice_info(slice, i + 1, total_slices);
+
+            match self
+                .analyze_slice(slice, project_path, analysis_results)
+                .await
+            {
+                Ok(response) => {
+                    results.push(SliceAnalysisResult {
+                        slice_id: slice.id,
+                        primary_module: slice.primary_module.clone(),
+                        response,
+                    });
+                    println!("   ✅ Slice {} complete", i + 1);
+                }
+                Err(e) => {
+                    println!("   ⚠️  Slice {} failed: {}", i + 1, e);
+                }
+            }
+        }
+
+        results
+    }
+
+    fn print_slice_info(&self, slice: &CodeSlice, current: usize, total: usize) {
+        println!(
+            "\n📦 [ORACLE] Analyzing slice {}/{} ({} files, ~{} tokens)",
+            current,
+            total,
+            slice.files.len(),
+            slice.token_count
+        );
+        if let Some(ref module) = slice.primary_module {
+            println!("   📂 Primary module: {}", module);
+        }
+    }
+
+    /// Analyze a single slice
+    async fn analyze_slice(
+        &self,
+        slice: &CodeSlice,
+        project_path: &Path,
+        analysis_results: &AnalysisResults,
+    ) -> Result<RefactoringOracleResponse> {
+        let bundle = self.create_slice_bundle(slice, project_path, analysis_results)?;
+        self.query_gemini(&bundle, &self.config.slice_model).await
+    }
+
+    /// Create a bundle for a single slice
+    fn create_slice_bundle(
+        &self,
+        slice: &CodeSlice,
+        project_path: &Path,
+        analysis_results: &AnalysisResults,
+    ) -> Result<String> {
+        let refactor_hints = build_refactor_hints(analysis_results, project_path);
+        let mut xml_files = Vec::new();
+        let mut total_tokens = 0;
+
+        for (path, content) in &slice.contents {
+            let estimated_tokens = content.len() / 4;
+            let path_str = path.to_string_lossy();
+
+            let key = normalize_path_for_key(&path_str);
+            let hints = refactor_hints
+                .get(&key)
+                .map(|h| h.join("; "))
+                .unwrap_or_else(|| "none".to_string());
+            let hints_truncated = truncate_hint(&hints, 80);
+            let tuple_label = format!("({}, {})", path_str, hints_truncated);
+
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+
+            xml_files.push(format!(
+                "    <file path=\"{}\" tuple=\"{}\" hint=\"{}\" type=\"{}\" tokens=\"{}\">\n{}\n    </file>",
+                path_str,
+                html_escape(&tuple_label),
+                html_escape(&hints_truncated),
+                ext,
+                estimated_tokens,
+                html_escape(content)
+            ));
+
+            total_tokens += estimated_tokens;
+        }
+
+        let slice_name = slice
+            .primary_module
+            .clone()
+            .unwrap_or_else(|| format!("slice_{}", slice.id));
+
+        let xml_bundle = format!(
+            "<codebase_slice id=\"{}\" name=\"{}\" files=\"{}\" tokens=\"{}\">\n{}\n</codebase_slice>",
+            slice.id,
+            slice_name,
+            slice.files.len(),
+            total_tokens,
+            xml_files.join("\n")
+        );
+
+        // Create condensed analysis for files in this slice
+        let slice_analysis = self.condense_analysis_for_slice(analysis_results, slice)?;
+
+        let bundle = format!(
+            "# Slice Analysis Request\n\n\
+            ## Code Slice: {} ({} files, ~{} tokens)\n{}\n\n\
+            ## Relevant Analysis\n{}\n\n\
+            ## Task Instructions\n\
+            Analyze this code slice and identify architectural improvements specific to this module/area.\n\n\
+            Focus on:\n\
+            1. Internal cohesion and organization within this slice\n\
+            2. Patterns that could be introduced or improved\n\
+            3. Abstraction opportunities\n\
+            4. Code quality issues specific to these files\n\n\
+            Note: This is a SLICE of a larger codebase. Focus on improvements within this slice's scope.\n\n\
+            {}",
+            slice_name,
+            slice.files.len(),
+            total_tokens,
+            xml_bundle,
+            slice_analysis,
+            self.get_json_schema_instructions()
+        );
+
+        Ok(bundle)
+    }
+
+    /// Condense analysis results for files in a specific slice
+    fn condense_analysis_for_slice(
+        &self,
+        results: &AnalysisResults,
+        slice: &CodeSlice,
+    ) -> Result<String> {
+        let slice_files: std::collections::HashSet<_> = slice
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+
+        // Filter refactoring candidates to those in this slice
+        let relevant_candidates: Vec<_> = results
+            .refactoring_candidates
+            .iter()
+            .filter(|c| {
+                let file_path = PathBuf::from(&c.file_path);
+                let relative = file_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                slice_files.contains(&c.file_path) || slice_files.iter().any(|sf| sf.ends_with(&relative))
+            })
+            .take(10)
+            .collect();
+
+        let mut condensed = format!(
+            "Files in slice: {}\n\
+            Relevant refactoring candidates: {}\n\n",
+            slice.files.len(),
+            relevant_candidates.len()
+        );
+
+        for (i, candidate) in relevant_candidates.iter().enumerate() {
+            condensed.push_str(&format!(
+                "{}. {} ({:?})\n   File: {}\n   Score: {:.1}\n\n",
+                i + 1,
+                candidate.name.split(':').last().unwrap_or(&candidate.name),
+                candidate.priority,
+                candidate.file_path,
+                candidate.score
+            ));
+        }
+
+        Ok(condensed)
+    }
+
+    /// Aggregate results from multiple slices into a single response
+    fn aggregate_slice_results(
+        &self,
+        slice_results: Vec<SliceAnalysisResult>,
+        _project_path: &Path,
+    ) -> Result<RefactoringOracleResponse> {
+        if slice_results.is_empty() {
+            return Err(ValknutError::internal("No slice results to aggregate".to_string()));
+        }
+
+        // If only one slice, return it directly
+        if slice_results.len() == 1 {
+            return Ok(slice_results.into_iter().next().unwrap().response);
+        }
+
+        // Combine assessments
+        let mut all_issues = Vec::new();
+        let mut all_strengths = Vec::new();
+        let mut summaries = Vec::new();
+
+        for result in &slice_results {
+            let module_prefix = result
+                .primary_module
+                .clone()
+                .unwrap_or_else(|| format!("slice_{}", result.slice_id));
+
+            let summary = result.response.assessment.get_summary();
+            summaries.push(format!("[{}] {}", module_prefix, summary));
+
+            for strength in &result.response.assessment.strengths {
+                all_strengths.push(format!("[{}] {}", module_prefix, strength));
+            }
+
+            for issue in &result.response.assessment.issues {
+                all_issues.push(format!("[{}] {}", module_prefix, issue));
+            }
+        }
+
+        // Combine tasks, adding slice context
+        let mut all_tasks = Vec::new();
+        let mut task_id_counter = 1;
+
+        for result in &slice_results {
+            let module_prefix = result
+                .primary_module
+                .clone()
+                .unwrap_or_else(|| format!("slice_{}", result.slice_id));
+
+            for task in result.response.all_tasks() {
+                let mut new_task = task.clone();
+                new_task.id = format!("T{}", task_id_counter);
+                new_task.title = format!("[{}] {}", module_prefix, task.title);
+                // Clear depends_on since cross-slice dependencies are complex
+                new_task.depends_on = vec![];
+                all_tasks.push(new_task);
+                task_id_counter += 1;
+            }
+        }
+
+        // Deduplicate and sort tasks by impact/effort
+        all_tasks.sort_by(|a, b| {
+            let a_score = task_priority_score(a);
+            let b_score = task_priority_score(b);
+            b_score.partial_cmp(&a_score).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Limit to top 20 tasks
+        all_tasks.truncate(20);
+
+        Ok(RefactoringOracleResponse {
+            assessment: CodebaseAssessment {
+                summary: Some(format!(
+                    "Aggregated from {} slices. {}",
+                    slice_results.len(),
+                    summaries.join(" ")
+                )),
+                architectural_narrative: None,
+                architectural_style: None,
+                strengths: all_strengths.into_iter().take(5).collect(),
+                issues: all_issues.into_iter().take(10).collect(),
+            },
+            tasks: all_tasks,
+            refactoring_roadmap: None,
+        })
+    }
+
+    /// Collect source files from project
+    fn collect_source_files(&self, project_path: &Path) -> Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+
+        let walker = WalkDir::new(project_path)
+            .max_depth(6)
+            .into_iter()
+            .filter_entry(|e| {
+                let path = e.path();
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default();
+
+                !name.starts_with('.') && !SKIP_DIRS.iter().any(|d| name == *d)
+            });
+
+        for entry in walker {
+            let entry = entry.map_generic_err("walking project directory")?;
+            let path = entry.path();
+
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    if SOURCE_EXTENSIONS.contains(&ext) {
+                        let relative = path
+                            .strip_prefix(project_path)
+                            .unwrap_or(path)
+                            .to_path_buf();
+
+                        if !is_test_file(&relative.to_string_lossy()) {
+                            files.push(relative);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(files)
+    }
+
+    /// Get the JSON schema instructions (shared between bundle types)
+    fn get_json_schema_instructions(&self) -> String {
+        format!(
+            "{}\n\n\
+            ## Focus Areas\n\
+            1. Readability: Clear naming, logical organization, self-documenting code\n\
+            2. Maintainability: Reduced coupling, clear module boundaries\n\
+            3. Simplification: Use stdlib/crates instead of hand-rolling\n\
+            4. Error Handling: Robust error types, clear propagation\n\
+            5. Logging: Structured logging where useful\n\n\
+            ## Out of Scope\n\
+            - NO new services or infrastructure\n\
+            - NO large architectural rewrites\n\n\
+            ## Response Format (JSON only, use codes from codebook)\n\
+            ```json\n\
+            {{\n\
+              \"assessment\": {{\n\
+                \"summary\": \"<2-3 sentences on code quality>\",\n\
+                \"strengths\": [\"<strength>\"],\n\
+                \"issues\": [\"<issue>\"]\n\
+              }},\n\
+              \"tasks\": [\n\
+                {{\n\
+                  \"id\": \"T1\",\n\
+                  \"title\": \"<title>\",\n\
+                  \"description\": \"<what and why>\",\n\
+                  \"category\": \"<C1-C7>\",\n\
+                  \"files\": [\"<path>\"],\n\
+                  \"risk\": \"<R1-R3>\",\n\
+                  \"impact\": \"<I1-I3>\",\n\
+                  \"effort\": \"<E1-E3>\",\n\
+                  \"depends_on\": []\n\
+                }}\n\
+              ]\n\
+            }}\n\
+            ```",
+            ORACLE_CODEBOOK
+        )
     }
 
     /// Create a codebase bundle with XML file tree structure and debugging
@@ -237,15 +955,7 @@ impl RefactoringOracle {
                     .unwrap_or_default();
 
                 // Skip common directories and files we don't want
-                !name.starts_with('.')
-                    && name != "target"
-                    && name != "node_modules"
-                    && name != "__pycache__"
-                    && name != "dist"
-                    && name != "build"
-                    && name != "coverage"
-                    && name != "tmp"
-                    && name != "temp"
+                !name.starts_with('.') && !SKIP_DIRS.iter().any(|d| name == *d)
             });
 
         let mut candidate_files = Vec::new();
@@ -258,22 +968,7 @@ impl RefactoringOracle {
             if path.is_file() {
                 if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                     // Include main source files
-                    if matches!(
-                        ext,
-                        "rs" | "py"
-                            | "js"
-                            | "ts"
-                            | "tsx"
-                            | "jsx"
-                            | "go"
-                            | "java"
-                            | "cpp"
-                            | "c"
-                            | "h"
-                            | "hpp"
-                            | "cs"
-                            | "php"
-                    ) {
+                    if SOURCE_EXTENSIONS.contains(&ext) {
                         let relative_path = path
                             .strip_prefix(project_path)
                             .unwrap_or(path)
@@ -383,71 +1078,57 @@ impl RefactoringOracle {
             .condense_analysis_results_with_budget(analysis_results, VALKNUT_OUTPUT_TOKEN_BUDGET)?;
 
         let final_bundle = format!(
-            "# Architectural Improvement Analysis Request\n\n\
-            ## Project Codebase ({} files, ~{} tokens)\n{}\n\n\
-            ## Valknut Technical Debt Analysis (for context only)\n{}\n\n\
-            ## Task Instructions\n\
-            You are an expert software architect. Analyze this codebase and propose **architectural improvements** - \
-            not just fixes for the issues detected by static analysis, but larger structural changes that would \
-            improve the overall design, maintainability, and developer experience.\n\n\
-            **IMPORTANT**: Your suggestions should:\n\
-            1. First, identify the \"engineering/architectural spirit\" of the project - what design philosophy does it follow \
-               (or should it follow)? Examples: functional-core-imperative-shell, clean architecture, hexagonal architecture, \
-               modular monolith, domain-driven design, pipeline architecture, plugin-based, etc.\n\
-            2. Propose improvements that RESPECT and STRENGTHEN that spirit, not fight against it.\n\
-            3. If the project lacks a clear architectural vision, recommend one that fits its domain and suggest \
-               how to evolve toward it.\n\
-            4. Focus on PATTERN-LEVEL changes (introducing patterns, consolidating abstractions, improving module boundaries) \
-               rather than just fixing individual complexity hotspots.\n\
-            5. Be EXPANSIVE - include both essential improvements and optional \"nice to have\" suggestions.\n\
-            6. Order tasks in a SAFE execution sequence where dependencies are respected.\n\n\
-            Additional guardrails:\n\
-            - Avoid nitpicks or low-impact / high-effort churn; prioritise meaningful architectural wins grounded in the code shown.\n\
-            - Prefer fewer, higher-value tasks over noisy micro-fixes; target ~8+ solid items when the evidence supports it.\n\n\
-            ## CRITICAL: Response Format Requirements\n\
-            You MUST respond with valid JSON that exactly matches this schema. Do not include markdown formatting, explanations, or any text outside the JSON object.\n\n\
-            ## Required JSON Response Schema:\n\
+            "# Code Quality Improvement Analysis\n\n\
+            {}\n\n\
+            ## Codebase ({} files, ~{} tokens)\n{}\n\n\
+            ## Valknut Analysis\n{}\n\n\
+            ## Task\n\
+            Analyze this codebase and propose improvements focused on **code quality**: readability, maintainability, \
+            clarity, and simplicity. You are reviewing code that works - the goal is to make it easier to understand, \
+            modify, and extend.\n\n\
+            ## Focus Areas (in priority order)\n\
+            1. **Readability**: Clear naming, logical organization, reduced cognitive load, self-documenting code\n\
+            2. **Maintainability**: Reduced coupling, clear module boundaries, consistent patterns\n\
+            3. **Simplification**: Remove unnecessary complexity, use standard library or well-known crates instead of hand-rolling\n\
+            4. **Error Handling**: Robust error types, clear propagation, actionable error messages, proper Result usage\n\
+            5. **Logging/Observability**: Structured logging where useful, clear debug output, tracing for complex flows\n\
+            6. **Type Safety**: Leverage the type system to prevent bugs, use newtypes, proper trait bounds\n\n\
+            ## Out of Scope\n\
+            - NO new services, databases, or infrastructure changes\n\
+            - NO large architectural rewrites or new frameworks\n\
+            - NO performance optimization unless it also improves clarity\n\
+            - NO changes that only benefit hypothetical future requirements\n\n\
+            ## Response Format\n\
+            Respond with valid JSON only. Use codes from the codebook above.\n\n\
             ```json\n\
             {{\n\
               \"assessment\": {{\n\
-                \"architectural_narrative\": \"<2-4 sentence narrative describing the current architectural state, its trajectory, and the recommended direction>\",\n\
-                \"architectural_style\": \"<the detected or recommended architectural philosophy for this codebase>\",\n\
-                \"issues\": [\"<issue1>\", \"<issue2>\", \"<issue3>\"]\n\
+                \"summary\": \"<2-3 sentences on overall code quality>\",\n\
+                \"strengths\": [\"<strength1>\", \"<strength2>\"],\n\
+                \"issues\": [\"<issue1>\", \"<issue2>\"]\n\
               }},\n\
-              \"refactoring_roadmap\": {{\n\
-                \"tasks\": [\n\
-                  {{\n\
-                    \"id\": \"<task-id>\",\n\
-                    \"title\": \"<concise task title>\",\n\
-                    \"description\": \"<detailed description explaining the architectural change and why it matters>\",\n\
-                    \"category\": \"<pattern|structure|abstraction|cleanup|optimization>\",\n\
-                    \"files\": [\"<affected-file1>\", \"<affected-file2>\"],\n\
-                    \"risk_level\": \"<low|medium|high>\",\n\
-                    \"impact\": \"<low|medium|high>\",\n\
-                    \"effort\": \"<low|medium|high>\",\n\
-                    \"mitigation\": \"<optional: mitigation strategy if risk is medium or high>\",\n\
-                    \"required\": <true for essential changes, false for optional/suggested>,\n\
-                    \"depends_on\": [\"<task-id of prerequisite>\"],\n\
-                    \"benefits\": [\"<benefit1>\", \"<benefit2>\"]\n\
-                  }}\n\
-                ]\n\
-              }}\n\
+              \"tasks\": [\n\
+                {{\n\
+                  \"id\": \"T1\",\n\
+                  \"title\": \"<concise title>\",\n\
+                  \"description\": \"<what to change and why it improves quality>\",\n\
+                  \"category\": \"<C1-C7>\",\n\
+                  \"files\": [\"<path>\"],\n\
+                  \"risk\": \"<R1-R3>\",\n\
+                  \"impact\": \"<I1-I3>\",\n\
+                  \"effort\": \"<E1-E3>\",\n\
+                  \"depends_on\": []\n\
+                }}\n\
+              ]\n\
             }}\n\
             ```\n\n\
-            ## Task Categories:\n\
-            - **pattern**: Introducing or improving design patterns (e.g., \"Introduce Repository pattern\", \"Add Builder pattern for configs\")\n\
-            - **structure**: Reorganizing modules, splitting files, moving code (e.g., \"Extract detection subsystem into separate crate\")\n\
-            - **abstraction**: Creating or refining abstractions, traits, interfaces (e.g., \"Unify detector trait hierarchy\")\n\
-            - **cleanup**: Removing dead code, consolidating duplicates (e.g., \"Remove deprecated config fields\")\n\
-            - **optimization**: Performance or resource improvements (e.g., \"Add caching layer for parsed ASTs\")\n\n\
-            ## Guidelines:\n\
-            - Provide 8-15 tasks covering a mix of essential and optional improvements\n\
-            - Tasks should be ordered so dependencies come first\n\
-            - Be specific about file paths - they must exist in the codebase\n\
-            - Focus on architectural patterns, not just complexity metrics\n\
-            - Mark truly foundational changes as required=true, nice-to-haves as required=false\n\
-            - The narrative should read like advice from a senior architect\n\
-            - Response must be valid JSON with no additional formatting",
+            ## Guidelines\n\
+            - Provide 8-15 concrete, actionable tasks\n\
+            - Order by dependencies, then by impact/effort ratio\n\
+            - Be specific about file paths (must exist in codebase)\n\
+            - Each task should have clear before/after improvement\n\
+            - Prefer quick wins (E1/E2) with good impact (I2/I3)",
+            ORACLE_CODEBOOK,
             files_included,
             total_tokens,
             xml_bundle,
@@ -499,10 +1180,10 @@ impl RefactoringOracle {
     }
 
     /// Query Gemini API with the bundled content
-    async fn query_gemini(&self, content: &str) -> Result<RefactoringOracleResponse> {
+    async fn query_gemini(&self, content: &str, model: &str) -> Result<RefactoringOracleResponse> {
         let url = format!(
             "{}/{}:generateContent?key={}",
-            self.config.api_endpoint, self.config.model, self.config.api_key
+            self.config.api_endpoint, model, self.config.api_key
         );
 
         let request = GeminiRequest {
@@ -564,6 +1245,7 @@ impl RefactoringOracle {
     }
 
     /// Condense analysis results with a specific token budget
+    /// Uses a codebook approach: define codes once, then reference them compactly
     fn condense_analysis_results_with_budget(
         &self,
         results: &AnalysisResults,
@@ -574,16 +1256,50 @@ impl RefactoringOracle {
             token_budget
         );
 
-        // Start with essential summary information
+        // Collect which issue/suggestion codes are actually used
+        let mut used_issue_codes: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut used_suggestion_codes: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for candidate in results.refactoring_candidates.iter()
+            .filter(|c| !matches!(c.priority, crate::core::scoring::Priority::None))
+            .take(15)
+        {
+            for issue in &candidate.issues {
+                used_issue_codes.insert(issue.code.clone());
+            }
+            for suggestion in candidate.suggestions.iter().take(2) {
+                used_suggestion_codes.insert(suggestion.code.clone());
+            }
+        }
+
+        // Build codebook section with only used codes
+        let mut codebook = String::from("## Codebook\n");
+
+        if !used_issue_codes.is_empty() {
+            codebook.push_str("ISS:\n");
+            for code in &used_issue_codes {
+                if let Some(def) = results.code_dictionary.issues.get(code) {
+                    codebook.push_str(&format!("  {}: {}\n", code, def.title));
+                }
+            }
+        }
+
+        if !used_suggestion_codes.is_empty() {
+            codebook.push_str("SUG:\n");
+            for code in &used_suggestion_codes {
+                if let Some(def) = results.code_dictionary.suggestions.get(code) {
+                    codebook.push_str(&format!("  {}: {}\n", code, def.title));
+                }
+            }
+        }
+        codebook.push('\n');
+
+        // Start with codebook + essential summary (compact format)
         let mut condensed = format!(
-            "## Core Metrics\n\
-            - Health Score: {:.2}\n\
-            - Files Analyzed: {}\n\
-            - Entities: {}\n\
-            - Issues Needing Refactoring: {}\n\
-            - High Priority Issues: {}\n\
-            - Critical Issues: {}\n\
-            - Average Refactoring Score: {:.2}\n\n",
+            "{}\
+            ## Metrics\n\
+            health={:.2} files={} entities={} issues={} high={} crit={} avg_score={:.2}\n\n",
+            codebook,
             results.summary.code_health_score,
             results.summary.files_processed,
             results.summary.entities_analyzed,
@@ -595,56 +1311,45 @@ impl RefactoringOracle {
 
         let mut current_tokens = condensed.len() / 4;
 
-        // Add top refactoring candidates by priority
+        // Add top refactoring candidates in compact format
         if !results.refactoring_candidates.is_empty() {
-            let candidates_section = "## Top Refactoring Priorities\n";
-            condensed.push_str(candidates_section);
-            current_tokens += candidates_section.len() / 4;
-
-            let issue_defs = &results.code_dictionary.issues;
-            let suggestion_defs = &results.code_dictionary.suggestions;
+            condensed.push_str("## Candidates\n");
+            current_tokens += 15;
 
             for (i, candidate) in results.refactoring_candidates.iter()
                 .filter(|c| !matches!(c.priority, crate::core::scoring::Priority::None))
-                .take(15)  // Limit candidates to control size
+                .take(15)
                 .enumerate()
             {
+                // Compact format: entity|file|score|priority|issues|suggestions
+                let issues_compact: String = candidate.issues.iter()
+                    .map(|issue| format!("{}@{:.0}", issue.code, issue.severity * 100.0))
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                let suggestions_compact: String = candidate.suggestions.iter()
+                    .take(2)
+                    .map(|s| s.code.clone())
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                let priority_code = match candidate.priority {
+                    Priority::Critical => "CRIT",
+                    Priority::High => "HIGH",
+                    Priority::Medium => "MED",
+                    Priority::Low => "LOW",
+                    Priority::None => "NONE",
+                };
+
                 let candidate_text = format!(
-                    "{}. **{}** ({:?})\n\
-                       - File: {}\n\
-                       - Score: {:.1} | Priority: {:?}\n\
-                       - Issues: {}\n\
-                       - Key Suggestions: {}\n\n",
+                    "{}. {}|{}|{:.0}|{}|[{}]|[{}]\n",
                     i + 1,
                     candidate.name.split(':').last().unwrap_or(&candidate.name),
-                    candidate.priority,
                     candidate.file_path,
                     candidate.score,
-                    candidate.priority,
-                    candidate
-                        .issues
-                        .iter()
-                        .map(|issue| {
-                            let title = issue_defs
-                                .get(&issue.code)
-                                .map(|def| def.title.as_str())
-                                .unwrap_or(issue.category.as_str());
-                            let severity = format!("{:.1}", issue.severity);
-                            format!("{} – {} [severity {}]", issue.code, title, severity)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    candidate.suggestions.iter()
-                        .take(2)  // Limit suggestions per candidate
-                        .map(|s| {
-                            let title = suggestion_defs
-                                .get(&s.code)
-                                .map(|def| def.title.as_str())
-                                .unwrap_or(s.refactoring_type.as_str());
-                            format!("{} – {}", s.code, title)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    priority_code,
+                    issues_compact,
+                    suggestions_compact
                 );
 
                 let candidate_tokens = candidate_text.len() / 4;
@@ -754,25 +1459,20 @@ fn is_test_file(path: &str) -> bool {
 fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 {
     let mut priority = 1.0;
 
-    // Boost priority for important files
-    if path.contains("main.rs") || path.contains("lib.rs") || path.contains("mod.rs") {
+    // Boost priority for important files using const arrays
+    if HIGH_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
         priority += 3.0;
     }
-
-    if path.contains("config") || path.contains("error") || path.contains("api") {
+    if MEDIUM_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
         priority += 2.0;
     }
-
-    if path.contains("core") || path.contains("engine") {
+    if LOW_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
         priority += 1.5;
     }
 
-    // Language-specific priority adjustments
-    match extension {
-        "rs" => priority += 2.0, // Boost Rust files since this is a Rust project
-        "py" | "js" | "ts" => priority += 1.5,
-        "go" | "java" | "cpp" => priority += 1.0,
-        _ => {}
+    // Language-specific priority adjustments using const array
+    if let Some((_, boost)) = EXTENSION_PRIORITIES.iter().find(|(ext, _)| *ext == extension) {
+        priority += boost;
     }
 
     // Penalize very large files (they consume too many tokens)
@@ -787,16 +1487,37 @@ fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 {
         priority *= 1.2;
     }
 
-    // Penalize test files and generated files
-    if path.contains("test") || path.contains("spec") || path.contains("_test") {
+    // Penalize test files and generated files using const arrays
+    if PENALTY_PATTERNS.iter().any(|p| path.contains(p)) {
         priority *= 0.3;
     }
-
-    if path.contains("generated") || path.contains("target/") || path.contains("build/") {
+    if STRONG_PENALTY_PATTERNS.iter().any(|p| path.contains(p)) {
         priority *= 0.1;
     }
 
     priority
+}
+
+/// Calculate a priority score for a task based on impact and effort
+/// Supports both new codes (I1-I3, E1-E3) and legacy strings (low/medium/high)
+fn task_priority_score(task: &RefactoringTask) -> f64 {
+    let impact_score = match task.impact.as_deref() {
+        Some("I3") | Some("high") => 3.0,
+        Some("I2") | Some("medium") => 2.0,
+        Some("I1") | Some("low") => 1.0,
+        _ => 1.5,
+    };
+
+    let effort_penalty = match task.effort.as_deref() {
+        Some("E3") | Some("high") => 0.5,
+        Some("E2") | Some("medium") => 0.75,
+        Some("E1") | Some("low") => 1.0,
+        _ => 0.75,
+    };
+
+    let required_bonus = if task.required.unwrap_or(false) { 1.5 } else { 1.0 };
+
+    impact_score * effort_penalty * required_bonus
 }
 
 fn build_refactor_hints(
@@ -920,651 +1641,6 @@ fn html_escape(content: &str) -> String {
         .replace('\'', "&#x27;")
 }
 
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use once_cell::sync::Lazy;
-    use std::collections::HashMap;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::sync::Mutex;
-    use std::time::Duration;
-    use tempfile::tempdir;
-
-    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-    use crate::core::pipeline::*;
-    use crate::core::scoring::Priority;
-
-    fn oracle_config_fixture(max_tokens: usize) -> OracleConfig {
-        OracleConfig {
-            api_key: "test-key".to_string(),
-            max_tokens,
-            api_endpoint: "https://api.example.com".to_string(),
-            model: "test-model".to_string(),
-        }
-    }
-
-    fn sample_candidate(
-        file_path: &Path,
-        entity_name: &str,
-        issue_code: &str,
-        suggestion_code: &str,
-        suggestion_type: &str,
-        priority: Priority,
-        severity: f64,
-        suggestion_priority: f64,
-    ) -> RefactoringCandidate {
-        RefactoringCandidate {
-            entity_id: format!("{}::{entity_name}", file_path.display()),
-            name: entity_name.to_string(),
-            file_path: file_path.to_string_lossy().to_string(),
-            line_range: Some((12, 48)),
-            priority,
-            score: 70.0 + severity * 20.0,
-            confidence: 0.8 + (severity / 5.0).min(0.15),
-            issues: vec![RefactoringIssue {
-                code: issue_code.to_string(),
-                category: "Complexity Hotspot".to_string(),
-                severity,
-                contributing_features: vec![FeatureContribution {
-                    feature_name: "cyclomatic_complexity".to_string(),
-                    value: 18.0,
-                    normalized_value: 0.9,
-                    contribution: 0.45,
-                }],
-            }],
-            suggestions: vec![RefactoringSuggestion {
-                refactoring_type: suggestion_type.to_string(),
-                code: suggestion_code.to_string(),
-                priority: suggestion_priority,
-                effort: 0.3,
-                impact: 0.7,
-            }],
-            issue_count: 1,
-            suggestion_count: 1,
-            coverage_percentage: None,
-        }
-    }
-
-    fn analysis_results_fixture(project_root: &Path) -> AnalysisResults {
-        let lib_path = project_root.join("src/lib.rs");
-        let utils_path = project_root.join("src/utils.rs");
-
-        let summary = AnalysisSummary {
-            files_processed: 3,
-            entities_analyzed: 6,
-            refactoring_needed: 2,
-            high_priority: 1,
-            critical: 1,
-            avg_refactoring_score: 72.5,
-            code_health_score: 0.42,
-            total_files: 3,
-            total_entities: 6,
-            total_lines_of_code: 420,
-            languages: vec!["Rust".to_string()],
-            total_issues: 4,
-            high_priority_issues: 2,
-            critical_issues: 1,
-            doc_health_score: 1.0,
-            doc_issue_count: 0,
-        };
-
-        let mut code_dictionary = CodeDictionary::default();
-        code_dictionary.issues.insert(
-            "VX001".to_string(),
-            CodeDefinition {
-                code: "VX001".to_string(),
-                title: "Cyclomatic spike".to_string(),
-                summary: "Cyclomatic complexity exceeded preferred range".to_string(),
-                category: Some("complexity".to_string()),
-            },
-        );
-        code_dictionary.issues.insert(
-            "VX002".to_string(),
-            CodeDefinition {
-                code: "VX002".to_string(),
-                title: "Excessive branching".to_string(),
-                summary: "Branching factor suggests decomposition".to_string(),
-                category: Some("structure".to_string()),
-            },
-        );
-        code_dictionary.suggestions.insert(
-            "RX001".to_string(),
-            CodeDefinition {
-                code: "RX001".to_string(),
-                title: "Extract helper".to_string(),
-                summary: "Split logic into dedicated helper functions".to_string(),
-                category: Some("refactoring".to_string()),
-            },
-        );
-        code_dictionary.suggestions.insert(
-            "RX002".to_string(),
-            CodeDefinition {
-                code: "RX002".to_string(),
-                title: "Simplify branches".to_string(),
-                summary: "Reduce branching to clarify business rules".to_string(),
-                category: Some("refactoring".to_string()),
-            },
-        );
-
-        AnalysisResults {
-            summary,
-            normalized: None,
-            passes: StageResultsBundle::disabled(),
-            refactoring_candidates: vec![
-                sample_candidate(
-                    &lib_path,
-                    "crate::lib::hotspot",
-                    "VX001",
-                    "RX001",
-                    "Extract Method",
-                    Priority::Critical,
-                    0.92,
-                    0.9,
-                ),
-                sample_candidate(
-                    &utils_path,
-                    "crate::utils::helper",
-                    "VX002",
-                    "RX002",
-                    "Simplify Branches",
-                    Priority::High,
-                    0.78,
-                    0.7,
-                ),
-            ],
-            statistics: AnalysisStatistics {
-                total_duration: Duration::from_secs(2),
-                avg_file_processing_time: Duration::from_millis(120),
-                avg_entity_processing_time: Duration::from_millis(45),
-                features_per_entity: HashMap::new(),
-                priority_distribution: HashMap::new(),
-                issue_distribution: HashMap::new(),
-                memory_stats: MemoryStats {
-                    peak_memory_bytes: 512_000,
-                    final_memory_bytes: 256_000,
-                    efficiency_score: 0.82,
-                },
-            },
-            clone_analysis: None,
-            coverage_packs: Vec::new(),
-            warnings: Vec::new(),
-            health_metrics: Some(HealthMetrics {
-                overall_health_score: 58.0,
-                maintainability_score: 52.0,
-                technical_debt_ratio: 71.0,
-                complexity_score: 83.0,
-                structure_quality_score: 45.0,
-                doc_health_score: 100.0,
-            }),
-            code_dictionary,
-            documentation: None,
-        }
-    }
-
-    #[test]
-    fn test_oracle_config_creation() {
-        let config = OracleConfig {
-            api_key: "test-key".to_string(),
-            max_tokens: 100_000,
-            api_endpoint: "https://api.example.com".to_string(),
-            model: "test-model".to_string(),
-        };
-
-        assert_eq!(config.api_key, "test-key");
-        assert_eq!(config.max_tokens, 100_000);
-        assert_eq!(config.api_endpoint, "https://api.example.com");
-        assert_eq!(config.model, "test-model");
-    }
-
-    #[test]
-    fn test_oracle_config_from_env_missing_key() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        std::env::remove_var("GEMINI_API_KEY");
-
-        let result = OracleConfig::from_env();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("GEMINI_API_KEY"));
-    }
-
-    #[test]
-    fn test_oracle_config_from_env_with_key() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("GEMINI_API_KEY", "test-api-key");
-
-        let result = OracleConfig::from_env();
-        assert!(result.is_ok());
-
-        let config = result.unwrap();
-        assert_eq!(config.api_key, "test-api-key");
-        assert_eq!(config.max_tokens, 400_000);
-        assert_eq!(config.model, "gemini-3-pro-preview");
-        assert!(config
-            .api_endpoint
-            .contains("generativelanguage.googleapis.com"));
-
-        // Clean up
-        std::env::remove_var("GEMINI_API_KEY");
-    }
-
-    #[test]
-    fn test_oracle_config_with_max_tokens() {
-        let config = OracleConfig {
-            api_key: "test".to_string(),
-            max_tokens: 100,
-            api_endpoint: "test".to_string(),
-            model: "test".to_string(),
-        }
-        .with_max_tokens(50_000);
-
-        assert_eq!(config.max_tokens, 50_000);
-    }
-
-    #[test]
-    fn test_refactoring_oracle_creation() {
-        let config = OracleConfig {
-            api_key: "test-key".to_string(),
-            max_tokens: 100_000,
-            api_endpoint: "https://api.example.com".to_string(),
-            model: "test-model".to_string(),
-        };
-
-        let oracle = RefactoringOracle::new(config);
-        assert_eq!(oracle.config.api_key, "test-key");
-    }
-
-    #[test]
-    fn test_is_test_file_patterns() {
-        // Test directory patterns
-        assert!(is_test_file("src/test/mod.rs"));
-        assert!(is_test_file("tests/integration.rs"));
-        assert!(is_test_file("src/tests/unit.py"));
-
-        // Test file name patterns
-        assert!(is_test_file("src/module_test.rs"));
-        assert!(is_test_file("src/component.test.js"));
-        assert!(is_test_file("src/service.spec.ts"));
-        assert!(is_test_file("test_module.py"));
-        assert!(is_test_file("src/TestClass.java"));
-        assert!(is_test_file("conftest.py"));
-
-        // Non-test files
-        assert!(!is_test_file("src/main.rs"));
-        assert!(!is_test_file("src/lib.rs"));
-        assert!(!is_test_file("src/config.py"));
-        assert!(!is_test_file("src/api/mod.rs"));
-    }
-
-    #[test]
-    fn test_calculate_file_priority() {
-        // High priority files
-        assert!(calculate_file_priority("src/main.rs", "rs", 1000) > 3.0);
-        assert!(calculate_file_priority("src/lib.rs", "rs", 1000) > 3.0);
-        assert!(calculate_file_priority("src/core/mod.rs", "rs", 1000) > 3.0);
-
-        // Config and API files get boost
-        assert!(calculate_file_priority("src/config.rs", "rs", 1000) > 2.0);
-        assert!(calculate_file_priority("src/api/mod.rs", "rs", 1000) > 2.0);
-
-        // Language priorities
-        assert!(
-            calculate_file_priority("src/module.rs", "rs", 1000)
-                > calculate_file_priority("src/module.py", "py", 1000)
-        );
-        assert!(
-            calculate_file_priority("src/module.py", "py", 1000)
-                > calculate_file_priority("src/module.c", "c", 1000)
-        );
-
-        // Size penalties
-        assert!(
-            calculate_file_priority("src/large.rs", "rs", 100_000)
-                < calculate_file_priority("src/small.rs", "rs", 1000)
-        );
-
-        // Test file penalty
-        assert!(
-            calculate_file_priority("src/module.rs", "rs", 1000)
-                > calculate_file_priority("src/module_test.rs", "rs", 1000)
-        );
-    }
-
-    #[test]
-    fn test_html_escape() {
-        assert_eq!(html_escape(""), "");
-        assert_eq!(html_escape("hello world"), "hello world");
-        assert_eq!(html_escape("hello & world"), "hello &amp; world");
-        assert_eq!(html_escape("<tag>"), "&lt;tag&gt;");
-        assert_eq!(html_escape("\"quoted\""), "&quot;quoted&quot;");
-        assert_eq!(html_escape("'single'"), "&#x27;single&#x27;");
-        assert_eq!(
-            html_escape("<script>alert('hello');</script>"),
-            "&lt;script&gt;alert(&#x27;hello&#x27;);&lt;/script&gt;"
-        );
-    }
-
-    #[test]
-    fn test_file_candidate_creation() {
-        let candidate = FileCandidate {
-            path: "src/test.rs".to_string(),
-            content: "fn main() {}".to_string(),
-            tokens: 100,
-            priority: 2.5,
-            file_type: "rs".to_string(),
-        };
-
-        assert_eq!(candidate.path, "src/test.rs");
-        assert_eq!(candidate.content, "fn main() {}");
-        assert_eq!(candidate.tokens, 100);
-        assert_eq!(candidate.priority, 2.5);
-        assert_eq!(candidate.file_type, "rs");
-    }
-
-    #[test]
-    fn test_codebase_assessment_structure() {
-        let assessment = CodebaseAssessment {
-            architectural_narrative:
-                "The codebase follows a pipeline architecture with clear separation.".to_string(),
-            architectural_style: "Pipeline Architecture with Modular Detectors".to_string(),
-            issues: vec![
-                "Configuration complexity".to_string(),
-                "Module boundaries".to_string(),
-            ],
-        };
-
-        assert!(assessment.architectural_narrative.contains("pipeline"));
-        assert!(assessment.architectural_style.contains("Pipeline"));
-        assert_eq!(assessment.issues.len(), 2);
-    }
-
-    #[test]
-    fn test_refactoring_task_structure() {
-        let task = RefactoringTask {
-            id: "task-1".to_string(),
-            title: "Split large file".to_string(),
-            description: "Break down monolithic module".to_string(),
-            category: "structure".to_string(),
-            files: vec!["src/large.rs".to_string()],
-            risk_level: "medium".to_string(),
-            impact: Some("high".to_string()),
-            effort: Some("medium".to_string()),
-            mitigation: Some("Use feature flags".to_string()),
-            required: true,
-            depends_on: vec![],
-            benefits: vec!["Improved maintainability".to_string()],
-        };
-
-        assert_eq!(task.id, "task-1");
-        assert_eq!(task.category, "structure");
-        assert_eq!(task.risk_level, "medium");
-        assert_eq!(task.impact, Some("high".to_string()));
-        assert_eq!(task.effort, Some("medium".to_string()));
-        assert!(task.required);
-        assert!(task.depends_on.is_empty());
-        assert_eq!(task.files.len(), 1);
-        assert_eq!(task.benefits.len(), 1);
-    }
-
-    #[test]
-    fn test_refactoring_roadmap_structure() {
-        let roadmap = RefactoringRoadmap { tasks: vec![] };
-        assert!(roadmap.tasks.is_empty());
-    }
-
-    #[test]
-    fn test_oracle_response_structure() {
-        let response = RefactoringOracleResponse {
-            assessment: CodebaseAssessment {
-                architectural_narrative: "The codebase is well-structured.".to_string(),
-                architectural_style: "Clean Architecture".to_string(),
-                issues: vec!["Testing".to_string()],
-            },
-            refactoring_roadmap: RefactoringRoadmap { tasks: vec![] },
-        };
-
-        assert!(response
-            .assessment
-            .architectural_narrative
-            .contains("well-structured"));
-        assert!(response.refactoring_roadmap.tasks.is_empty());
-    }
-
-    #[test]
-    fn test_condense_analysis_results() {
-        use std::collections::HashMap;
-        use std::time::Duration;
-
-        let config = OracleConfig {
-            api_key: "test".to_string(),
-            max_tokens: 100_000,
-            api_endpoint: "test".to_string(),
-            model: "test".to_string(),
-        };
-        let oracle = RefactoringOracle::new(config);
-
-        let results = AnalysisResults {
-            summary: AnalysisSummary {
-                code_health_score: 75.5,
-                files_processed: 10,
-                entities_analyzed: 50,
-                refactoring_needed: 5,
-                high_priority: 2,
-                critical: 1,
-                avg_refactoring_score: 3.2,
-                total_files: 10,
-                total_entities: 50,
-                total_lines_of_code: 1_500,
-                languages: vec!["Rust".to_string()],
-                total_issues: 3,
-                high_priority_issues: 2,
-                critical_issues: 1,
-                doc_health_score: 1.0,
-                doc_issue_count: 0,
-            },
-            normalized: None,
-            passes: StageResultsBundle::disabled(),
-            refactoring_candidates: vec![],
-            statistics: AnalysisStatistics {
-                total_duration: Duration::from_secs(30),
-                avg_file_processing_time: Duration::from_millis(500),
-                avg_entity_processing_time: Duration::from_millis(100),
-                features_per_entity: HashMap::new(),
-                priority_distribution: HashMap::new(),
-                issue_distribution: HashMap::new(),
-                memory_stats: MemoryStats {
-                    peak_memory_bytes: 1000000,
-                    final_memory_bytes: 800000,
-                    efficiency_score: 0.8,
-                },
-            },
-            clone_analysis: None,
-            coverage_packs: vec![],
-            warnings: vec![],
-            health_metrics: None,
-            code_dictionary: CodeDictionary::default(),
-            documentation: None,
-        };
-
-        let condensed = oracle.condense_analysis_results(&results);
-        assert!(condensed.contains("75.5"));
-        assert!(condensed.contains("files_analyzed"));
-        assert!(condensed.contains("health_score"));
-    }
-
-    #[test]
-    fn test_token_budget_constants() {
-        assert_eq!(VALKNUT_OUTPUT_TOKEN_BUDGET, 50_000);
-    }
-
-    #[test]
-    fn test_gemini_request_structure() {
-        let request = GeminiRequest {
-            contents: vec![GeminiContent {
-                parts: vec![GeminiPart {
-                    text: "test content".to_string(),
-                }],
-            }],
-            generation_config: GeminiGenerationConfig {
-                temperature: 0.2,
-                top_k: 40,
-                top_p: 0.95,
-                max_output_tokens: 8192,
-                response_mime_type: "application/json".to_string(),
-            },
-        };
-
-        assert_eq!(request.contents.len(), 1);
-        assert_eq!(request.generation_config.temperature, 0.2);
-        assert_eq!(
-            request.generation_config.response_mime_type,
-            "application/json"
-        );
-    }
-
-    #[test]
-    fn test_gemini_response_structure() {
-        let response = GeminiResponse {
-            candidates: vec![GeminiCandidate {
-                content: GeminiResponseContent {
-                    parts: vec![GeminiResponsePart {
-                        text: "response text".to_string(),
-                    }],
-                },
-            }],
-        };
-
-        assert_eq!(response.candidates.len(), 1);
-        assert_eq!(
-            response.candidates[0].content.parts[0].text,
-            "response text"
-        );
-    }
-
-    #[test]
-    fn truncate_hint_adds_ellipsis_for_long_labels() {
-        let short = truncate_hint("High risk", 20);
-        assert_eq!(short, "High risk");
-
-        let long = truncate_hint("VeryLongRefactorHintIdentifierThatShouldBeTrimmed", 16);
-        assert!(long.ends_with('…'));
-        assert!(long.chars().count() <= 16);
-    }
-
-    #[test]
-    fn normalize_path_for_key_flattens_backslashes() {
-        assert_eq!(
-            normalize_path_for_key(r"src\module\lib.rs"),
-            "src/module/lib.rs"
-        );
-        assert_eq!(normalize_path_for_key(""), "");
-    }
-
-    #[test]
-    fn build_refactor_hints_normalizes_paths_and_limits_size() {
-        let project = tempdir().unwrap();
-        let root = project.path().join("workspace");
-        fs::create_dir_all(root.join("src")).unwrap();
-        let results = analysis_results_fixture(&root);
-        let hints = build_refactor_hints(&results, &root);
-
-        let entry = hints
-            .get("src/lib.rs")
-            .expect("expected lib.rs hints entry");
-        assert!(
-            entry.iter().all(|hint| hint.len() <= 60),
-            "hint should be truncated to configured length"
-        );
-        assert!(
-            entry.iter().any(|hint| hint.contains("CH")),
-            "category abbreviation should be included"
-        );
-    }
-
-    #[tokio::test]
-    async fn create_codebase_bundle_includes_readme_and_skips_large_files() {
-        let project = tempdir().unwrap();
-        let root = project.path().join("workspace");
-        fs::create_dir_all(root.join("src")).unwrap();
-        fs::write(
-            root.join("README.md"),
-            "# Sample Project\n\nImportant overview.",
-        )
-        .unwrap();
-        fs::write(
-            root.join("src/lib.rs"),
-            "pub fn compute(value: i32) -> i32 { value * 2 }\n",
-        )
-        .unwrap();
-        fs::write(
-            root.join("src/utils.rs"),
-            "pub fn helper(flag: bool) -> bool { if flag { !flag } else { flag } }\n",
-        )
-        .unwrap();
-        let large_body = "fn enormous_task() {}\n".repeat(400);
-        fs::write(root.join("src/huge.rs"), large_body).unwrap();
-
-        let results = analysis_results_fixture(&root);
-        let oracle = RefactoringOracle::new(oracle_config_fixture(180));
-
-        let bundle = oracle
-            .create_codebase_bundle(&root, &results)
-            .await
-            .expect("bundle creation");
-
-        assert!(bundle.contains("README.md"));
-        assert!(bundle.contains("src/lib.rs"));
-        assert!(
-            !bundle.contains("src/huge.rs"),
-            "large file should be skipped when exceeding budget"
-        );
-        assert!(
-            bundle.contains("CH 92%") && bundle.contains("EM"),
-            "refactor hints should be embedded in tuple labels"
-        );
-    }
-
-    #[test]
-    fn condense_analysis_results_with_budget_handles_limits_and_health_section() {
-        let project = tempdir().unwrap();
-        let root = project.path().join("workspace");
-        fs::create_dir_all(root.join("src")).unwrap();
-        fs::write(root.join("src/lib.rs"), "fn demo() {}\n").unwrap();
-        fs::write(root.join("src/utils.rs"), "fn helper() {}\n").unwrap();
-
-        let results = analysis_results_fixture(&root);
-        let oracle = RefactoringOracle::new(oracle_config_fixture(500));
-
-        let limited = oracle
-            .condense_analysis_results_with_budget(&results, 90)
-            .expect("condense with tight budget");
-        assert!(
-            !limited.contains("crate::lib::hotspot") && !limited.contains("crate::utils::helper"),
-            "candidates should be omitted when budget is exhausted before listing them"
-        );
-
-        let mut expanded_results = analysis_results_fixture(&root);
-        expanded_results
-            .refactoring_candidates
-            .push(sample_candidate(
-                &root.join("src/core.rs"),
-                "crate::core::planner",
-                "VX002",
-                "RX002",
-                "Simplify Branches",
-                Priority::High,
-                0.68,
-                0.6,
-            ));
-
-        let expanded = oracle
-            .condense_analysis_results_with_budget(&expanded_results, 420)
-            .expect("condense with ample budget");
-        // Health section is optional after normalization removal
-        // ensure condensed text still produced
-        assert!(!expanded.is_empty());
-        assert!(
-            expanded.contains("helper"),
-            "refactoring candidate names should appear when budget allows"
-        );
-    }
-}
+mod tests;
