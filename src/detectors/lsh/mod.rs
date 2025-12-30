@@ -9,14 +9,29 @@ pub use config::{
     DenoiseWeights, LshConfig, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
 };
 
+mod index;
+mod lsh_cache;
+pub mod memory_pool;
+mod metrics;
+mod signature;
+mod similarity_context;
+pub mod weighted;
+
+// Re-export submodule types
+pub use index::LshIndex;
+pub use lsh_cache::{CacheStatistics, LshCache};
+pub use memory_pool::{LshMemoryPools, PoolStatistics};
+pub use metrics::{LshContextStatistics, LshPerformanceMetrics};
+pub use signature::MinHashSignature;
+pub use similarity_context::LshSimilarityContext;
+pub use weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats};
+
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use ahash::AHasher;
 use async_trait::async_trait;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{debug, info, warn};
 use xxhash_rust::xxh3::Xxh3;
@@ -32,109 +47,8 @@ use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{
     CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
 };
-use crate::core::interning::{global_interner, intern, resolve, InternedString};
-use crate::lang::common::LanguageAdapter;
-use crate::lang::{
-    go::GoAdapter, javascript::JavaScriptAdapter, python::PythonAdapter, rust_lang::RustAdapter,
-    typescript::TypeScriptAdapter,
-};
+use crate::core::interning::{intern, resolve, InternedString};
 use tree_sitter::Node;
-
-mod lsh_cache;
-pub use lsh_cache::{CacheStatistics, LshCache};
-
-pub mod memory_pool;
-pub use memory_pool::{LshMemoryPools, PoolStatistics};
-
-pub mod weighted;
-pub use weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats};
-
-/// Performance metrics for LSH operations
-#[derive(Debug, Default, Clone)]
-pub struct LshPerformanceMetrics {
-    /// Time spent generating MinHash signatures
-    pub signature_generation_time: std::time::Duration,
-    /// Time spent on similarity comparisons
-    pub comparison_time: std::time::Duration,
-    /// Time spent building LSH index
-    pub index_build_time: std::time::Duration,
-    /// Number of entities processed
-    pub entities_processed: usize,
-    /// Number of similarity comparisons performed
-    pub comparisons_performed: usize,
-    /// Number of cache hits
-    pub cache_hits: usize,
-    /// Number of cache misses
-    pub cache_misses: usize,
-}
-
-impl LshPerformanceMetrics {
-    /// Create new performance metrics
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Log performance summary
-    pub fn log_summary(&self) {
-        info!("LSH Performance Summary:");
-        info!(
-            "  Signature generation: {:?}",
-            self.signature_generation_time
-        );
-        info!("  Comparison time: {:?}", self.comparison_time);
-        info!("  Index build time: {:?}", self.index_build_time);
-        info!("  Entities processed: {}", self.entities_processed);
-        info!("  Comparisons performed: {}", self.comparisons_performed);
-        if self.cache_hits + self.cache_misses > 0 {
-            let hit_rate = self.cache_hits as f64 / (self.cache_hits + self.cache_misses) as f64;
-            info!("  Cache hit rate: {:.2}%", hit_rate * 100.0);
-        }
-
-        // Calculate average times
-        if self.entities_processed > 0 {
-            let avg_signature_time =
-                self.signature_generation_time / self.entities_processed as u32;
-            info!("  Average signature time: {:?}", avg_signature_time);
-        }
-        if self.comparisons_performed > 0 {
-            let avg_comparison_time = self.comparison_time / self.comparisons_performed as u32;
-            info!("  Average comparison time: {:?}", avg_comparison_time);
-        }
-    }
-
-    /// Check if performance is within acceptable bounds
-    pub fn validate_performance(&self) -> std::result::Result<(), String> {
-        // Define performance thresholds
-        const MAX_SIGNATURE_TIME_MS: u64 = 100; // 100ms per signature is too slow
-        const MAX_COMPARISON_TIME_MS: u64 = 50; // 50ms per comparison is too slow
-
-        if self.entities_processed > 0 {
-            let avg_sig_time =
-                self.signature_generation_time.as_millis() / self.entities_processed as u128;
-            if avg_sig_time > MAX_SIGNATURE_TIME_MS as u128 {
-                return Err(format!(
-                    "Signature generation too slow: {}ms avg > {}ms threshold",
-                    avg_sig_time, MAX_SIGNATURE_TIME_MS
-                ));
-            }
-        }
-
-        if self.comparisons_performed > 0 {
-            let avg_comp_time =
-                self.comparison_time.as_millis() / self.comparisons_performed as u128;
-            if avg_comp_time > MAX_COMPARISON_TIME_MS as u128 {
-                return Err(format!(
-                    "Comparison too slow: {}ms avg > {}ms threshold",
-                    avg_comp_time, MAX_COMPARISON_TIME_MS
-                ));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-// Removed unused regex import
 
 /// LSH-based similarity feature extractor with O(n) candidate search
 #[derive(Debug)]
@@ -1261,12 +1175,12 @@ impl LshExtractor {
         let elapsed = start_time.elapsed();
         info!("Built LSH similarity context in {:?}", elapsed);
 
-        LshSimilarityContext {
+        LshSimilarityContext::new(
             lsh_index,
             signatures,
-            lsh_config: self.lsh_config.clone(),
-            entities_count: entities.len(),
-        }
+            self.lsh_config.clone(),
+            entities.len(),
+        )
     }
 
     /// Compare entity with others in the context using efficient LSH-based candidate search
@@ -1555,228 +1469,6 @@ fn summarise_similarities(similarities: &[f64]) -> (f64, f64, f64) {
     let duplicate_count = similarities.iter().filter(|&&s| s > 0.8).count() as f64;
 
     (max_similarity, avg_similarity, duplicate_count)
-}
-
-/// O(n) similarity search context with prebuilt LSH index
-#[derive(Debug)]
-pub struct LshSimilarityContext {
-    /// LSH index for efficient candidate search
-    lsh_index: LshIndex,
-    /// Signature storage for similarity computation
-    signatures: HashMap<String, Vec<u64>>,
-    /// LSH configuration used
-    lsh_config: LshConfig,
-    /// Number of entities in the context
-    entities_count: usize,
-}
-
-impl LshSimilarityContext {
-    /// Find similar entities to the given entity using O(log n) LSH candidate search
-    pub fn find_similar_entities(
-        &self,
-        entity_id: &str,
-        max_results: Option<usize>,
-    ) -> Vec<(String, f64)> {
-        let start_time = std::time::Instant::now();
-
-        // Use LSH index to find candidates efficiently
-        let mut candidates = self.lsh_index.find_candidates(entity_id);
-
-        // Limit results if requested
-        if let Some(max) = max_results {
-            candidates.truncate(max);
-        }
-
-        let elapsed = start_time.elapsed();
-        debug!(
-            "LSH candidate search for {} found {} candidates in {:?}",
-            entity_id,
-            candidates.len(),
-            elapsed
-        );
-
-        candidates
-    }
-
-    /// Calculate similarity between two entities if both are in the context
-    pub fn calculate_similarity(&self, entity1_id: &str, entity2_id: &str) -> Option<f64> {
-        let sig1 = self.signatures.get(entity1_id)?;
-        let sig2 = self.signatures.get(entity2_id)?;
-
-        Some(Self::jaccard_similarity(sig1, sig2))
-    }
-
-    /// Calculate Jaccard similarity between two signatures
-    fn jaccard_similarity(sig1: &[u64], sig2: &[u64]) -> f64 {
-        if sig1.len() != sig2.len() {
-            return 0.0;
-        }
-
-        let matching = sig1.iter().zip(sig2.iter()).filter(|(a, b)| a == b).count();
-        matching as f64 / sig1.len() as f64
-    }
-
-    /// Get performance statistics for the similarity context
-    pub fn get_statistics(&self) -> LshContextStatistics {
-        LshContextStatistics {
-            entities_count: self.entities_count,
-            num_bands: self.lsh_config.num_bands,
-            num_hashes: self.lsh_config.num_hashes,
-            theoretical_complexity: format!("O(n) with {} bands", self.lsh_config.num_bands),
-        }
-    }
-}
-
-/// Performance statistics for LSH similarity context
-#[derive(Debug, Clone)]
-pub struct LshContextStatistics {
-    pub entities_count: usize,
-    pub num_bands: usize,
-    pub num_hashes: usize,
-    pub theoretical_complexity: String,
-}
-
-/// MinHash signature for efficient similarity computation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MinHashSignature {
-    /// The signature values
-    pub signature: Vec<u64>,
-
-    /// Parameters used to generate this signature
-    pub num_hashes: usize,
-    pub shingle_size: usize,
-}
-
-impl MinHashSignature {
-    /// Create a new MinHash signature
-    pub fn new(signature: Vec<u64>, num_hashes: usize, shingle_size: usize) -> Self {
-        Self {
-            signature,
-            num_hashes,
-            shingle_size,
-        }
-    }
-
-    /// Calculate Jaccard similarity with another signature
-    pub fn jaccard_similarity(&self, other: &Self) -> Option<f64> {
-        if self.signature.len() != other.signature.len() {
-            return None;
-        }
-
-        let matching = self
-            .signature
-            .iter()
-            .zip(other.signature.iter())
-            .filter(|(a, b)| a == b)
-            .count();
-
-        Some(matching as f64 / self.signature.len() as f64)
-    }
-}
-
-/// LSH index for efficient similarity search
-#[derive(Debug)]
-pub struct LshIndex {
-    /// Number of bands for LSH
-    num_bands: usize,
-
-    /// Hash tables for each band
-    bands: Vec<HashMap<u64, Vec<String>>>,
-
-    /// Stored signatures
-    signatures: HashMap<String, MinHashSignature>,
-}
-
-impl LshIndex {
-    /// Create a new LSH index
-    pub fn new(num_bands: usize) -> Self {
-        Self {
-            num_bands,
-            bands: vec![HashMap::with_capacity(32); num_bands], // Estimate 32 entities per band
-            signatures: HashMap::with_capacity(256),            // Estimate 256 total entities
-        }
-    }
-
-    /// Add an entity to the index
-    pub fn add_entity(&mut self, entity_id: String, signature: MinHashSignature) {
-        let hashes_per_band = signature.signature.len() / self.num_bands;
-
-        // Calculate band hashes first
-        let mut band_hashes = Vec::with_capacity(self.num_bands);
-
-        for band_idx in 0..self.num_bands {
-            let start_idx = band_idx * hashes_per_band;
-            let end_idx = (start_idx + hashes_per_band).min(signature.signature.len());
-
-            if start_idx < signature.signature.len() {
-                let band_signature = &signature.signature[start_idx..end_idx];
-                let band_hash = self.hash_band(band_signature);
-                band_hashes.push((band_idx, band_hash));
-            }
-        }
-
-        // Add to each band
-        for (band_idx, band_hash) in band_hashes {
-            self.bands[band_idx]
-                .entry(band_hash)
-                .or_default()
-                .push(entity_id.clone());
-        }
-
-        // Store the signature
-        self.signatures.insert(entity_id, signature);
-    }
-
-    /// Find candidate duplicates for an entity
-    pub fn find_candidates(&self, entity_id: &str) -> Vec<(String, f64)> {
-        let signature = match self.signatures.get(entity_id) {
-            Some(sig) => sig,
-            None => return Vec::new(),
-        };
-
-        let mut candidates = std::collections::HashSet::new();
-        let hashes_per_band = signature.signature.len() / self.num_bands;
-
-        // Find candidates from each band
-        for (band_idx, band) in self.bands.iter().enumerate() {
-            let start_idx = band_idx * hashes_per_band;
-            let end_idx = (start_idx + hashes_per_band).min(signature.signature.len());
-
-            if start_idx < signature.signature.len() {
-                let band_signature = &signature.signature[start_idx..end_idx];
-                let band_hash = self.hash_band(band_signature);
-
-                if let Some(entities) = band.get(&band_hash) {
-                    for candidate_id in entities {
-                        if candidate_id != entity_id {
-                            candidates.insert(candidate_id.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Calculate similarities for candidates
-        let mut results = Vec::with_capacity(candidates.len());
-        for candidate_id in candidates {
-            if let Some(candidate_sig) = self.signatures.get(&candidate_id) {
-                if let Some(similarity) = signature.jaccard_similarity(candidate_sig) {
-                    results.push((candidate_id, similarity));
-                }
-            }
-        }
-
-        // Sort by similarity (highest first)
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        results
-    }
-
-    /// Hash a band signature
-    fn hash_band(&self, band_signature: &[u64]) -> u64 {
-        let mut hasher = AHasher::default();
-        band_signature.hash(&mut hasher);
-        hasher.finish()
-    }
 }
 
 #[cfg(test)]
