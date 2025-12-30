@@ -105,181 +105,85 @@ pub fn issue_definition_for_category(category: &str) -> CodeDefinition {
     }
 }
 
+/// Pattern matching mode for suggestion lookups.
+enum PatternMatch<'a> {
+    StartsWith(&'a str),
+    Contains(&'a str),
+    StartsAndContains(&'a str, &'a str),
+    Exact(&'a str),
+}
+
+/// Entry in the suggestion definition lookup table.
+struct SuggestionEntry {
+    pattern: PatternMatch<'static>,
+    code: &'static str,
+    title: &'static str,
+    summary: &'static str,
+}
+
+impl SuggestionEntry {
+    fn matches(&self, lowered: &str) -> bool {
+        match &self.pattern {
+            PatternMatch::StartsWith(prefix) => lowered.starts_with(prefix),
+            PatternMatch::Contains(substr) => lowered.contains(substr),
+            PatternMatch::StartsAndContains(prefix, substr) => {
+                lowered.starts_with(prefix) && lowered.contains(substr)
+            }
+            PatternMatch::Exact(exact) => lowered == *exact,
+        }
+    }
+}
+
+/// Static lookup table for suggestion definitions.
+const SUGGESTION_ENTRIES: &[SuggestionEntry] = &[
+    SuggestionEntry { pattern: PatternMatch::StartsWith("eliminate_duplication"), code: "DEDUP", title: "Eliminate Duplication", summary: "Consolidate repeated logic to a shared helper before it diverges." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("extract_method"), code: "XTRMTH", title: "Extract Method", summary: "Pull focused helpers from large routines to shrink cognitive load." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("extract_class"), code: "XTRCLS", title: "Extract Class", summary: "Split multi-purpose modules into cohesive components." },
+    SuggestionEntry { pattern: PatternMatch::StartsAndContains("simplify", "conditional"), code: "SIMPCND", title: "Simplify Conditionals", summary: "Flatten or reorganize complex branching to clarify intent." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_cyclomatic_complexity"), code: "RDCYCLEX", title: "Reduce Cyclomatic", summary: "Break apart dense branching to keep cyclomatic complexity in check." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_cognitive_complexity"), code: "RDCOGN", title: "Reduce Cognitive", summary: "Streamline control flow to ease human comprehension." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_fan_in"), code: "RDFANIN", title: "Reduce Fan-In", summary: "Distribute responsibilities so fewer callers funnel through one hotspot." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_fan_out"), code: "RDFANOUT", title: "Reduce Fan-Out", summary: "Contain dependencies so modules rely on fewer collaborators." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_centrality"), code: "RDCNTRL", title: "Reduce Centrality", summary: "Limit chokepoint responsibilities in the dependency graph." },
+    SuggestionEntry { pattern: PatternMatch::StartsWith("reduce_chokepoint"), code: "RDCHOKE", title: "Fix Chokepoint", summary: "Split chokepoint modules so change risk is shared." },
+    SuggestionEntry { pattern: PatternMatch::Contains("nested_branching"), code: "RDNEST", title: "Reduce Nesting", summary: "Flatten nested branching to keep logic approachable." },
+    SuggestionEntry { pattern: PatternMatch::Exact("simplify_logic"), code: "SMPLOGIC", title: "Simplify Logic", summary: "Clarify logic with smaller expressions or well-named helpers." },
+    SuggestionEntry { pattern: PatternMatch::Contains("split_responsibilities"), code: "SPLRESP", title: "Split Responsibilities", summary: "Separate distinct concerns into dedicated units." },
+    SuggestionEntry { pattern: PatternMatch::Contains("move_method"), code: "MOVEMTH", title: "Move Method", summary: "Relocate behavior to the module with the right knowledge." },
+    SuggestionEntry { pattern: PatternMatch::Contains("organize_imports"), code: "ORGIMPT", title: "Organize Imports", summary: "Tidy imports to highlight the dependencies that matter." },
+    SuggestionEntry { pattern: PatternMatch::Contains("introduce_facade"), code: "FACAD", title: "Introduce Facade", summary: "Wrap complex subsystems behind a focused interface." },
+    SuggestionEntry { pattern: PatternMatch::Contains("extract_interface"), code: "XTRIFCE", title: "Extract Interface", summary: "Define interfaces to decouple callers from implementations." },
+    SuggestionEntry { pattern: PatternMatch::Contains("inline_temp"), code: "INLTEMP", title: "Inline Temporary", summary: "Replace temporary variables with direct expressions to reduce clutter." },
+    SuggestionEntry { pattern: PatternMatch::Contains("rename_class"), code: "RENCLSS", title: "Rename Class", summary: "Choose a name that conveys the module's real role." },
+    SuggestionEntry { pattern: PatternMatch::Contains("rename_method"), code: "RENMTHD", title: "Rename Method", summary: "Make intentions clear with well-chosen method names." },
+    SuggestionEntry { pattern: PatternMatch::Contains("extract_variable"), code: "XTRVAR", title: "Extract Variable", summary: "Introduce named variables to document intent and reuse values." },
+    SuggestionEntry { pattern: PatternMatch::Contains("add_comments"), code: "ADDCMNT", title: "Add Comments", summary: "Capture the why behind tricky logic paths." },
+    SuggestionEntry { pattern: PatternMatch::Contains("rename_variable"), code: "RENVAR", title: "Rename Variable", summary: "Rename identifiers so they read like documentation." },
+    SuggestionEntry { pattern: PatternMatch::Contains("replace_magic_number"), code: "REPMAG", title: "Replace Magic Number", summary: "Bind constants to descriptive names to reveal intent." },
+    SuggestionEntry { pattern: PatternMatch::Contains("format_code"), code: "FMTSTYLE", title: "Format Code", summary: "Apply consistent formatting to reduce visual noise." },
+    SuggestionEntry { pattern: PatternMatch::Contains("refactor_code_quality"), code: "REFQLTY", title: "Refactor Code Quality", summary: "Invest in broad cleanups to stabilize quality drift." },
+];
+
 pub fn suggestion_definition_for_kind(kind: &str) -> CodeDefinition {
     let lowered = kind.to_ascii_lowercase();
 
-    let (code, title, summary) = if lowered.starts_with("eliminate_duplication") {
-        (
-            "DEDUP",
-            "Eliminate Duplication",
-            "Consolidate repeated logic to a shared helper before it diverges.",
-        )
-    } else if lowered.starts_with("extract_method") {
-        (
-            "XTRMTH",
-            "Extract Method",
-            "Pull focused helpers from large routines to shrink cognitive load.",
-        )
-    } else if lowered.starts_with("extract_class") {
-        (
-            "XTRCLS",
-            "Extract Class",
-            "Split multi-purpose modules into cohesive components.",
-        )
-    } else if lowered.starts_with("simplify") && lowered.contains("conditional") {
-        (
-            "SIMPCND",
-            "Simplify Conditionals",
-            "Flatten or reorganize complex branching to clarify intent.",
-        )
-    } else if lowered.starts_with("reduce_cyclomatic_complexity") {
-        (
-            "RDCYCLEX",
-            "Reduce Cyclomatic",
-            "Break apart dense branching to keep cyclomatic complexity in check.",
-        )
-    } else if lowered.starts_with("reduce_cognitive_complexity") {
-        (
-            "RDCOGN",
-            "Reduce Cognitive",
-            "Streamline control flow to ease human comprehension.",
-        )
-    } else if lowered.starts_with("reduce_fan_in") {
-        (
-            "RDFANIN",
-            "Reduce Fan-In",
-            "Distribute responsibilities so fewer callers funnel through one hotspot.",
-        )
-    } else if lowered.starts_with("reduce_fan_out") {
-        (
-            "RDFANOUT",
-            "Reduce Fan-Out",
-            "Contain dependencies so modules rely on fewer collaborators.",
-        )
-    } else if lowered.starts_with("reduce_centrality") {
-        (
-            "RDCNTRL",
-            "Reduce Centrality",
-            "Limit chokepoint responsibilities in the dependency graph.",
-        )
-    } else if lowered.starts_with("reduce_chokepoint") {
-        (
-            "RDCHOKE",
-            "Fix Chokepoint",
-            "Split chokepoint modules so change risk is shared.",
-        )
-    } else if lowered.contains("nested_branching") {
-        (
-            "RDNEST",
-            "Reduce Nesting",
-            "Flatten nested branching to keep logic approachable.",
-        )
-    } else if lowered == "simplify_logic" {
-        (
-            "SMPLOGIC",
-            "Simplify Logic",
-            "Clarify logic with smaller expressions or well-named helpers.",
-        )
-    } else if lowered.contains("split_responsibilities") {
-        (
-            "SPLRESP",
-            "Split Responsibilities",
-            "Separate distinct concerns into dedicated units.",
-        )
-    } else if lowered.contains("move_method") {
-        (
-            "MOVEMTH",
-            "Move Method",
-            "Relocate behavior to the module with the right knowledge.",
-        )
-    } else if lowered.contains("organize_imports") {
-        (
-            "ORGIMPT",
-            "Organize Imports",
-            "Tidy imports to highlight the dependencies that matter.",
-        )
-    } else if lowered.contains("introduce_facade") {
-        (
-            "FACAD",
-            "Introduce Facade",
-            "Wrap complex subsystems behind a focused interface.",
-        )
-    } else if lowered.contains("extract_interface") {
-        (
-            "XTRIFCE",
-            "Extract Interface",
-            "Define interfaces to decouple callers from implementations.",
-        )
-    } else if lowered.contains("inline_temp") {
-        (
-            "INLTEMP",
-            "Inline Temporary",
-            "Replace temporary variables with direct expressions to reduce clutter.",
-        )
-    } else if lowered.contains("rename_class") {
-        (
-            "RENCLSS",
-            "Rename Class",
-            "Choose a name that conveys the module's real role.",
-        )
-    } else if lowered.contains("rename_method") {
-        (
-            "RENMTHD",
-            "Rename Method",
-            "Make intentions clear with well-chosen method names.",
-        )
-    } else if lowered.contains("extract_variable") {
-        (
-            "XTRVAR",
-            "Extract Variable",
-            "Introduce named variables to document intent and reuse values.",
-        )
-    } else if lowered.contains("add_comments") {
-        (
-            "ADDCMNT",
-            "Add Comments",
-            "Capture the why behind tricky logic paths.",
-        )
-    } else if lowered.contains("rename_variable") {
-        (
-            "RENVAR",
-            "Rename Variable",
-            "Rename identifiers so they read like documentation.",
-        )
-    } else if lowered.contains("replace_magic_number") {
-        (
-            "REPMAG",
-            "Replace Magic Number",
-            "Bind constants to descriptive names to reveal intent.",
-        )
-    } else if lowered.contains("format_code") {
-        (
-            "FMTSTYLE",
-            "Format Code",
-            "Apply consistent formatting to reduce visual noise.",
-        )
-    } else if lowered.contains("refactor_code_quality") {
-        (
-            "REFQLTY",
-            "Refactor Code Quality",
-            "Invest in broad cleanups to stabilize quality drift.",
-        )
-    } else {
-        let code = sanitize_code(&lowered);
-        let title = format!("Refactor {}", title_case(&lowered.replace('_', " ")));
-        let summary = "General refactoring action suggested by the analyzer.".to_string();
+    // Look up in static table
+    if let Some(entry) = SUGGESTION_ENTRIES.iter().find(|e| e.matches(&lowered)) {
         return CodeDefinition {
-            code,
-            title,
-            summary,
+            code: entry.code.to_string(),
+            title: entry.title.to_string(),
+            summary: entry.summary.to_string(),
             category: Some("refactoring".to_string()),
         };
-    };
+    }
 
+    // Fallback for unknown kinds
+    let code = sanitize_code(&lowered);
+    let title = format!("Refactor {}", title_case(&lowered.replace('_', " ")));
     CodeDefinition {
-        code: code.to_string(),
-        title: title.to_string(),
-        summary: summary.to_string(),
+        code,
+        title,
+        summary: "General refactoring action suggested by the analyzer.".to_string(),
         category: Some("refactoring".to_string()),
     }
 }

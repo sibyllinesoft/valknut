@@ -14,6 +14,7 @@
                 <option value="structure">Structure</option>
                 <option value="docs">Docs</option>
                 <option value="coverage">Coverage</option>
+                <option value="cohesion">Cohesion</option>
             </select>
         </div>
         <div id="treemap-root" style="width: 100%; height: calc(100vh - 128px); min-height: 300px;"></div>
@@ -24,7 +25,8 @@
                 "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
                 "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}},
                 "coverage_packs": {{#if coverage_packs}}{{{json coverage_packs}}}{{else}}[]{{/if}},
-                "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{"issues":{},"suggestions":{}}{{/if}}
+                "code_dictionary": {{#if code_dictionary}}{{{json code_dictionary}}}{{else}}{"issues":{},"suggestions":{}}{{/if}},
+                "cohesion": {{#if cohesion}}{{{json cohesion}}}{{else}}null{{/if}}
             }
         </script>
         <script>
@@ -74,8 +76,48 @@
                     maintainability: 'Maintainability: severity inverted from maintainability index; higher = harder to sustain over time.',
                     structure: 'Structure: severity for structural issues (coupling, cohesion, file/module organization).',
                     docs: 'Docs: severity derived from documentation health (lower health = higher severity).',
-                    coverage: 'Coverage: severity derived from test coverage (lower coverage = higher severity / more red).'
+                    coverage: 'Coverage: severity derived from test coverage (lower coverage = higher severity / more red).',
+                    cohesion: 'Cohesion: semantic cohesion score (lower cohesion = higher severity / more red); measures how focused the code is.'
                 };
+
+                // Build file-level cohesion map from cohesion.file_scores
+                const cohesionData = payload.cohesion || {};
+                const fileCohesionMap = {};
+                if (cohesionData.enabled && cohesionData.file_scores) {
+                    for (const [path, score] of Object.entries(cohesionData.file_scores)) {
+                        const normalizedPath = path.replace(/\\/g, '/');
+                        // Store cohesion (0-1, higher = better), we'll invert to severity
+                        fileCohesionMap[normalizedPath] = score.cohesion;
+                        // Without leading ./
+                        if (normalizedPath.startsWith('./')) {
+                            fileCohesionMap[normalizedPath.slice(2)] = score.cohesion;
+                        } else {
+                            fileCohesionMap['./' + normalizedPath] = score.cohesion;
+                        }
+                        // Also store just filename for fallback
+                        const filename = normalizedPath.split('/').pop();
+                        if (filename && !fileCohesionMap[filename]) {
+                            fileCohesionMap[filename] = score.cohesion;
+                        }
+                    }
+                }
+
+                // Filter out dropdown options for metrics without data
+                if (colorSelect) {
+                    const hasDocData = Object.keys(docHealthMap).length > 0;
+                    const hasCoverageData = coveragePacks.length > 0;
+                    const hasCohesionData = cohesionData.enabled && Object.keys(fileCohesionMap).length > 0;
+
+                    Array.from(colorSelect.options).forEach(option => {
+                        if (option.value === 'docs' && !hasDocData) {
+                            option.remove();
+                        } else if (option.value === 'coverage' && !hasCoverageData) {
+                            option.remove();
+                        } else if (option.value === 'cohesion' && !hasCohesionData) {
+                            option.remove();
+                        }
+                    });
+                }
 
                 function getLinesOfCode(entity) {
                     let loc = entity.lines_of_code || entity.linesOfCode || null;
@@ -136,6 +178,26 @@
                             }
                         }
                         // No coverage data - assume neutral (50% severity)
+                        return 50;
+                    }
+                    if (category === 'cohesion') {
+                        // Look up file-level cohesion
+                        const raw = String(entity.file_path || entity.filePath || '').replace(/\\/g, '/');
+                        const variants = [
+                            raw,
+                            raw.replace(/^[.][/]/, ''),
+                            raw.replace(/^.*?src[/]/, 'src/'),
+                            raw.split('/').slice(-2).join('/'),
+                            raw.split('/').pop() || raw,
+                        ];
+                        for (const v of variants) {
+                            const cohesion = fileCohesionMap[v];
+                            if (typeof cohesion === 'number' && Number.isFinite(cohesion)) {
+                                // Invert: 1.0 (100%) cohesion = 0 severity, 0 cohesion = 100 severity
+                                return Math.max(0, 100 - cohesion * 100);
+                            }
+                        }
+                        // No cohesion data - assume neutral (50% severity)
                         return 50;
                     }
                     for (const issue of issues) {

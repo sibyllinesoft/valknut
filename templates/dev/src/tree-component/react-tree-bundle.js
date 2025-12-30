@@ -41,7 +41,7 @@
       });
   };
 
-  // templates/dev/node_modules/react/cjs/react.development.js
+  // node_modules/react/cjs/react.development.js
   var require_react_development = __commonJS((exports, module) => {
     if (true) {
       (function() {
@@ -1844,14 +1844,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // templates/dev/node_modules/react/index.js
+  // node_modules/react/index.js
   var require_react = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_development();
     }
   });
 
-  // templates/dev/node_modules/scheduler/cjs/scheduler.development.js
+  // node_modules/scheduler/cjs/scheduler.development.js
   var require_scheduler_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -2294,14 +2294,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // templates/dev/node_modules/scheduler/index.js
+  // node_modules/scheduler/index.js
   var require_scheduler = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_scheduler_development();
     }
   });
 
-  // templates/dev/node_modules/react-dom/cjs/react-dom.development.js
+  // node_modules/react-dom/cjs/react-dom.development.js
   var require_react_dom_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -22748,14 +22748,14 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
     }
   });
 
-  // templates/dev/node_modules/react-dom/index.js
+  // node_modules/react-dom/index.js
   var require_react_dom = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_dom_development();
     }
   });
 
-  // templates/dev/node_modules/react-dom/client.js
+  // node_modules/react-dom/client.js
   var require_client = __commonJS((exports) => {
     var m = require_react_dom();
     if (false) {} else {
@@ -22780,7 +22780,7 @@ You might need to use a local HTTP server (instead of file://): ` + "https://rea
     var i;
   });
 
-  // templates/dev/node_modules/react/cjs/react-jsx-runtime.development.js
+  // node_modules/react/cjs/react-jsx-runtime.development.js
   var require_react_jsx_runtime_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -23673,14 +23673,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // templates/dev/node_modules/react/jsx-runtime.js
+  // node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_jsx_runtime_development();
     }
   });
 
-  // templates/dev/node_modules/react/cjs/react-jsx-dev-runtime.development.js
+  // node_modules/react/cjs/react-jsx-dev-runtime.development.js
   var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
     if (true) {
       (function() {
@@ -24561,14 +24561,14 @@ Check the top-level render call using <` + parentName + ">.";
     }
   });
 
-  // templates/dev/node_modules/react/jsx-dev-runtime.js
+  // node_modules/react/jsx-dev-runtime.js
   var require_jsx_dev_runtime = __commonJS((exports, module) => {
     if (false) {} else {
       module.exports = require_react_jsx_dev_runtime_development();
     }
   });
 
-  // templates/dev/src/tree-component/index.js
+  // src/tree-component/index.js
   var exports_tree_component = {};
   __export(exports_tree_component, {
     validateTreeData: () => validateTreeData,
@@ -24583,14 +24583,14 @@ Check the top-level render call using <` + parentName + ">.";
   var import_react8 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
-  // templates/dev/src/tree-component/CodeAnalysisTree.jsx
+  // src/tree-component/CodeAnalysisTree.jsx
   var import_react6 = __toESM(require_react(), 1);
 
-  // templates/dev/node_modules/@tanstack/react-virtual/dist/esm/index.js
+  // node_modules/@tanstack/react-virtual/dist/esm/index.js
   var React = __toESM(require_react(), 1);
   var import_react_dom = __toESM(require_react_dom(), 1);
 
-  // templates/dev/node_modules/@tanstack/virtual-core/dist/esm/utils.js
+  // node_modules/@tanstack/virtual-core/dist/esm/utils.js
   function memo(getDeps, fn, opts) {
     let deps = opts.initialDeps ?? [];
     let result;
@@ -24649,7 +24649,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   };
 
-  // templates/dev/node_modules/@tanstack/virtual-core/dist/esm/index.js
+  // node_modules/@tanstack/virtual-core/dist/esm/index.js
   var getRect = (element) => {
     const { offsetWidth, offsetHeight } = element;
     return { width: offsetWidth, height: offsetHeight };
@@ -25325,7 +25325,7 @@ Check the top-level render call using <` + parentName + ">.";
     return { startIndex, endIndex };
   }
 
-  // templates/dev/node_modules/@tanstack/react-virtual/dist/esm/index.js
+  // node_modules/@tanstack/react-virtual/dist/esm/index.js
   var useIsomorphicLayoutEffect = typeof document !== "undefined" ? React.useLayoutEffect : React.useEffect;
   function useVirtualizerBase(options) {
     const rerender = React.useReducer(() => ({}), {})[1];
@@ -25360,16 +25360,16 @@ Check the top-level render call using <` + parentName + ">.";
     });
   }
 
-  // templates/dev/src/tree-component/TreeNode.jsx
+  // src/tree-component/TreeNode.jsx
   var import_react5 = __toESM(require_react(), 1);
 
-  // templates/dev/src/components/Tooltip.jsx
+  // src/components/Tooltip.jsx
   var import_react3 = __toESM(require_react(), 1);
 
-  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var React4 = __toESM(require_react(), 1);
 
-  // templates/dev/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
   function hasWindow() {
     return typeof window !== "undefined";
   }
@@ -25517,11 +25517,11 @@ Check the top-level render call using <` + parentName + ">.";
     return win.parent && Object.getPrototypeOf(win.parent) ? win.frameElement : null;
   }
 
-  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
   var React2 = __toESM(require_react(), 1);
   var import_react = __toESM(require_react(), 1);
 
-  // templates/dev/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
   var min = Math.min;
   var max = Math.max;
   var round = Math.round;
@@ -25653,7 +25653,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   }
 
-  // templates/dev/node_modules/tabbable/dist/index.esm.js
+  // node_modules/tabbable/dist/index.esm.js
   /*!
   * tabbable 6.2.0
   * @license MIT, https://github.com/focus-trap/tabbable/blob/master/LICENSE
@@ -25947,7 +25947,7 @@ Check the top-level render call using <` + parentName + ">.";
     return sortByOrder(candidates);
   };
 
-  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
+  // node_modules/@floating-ui/react/dist/floating-ui.react.utils.mjs
   function getPlatform() {
     const uaData = navigator.userAgentData;
     if (uaData != null && uaData.platform) {
@@ -26142,11 +26142,11 @@ Check the top-level render call using <` + parentName + ">.";
     });
   }
 
-  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
   var ReactDOM2 = __toESM(require_react_dom(), 1);
 
-  // templates/dev/node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+  // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
   function computeCoordsFromPlacement(_ref, placement, rtl) {
     let {
       reference,
@@ -26649,7 +26649,7 @@ Check the top-level render call using <` + parentName + ">.";
     };
   };
 
-  // templates/dev/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+  // node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
   function getCssDimensions(element) {
     const css = getComputedStyle2(element);
     let width = parseFloat(css.width) || 0;
@@ -27256,7 +27256,7 @@ Check the top-level render call using <` + parentName + ">.";
     });
   };
 
-  // templates/dev/node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
+  // node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
   var React3 = __toESM(require_react(), 1);
   var import_react2 = __toESM(require_react(), 1);
   var ReactDOM = __toESM(require_react_dom(), 1);
@@ -27525,7 +27525,7 @@ Check the top-level render call using <` + parentName + ">.";
     ...arrow$1(options),
     options: [options, deps]
   });
-  // templates/dev/node_modules/@floating-ui/react/dist/floating-ui.react.mjs
+  // node_modules/@floating-ui/react/dist/floating-ui.react.mjs
   var FOCUSABLE_ATTRIBUTE2 = "data-floating-ui-focusable";
   var ACTIVE_KEY = "active";
   var SELECTED_KEY = "selected";
@@ -28955,7 +28955,7 @@ Check the top-level render call using <` + parentName + ">.";
     } : {}, [enabled, reference, floating, item]);
   }
 
-  // templates/dev/src/components/Tooltip.jsx
+  // src/components/Tooltip.jsx
   var jsx_dev_runtime = __toESM(require_jsx_dev_runtime(), 1);
   var Tooltip = ({ children, content, placement: initialPlacement = "bottom", delay = 200 }) => {
     const arrowRef = import_react3.useRef(null);
@@ -29011,7 +29011,7 @@ Check the top-level render call using <` + parentName + ">.";
   };
   var Tooltip_default = Tooltip;
 
-  // templates/dev/src/tree-component/TreeNode.jsx
+  // src/tree-component/TreeNode.jsx
   var renderChevronIcon = () => {
     const pathD = "M9 6l6 6-6 6";
     return import_react5.default.createElement("svg", {
@@ -30071,6 +30071,23 @@ Check the top-level render call using <` + parentName + ">.";
         style: healthStyle,
         title: "Aggregate health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
+      if (typeof data.cohesion === "number") {
+        const cohesionPct = Math.round(data.cohesion * 100);
+        const cohesionStyle = {
+          marginLeft: "0.5rem",
+          display: "inline-flex",
+          alignItems: "center",
+          ...getHealthBadgeStyle(cohesionPct)
+        };
+        const outlierCount = Array.isArray(data.cohesionOutliers) ? data.cohesionOutliers.length : 0;
+        const title = outlierCount > 0 ? `Semantic cohesion: ${cohesionPct}% (${outlierCount} outlier file${outlierCount > 1 ? "s" : ""})` : `Semantic cohesion: ${cohesionPct}% (how semantically aligned files are)`;
+        children.push(import_react5.default.createElement("div", {
+          key: "cohesion-folder",
+          className: "tree-badge cohesion-badge",
+          style: cohesionStyle,
+          title
+        }, `Cohesion: ${cohesionPct}%`));
+      }
     }
     if (isFile) {
       children.push(import_react5.default.createElement("div", {
@@ -30079,6 +30096,23 @@ Check the top-level render call using <` + parentName + ">.";
         style: healthStyle,
         title: "File health score (higher is better)"
       }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
+      if (typeof data.cohesion === "number") {
+        const cohesionPct = Math.round(data.cohesion * 100);
+        const cohesionStyle = {
+          marginLeft: "0.5rem",
+          display: "inline-flex",
+          alignItems: "center",
+          ...getHealthBadgeStyle(cohesionPct)
+        };
+        const outlierCount = Array.isArray(data.cohesionOutliers) ? data.cohesionOutliers.length : 0;
+        const title = outlierCount > 0 ? `Semantic cohesion: ${cohesionPct}% (${outlierCount} outlier entit${outlierCount > 1 ? "ies" : "y"})` : `Semantic cohesion: ${cohesionPct}% (how semantically focused the file is)`;
+        children.push(import_react5.default.createElement("div", {
+          key: "cohesion-file",
+          className: "tree-badge cohesion-badge",
+          style: cohesionStyle,
+          title
+        }, `Cohesion: ${cohesionPct}%`));
+      }
     }
     if (isEntity) {
       children.push(import_react5.default.createElement("div", {
@@ -30122,7 +30156,7 @@ Check the top-level render call using <` + parentName + ">.";
     return tooltipWrapped;
   };
 
-  // templates/dev/src/tree-component/treeUtils.js
+  // src/tree-component/treeUtils.js
   var transformTreeData = (data, parentId = "", codeDictionary = { issues: {}, suggestions: {} }) => {
     if (!Array.isArray(data)) {
       return [];
@@ -30307,7 +30341,7 @@ Check the top-level render call using <` + parentName + ">.";
     return data.map(filterNode).filter(Boolean);
   };
 
-  // templates/dev/src/tree-component/CodeAnalysisTree.jsx
+  // src/tree-component/CodeAnalysisTree.jsx
   var CodeAnalysisTree = ({ data }) => {
     const SHOW_ENTITY_DETAIL_ROWS = false;
     const [treeData, setTreeData] = import_react6.useState([]);
@@ -31247,6 +31281,61 @@ Check the top-level render call using <` + parentName + ">.";
       };
       return nodes.map(annotate).filter(Boolean);
     }, []);
+    const annotateCohesion = import_react6.useCallback((nodes, cohesionData) => {
+      if (!Array.isArray(nodes) || !cohesionData || !cohesionData.enabled) {
+        return nodes;
+      }
+      const fileScores = cohesionData.file_scores || cohesionData.fileScores || {};
+      const folderScores = cohesionData.folder_scores || cohesionData.folderScores || {};
+      const lookupCohesion = (filePath, type) => {
+        if (!filePath)
+          return null;
+        const scores = type === "folder" ? folderScores : fileScores;
+        const normalizedPath = normalizePath(filePath).replace(/^\.\//, "");
+        for (const [key, score] of Object.entries(scores)) {
+          const normalizedKey = normalizePath(key);
+          if (normalizedKey === normalizedPath) {
+            return score;
+          }
+          if (normalizedKey.endsWith("/" + normalizedPath)) {
+            return score;
+          }
+          const keyParts = normalizedKey.split("/");
+          for (let i = 1;i <= Math.min(keyParts.length, 5); i++) {
+            const keySuffix = keyParts.slice(-i).join("/");
+            if (keySuffix === normalizedPath || normalizedPath.endsWith("/" + keySuffix) || keySuffix.endsWith("/" + normalizedPath)) {
+              return score;
+            }
+          }
+        }
+        return null;
+      };
+      const annotate = (node) => {
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        const clone = { ...node };
+        if (Array.isArray(clone.children)) {
+          clone.children = clone.children.map(annotate).filter(Boolean);
+        }
+        if ((clone.type === "file" || clone.type === "folder") && typeof clone.cohesion !== "number") {
+          let path = clone.filePath || clone.file_path || clone.path || clone.id || clone.name || "";
+          if (path.startsWith("folder-"))
+            path = path.slice(7);
+          if (path.startsWith("file-"))
+            path = path.slice(5);
+          const cohesionScore = lookupCohesion(path, clone.type);
+          if (cohesionScore && typeof cohesionScore.cohesion === "number") {
+            clone.cohesion = cohesionScore.cohesion;
+            if (Array.isArray(cohesionScore.outliers) && cohesionScore.outliers.length > 0) {
+              clone.cohesionOutliers = cohesionScore.outliers;
+            }
+          }
+        }
+        return clone;
+      };
+      return nodes.map(annotate).filter(Boolean);
+    }, [normalizePath]);
     import_react6.useEffect(() => {
       try {
         const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
@@ -31261,8 +31350,9 @@ Check the top-level render call using <` + parentName + ">.";
             const aggregatedNormalized2 = aggregateTreeMetrics(normalized2);
             const docIssuesMap2 = data.documentation?.file_doc_issues || data.documentation?.fileDocIssues || {};
             const withDocIssues = annotateDocIssues(aggregatedNormalized2, docIssuesMap2);
-            const sorted2 = sortNodesByPriority(withDocIssues);
-            console.info("[CodeAnalysisTree] using unifiedHierarchy; nodes:", sorted2.length);
+            const cohesionData2 = data.cohesion || data.passes?.cohesion;
+            const withCohesion2 = annotateCohesion(withDocIssues, cohesionData2);
+            const sorted2 = sortNodesByPriority(withCohesion2);
             setTreeData(sorted2);
             return;
           }
@@ -31311,7 +31401,9 @@ Check the top-level render call using <` + parentName + ">.";
           const annotated = annotateNodesWithDictionary(treeStructure);
           const normalized = normalizeTreeData(annotated);
           const aggregatedNormalized = aggregateTreeMetrics(normalized);
-          const sorted = sortNodesByPriority(aggregatedNormalized);
+          const cohesionData = data.cohesion || data.passes?.cohesion;
+          const withCohesion = annotateCohesion(aggregatedNormalized, cohesionData);
+          const sorted = sortNodesByPriority(withCohesion);
           setTreeData(sorted);
         } else {
           setTreeData([]);
@@ -31326,6 +31418,7 @@ Check the top-level render call using <` + parentName + ">.";
       normalizeTreeData,
       annotateNodesWithDictionary,
       annotateDocIssues,
+      annotateCohesion,
       sortNodesByPriority,
       aggregateTreeMetrics,
       groupCandidatesByFile,
@@ -31490,7 +31583,7 @@ Check the top-level render call using <` + parentName + ">.";
     }))));
   };
 
-  // templates/dev/src/tree-component/ClonePairsPanel.jsx
+  // src/tree-component/ClonePairsPanel.jsx
   var import_react7 = __toESM(require_react(), 1);
   var jsx_dev_runtime2 = __toESM(require_jsx_dev_runtime(), 1);
   var chunk = (items, size4) => {
@@ -31702,7 +31795,7 @@ Check the top-level render call using <` + parentName + ">.";
     }, undefined, false, undefined, this);
   };
 
-  // templates/dev/src/tree-component/index.js
+  // src/tree-component/index.js
   var tree_component_default = CodeAnalysisTree;
   if (typeof window !== "undefined") {
     if (typeof window.ReactTreeBundle === "function") {
@@ -31755,5 +31848,5 @@ Check the top-level render call using <` + parentName + ">.";
   }
 })();
 
-//# debugId=70460ADF517F7C2664756E2164756E21
+//# debugId=6EDBCEBDF7B2282A64756E2164756E21
 //# sourceMappingURL=react-tree-bundle.js.map

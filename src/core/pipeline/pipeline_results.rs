@@ -9,6 +9,7 @@ use super::pipeline_config::AnalysisConfig;
 use super::result_types::AnalysisSummary;
 use crate::core::featureset::FeatureVector;
 use crate::core::scoring::ScoringResult;
+use crate::detectors::cohesion::CohesionAnalysisResults;
 use crate::detectors::complexity::ComplexityAnalysisResult;
 use crate::detectors::refactoring::RefactoringAnalysisResult;
 
@@ -40,6 +41,9 @@ pub struct ComprehensiveAnalysisResult {
     /// Documentation analysis results
     #[serde(default)]
     pub documentation: DocumentationAnalysisResults,
+    /// Semantic cohesion analysis results
+    #[serde(default)]
+    pub cohesion: CohesionAnalysisResults,
     /// Overall health metrics
     pub health_metrics: HealthMetrics,
 }
@@ -143,7 +147,7 @@ pub struct CloneVerificationResults {
 }
 
 /// TF-IDF statistics for denoise mode
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TfIdfStats {
     /// Total k-grams processed
     pub total_grams: usize,
@@ -151,6 +155,38 @@ pub struct TfIdfStats {
     pub unique_grams: usize,
     /// Top 1% contribution percentage
     pub top1pct_contribution: f64,
+}
+
+impl LshAnalysisResults {
+    /// Create results for when LSH is disabled
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            clone_pairs: Vec::new(),
+            max_similarity: 0.0,
+            avg_similarity: 0.0,
+            duplicate_count: 0,
+            apted_verification_enabled: false,
+            verification: None,
+            denoising_enabled: false,
+            tfidf_stats: None,
+        }
+    }
+
+    /// Create empty results with specific settings
+    pub fn empty_with_settings(verify_with_apted: bool, denoise_enabled: bool) -> Self {
+        Self {
+            enabled: true,
+            clone_pairs: Vec::new(),
+            max_similarity: 0.0,
+            avg_similarity: 0.0,
+            duplicate_count: 0,
+            apted_verification_enabled: verify_with_apted,
+            verification: None,
+            denoising_enabled: denoise_enabled,
+            tfidf_stats: None,
+        }
+    }
 }
 
 /// Coverage analysis results

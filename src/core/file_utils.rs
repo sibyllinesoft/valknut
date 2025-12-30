@@ -195,16 +195,10 @@ impl CoverageFormat {
             .to_lowercase();
 
         if first_kb.contains("<?xml") {
-            if first_kb.contains("coverage") && first_kb.contains("branch-rate") {
-                Ok(Self::Cobertura)
-            } else if first_kb.contains("coverage") {
-                Ok(Self::CoveragePyXml)
-            } else if first_kb.contains("report") && first_kb.contains("package") {
-                Ok(Self::JaCoCo)
-            } else {
-                Ok(Self::Unknown)
-            }
-        } else if first_kb.starts_with("tn:")
+            return Ok(Self::detect_xml_format(&first_kb));
+        }
+
+        if first_kb.starts_with("tn:")
             || first_kb.contains("\ntn:")
             || first_kb.starts_with("sf:")
             || first_kb.contains("\nsf:")
@@ -241,6 +235,19 @@ impl CoverageFormat {
 
         // Default to Istanbul for other JSON files
         Ok(Self::IstanbulJson)
+    }
+
+    /// Detect XML coverage format from content prefix.
+    fn detect_xml_format(first_kb: &str) -> Self {
+        if first_kb.contains("coverage") && first_kb.contains("branch-rate") {
+            Self::Cobertura
+        } else if first_kb.contains("coverage") {
+            Self::CoveragePyXml
+        } else if first_kb.contains("report") && first_kb.contains("package") {
+            Self::JaCoCo
+        } else {
+            Self::Unknown
+        }
     }
 }
 
@@ -343,47 +350,47 @@ impl CoverageDiscovery {
     ) -> Result<Vec<CoverageFile>> {
         let mut files = Vec::new();
 
-        // Handle glob patterns
         if pattern.contains("*") {
             // Use glob matching with multiple strategies
             let glob_patterns = Self::expand_glob_pattern(search_path, pattern);
-
             for glob_pattern in glob_patterns {
-                match glob::glob(&glob_pattern) {
-                    Ok(paths) => {
-                        for entry in paths {
-                            if let Ok(path) = entry {
-                                if let Ok(coverage_file) =
-                                    Self::validate_coverage_file_with_age(&path, max_age)
-                                {
-                                    if let Some(file) = coverage_file {
-                                        files.push(file);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Glob pattern failed: {}: {}", glob_pattern, e);
-                    }
-                }
+                Self::collect_glob_matches(&glob_pattern, max_age, &mut files);
             }
         } else {
             // Direct file lookup with intelligent fallbacks
             let candidate_paths = Self::expand_direct_pattern(search_path, pattern);
-
             for file_path in candidate_paths {
-                if let Ok(coverage_file) =
-                    Self::validate_coverage_file_with_age(&file_path, max_age)
-                {
-                    if let Some(file) = coverage_file {
-                        files.push(file);
-                    }
-                }
+                Self::try_add_coverage_file(&file_path, max_age, &mut files);
             }
         }
 
         Ok(files)
+    }
+
+    /// Collect coverage files matching a glob pattern.
+    fn collect_glob_matches(
+        glob_pattern: &str,
+        max_age: Option<Duration>,
+        files: &mut Vec<CoverageFile>,
+    ) {
+        let Ok(paths) = glob::glob(glob_pattern) else {
+            debug!("Glob pattern failed: {}", glob_pattern);
+            return;
+        };
+        for entry in paths.flatten() {
+            Self::try_add_coverage_file(&entry, max_age, files);
+        }
+    }
+
+    /// Try to validate and add a coverage file to the collection.
+    fn try_add_coverage_file(
+        path: &Path,
+        max_age: Option<Duration>,
+        files: &mut Vec<CoverageFile>,
+    ) {
+        if let Ok(Some(file)) = Self::validate_coverage_file_with_age(path, max_age) {
+            files.push(file);
+        }
     }
 
     /// Expand glob pattern into multiple search strategies
@@ -410,28 +417,34 @@ impl CoverageDiscovery {
         patterns
     }
 
+    /// Fallback paths for common coverage file patterns.
+    const COVERAGE_FALLBACKS: &[(&str, &[&str])] = &[
+        ("coverage.xml", &[
+            "coverage/coverage.xml",
+            "target/coverage/coverage.xml",
+            "target/tarpaulin/coverage.xml",
+            "test-results/coverage.xml",
+            "reports/coverage.xml",
+        ]),
+        ("lcov.info", &[
+            "coverage/lcov.info",
+            "coverage-reports/lcov.info",
+            "target/coverage/lcov.info",
+        ]),
+        ("coverage.json", &[
+            "coverage/coverage-final.json",
+            "coverage/coverage.json",
+            "reports/coverage.json",
+        ]),
+    ];
+
     /// Expand direct pattern into intelligent fallback paths
     fn expand_direct_pattern(search_path: &Path, pattern: &str) -> Vec<PathBuf> {
-        let mut paths = Vec::new();
+        let mut paths = vec![search_path.join(pattern)];
 
-        // Primary path
-        paths.push(search_path.join(pattern));
-
-        // Common variations for coverage files
-        if pattern == "coverage.xml" {
-            paths.push(search_path.join("coverage/coverage.xml"));
-            paths.push(search_path.join("target/coverage/coverage.xml"));
-            paths.push(search_path.join("target/tarpaulin/coverage.xml"));
-            paths.push(search_path.join("test-results/coverage.xml"));
-            paths.push(search_path.join("reports/coverage.xml"));
-        } else if pattern == "lcov.info" {
-            paths.push(search_path.join("coverage/lcov.info"));
-            paths.push(search_path.join("coverage-reports/lcov.info"));
-            paths.push(search_path.join("target/coverage/lcov.info"));
-        } else if pattern == "coverage.json" {
-            paths.push(search_path.join("coverage/coverage-final.json"));
-            paths.push(search_path.join("coverage/coverage.json"));
-            paths.push(search_path.join("reports/coverage.json"));
+        // Add fallback paths from lookup table
+        if let Some((_, fallbacks)) = Self::COVERAGE_FALLBACKS.iter().find(|(p, _)| *p == pattern) {
+            paths.extend(fallbacks.iter().map(|f| search_path.join(f)));
         }
 
         paths

@@ -10,367 +10,8 @@ use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::Value;
-
-    #[test]
-    fn test_javascript_adapter_creation() {
-        let adapter = JavaScriptAdapter::new();
-        assert!(
-            adapter.is_ok(),
-            "Should create JavaScript adapter successfully"
-        );
-    }
-
-    #[test]
-    fn test_parse_simple_function() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source = r#"
-function hello() {
-    return "Hello, World!";
-}
-"#;
-        let result = adapter.parse_source(source, "test.js");
-        assert!(result.is_ok(), "Should parse simple function");
-
-        let index = result.unwrap();
-        assert!(
-            index.get_entities_in_file("test.js").len() >= 1,
-            "Should find at least one entity"
-        );
-    }
-
-    #[test]
-    fn test_parse_simple_class() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source = r#"
-class MyClass {
-    constructor() {
-        this.value = 0;
-    }
-    
-    getValue() {
-        return this.value;
-    }
-}
-"#;
-        let result = adapter.parse_source(source, "test.js");
-        assert!(result.is_ok(), "Should parse simple class");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("test.js");
-        assert!(entities.len() >= 1, "Should find at least one entity");
-
-        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
-        assert!(has_class, "Should find a class entity");
-    }
-
-    #[test]
-    fn test_parse_arrow_functions() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source = r#"
-const add = (a, b) => a + b;
-const multiply = (x, y) => {
-    return x * y;
-};
-"#;
-        let result = adapter.parse_source(source, "arrow.js");
-        assert!(result.is_ok(), "Should parse arrow functions");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("arrow.js");
-        // Arrow functions might be detected as variables or functions depending on implementation
-        // entities.len() is unsigned, always >= 0 - should handle arrow functions gracefully
-    }
-
-    #[test]
-    fn test_parse_complex_javascript() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source = r#"
-import { fetch } from 'node-fetch';
-
-class APIClient {
-    constructor(baseURL) {
-        this.baseURL = baseURL;
-    }
-    
-    async get(endpoint) {
-        const response = await fetch(`${this.baseURL}/${endpoint}`);
-        return response.json();
-    }
-}
-
-function createClient(url) {
-    return new APIClient(url);
-}
-
-const defaultClient = createClient('https://api.example.com');
-"#;
-        let result = adapter.parse_source(source, "complex.js");
-        assert!(result.is_ok(), "Should parse complex JavaScript code");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("complex.js");
-        assert!(entities.len() >= 2, "Should find multiple entities");
-    }
-
-    #[test]
-    fn test_empty_javascript_file() {
-        let mut adapter = JavaScriptAdapter::new().unwrap();
-        let source = "// Just a comment\n/* Another comment */";
-        let result = adapter.parse_source(source, "empty.js");
-        assert!(result.is_ok(), "Should handle empty JavaScript file");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("empty.js");
-        assert_eq!(
-            entities.len(),
-            0,
-            "Should find no entities in comment-only file"
-        );
-    }
-
-    #[test]
-    fn test_extract_javascript_metadata_and_fallback_names() {
-        let mut adapter = JavaScriptAdapter::new().expect("adapter");
-        let source = r#"
-async function fetchData(url, { retries = 0 } = {}) {
-    return await doFetch(url, retries);
-}
-
-const iterate = function* iterateItems(items) {
-    for (const item of items) {
-        yield item;
-    }
-};
-
-class Derived extends Base {
-    *items() {
-        yield* Base.items();
-    }
-}
-
-const ANSWER = 42;
-const alias = thisValue;
-const worker = function () { return ANSWER; };
-const arrow = () => alias;
-"#;
-
-        let code_entities = adapter
-            .extract_code_entities(source, "metadata.js")
-            .expect("code entities");
-
-        let fetch_entity = code_entities
-            .iter()
-            .find(|entity| entity.name == "fetchData")
-            .expect("fetchData entity missing");
-        assert_eq!(
-            fetch_entity
-                .properties
-                .get("is_async")
-                .expect("async metadata"),
-            &Value::Bool(true)
-        );
-        assert_eq!(
-            fetch_entity
-                .properties
-                .get("is_generator")
-                .expect("generator metadata"),
-            &Value::Bool(false)
-        );
-        let params: Vec<_> = fetch_entity
-            .properties
-            .get("parameters")
-            .and_then(Value::as_array)
-            .expect("parameters metadata")
-            .iter()
-            .filter_map(|value| value.as_str())
-            .collect();
-        assert!(
-            params.contains(&"url"),
-            "parameters should include url, got {params:?}"
-        );
-
-        let generator_entity = code_entities
-            .iter()
-            .find(|entity| {
-                entity
-                    .properties
-                    .get("is_generator")
-                    .map(|value| value == &Value::Bool(true))
-                    .unwrap_or(false)
-            })
-            .expect("generator entity missing");
-        assert_eq!(generator_entity.name, "items");
-        assert_eq!(
-            generator_entity
-                .properties
-                .get("is_generator")
-                .expect("iterate generator metadata"),
-            &Value::Bool(true)
-        );
-
-        let class_entity = code_entities
-            .iter()
-            .find(|entity| entity.name == "Derived")
-            .expect("class metadata missing");
-        assert_eq!(
-            class_entity.properties.get("extends"),
-            Some(&Value::String("Base".to_string()))
-        );
-
-        assert!(
-            code_entities
-                .iter()
-                .any(|entity| entity.name.starts_with("anonymous_function_")),
-            "expected fallback name for anonymous function",
-        );
-        assert!(
-            code_entities
-                .iter()
-                .any(|entity| entity.entity_type == "Constant" && entity.name == "ANSWER"),
-            "expected constant entity for ANSWER"
-        );
-    }
-
-    #[test]
-    fn test_extract_javascript_import_variants() {
-        let mut adapter = JavaScriptAdapter::new().expect("adapter");
-        let source = r#"
-import defaultExport from "pkg-core";
-import { alpha, beta as betaAlias } from './utils/helpers';
-import { default as DefaultHelper } from "./alt.js";
-import * as analytics from "@org/analytics";
-const tools = require("./tools");
-const dynamic = require(`../dynamic/index.js`);
-"#;
-
-        let imports = adapter.extract_imports(source).expect("imports");
-        let modules: Vec<_> = imports.iter().map(|imp| imp.module.as_str()).collect();
-
-        assert!(
-            modules.contains(&"pkg-core")
-                && modules.contains(&"./utils/helpers")
-                && modules.contains(&"./alt.js")
-                && modules.contains(&"@org/analytics")
-                && modules.contains(&"./tools")
-                && modules.contains(&"../dynamic/index.js"),
-            "expected normalized modules in {modules:?}"
-        );
-
-        let named_values: Vec<_> = imports
-            .iter()
-            .filter(|imp| imp.import_type == "named")
-            .filter_map(|imp| imp.imports.as_ref())
-            .flat_map(|list| list.iter().map(|name| name.trim().to_string()))
-            .collect();
-        assert!(
-            named_values.iter().any(|name| name == "alpha"),
-            "expected alpha in named imports: {named_values:?}"
-        );
-        assert!(
-            named_values.iter().any(|name| name.contains("beta")),
-            "expected beta alias in named imports: {named_values:?}"
-        );
-        assert!(
-            named_values.iter().any(|name| name == "DefaultHelper"),
-            "expected default-as normalization in named imports: {named_values:?}"
-        );
-
-        assert!(
-            imports.iter().any(|imp| imp.import_type == "default"),
-            "expected default import variant"
-        );
-        assert!(
-            imports.iter().any(|imp| imp.import_type == "star"),
-            "expected namespace import variant"
-        );
-        assert!(
-            imports.iter().any(|imp| imp.import_type == "require"),
-            "expected require variant"
-        );
-    }
-
-    #[test]
-    fn test_javascript_identifiers_and_calls() {
-        let mut adapter = JavaScriptAdapter::new().expect("adapter");
-        let source = r#"
-export function outer(value) {
-    function inner() { return value?.toString(); }
-    return [Promise.resolve(value), inner()].map(item => item);
-}
-
-outer(42);
-"#;
-
-        let calls = adapter
-            .extract_function_calls(source)
-            .expect("function calls");
-        assert!(calls.iter().any(|call| call.contains("outer")));
-        assert!(calls.iter().any(|call| call.contains("Promise.resolve")));
-
-        let identifiers = adapter.extract_identifiers(source).expect("identifiers");
-        assert!(identifiers.contains(&"outer".to_string()));
-        assert!(identifiers.contains(&"inner".to_string()));
-
-        let normalized = adapter.normalize_source(source).expect("normalize");
-        assert!(
-            normalized.starts_with("(program"),
-            "expected S-expression for normalized source"
-        );
-
-        let patterns = adapter
-            .contains_boilerplate_patterns(
-                source,
-                &[
-                    "Promise.resolve".to_string(),
-                    "nonexistent-pattern".to_string(),
-                ],
-            )
-            .expect("patterns");
-        assert_eq!(patterns, vec!["Promise.resolve".to_string()]);
-
-        let ast_nodes = adapter.count_ast_nodes(source).expect("ast nodes");
-        let distinct_blocks = adapter
-            .count_distinct_blocks(source)
-            .expect("distinct blocks");
-        assert!(ast_nodes > 0);
-        assert!(distinct_blocks > 0);
-    }
-
-    #[test]
-    fn test_detects_constants_and_variables() {
-        let mut adapter = JavaScriptAdapter::new().expect("adapter");
-        let source = r#"
-const ANSWER = 42;
-let counter = 0;
-var legacy = counter + ANSWER;
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source, "vars.js")
-            .expect("entities extracted");
-
-        let answer = entities
-            .iter()
-            .find(|entity| entity.name == "ANSWER")
-            .expect("missing ANSWER constant");
-        assert_eq!(answer.entity_type, "Constant");
-
-        let counter = entities
-            .iter()
-            .find(|entity| entity.name == "counter")
-            .expect("missing counter variable");
-        assert_eq!(counter.entity_type, "Variable");
-
-        let legacy = entities
-            .iter()
-            .find(|entity| entity.name == "legacy")
-            .expect("missing legacy var");
-        assert_eq!(legacy.entity_type, "Variable");
-    }
-}
+#[path = "javascript_tests.rs"]
+mod tests;
 
 /// JavaScript-specific parsing and analysis
 pub struct JavaScriptAdapter {
@@ -474,35 +115,52 @@ impl JavaScriptAdapter {
         )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-
-            // Process child nodes with this entity as parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    Some(entity_id.clone()),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
         } else {
-            // Process child nodes with current parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    parent_id.clone(),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
         }
-
         Ok(())
+    }
+
+    /// Traverse and process all child nodes recursively.
+    fn traverse_children(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_entities_recursive(
+                child,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                index,
+                entity_id_counter,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Determine entity kind from node kind, returning None for non-entity nodes.
+    fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
+        Ok(match node.kind() {
+            "function_declaration" | "function_expression" | "arrow_function" => Some(EntityKind::Function),
+            "method_definition" => Some(EntityKind::Method),
+            "class_declaration" => Some(EntityKind::Class),
+            "variable_declaration" | "lexical_declaration" => {
+                Some(if self.is_const_declaration(node, source_code)? {
+                    EntityKind::Constant
+                } else {
+                    EntityKind::Variable
+                })
+            }
+            _ => None,
+        })
     }
 
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
@@ -514,42 +172,13 @@ impl JavaScriptAdapter {
         parent_id: Option<String>,
         entity_id_counter: &mut usize,
     ) -> Result<Option<ParsedEntity>> {
-        let entity_kind = match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => {
-                EntityKind::Function
-            }
-            "method_definition" => EntityKind::Method,
-            "class_declaration" => EntityKind::Class,
-            "variable_declaration" => {
-                // Check if it's a const declaration (constant)
-                if self.is_const_declaration(&node, source_code)? {
-                    EntityKind::Constant
-                } else {
-                    EntityKind::Variable
-                }
-            }
-            "lexical_declaration" => {
-                // let/const declarations
-                if self.is_const_declaration(&node, source_code)? {
-                    EntityKind::Constant
-                } else {
-                    EntityKind::Variable
-                }
-            }
-            _ => return Ok(None),
+        let entity_kind = match self.determine_entity_kind(&node, source_code)? {
+            Some(kind) => kind,
+            None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?.unwrap_or_else(|| {
-            // Provide fallback names for entities without extractable names
-            match entity_kind {
-                EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
-                EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
-                EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
-                EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
-                EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
-                _ => format!("anonymous_entity_{}", *entity_id_counter),
-            }
-        });
+        let name = self.extract_name(&node, source_code)?
+            .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -598,65 +227,40 @@ impl JavaScriptAdapter {
         Ok(Some(entity))
     }
 
+    /// Find the first child matching any of the given kinds and return its text.
+    fn find_child_text(node: &Node, source_code: &str, kinds: &[&str]) -> Result<Option<String>> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if kinds.contains(&child.kind()) {
+                return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+            }
+        }
+        Ok(None)
+    }
+
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
-        let mut cursor = node.walk();
-
         match node.kind() {
-            "function_declaration" | "class_declaration" => {
-                // Look for the identifier child
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
+            "function_declaration" | "class_declaration" | "function_expression" | "arrow_function" => {
+                Self::find_child_text(node, source_code, &["identifier"])
             }
             "method_definition" => {
-                // Look for property_identifier or identifier
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "property_identifier" || child.kind() == "identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
-            }
-            "function_expression" | "arrow_function" => {
-                // For function expressions, try to find if they have a name
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
-                // Return None for truly anonymous functions, will get fallback name
-                return Ok(None);
+                Self::find_child_text(node, source_code, &["property_identifier", "identifier"])
             }
             "variable_declaration" | "lexical_declaration" => {
                 // Look for variable_declarator and then identifier
+                let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.kind() == "variable_declarator" {
-                        let mut declarator_cursor = child.walk();
-                        for declarator_child in child.children(&mut declarator_cursor) {
-                            if declarator_child.kind() == "identifier" {
-                                return Ok(Some(
-                                    declarator_child
-                                        .utf8_text(source_code.as_bytes())?
-                                        .to_string(),
-                                ));
-                            }
+                        if let Some(name) = Self::find_child_text(&child, source_code, &["identifier"])? {
+                            return Ok(Some(name));
                         }
                     }
                 }
+                Ok(None)
             }
-            _ => {
-                // For any other node type, try to find an identifier child
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "identifier" || child.kind() == "property_identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
-            }
+            _ => Self::find_child_text(node, source_code, &["identifier", "property_identifier"]),
         }
-
-        Ok(None)
     }
 
     /// Check if a declaration is a const declaration

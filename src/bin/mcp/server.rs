@@ -232,46 +232,42 @@ impl McpServer {
         let stdin = tokio::io::stdin();
         let mut reader = AsyncBufReader::new(stdin);
         let mut stdout = tokio::io::stdout();
-
         let mut line = String::new();
 
         loop {
             line.clear();
 
-            // Read a line from stdin
-            match reader.read_line(&mut line).await {
+            let response = match reader.read_line(&mut line).await {
                 Ok(0) => {
-                    // EOF reached, exit gracefully
                     debug!("EOF reached, shutting down MCP server");
                     break;
                 }
-                Ok(_) => {
-                    // Process the JSON-RPC request
-                    let response = self.handle_request(&line).await;
-
-                    // Write response to stdout
-                    let response_json = serde_json::to_string(&response)?;
-                    stdout.write_all(response_json.as_bytes()).await?;
-                    stdout.write_all(b"\n").await?;
-                    stdout.flush().await?;
-                }
+                Ok(_) => self.handle_request(&line).await,
                 Err(e) => {
                     error!("Error reading from stdin: {}", e);
-                    // Send error response and continue
-                    let error_response = JsonRpcResponse::error(
+                    JsonRpcResponse::error(
                         None,
                         error_codes::INTERNAL_ERROR,
                         format!("Failed to read request: {}", e),
-                    );
-                    let response_json = serde_json::to_string(&error_response)?;
-                    stdout.write_all(response_json.as_bytes()).await?;
-                    stdout.write_all(b"\n").await?;
-                    stdout.flush().await?;
+                    )
                 }
-            }
+            };
+
+            Self::write_response(&mut stdout, &response).await?;
         }
 
         info!("MCP server shutdown complete");
+        Ok(())
+    }
+
+    async fn write_response(
+        stdout: &mut tokio::io::Stdout,
+        response: &JsonRpcResponse,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let response_json = serde_json::to_string(response)?;
+        stdout.write_all(response_json.as_bytes()).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
         Ok(())
     }
 
@@ -378,15 +374,12 @@ impl McpServer {
         id: Option<serde_json::Value>,
         params: Option<serde_json::Value>,
     ) -> JsonRpcResponse {
-        let params = match params {
-            Some(p) => p,
-            None => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    "Missing parameters".to_string(),
-                );
-            }
+        let Some(params) = params else {
+            return JsonRpcResponse::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                "Missing parameters".to_string(),
+            );
         };
 
         let tool_params: ToolCallParams = match serde_json::from_value(params) {
@@ -400,88 +393,24 @@ impl McpServer {
             }
         };
 
-        // Execute the requested tool
-        let result = match tool_params.name.as_str() {
-            "analyze_code" => {
-                let params: AnalyzeCodeParams = match serde_json::from_value(tool_params.arguments)
-                {
-                    Ok(p) => p,
-                    Err(e) => {
-                        return JsonRpcResponse::error(
-                            id,
-                            error_codes::INVALID_PARAMS,
-                            format!("Invalid analyze_code parameters: {}", e),
-                        );
-                    }
-                };
-
-                match self.execute_analyze_code_cached(params).await {
-                    Ok(result) => result,
-                    Err((code, message)) => {
-                        return JsonRpcResponse::error(id, code, message);
-                    }
-                }
-            }
-            "get_refactoring_suggestions" => {
-                let params: RefactoringSuggestionsParams =
-                    match serde_json::from_value(tool_params.arguments) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            return JsonRpcResponse::error(
-                                id,
-                                error_codes::INVALID_PARAMS,
-                                format!("Invalid get_refactoring_suggestions parameters: {}", e),
-                            );
-                        }
-                    };
-
-                match execute_refactoring_suggestions(params).await {
-                    Ok(result) => result,
-                    Err((code, message)) => {
-                        return JsonRpcResponse::error(id, code, message);
-                    }
-                }
-            }
-            "validate_quality_gates" => {
-                let params: ValidateQualityGatesParams =
-                    match serde_json::from_value(tool_params.arguments) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            return JsonRpcResponse::error(
-                                id,
-                                error_codes::INVALID_PARAMS,
-                                format!("Invalid validate_quality_gates parameters: {}", e),
-                            );
-                        }
-                    };
-
-                match execute_validate_quality_gates(params).await {
-                    Ok(result) => result,
-                    Err((code, message)) => {
-                        return JsonRpcResponse::error(id, code, message);
-                    }
-                }
-            }
-            "analyze_file_quality" => {
-                let params: AnalyzeFileQualityParams =
-                    match serde_json::from_value(tool_params.arguments) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            return JsonRpcResponse::error(
-                                id,
-                                error_codes::INVALID_PARAMS,
-                                format!("Invalid analyze_file_quality parameters: {}", e),
-                            );
-                        }
-                    };
-
-                match execute_analyze_file_quality(params).await {
-                    Ok(result) => result,
-                    Err((code, message)) => {
-                        return JsonRpcResponse::error(id, code, message);
-                    }
-                }
-            }
+        // Parse and execute the requested tool
+        let tool_result: Result<ToolResult, (i32, String)> = match tool_params.name.as_str() {
+            "analyze_code" => match serde_json::from_value::<AnalyzeCodeParams>(tool_params.arguments) {
+                Ok(p) => self.execute_analyze_code_cached(p).await,
+                Err(e) => Err((error_codes::INVALID_PARAMS, format!("Invalid analyze_code parameters: {}", e))),
+            },
+            "get_refactoring_suggestions" => match serde_json::from_value::<RefactoringSuggestionsParams>(tool_params.arguments) {
+                Ok(p) => execute_refactoring_suggestions(p).await,
+                Err(e) => Err((error_codes::INVALID_PARAMS, format!("Invalid get_refactoring_suggestions parameters: {}", e))),
+            },
+            "validate_quality_gates" => match serde_json::from_value::<ValidateQualityGatesParams>(tool_params.arguments) {
+                Ok(p) => execute_validate_quality_gates(p).await,
+                Err(e) => Err((error_codes::INVALID_PARAMS, format!("Invalid validate_quality_gates parameters: {}", e))),
+            },
+            "analyze_file_quality" => match serde_json::from_value::<AnalyzeFileQualityParams>(tool_params.arguments) {
+                Ok(p) => execute_analyze_file_quality(p).await,
+                Err(e) => Err((error_codes::INVALID_PARAMS, format!("Invalid analyze_file_quality parameters: {}", e))),
+            },
             _ => {
                 return JsonRpcResponse::error(
                     id,
@@ -491,7 +420,10 @@ impl McpServer {
             }
         };
 
-        JsonRpcResponse::success(id, serde_json::to_value(result).unwrap())
+        match tool_result {
+            Ok(result) => JsonRpcResponse::success(id, serde_json::to_value(result).unwrap()),
+            Err((code, message)) => JsonRpcResponse::error(id, code, message),
+        }
     }
 }
 

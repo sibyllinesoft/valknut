@@ -258,6 +258,11 @@ fn merge_stage_results(
         } else {
             current.lsh
         },
+        cohesion: if incoming.cohesion.enabled {
+            incoming.cohesion
+        } else {
+            current.cohesion
+        },
     }
 }
 

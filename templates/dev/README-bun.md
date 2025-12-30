@@ -197,6 +197,50 @@ bun run dev --watch         # Start development with auto-rebuild
 open dist/test.html         # Validate bundle in browser
 ```
 
+## Dev Server Architecture
+
+The dev server (`npm run dev` or `bun run dev`) uses a specific file structure:
+
+```
+templates/dev/
+├── public/                    # Served by webpack-dev-server
+│   └── report-dev.html       # <-- Dev server serves THIS file
+├── data/
+│   ├── analysis.json         # Input data (single source of truth)
+│   └── tree-data.json        # Extracted tree data
+├── scripts/
+│   ├── dev-server.cjs        # Main dev server script
+│   └── render-report.cjs     # Generates report from templates + data
+└── report-dev.html           # NOT used by dev server (for file:// access only)
+```
+
+### Important: Updating the Dev Server Report
+
+**The dev server serves `public/report-dev.html`, NOT `templates/dev/report-dev.html`.**
+
+To update what the dev server shows:
+
+```bash
+# Option 1: Copy a generated report directly to public/
+cp docs/report_YYYYMMDD_HHMMSS.html templates/dev/public/report-dev.html
+
+# Option 2: Let the dev server regenerate from updated analysis data
+cp .valknut/analysis-results.json templates/dev/data/analysis.json
+# The dev server will auto-detect the change and regenerate
+```
+
+### How the Dev Server Works
+
+1. Watches `.valknut/` for new analysis JSON files
+2. Copies latest JSON to `data/analysis.json`
+3. Runs `render-report.cjs` to generate HTML using Handlebars templates
+4. Outputs to `public/report-dev.html`
+5. Webpack-dev-server serves from `public/`
+
+### Common Gotcha
+
+If you copy a report to `templates/dev/report-dev.html` (without `public/`), it won't appear in the dev server. The file at that location is only used when opening via `file://` protocol directly.
+
 ## Bundle Analysis
 
 The Bun build script provides detailed bundle information:

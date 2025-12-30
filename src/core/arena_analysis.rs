@@ -200,6 +200,8 @@ impl ArenaFileAnalyzer {
             .map(|interned_entity| interned_entity.to_code_entity())
             .collect();
 
+        let loc = count_lines_of_code(source_code);
+
         let analysis_result = ArenaAnalysisResult {
             entity_count: workspace.entities.len(),
             file_path: intern(&file_path_str),
@@ -211,6 +213,8 @@ impl ArenaFileAnalyzer {
                 arena.allocated_bytes(),
             ),
             entities: regular_entities,
+            lines_of_code: loc,
+            source_code: source_code.to_string(),
         };
 
         Ok(analysis_result)
@@ -308,6 +312,10 @@ pub struct ArenaAnalysisResult {
     pub memory_efficiency_score: f64,
     /// Extracted entities (converted from interned to regular entities)
     pub entities: Vec<crate::core::featureset::CodeEntity>,
+    /// Lines of code (non-blank, non-comment lines)
+    pub lines_of_code: usize,
+    /// Source code content (for downstream stages to avoid re-reading)
+    pub source_code: String,
 }
 
 impl ArenaAnalysisResult {
@@ -338,6 +346,21 @@ fn calculate_memory_efficiency(entity_count: usize, arena_bytes: usize) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Count lines of code (non-blank, non-comment lines)
+fn count_lines_of_code(source: &str) -> usize {
+    source
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty()
+                && !trimmed.starts_with("//")
+                && !trimmed.starts_with('#')
+                && !trimmed.starts_with("/*")
+                && !trimmed.starts_with('*')
+        })
+        .count()
 }
 
 /// Arena-based batch analysis for multiple files
@@ -587,6 +610,8 @@ class TestClass:
             arena_bytes_used: 4096, // 4 KB
             memory_efficiency_score: calculate_memory_efficiency(10, 4096),
             entities: Vec::new(),
+            lines_of_code: 100,
+            source_code: String::new(),
         };
 
         assert_eq!(result.file_path_str(), "sample/file.py");
@@ -610,6 +635,8 @@ class TestClass:
             arena_bytes_used: 2048,
             memory_efficiency_score: calculate_memory_efficiency(5, 2048),
             entities: Vec::new(),
+            lines_of_code: 50,
+            source_code: String::new(),
         };
 
         assert_eq!(result.entities_per_second(), 0.0);
@@ -667,6 +694,8 @@ class TestClass:
             arena_bytes_used: 8192,
             memory_efficiency_score: calculate_memory_efficiency(10, 8192),
             entities: Vec::new(),
+            lines_of_code: 200,
+            source_code: String::new(),
         };
 
         let batch = ArenaBatchResult {

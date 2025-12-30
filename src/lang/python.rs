@@ -17,274 +17,8 @@ use crate::core::interning::{intern, resolve, InternedString};
 use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_python_adapter_creation() {
-        let adapter = PythonAdapter::new();
-        assert!(adapter.is_ok(), "Should create Python adapter successfully");
-    }
-
-    #[test]
-    fn test_parse_simple_function() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-def hello_world():
-    return "Hello, World!"
-"#;
-        let result = adapter.parse_source(source, "test.py");
-        assert!(
-            result.is_ok(),
-            "Should parse simple function: {:?}",
-            result.err()
-        );
-
-        let index = result.unwrap();
-        assert!(
-            index.get_entities_in_file("test.py").len() >= 1,
-            "Should find at least one entity"
-        );
-    }
-
-    #[test]
-    fn test_parse_simple_class() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-class MyClass:
-    def __init__(self):
-        self.value = 0
-    
-    def get_value(self):
-        return self.value
-"#;
-        let result = adapter.parse_source(source, "test.py");
-        assert!(result.is_ok(), "Should parse simple class");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("test.py");
-        assert!(entities.len() >= 1, "Should find at least one entity");
-
-        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
-        assert!(has_class, "Should find a class entity");
-    }
-
-    #[test]
-    fn test_parse_complex_python() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-import os
-import sys
-
-class DataProcessor:
-    """A sample data processor class."""
-    
-    def __init__(self, name: str):
-        self.name = name
-        self.data = []
-    
-    @property
-    def size(self) -> int:
-        return len(self.data)
-    
-    def add_data(self, item):
-        self.data.append(item)
-
-def process_file(filename: str) -> bool:
-    """Process a file and return success status."""
-    try:
-        with open(filename, 'r') as f:
-            content = f.read()
-        return True
-    except FileNotFoundError:
-        return False
-
-if __name__ == "__main__":
-    processor = DataProcessor("test")
-    success = process_file("data.txt")
-"#;
-        let result = adapter.parse_source(source, "complex.py");
-        assert!(result.is_ok(), "Should parse complex Python code");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("complex.py");
-        assert!(entities.len() >= 2, "Should find multiple entities");
-
-        let has_class = entities.iter().any(|e| matches!(e.kind, EntityKind::Class));
-        let has_function = entities
-            .iter()
-            .any(|e| matches!(e.kind, EntityKind::Function));
-        assert!(
-            has_class && has_function,
-            "Should find both class and function entities"
-        );
-    }
-
-    #[test]
-    fn test_extract_entity_name() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = "def test_function(): pass";
-        let tree = adapter.parser.parse(source, None).unwrap();
-        let function_node = tree.root_node().child(0).unwrap(); // Should be function_definition
-
-        let result = adapter.extract_name(&function_node, source);
-        assert!(result.is_ok());
-
-        if let Ok(Some(name)) = result {
-            assert_eq!(name, "test_function");
-        }
-    }
-
-    #[test]
-    fn test_convert_to_code_entity() {
-        let adapter = PythonAdapter::new().unwrap();
-        let entity = ParsedEntity {
-            id: "test-id".to_string(),
-            name: "test_func".to_string(),
-            kind: EntityKind::Function,
-            location: SourceLocation {
-                file_path: "test.py".to_string(),
-                start_line: 1,
-                end_line: 2,
-                start_column: 0,
-                end_column: 10,
-            },
-            parent: None,
-            children: vec![],
-            metadata: HashMap::new(),
-        };
-
-        let source = "def test_func(): pass";
-        let result = adapter.convert_to_code_entity(&entity, source);
-        assert!(result.is_ok(), "Should convert to CodeEntity successfully");
-
-        let code_entity = result.unwrap();
-        assert_eq!(code_entity.name, "test_func");
-        assert_eq!(code_entity.file_path, "test.py");
-    }
-
-    #[test]
-    fn test_get_entities_empty_file() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = "# Just a comment\n";
-        let result = adapter.parse_source(source, "empty.py");
-        assert!(result.is_ok(), "Should handle empty Python file");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("empty.py");
-        assert_eq!(
-            entities.len(),
-            0,
-            "Should find no entities in comment-only file"
-        );
-    }
-
-    #[test]
-    fn test_extract_imports_supports_star_and_named() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-import os
-from typing import List, Dict
-from custom.utils import *
-"#;
-
-        let imports = adapter.extract_imports(source).expect("imports parsed");
-        assert_eq!(imports.len(), 3);
-        assert!(imports.iter().any(|imp| imp.module == "os"));
-        assert!(imports
-            .iter()
-            .any(|imp| imp.module == "typing" && imp.import_type == "named"));
-        assert!(imports
-            .iter()
-            .any(|imp| imp.module == "custom.utils" && imp.import_type == "star"));
-    }
-
-    #[test]
-    fn test_extract_function_calls_and_identifiers() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-import math
-
-def compute(value):
-    print(value)
-    math.sqrt(value)
-    helper(value)
-
-def helper(value):
-    return value * 2
-
-compute(10)
-"#;
-
-        let calls = adapter
-            .extract_function_calls(source)
-            .expect("function calls extracted");
-        assert!(calls.contains(&"print".to_string()));
-        assert!(calls.iter().any(|call| call.contains("math.sqrt")));
-        assert!(calls.contains(&"helper".to_string()));
-
-        let identifiers = adapter
-            .extract_identifiers(source)
-            .expect("identifiers extracted");
-        assert!(identifiers.contains(&"compute".to_string()));
-        assert!(identifiers.contains(&"helper".to_string()));
-    }
-
-    #[test]
-    fn test_contains_boilerplate_patterns_detects_common_cases() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-import os
-from typing import List
-
-def main():
-    pass
-
-if __name__ == "__main__":
-    main()
-"#;
-
-        let patterns = vec![
-            "import os".to_string(),
-            "from typing import".to_string(),
-            "if __name__ == \"__main__\"".to_string(),
-        ];
-        let found = adapter
-            .contains_boilerplate_patterns(source, &patterns)
-            .expect("boilerplate detection");
-
-        assert!(found.contains(&"import os".to_string()));
-        assert!(found.contains(&"from typing import".to_string()));
-        assert!(found.contains(&"if __name__ == \"__main__\"".to_string()));
-    }
-
-    #[test]
-    fn test_normalize_and_count_python_ast_metrics() {
-        let mut adapter = PythonAdapter::new().unwrap();
-        let source = r#"
-def outer(value):
-    if value > 10:
-        return value + 1
-    return value - 1
-"#;
-
-        let normalized = adapter
-            .normalize_source(source)
-            .expect("normalization should succeed");
-        assert!(normalized.contains("function_definition"));
-        assert!(normalized.contains("if_statement"));
-
-        let node_count = adapter
-            .count_ast_nodes(source)
-            .expect("node counting should succeed");
-        assert!(node_count > 0);
-
-        let block_count = adapter
-            .count_distinct_blocks(source)
-            .expect("block counting should succeed");
-        assert!(block_count >= 2);
-    }
-}
+#[path = "python_tests.rs"]
+mod tests;
 
 /// Python-specific parsing and analysis
 pub struct PythonAdapter {
@@ -408,35 +142,55 @@ impl PythonAdapter {
         )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-
-            // Process child nodes with this entity as parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    Some(entity_id.clone()),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
         } else {
-            // Process child nodes with current parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    parent_id.clone(),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
         }
-
         Ok(())
+    }
+
+    /// Traverse and process all child nodes recursively.
+    fn traverse_children(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_entities_recursive(
+                child,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                index,
+                entity_id_counter,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Check if a name represents a constant (all uppercase with underscores).
+    fn is_constant_name(name: &str) -> bool {
+        name.chars().all(|c| c.is_uppercase() || c == '_')
+    }
+
+    /// Determine entity kind from node kind, returning None for non-entity nodes.
+    fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
+        Ok(match node.kind() {
+            "function_definition" => Some(EntityKind::Function),
+            "class_definition" => Some(EntityKind::Class),
+            "module" => None,
+            "assignment" => {
+                self.extract_name(node, source_code)?.map(|name| {
+                    if Self::is_constant_name(&name) { EntityKind::Constant } else { EntityKind::Variable }
+                })
+            }
+            _ => None,
+        })
     }
 
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
@@ -448,40 +202,13 @@ impl PythonAdapter {
         parent_id: Option<String>,
         entity_id_counter: &mut usize,
     ) -> Result<Option<ParsedEntity>> {
-        let entity_kind = match node.kind() {
-            "function_definition" => EntityKind::Function,
-            "class_definition" => EntityKind::Class,
-            "module" => {
-                // Skip root module nodes that don't have meaningful names
-                return Ok(None);
-            }
-            "assignment" => {
-                // Check if it's a constant assignment (all uppercase)
-                if let Some(name) = self.extract_name(&node, source_code)? {
-                    if name.chars().all(|c| c.is_uppercase() || c == '_') {
-                        EntityKind::Constant
-                    } else {
-                        EntityKind::Variable
-                    }
-                } else {
-                    return Ok(None);
-                }
-            }
-            // Method definitions are handled as functions within classes
-            _ => return Ok(None),
+        let entity_kind = match self.determine_entity_kind(&node, source_code)? {
+            Some(kind) => kind,
+            None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?.unwrap_or_else(|| {
-            // Provide fallback names for entities without extractable names
-            match entity_kind {
-                EntityKind::Function => format!("anonymous_function_{}", *entity_id_counter),
-                EntityKind::Method => format!("anonymous_method_{}", *entity_id_counter),
-                EntityKind::Class => format!("anonymous_class_{}", *entity_id_counter),
-                EntityKind::Variable => format!("anonymous_variable_{}", *entity_id_counter),
-                EntityKind::Constant => format!("anonymous_constant_{}", *entity_id_counter),
-                _ => format!("anonymous_entity_{}", *entity_id_counter),
-            }
-        });
+        let name = self.extract_name(&node, source_code)?
+            .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;
         let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
@@ -530,41 +257,68 @@ impl PythonAdapter {
         Ok(Some(entity))
     }
 
+    /// Extract text from a node, trying field name first, then falling back to child search.
+    fn extract_node_text(node: &Node, source_code: &str, field: &str, fallback_kinds: &[&str]) -> Result<Option<String>> {
+        if let Some(name_node) = node.child_by_field_name(field) {
+            return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if fallback_kinds.contains(&child.kind()) {
+                return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+            }
+        }
+        Ok(None)
+    }
+
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
-        let mut cursor = node.walk();
-
         match node.kind() {
             "function_definition" | "class_definition" => {
-                // Look for the identifier child (name field)
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    return Ok(Some(
-                        name_node.utf8_text(source_code.as_bytes())?.to_string(),
-                    ));
-                }
-
-                // Reset cursor for fallback
-                cursor = node.walk();
-
-                // Fallback: Look for the identifier child
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
+                Self::extract_node_text(node, source_code, "name", &["identifier"])
             }
             "assignment" => {
-                // Look for the left-hand side identifier
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "identifier" {
-                        return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-                    }
-                }
+                Self::extract_node_text(node, source_code, "", &["identifier"])
             }
-            _ => {}
+            _ => Ok(None),
         }
+    }
 
-        Ok(None)
+    /// Extract parameter names from a parameters node.
+    fn extract_parameters_from_node<'a>(node: &Node<'a>, source_code: &'a str) -> Result<Vec<&'a str>> {
+        let mut parameters = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                parameters.push(child.utf8_text(source_code.as_bytes())?);
+            }
+        }
+        Ok(parameters)
+    }
+
+    /// Scan function children for parameters, decorators, and return annotation.
+    fn scan_function_children<'a>(
+        node: &Node<'a>,
+        source_code: &'a str,
+    ) -> Result<(Vec<&'a str>, bool, Option<String>)> {
+        let mut parameters = Vec::new();
+        let mut has_decorators = false;
+        let mut return_annotation = None;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "parameters" => {
+                    parameters = Self::extract_parameters_from_node(&child, source_code)?;
+                }
+                "decorator" => has_decorators = true,
+                "type" => {
+                    return_annotation = Some(child.utf8_text(source_code.as_bytes())?.to_string());
+                }
+                _ => {}
+            }
+        }
+        Ok((parameters, has_decorators, return_annotation))
     }
 
     /// Extract function-specific metadata
@@ -574,57 +328,20 @@ impl PythonAdapter {
         source_code: &str,
         metadata: &mut HashMap<String, serde_json::Value>,
     ) -> Result<()> {
-        let mut cursor = node.walk();
-        let mut parameters = Vec::new();
-        let mut has_decorators = false;
-        let mut return_annotation = None;
+        let (parameters, has_decorators, return_annotation) =
+            Self::scan_function_children(node, source_code)?;
+
         let mut function_calls = Vec::new();
-
-        for child in node.children(&mut cursor) {
-            match child.kind() {
-                "parameters" => {
-                    // Extract parameter information
-                    let mut param_cursor = child.walk();
-                    for param_child in child.children(&mut param_cursor) {
-                        if param_child.kind() == "identifier" {
-                            let param_name = param_child.utf8_text(source_code.as_bytes())?;
-                            parameters.push(param_name);
-                        }
-                    }
-                }
-                "decorator" => {
-                    has_decorators = true;
-                }
-                "type" => {
-                    // Return type annotation
-                    return_annotation = Some(child.utf8_text(source_code.as_bytes())?.to_string());
-                }
-                _ => {}
-            }
-        }
-
-        // Collect function calls within this definition for dependency analysis
         self.extract_function_calls_recursive(*node, source_code, &mut function_calls)?;
 
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
-        metadata.insert(
-            "has_decorators".to_string(),
-            serde_json::Value::Bool(has_decorators),
-        );
+        metadata.insert("has_decorators".to_string(), serde_json::Value::Bool(has_decorators));
         if let Some(return_type) = return_annotation {
-            metadata.insert(
-                "return_annotation".to_string(),
-                serde_json::Value::String(return_type),
-            );
+            metadata.insert("return_annotation".to_string(), serde_json::Value::String(return_type));
         }
         metadata.insert(
             "function_calls".to_string(),
-            serde_json::Value::Array(
-                function_calls
-                    .into_iter()
-                    .map(serde_json::Value::String)
-                    .collect(),
-            ),
+            serde_json::Value::Array(function_calls.into_iter().map(serde_json::Value::String).collect()),
         );
 
         Ok(())
@@ -894,6 +611,48 @@ impl PythonAdapter {
         Ok(())
     }
 
+    /// Common modules considered boilerplate imports.
+    const COMMON_MODULES: [&'static str; 5] = ["os", "sys", "json", "logging", "datetime"];
+
+    /// Check for common import statement pattern.
+    fn check_import_pattern(node: &Node, source: &str) -> Option<String> {
+        let name_node = node.child_by_field_name("name")?;
+        let module_name = name_node.utf8_text(source.as_bytes()).ok()?;
+        Self::COMMON_MODULES.contains(&module_name).then(|| format!("import {}", module_name))
+    }
+
+    /// Check for typing import pattern.
+    fn check_from_import_pattern(node: &Node, source: &str) -> Option<String> {
+        let module_node = node.child_by_field_name("module_name")?;
+        let module_name = module_node.utf8_text(source.as_bytes()).ok()?;
+        (module_name == "typing").then(|| "from typing import".to_string())
+    }
+
+    /// Check for if __name__ == "__main__" pattern.
+    fn check_main_guard_pattern(node: &Node, source: &str) -> Option<String> {
+        let condition_node = node.child_by_field_name("condition")?;
+        if condition_node.kind() != "comparison_operator" {
+            return None;
+        }
+        let mut cursor = condition_node.walk();
+        let children: Vec<_> = condition_node.children(&mut cursor).collect();
+        if children.len() < 3 {
+            return None;
+        }
+        let left_text = children[0].utf8_text(source.as_bytes()).ok()?;
+        let right_text = children[2].utf8_text(source.as_bytes()).ok()?;
+        (left_text == "__name__" && right_text.contains("__main__"))
+            .then(|| "if __name__ == \"__main__\"".to_string())
+    }
+
+    /// Check for dunder method definition pattern.
+    fn check_dunder_method_pattern(node: &Node, source: &str) -> Option<String> {
+        let name_node = node.child_by_field_name("name")?;
+        let func_name = name_node.utf8_text(source.as_bytes()).ok()?;
+        (func_name.len() >= 4 && func_name.starts_with("__") && func_name.ends_with("__"))
+            .then(|| func_name.to_string())
+    }
+
     /// Check for boilerplate patterns in AST recursively
     fn check_boilerplate_patterns_recursive(
         &self,
@@ -902,72 +661,17 @@ impl PythonAdapter {
         patterns: &[String],
         found_patterns: &mut Vec<String>,
     ) -> Result<()> {
-        // Check specific Python boilerplate patterns based on AST structure
-        match node.kind() {
-            "import_statement" => {
-                // Check for common imports using AST structure
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(module_name) = name_node.utf8_text(source.as_bytes()) {
-                        let common_modules = ["os", "sys", "json", "logging", "datetime"];
-                        if common_modules.contains(&module_name) {
-                            found_patterns.push(format!("import {}", module_name));
-                        }
-                    }
-                }
-            }
-            "import_from_statement" => {
-                // Check for typing imports and other common patterns
-                if let Some(module_node) = node.child_by_field_name("module_name") {
-                    if let Ok(module_name) = module_node.utf8_text(source.as_bytes()) {
-                        if module_name == "typing" {
-                            found_patterns.push("from typing import".to_string());
-                        }
-                    }
-                }
-            }
-            "if_statement" => {
-                // Check for if __name__ == "__main__" pattern using AST structure
-                if let Some(condition_node) = node.child_by_field_name("condition") {
-                    if condition_node.kind() == "comparison_operator" {
-                        let mut cursor = condition_node.walk();
-                        let children: Vec<_> = condition_node.children(&mut cursor).collect();
-
-                        if children.len() >= 3 {
-                            // Check for __name__ on left side
-                            if let Ok(left_text) = children[0].utf8_text(source.as_bytes()) {
-                                if left_text == "__name__" {
-                                    // Check for "__main__" on right side
-                                    if let Ok(right_text) = children[2].utf8_text(source.as_bytes())
-                                    {
-                                        if right_text.contains("__main__") {
-                                            found_patterns
-                                                .push("if __name__ == \"__main__\"".to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            "function_definition" => {
-                // Check for dunder methods using AST field access
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(func_name) = name_node.utf8_text(source.as_bytes()) {
-                        // Check for dunder methods (double underscore methods)
-                        if func_name.len() >= 4
-                            && func_name.starts_with("__")
-                            && func_name.ends_with("__")
-                        {
-                            found_patterns.push(func_name.to_string());
-                        }
-                    }
-                }
-            }
-            _ => {}
+        let pattern = match node.kind() {
+            "import_statement" => Self::check_import_pattern(&node, source),
+            "import_from_statement" => Self::check_from_import_pattern(&node, source),
+            "if_statement" => Self::check_main_guard_pattern(&node, source),
+            "function_definition" => Self::check_dunder_method_pattern(&node, source),
+            _ => None,
+        };
+        if let Some(p) = pattern {
+            found_patterns.push(p);
         }
 
-        // Process children recursively
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             self.check_boilerplate_patterns_recursive(child, source, patterns, found_patterns)?;

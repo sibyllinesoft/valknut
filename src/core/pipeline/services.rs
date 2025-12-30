@@ -14,6 +14,7 @@ use crate::core::pipeline::pipeline_results::{
     ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
     StructureAnalysisResults,
 };
+use crate::detectors::cohesion::CohesionAnalysisResults;
 use crate::core::pipeline::{QualityGateResult, QualityGateViolation};
 use serde::{Deserialize, Serialize};
 
@@ -114,6 +115,9 @@ pub struct StageResultsBundle {
     pub refactoring: RefactoringAnalysisResults,
     pub impact: ImpactAnalysisResults,
     pub lsh: LshAnalysisResults,
+    /// Semantic cohesion analysis results
+    #[serde(default)]
+    pub cohesion: CohesionAnalysisResults,
 }
 
 impl StageResultsBundle {
@@ -165,6 +169,7 @@ impl StageResultsBundle {
                 denoising_enabled: false,
                 tfidf_stats: None,
             },
+            cohesion: CohesionAnalysisResults::default(),
         }
     }
 }

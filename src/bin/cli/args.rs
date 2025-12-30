@@ -253,11 +253,11 @@ pub struct DocAuditArgs {
     pub root: PathBuf,
 
     /// Require READMEs for directories above this descendant threshold
-    #[arg(long, default_value_t = doc_audit::DEFAULT_COMPLEXITY_THRESHOLD)]
+    #[arg(long, default_value_t = valknut_rs::doc_audit::DEFAULT_COMPLEXITY_THRESHOLD)]
     pub complexity_threshold: usize,
 
     /// Mark README as stale after this many commits touch the directory
-    #[arg(long, default_value_t = doc_audit::DEFAULT_MAX_README_COMMITS)]
+    #[arg(long, default_value_t = valknut_rs::doc_audit::DEFAULT_MAX_README_COMMITS)]
     pub max_readme_commits: usize,
 
     /// Exit with non-zero status when any issues are detected
@@ -327,18 +327,54 @@ pub struct AnalysisControlArgs {
     /// Disable LSH clone detection analysis
     #[arg(long)]
     pub no_lsh: bool,
+
+    /// Enable semantic cohesion analysis (experimental - uses local embeddings)
+    #[arg(long)]
+    pub cohesion: bool,
+}
+
+/// Semantic cohesion analysis configuration
+#[derive(Args)]
+pub struct CohesionArgs {
+    /// Minimum cohesion score threshold (0.0-1.0, default: 0.3)
+    #[arg(long)]
+    pub cohesion_min_score: Option<f64>,
+
+    /// Minimum doc-code alignment threshold (0.0-1.0, default: 0.4)
+    #[arg(long)]
+    pub cohesion_min_doc_alignment: Option<f64>,
+
+    /// Outlier detection percentile (0.0-1.0, default: 0.10)
+    #[arg(long)]
+    pub cohesion_outlier_percentile: Option<f64>,
 }
 
 /// AI-powered analysis features
 #[derive(Args)]
 pub struct AIFeaturesArgs {
-    /// Enable AI refactoring oracle using Gemini 2.5 Pro (requires GEMINI_API_KEY env var)
+    /// Enable AI refactoring oracle using Gemini 3 Flash (requires GEMINI_API_KEY env var)
     #[arg(long)]
     pub oracle: bool,
 
-    /// Maximum tokens to send to refactoring oracle (default: 500000)
+    /// Maximum tokens to send to refactoring oracle (default: 400000)
     #[arg(long)]
     pub oracle_max_tokens: Option<usize>,
+
+    /// Token budget per slice for import-graph partitioning (default: 200000)
+    #[arg(long)]
+    pub oracle_slice_budget: Option<usize>,
+
+    /// Disable oracle slicing (analyze entire codebase as single bundle)
+    #[arg(long)]
+    pub no_oracle_slicing: bool,
+
+    /// Token threshold above which to enable slicing (default: 300000)
+    #[arg(long)]
+    pub oracle_slicing_threshold: Option<usize>,
+
+    /// Dry-run mode for oracle: show slicing plan without calling API
+    #[arg(long)]
+    pub oracle_dry_run: bool,
 }
 
 /// Arguments for the primary `analyze` command
@@ -382,6 +418,9 @@ pub struct AnalyzeArgs {
 
     #[command(flatten)]
     pub analysis_control: AnalysisControlArgs,
+
+    #[command(flatten)]
+    pub cohesion: CohesionArgs,
 
     #[command(flatten)]
     pub ai_features: AIFeaturesArgs,
@@ -429,7 +468,7 @@ pub struct McpManifestArgs {
 
 /// Available output formats for analysis reports
 /// Report serialization options for the `analyze` command.
-#[derive(Clone, ValueEnum)]
+#[derive(Clone, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     /// Line-delimited JSON format
     Jsonl,

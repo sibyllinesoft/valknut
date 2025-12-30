@@ -29,125 +29,155 @@ pub fn discover_files(
     }
 
     let canonical_roots = canonicalize_roots(roots);
+    let filter_context = build_filter_context(pipeline_config, valknut_config)?;
+    let (tracked_files, repo_root) = find_repository(&canonical_roots)?;
 
-    let (include_patterns, mut exclude_patterns, mut ignore_patterns) =
+    let collected = if let Some(tracked) = tracked_files {
+        collect_from_git_tracked(tracked, &canonical_roots, repo_root.as_deref(), &filter_context)
+    } else {
+        collect_from_filesystem_walk(&canonical_roots, &filter_context)
+    };
+
+    log_discovery_results(&collected);
+    Ok(collected)
+}
+
+/// Build the filter context with compiled glob patterns.
+fn build_filter_context(
+    pipeline_config: &PipelineAnalysisConfig,
+    valknut_config: Option<&ValknutConfig>,
+) -> Result<(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64)> {
+    let (include_patterns, mut exclude_patterns, ignore_patterns) =
         gather_patterns(pipeline_config, valknut_config);
     exclude_patterns.push("**/.git/**".to_string());
 
     let include_glob = compile_globset(&include_patterns)?;
     let exclude_glob = compile_globset(&exclude_patterns)?;
     let ignore_glob = compile_globset(&ignore_patterns)?;
-
     let allowed_extensions = allowed_extensions_from(pipeline_config, valknut_config);
 
-    let (tracked_files, repo_root) = find_repository(&canonical_roots)?;
+    Ok((include_glob, exclude_glob, ignore_glob, allowed_extensions, pipeline_config.max_file_size_bytes))
+}
+
+/// Collect files from git-tracked file list.
+fn collect_from_git_tracked(
+    tracked: Vec<PathBuf>,
+    canonical_roots: &[PathBuf],
+    repo_root: Option<&Path>,
+    filter_context: &(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64),
+) -> Vec<PathBuf> {
+    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) = filter_context;
+
+    info!(
+        "Found git repository at '{}'. Using git index for file discovery.",
+        repo_root.map(|p| p.display().to_string()).unwrap_or_else(|| "unknown".to_string())
+    );
+    info!("Discovered {} tracked files from git index", tracked.len());
 
     let mut unique = HashSet::new();
     let mut collected = Vec::new();
 
-    if let Some(tracked) = tracked_files {
-        info!(
-            "Found git repository at '{}'. Using git index for file discovery.",
-            repo_root
-                .as_ref()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| "unknown".to_string())
-        );
-        info!("Discovered {} tracked files from git index", tracked.len());
-        for file in tracked {
-            if !is_within_requested_roots(&canonical_roots, &file) {
-                continue;
-            }
-
-            if should_keep(
-                &file,
-                repo_root
-                    .as_deref()
-                    .unwrap_or_else(|| default_base_for(&file)),
-                include_glob.as_ref(),
-                exclude_glob.as_ref(),
-                ignore_glob.as_ref(),
-                &allowed_extensions,
-                pipeline_config.max_file_size_bytes,
-            ) {
-                if unique.insert(file.clone()) {
-                    collected.push(file);
-                }
-            }
+    for file in tracked {
+        if !is_within_requested_roots(canonical_roots, &file) {
+            continue;
         }
-    } else {
-        warn!("No git repository found for paths: {:?}. Falling back to filesystem walk. This may be slower.", 
-              canonical_roots.iter().map(|p| p.display().to_string()).collect::<Vec<_>>());
-        info!("Using filesystem traversal with ignore rules for file discovery");
-        // Fall back to filesystem walk with ignore rules when git metadata isn't available.
-        for root in &canonical_roots {
-            if root.is_file() {
-                if should_keep(
-                    root,
-                    default_base_for(root),
-                    include_glob.as_ref(),
-                    exclude_glob.as_ref(),
-                    ignore_glob.as_ref(),
-                    &allowed_extensions,
-                    pipeline_config.max_file_size_bytes,
-                ) {
-                    if unique.insert(root.clone()) {
-                        collected.push(root.clone());
-                    }
-                }
-                continue;
-            }
 
-            let walker = WalkBuilder::new(root)
-                .standard_filters(true)
-                .git_ignore(true)
-                .git_global(true)
-                .git_exclude(true)
-                .hidden(false)
-                .build();
-
-            for entry in walker {
-                match entry {
-                    Ok(dir_entry) => {
-                        let path = dir_entry.path();
-                        if !dir_entry
-                            .file_type()
-                            .map(|ft| ft.is_file())
-                            .unwrap_or(false)
-                        {
-                            continue;
-                        }
-
-                        if should_keep(
-                            path,
-                            root,
-                            include_glob.as_ref(),
-                            exclude_glob.as_ref(),
-                            ignore_glob.as_ref(),
-                            &allowed_extensions,
-                            pipeline_config.max_file_size_bytes,
-                        ) {
-                            let path = path.to_path_buf();
-                            if unique.insert(path.clone()) {
-                                collected.push(path);
-                            }
-                        }
-                    }
-                    Err(err) => warn!("Failed to walk directory: {err}"),
-                }
-            }
+        let base = repo_root.unwrap_or_else(|| default_base_for(&file));
+        if should_keep(&file, base, include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, *max_file_size) {
+            add_unique(&mut unique, &mut collected, file);
         }
     }
 
     collected.sort();
-    info!(
-        "File discovery completed: {} files selected for analysis",
-        collected.len()
+    collected
+}
+
+/// Collect files via filesystem walk when git metadata isn't available.
+fn collect_from_filesystem_walk(
+    canonical_roots: &[PathBuf],
+    filter_context: &(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64),
+) -> Vec<PathBuf> {
+    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) = filter_context;
+
+    warn!(
+        "No git repository found for paths: {:?}. Falling back to filesystem walk. This may be slower.",
+        canonical_roots.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
     );
-    if collected.len() > 100 {
-        info!("Large file set detected ({} files). Consider using more specific include/exclude patterns for better performance", collected.len());
+    info!("Using filesystem traversal with ignore rules for file discovery");
+
+    let mut unique = HashSet::new();
+    let mut collected = Vec::new();
+
+    for root in canonical_roots {
+        if root.is_file() {
+            if should_keep(root, default_base_for(root), include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, *max_file_size) {
+                add_unique(&mut unique, &mut collected, root.clone());
+            }
+            continue;
+        }
+
+        walk_directory(root, &mut unique, &mut collected, include_glob, exclude_glob, ignore_glob, allowed_extensions, *max_file_size);
     }
-    Ok(collected)
+
+    collected.sort();
+    collected
+}
+
+/// Walk a directory and collect matching files.
+fn walk_directory(
+    root: &Path,
+    unique: &mut HashSet<PathBuf>,
+    collected: &mut Vec<PathBuf>,
+    include_glob: &Option<GlobSet>,
+    exclude_glob: &Option<GlobSet>,
+    ignore_glob: &Option<GlobSet>,
+    allowed_extensions: &HashSet<String>,
+    max_file_size: u64,
+) {
+    let walker = WalkBuilder::new(root)
+        .standard_filters(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .hidden(false)
+        .build();
+
+    for entry in walker {
+        let Ok(dir_entry) = entry else {
+            if let Err(err) = entry {
+                warn!("Failed to walk directory: {err}");
+            }
+            continue;
+        };
+
+        let is_file = dir_entry.file_type().map(|ft| ft.is_file()).unwrap_or(false);
+        if !is_file {
+            continue;
+        }
+
+        let path = dir_entry.path();
+        if should_keep(path, root, include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, max_file_size) {
+            add_unique(unique, collected, path.to_path_buf());
+        }
+    }
+}
+
+/// Add a path to the collection if not already present.
+fn add_unique(unique: &mut HashSet<PathBuf>, collected: &mut Vec<PathBuf>, path: PathBuf) {
+    if unique.insert(path.clone()) {
+        collected.push(path);
+    }
+}
+
+/// Log discovery completion results.
+fn log_discovery_results(collected: &[PathBuf]) {
+    info!("File discovery completed: {} files selected for analysis", collected.len());
+    if collected.len() > 100 {
+        info!(
+            "Large file set detected ({} files). Consider using more specific include/exclude patterns for better performance",
+            collected.len()
+        );
+    }
 }
 
 fn canonicalize_roots(roots: &[PathBuf]) -> Vec<PathBuf> {

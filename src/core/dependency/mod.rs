@@ -475,73 +475,99 @@ fn select_target<'a>(
     call: &CallIdentifier,
     candidate_keys: &[String],
 ) -> Option<&'a EntityKey> {
-    let mut best: Option<&EntityKey> = None;
-    let mut best_score = i32::MIN;
+    candidates
+        .iter()
+        .filter_map(|&key| {
+            let node = nodes.get(key)?;
+            let score = score_candidate(source, node, call, candidate_keys)?;
+            Some((key, score))
+        })
+        .max_by_key(|(_, score)| *score)
+        .map(|(key, _)| key)
+}
 
-    for &candidate_key in candidates {
-        let Some(candidate_node) = nodes.get(candidate_key) else {
-            continue;
-        };
+/// Calculate match score for a candidate node. Returns None if candidate should be skipped.
+fn score_candidate(
+    source: &FunctionNode,
+    candidate: &FunctionNode,
+    call: &CallIdentifier,
+    candidate_keys: &[String],
+) -> Option<i32> {
+    let is_self_call = candidate.unique_id == source.unique_id;
 
-        let is_self_call = candidate_node.unique_id == source.unique_id;
-
-        if is_self_call
-            && !call
-                .base()
-                .eq_ignore_ascii_case(candidate_node.name.as_str())
-        {
-            continue;
-        }
-
-        let mut score = 0;
-
-        if is_self_call {
-            score += 120;
-        }
-        let candidate_qualified_lower = candidate_node.qualified_name.to_lowercase();
-
-        if !candidate_keys.is_empty() && candidate_qualified_lower == candidate_keys[0] {
-            score += 100;
-        } else if candidate_keys
-            .iter()
-            .any(|candidate| candidate == &candidate_qualified_lower)
-        {
-            score += 75;
-        } else if candidate_node.name.eq_ignore_ascii_case(call.base()) {
-            score += 40;
-        }
-
-        if namespace_matches(call.namespace(), &candidate_node.namespace) {
-            score += 50;
-        }
-
-        if candidate_node.file_path == source.file_path {
-            score += 20;
-        }
-
-        if namespace_equals(&source.namespace, &candidate_node.namespace) {
-            score += 15;
-        } else if namespace_shares_tail(&source.namespace, &candidate_node.namespace) {
-            score += 8;
-        }
-
-        if let (Some(src_line), Some(dst_line)) = (source.start_line, candidate_node.start_line) {
-            let distance = if src_line >= dst_line {
-                src_line - dst_line
-            } else {
-                dst_line - src_line
-            };
-            let capped = distance.min(400);
-            score += 15 - (capped as i32 / 25);
-        }
-
-        if score > best_score {
-            best_score = score;
-            best = Some(candidate_key);
-        }
+    // Skip self-calls that don't match the call name
+    if is_self_call && !call.base().eq_ignore_ascii_case(&candidate.name) {
+        return None;
     }
 
-    best
+    let mut score = 0;
+
+    // Self-call bonus
+    if is_self_call {
+        score += 120;
+    }
+
+    // Qualified name matching
+    score += score_qualified_name_match(candidate, call, candidate_keys);
+
+    // Namespace matching
+    if namespace_matches(call.namespace(), &candidate.namespace) {
+        score += 50;
+    }
+
+    // Same file bonus
+    if candidate.file_path == source.file_path {
+        score += 20;
+    }
+
+    // Namespace proximity
+    score += score_namespace_proximity(source, candidate);
+
+    // Line proximity
+    score += score_line_proximity(source.start_line, candidate.start_line);
+
+    Some(score)
+}
+
+/// Score based on qualified name matching
+fn score_qualified_name_match(
+    candidate: &FunctionNode,
+    call: &CallIdentifier,
+    candidate_keys: &[String],
+) -> i32 {
+    let qualified_lower = candidate.qualified_name.to_lowercase();
+
+    if !candidate_keys.is_empty() && qualified_lower == candidate_keys[0] {
+        100
+    } else if candidate_keys.iter().any(|k| k == &qualified_lower) {
+        75
+    } else if candidate.name.eq_ignore_ascii_case(call.base()) {
+        40
+    } else {
+        0
+    }
+}
+
+/// Score based on namespace proximity between source and candidate
+fn score_namespace_proximity(source: &FunctionNode, candidate: &FunctionNode) -> i32 {
+    if namespace_equals(&source.namespace, &candidate.namespace) {
+        15
+    } else if namespace_shares_tail(&source.namespace, &candidate.namespace) {
+        8
+    } else {
+        0
+    }
+}
+
+/// Score based on line distance between source and candidate
+fn score_line_proximity(src_line: Option<usize>, dst_line: Option<usize>) -> i32 {
+    match (src_line, dst_line) {
+        (Some(src), Some(dst)) => {
+            let distance = src.abs_diff(dst).min(400);
+            15 - (distance as i32 / 25)
+        }
+        _ => 0,
+    }
 }
 
 fn namespace_matches(call_ns: &[String], candidate_ns: &[String]) -> bool {

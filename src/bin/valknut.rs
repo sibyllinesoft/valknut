@@ -19,21 +19,22 @@ async fn main() -> anyhow::Result<()> {
     run_cli(cli).await
 }
 
-async fn run_cli(cli: Cli) -> anyhow::Result<()> {
-    // Initialize tracing/logging
-    let log_level = if cli.verbose {
+/// Initialize tracing/logging based on verbosity setting.
+fn init_logging(verbose: bool) {
+    let log_level = if verbose {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
     };
-
-    let subscriber_builder = tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_max_level(log_level)
-        .with_target(false);
+        .with_target(false)
+        .try_init();
+}
 
-    let _ = subscriber_builder.try_init();
+async fn run_cli(cli: Cli) -> anyhow::Result<()> {
+    init_logging(cli.verbose);
 
-    // Execute command
     match cli.command {
         Commands::Analyze(args) => {
             cli::analyze_command(*args, cli.survey, cli.survey_verbosity, cli.verbose).await?;
@@ -78,6 +79,7 @@ mod tests {
         issue_code_for_category, issue_definition_for_category, suggestion_code_for_kind,
         suggestion_definition_for_kind,
     };
+    use valknut_rs::doc_audit;
 
     #[tokio::test]
     async fn test_cli_parsing_analyze_default() {

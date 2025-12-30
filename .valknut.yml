@@ -13,17 +13,19 @@ analysis:
   confidence_threshold: 0.7
   max_files: 50
   exclude_patterns:
-    - "*/node_modules/*"
-    - "*/venv/*"
-    - "*/target/*"
-    - "*/__pycache__/*"
-    - "*.min.js"
-    - "templates/assets/**"
-    - "templates/dev/assets/**"
-    - "templates/dev/debug_with_unminified_bundle.js"
-    - "templates/dev/public/**"
-    - "templates/dev/src/tree-component/react-tree-bundle.js"
-    - "templates/dev/src/tree-component/test-bundle.js"
+    - "**/node_modules/**"
+    - "**/venv/**"
+    - "**/target/**"
+    - "**/__pycache__/**"
+    - "**/*.min.js"
+    - "datasets/**"
+    - "templates/dev/**"
+    - "templates/partials/**"
+    - "vscode-extension/**"
+    - "benchmarks/**"
+    - "examples/**"
+    - "scripts/**"
+    - "docs/**"
   include_patterns:
     - "**/*"
 
@@ -78,6 +80,10 @@ structure:
     min_branch_recommendation_gain: 0.15
     min_files_for_split: 5
     target_loc_per_subdir: 1000
+    optimal_files: 7
+    optimal_files_stddev: 2.0
+    optimal_subdirs: 3
+    optimal_subdirs_stddev: 1.5
 
   # File analysis settings
   fsfile:
@@ -85,8 +91,10 @@ structure:
     huge_bytes: 128000
     min_split_loc: 200
     min_entities_per_split: 3
+    optimal_ast_nodes: 2000
+    ast_nodes_95th_percentile: 6000
 
-  # Partitioning configuration  
+  # Partitioning configuration
   partitioning:
     balance_tolerance: 0.25
     max_clusters: 4
@@ -96,6 +104,24 @@ structure:
       - api
       - util
       - shared
+
+  # Entity health scoring configuration
+  entity_health:
+    function_size:
+      optimal: 200
+      percentile_95: 800
+      penalty_center: 0.90
+      penalty_steepness: 0.05
+    class_size:
+      optimal: 500
+      percentile_95: 3000
+      penalty_center: 0.90
+      penalty_steepness: 0.05
+    file_size:
+      optimal: 2000
+      percentile_95: 6000
+      penalty_center: 0.90
+      penalty_steepness: 0.05
 
 # Basic naming analysis (simple pattern-based)
 names:

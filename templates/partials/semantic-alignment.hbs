@@ -1,0 +1,121 @@
+<!-- Semantic Alignment - cohesion and doc alignment analysis -->
+{{#if cohesion.enabled}}
+<section class="cohesion-section tab-panel" data-tab="alignment">
+    <div class="tab-heading-row" style="display:none;">
+        <h2 class="tab-heading">Alignment</h2>
+        <p class="tab-subtitle">Semantic cohesion and documentation alignment across the codebase.</p>
+    </div>
+    <div class="tab-body">
+
+    <div class="clone-metric-grid">
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Avg Cohesion</span>
+            <span class="clone-metric-card__value">
+                {{#if cohesion.average_cohesion}}
+                    {{format cohesion.average_cohesion "0.0%"}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Avg Doc Alignment</span>
+            <span class="clone-metric-card__value">
+                {{#if cohesion.average_doc_alignment}}
+                    {{format cohesion.average_doc_alignment "0.0%"}}
+                {{else}}
+                    —
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Issues</span>
+            <span class="clone-metric-card__value">
+                {{#if cohesion.issues_count}}
+                    {{cohesion.issues_count}}
+                {{else}}
+                    0
+                {{/if}}
+            </span>
+        </div>
+        <div class="clone-metric-card" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <span class="clone-metric-card__label">Files Analyzed</span>
+            <span class="clone-metric-card__value">
+                {{#if cohesion.files_analyzed}}
+                    {{cohesion.files_analyzed}}
+                {{else}}
+                    0
+                {{/if}}
+            </span>
+        </div>
+    </div>
+
+    {{#if cohesion.issues}}
+    <div class="cohesion-issues" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); padding-top: 0.75rem;">
+        <h3 style="font-size: 0.9rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">Cohesion Issues</h3>
+        <div class="analysis-tree" style="max-height: 400px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--keyline) transparent;">
+            {{#each cohesion.issues}}
+            <div class="tree-leaf" style="margin-bottom: 0.5rem; border-radius: 8px;">
+                <div class="tree-leaf-header">
+                    <div class="tree-leaf-title">
+                        <span class="issue-code" style="font-family: monospace; color: var(--color-warning);">{{code}}</span>
+                        <span style="margin-left: 0.5rem;">{{path}}</span>
+                        {{#if entity}}
+                        <span style="color: var(--color-text-muted);"> :: {{entity}}</span>
+                        {{/if}}
+                    </div>
+                    <div class="tree-badge tree-badge-{{#if (gt severity 0.7)}}High{{else}}{{#if (gt severity 0.4)}}Medium{{else}}Low{{/if}}{{/if}}">
+                        Severity: {{format severity "0.0%"}}
+                    </div>
+                </div>
+                <div class="tree-leaf-value" style="color: var(--color-text-muted); font-size: 0.85rem;">
+                    {{description}}
+                    {{#if line_range}}
+                    <span style="margin-left: 0.5rem; font-family: monospace;">(lines {{line_range.[0]}}-{{line_range.[1]}})</span>
+                    {{/if}}
+                </div>
+            </div>
+            {{/each}}
+        </div>
+    </div>
+    {{/if}}
+
+    {{#if cohesion.folder_scores}}
+    <div class="folder-cohesion" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.026); padding-top: 0.75rem;">
+        <h3 style="font-size: 0.9rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">Folder Cohesion</h3>
+        <div class="analysis-tree" style="max-height: 300px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--keyline) transparent;">
+            {{#each cohesion.folder_scores}}
+            <div class="tree-leaf" style="margin-bottom: 0.5rem; border-radius: 8px;">
+                <div class="tree-leaf-header">
+                    <div class="tree-leaf-title">
+                        <i data-lucide="folder" style="width: 14px; height: 14px; margin-right: 0.5rem;"></i>
+                        {{@key}}
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <div class="tree-badge" style="background: rgba(255,255,255,0.05);">
+                            {{file_count}} files
+                        </div>
+                        <div class="tree-badge tree-badge-{{#if (gt cohesion 0.8)}}low{{else}}{{#if (gt cohesion 0.6)}}Medium{{else}}High{{/if}}{{/if}}">
+                            Cohesion: {{format cohesion "0.0%"}}
+                        </div>
+                        {{#if doc_alignment}}
+                        <div class="tree-badge" style="background: rgba(100,149,237,0.2); color: #6495ed;">
+                            Doc: {{format doc_alignment "0.0%"}}
+                        </div>
+                        {{/if}}
+                    </div>
+                </div>
+                {{#if outliers}}
+                <div class="tree-leaf-value" style="color: var(--color-text-muted); font-size: 0.85rem;">
+                    Outliers: {{#each outliers}}{{path}}{{#unless @last}}, {{/unless}}{{/each}}
+                </div>
+                {{/if}}
+            </div>
+            {{/each}}
+        </div>
+    </div>
+    {{/if}}
+
+    </div>
+</section>
+{{/if}}

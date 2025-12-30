@@ -65,6 +65,31 @@ pub fn entity_ast_kind(entity: &CodeEntity) -> Option<String> {
         })
 }
 
+/// Check if a node is completely outside the target byte range.
+fn node_disjoint_from_range(node: &Node, start_byte: usize, end_byte: usize) -> bool {
+    node.start_byte() > end_byte || node.end_byte() < start_byte
+}
+
+/// Check if a node fully contains the target byte range.
+fn node_contains_range(node: &Node, start_byte: usize, end_byte: usize) -> bool {
+    start_byte >= node.start_byte() && end_byte <= node.end_byte()
+}
+
+/// Check if a node matches the criteria to become a candidate.
+fn is_candidate_node(node: &Node, target_kind: Option<&str>, start_byte: usize, end_byte: usize) -> bool {
+    let matches_kind = target_kind.map_or(false, |expected| node.kind() == expected);
+    let matches_exact_range = node.start_byte() == start_byte && node.end_byte() == end_byte;
+    matches_kind || matches_exact_range
+}
+
+/// Collect children of a node that overlap with the target range.
+fn overlapping_children<'a>(node: Node<'a>, start_byte: usize, end_byte: usize) -> Vec<Node<'a>> {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .filter(|child| child.end_byte() >= start_byte && child.start_byte() <= end_byte)
+        .collect()
+}
+
 /// Locate the tree-sitter node corresponding to the given entity within the
 /// parsed tree provided by the [`AstContext`].
 ///
@@ -78,25 +103,17 @@ pub fn find_entity_node<'a>(context: &'a AstContext<'a>, entity: &CodeEntity) ->
     let mut candidate = None;
 
     while let Some(node) = stack.pop() {
-        if node.start_byte() > end_byte || node.end_byte() < start_byte {
+        if node_disjoint_from_range(&node, start_byte, end_byte) {
+            continue;
+        }
+        if !node_contains_range(&node, start_byte, end_byte) {
             continue;
         }
 
-        if start_byte >= node.start_byte() && end_byte <= node.end_byte() {
-            let matches_kind = target_kind
-                .as_deref()
-                .map_or(false, |expected| node.kind() == expected);
-            if matches_kind || (node.start_byte() == start_byte && node.end_byte() == end_byte) {
-                candidate = Some(node);
-            }
-
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.end_byte() >= start_byte && child.start_byte() <= end_byte {
-                    stack.push(child);
-                }
-            }
+        if is_candidate_node(&node, target_kind.as_deref(), start_byte, end_byte) {
+            candidate = Some(node);
         }
+        stack.extend(overlapping_children(node, start_byte, end_byte));
     }
 
     candidate

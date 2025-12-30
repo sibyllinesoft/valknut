@@ -1,3 +1,19 @@
+/**
+ * Render Report Script
+ *
+ * Generates HTML reports from Handlebars templates and analysis data.
+ *
+ * INPUT:  data/analysis.json (single source of truth)
+ * OUTPUT: public/report-dev.html <- This is what the dev server serves!
+ *
+ * To update input data:
+ *   cp .valknut/analysis-results.json templates/dev/data/analysis.json
+ *
+ * Note: The output goes to public/, NOT to the root templates/dev/ directory.
+ * The file at templates/dev/report-dev.html is separate and only used for
+ * direct file:// access.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const handlebars = require('handlebars');
@@ -7,11 +23,10 @@ const TEMPLATE_ROOT = path.resolve(__dirname, '../../');
 const PROJECT_ROOT = path.resolve(TEMPLATE_ROOT, '..');
 const PARTIALS_DIR = path.join(TEMPLATE_ROOT, 'partials');
 const ASSETS_DIR = path.join(TEMPLATE_ROOT, 'assets');
-const OUTPUT_DIR = path.join(ROOT_DIR, 'public');
+const OUTPUT_DIR = path.join(ROOT_DIR, 'public');  // Dev server serves from here
 const DATA_DIR = path.join(ROOT_DIR, 'data');
-const ANALYSIS_JSON = path.join(DATA_DIR, 'analysis.json');
-const ANALYSIS_RESULTS_JSON = path.join(DATA_DIR, 'analysis-results.json');
-const OUTPUT_HTML = path.join(OUTPUT_DIR, 'report-dev.html');
+const ANALYSIS_JSON = path.join(DATA_DIR, 'analysis.json');  // Single source of truth
+const OUTPUT_HTML = path.join(OUTPUT_DIR, 'report-dev.html');  // <- Dev server serves this!
 const OUTPUT_DATA_JSON = path.join(OUTPUT_DIR, 'data.json');
 const WEB_ASSETS_DIR = path.join(ASSETS_DIR, 'webpage_files');
 const OUTPUT_WEB_ASSETS_DIR = path.join(OUTPUT_DIR, 'webpage_files');
@@ -722,6 +737,61 @@ function priorityBucket(priority) {
   return 'low';
 }
 
+/**
+ * Inject cohesion scores from cohesion analysis into hierarchy nodes.
+ * Matches nodes by path to cohesion.file_scores and cohesion.folder_scores.
+ */
+function injectCohesionIntoHierarchy(hierarchy, cohesion) {
+  if (!cohesion || !cohesion.enabled) {
+    return hierarchy;
+  }
+
+  const fileScores = cohesion.file_scores || {};
+  const folderScores = cohesion.folder_scores || {};
+
+  // Build lookup maps with normalized paths
+  const fileScoreMap = new Map();
+  for (const [path, score] of Object.entries(fileScores)) {
+    fileScoreMap.set(normalizePath(path), score);
+  }
+  const folderScoreMap = new Map();
+  for (const [path, score] of Object.entries(folderScores)) {
+    folderScoreMap.set(normalizePath(path), score);
+  }
+
+  function injectNode(node) {
+    if (!node) return node;
+
+    const nodePath = normalizePath(node.path || node.file_path || node.filePath || '');
+    let cohesionScore = null;
+    let cohesionOutliers = null;
+
+    if (node.type === 'file' && fileScoreMap.has(nodePath)) {
+      const score = fileScoreMap.get(nodePath);
+      cohesionScore = score.cohesion;
+      cohesionOutliers = score.outliers || [];
+    } else if (node.type === 'folder' && folderScoreMap.has(nodePath)) {
+      const score = folderScoreMap.get(nodePath);
+      cohesionScore = score.cohesion;
+      cohesionOutliers = score.outliers || [];
+    }
+
+    const updatedNode = { ...node };
+    if (cohesionScore !== null) {
+      updatedNode.cohesion = cohesionScore;
+      updatedNode.cohesionOutliers = cohesionOutliers;
+    }
+
+    if (Array.isArray(node.children)) {
+      updatedNode.children = node.children.map(injectNode);
+    }
+
+    return updatedNode;
+  }
+
+  return Array.isArray(hierarchy) ? hierarchy.map(injectNode) : hierarchy;
+}
+
 // Extract maintainability_index from entity issues' contributing_features
 function extractMaintainabilityIndex(entity) {
   const issues = entity.issues || [];
@@ -993,6 +1063,10 @@ function buildTemplateData(results) {
   );
   unifiedHierarchy = sortHierarchy(unifiedHierarchy);
 
+  // Inject cohesion data into hierarchy nodes
+  const cohesion = results.cohesion || results.passes?.cohesion || null;
+  unifiedHierarchy = injectCohesionIntoHierarchy(unifiedHierarchy, cohesion);
+
   const graphInsights = buildGraphInsights(directoryHealthTree);
 
   return {
@@ -1026,6 +1100,7 @@ function buildTemplateData(results) {
     clone_analysis_raw: results.clone_analysis || null,
     passes: results.passes || results.stage_results || null,
     documentation: results.documentation || null,
+    cohesion: results.cohesion || results.passes?.cohesion || null,
   };
 }
 
@@ -1205,25 +1280,18 @@ function registerPartials() {
 }
 
 function loadAnalysisData() {
-  const candidates = [
-    { path: ANALYSIS_RESULTS_JSON, label: 'analysis-results.json' },
-    { path: ANALYSIS_JSON, label: 'analysis.json' },
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate.path)) {
-      const data = readJson(candidate.path);
-      if (data) {
-        return data;
-      }
-      console.warn(
-        `[render-report] ${candidate.label} present but invalid JSON, trying next fallback.`
-      );
+  // Single source: data/analysis.json
+  if (fs.existsSync(ANALYSIS_JSON)) {
+    const data = readJson(ANALYSIS_JSON);
+    if (data) {
+      return data;
     }
+    console.warn('[render-report] analysis.json present but invalid JSON.');
   }
 
   console.warn(
-    '[render-report] analysis JSON not found; rendering with stub data. Run `valknut analyze --format json --out templates/dev/data ...` first.'
+    '[render-report] data/analysis.json not found; rendering with stub data.\n' +
+    '  To populate: cp .valknut/analysis-results.json templates/dev/data/analysis.json'
   );
   return {
     summary: {

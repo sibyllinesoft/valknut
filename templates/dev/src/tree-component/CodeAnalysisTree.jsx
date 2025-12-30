@@ -1235,6 +1235,77 @@ export const CodeAnalysisTree = ({ data }) => {
         return nodes.map(annotate).filter(Boolean);
     }, []);
 
+    // Annotate nodes with cohesion scores from cohesion data
+    const annotateCohesion = useCallback((nodes, cohesionData) => {
+        // Note: cohesion is primarily applied by tree.hbs before React mounts.
+        // This serves as a fallback for edge cases where tree.hbs couldn't apply it.
+        if (!Array.isArray(nodes) || !cohesionData || !cohesionData.enabled) {
+            return nodes;
+        }
+
+        const fileScores = cohesionData.file_scores || cohesionData.fileScores || {};
+        const folderScores = cohesionData.folder_scores || cohesionData.folderScores || {};
+
+        const lookupCohesion = (filePath, type) => {
+            if (!filePath) return null;
+            const scores = type === 'folder' ? folderScores : fileScores;
+            const normalizedPath = normalizePath(filePath).replace(/^\.\//, '');
+
+            for (const [key, score] of Object.entries(scores)) {
+                const normalizedKey = normalizePath(key);
+                // Direct match
+                if (normalizedKey === normalizedPath) {
+                    return score;
+                }
+                // Key ends with the path (absolute vs relative)
+                if (normalizedKey.endsWith('/' + normalizedPath)) {
+                    return score;
+                }
+                // Try matching suffix segments
+                const keyParts = normalizedKey.split('/');
+                for (let i = 1; i <= Math.min(keyParts.length, 5); i++) {
+                    const keySuffix = keyParts.slice(-i).join('/');
+                    if (keySuffix === normalizedPath || normalizedPath.endsWith('/' + keySuffix) || keySuffix.endsWith('/' + normalizedPath)) {
+                        return score;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const annotate = (node) => {
+            if (!node || typeof node !== 'object') {
+                return node;
+            }
+
+            const clone = { ...node };
+
+            if (Array.isArray(clone.children)) {
+                clone.children = clone.children.map(annotate).filter(Boolean);
+            }
+
+            // Attach cohesion to file and folder nodes (if not already set by tree.hbs)
+            if ((clone.type === 'file' || clone.type === 'folder') && typeof clone.cohesion !== 'number') {
+                let path = clone.filePath || clone.file_path || clone.path || clone.id || clone.name || '';
+                // Strip 'folder-' or 'file-' prefix from id-based paths
+                if (path.startsWith('folder-')) path = path.slice(7);
+                if (path.startsWith('file-')) path = path.slice(5);
+
+                const cohesionScore = lookupCohesion(path, clone.type);
+                if (cohesionScore && typeof cohesionScore.cohesion === 'number') {
+                    clone.cohesion = cohesionScore.cohesion;
+                    if (Array.isArray(cohesionScore.outliers) && cohesionScore.outliers.length > 0) {
+                        clone.cohesionOutliers = cohesionScore.outliers;
+                    }
+                }
+            }
+
+            return clone;
+        };
+
+        return nodes.map(annotate).filter(Boolean);
+    }, [normalizePath]);
+
     // Load data from props
     useEffect(() => {
         try {
@@ -1262,8 +1333,10 @@ export const CodeAnalysisTree = ({ data }) => {
                         || data.documentation?.fileDocIssues
                         || {};
                     const withDocIssues = annotateDocIssues(aggregatedNormalized, docIssuesMap);
-                    const sorted = sortNodesByPriority(withDocIssues);
-                    console.info('[CodeAnalysisTree] using unifiedHierarchy; nodes:', sorted.length);
+                    // Annotate with cohesion scores
+                    const cohesionData = data.cohesion || data.passes?.cohesion;
+                    const withCohesion = annotateCohesion(withDocIssues, cohesionData);
+                    const sorted = sortNodesByPriority(withCohesion);
                     setTreeData(sorted);
                     return;
                 }
@@ -1348,7 +1421,10 @@ export const CodeAnalysisTree = ({ data }) => {
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
                 const aggregatedNormalized = aggregateTreeMetrics(normalized);
-                const sorted = sortNodesByPriority(aggregatedNormalized);
+                // Annotate with cohesion scores
+                const cohesionData = data.cohesion || data.passes?.cohesion;
+                const withCohesion = annotateCohesion(aggregatedNormalized, cohesionData);
+                const sorted = sortNodesByPriority(withCohesion);
                 setTreeData(sorted);
             } else {
                 setTreeData([]);
@@ -1363,6 +1439,7 @@ export const CodeAnalysisTree = ({ data }) => {
         normalizeTreeData,
         annotateNodesWithDictionary,
         annotateDocIssues,
+        annotateCohesion,
         sortNodesByPriority,
         aggregateTreeMetrics,
         groupCandidatesByFile,

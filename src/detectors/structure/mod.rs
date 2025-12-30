@@ -14,19 +14,22 @@
 //! - Configurable thresholds and parameters via YAML
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use serde::Serialize;
 
+use crate::core::arena_analysis::ArenaAnalysisResult;
 use crate::core::errors::Result;
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
 
 pub mod config;
 pub mod directory;
 pub mod file;
+pub mod health;
 
 pub use config::*;
+pub use health::{EntityHealth, HealthScorer};
 use directory::DirectoryAnalyzer;
 use file::FileAnalyzer;
 
@@ -71,6 +74,31 @@ impl IntoIterator for StructureRecommendations {
         }
 
         recommendations.into_iter()
+    }
+}
+
+/// Pre-computed file metrics from arena analysis to avoid re-reading files
+#[derive(Debug, Clone)]
+pub struct PrecomputedFileMetrics {
+    /// File path
+    pub path: PathBuf,
+    /// Lines of code
+    pub loc: usize,
+    /// Source code content
+    pub source: String,
+    /// Pre-extracted entities
+    pub entities: Vec<CodeEntity>,
+}
+
+impl PrecomputedFileMetrics {
+    /// Create from an ArenaAnalysisResult
+    pub fn from_arena_result(result: &ArenaAnalysisResult) -> Self {
+        Self {
+            path: PathBuf::from(result.file_path_str()),
+            loc: result.lines_of_code,
+            source: result.source_code.clone(),
+            entities: result.entities.clone(),
+        }
     }
 }
 
@@ -224,6 +252,109 @@ impl StructureExtractor {
         Ok(packs)
     }
 
+    /// Generate structure recommendations using pre-computed metrics from arena analysis.
+    /// This avoids re-reading files and re-extracting entities, significantly improving performance.
+    pub async fn generate_recommendations_with_metrics(
+        &self,
+        root_path: &Path,
+        metrics: &[PrecomputedFileMetrics],
+    ) -> Result<StructureRecommendations> {
+        // Build a lookup map for quick access
+        let metrics_map: HashMap<PathBuf, &PrecomputedFileMetrics> = metrics
+            .iter()
+            .map(|m| (m.path.clone(), m))
+            .collect();
+
+        // Generate both types of packs using pre-computed metrics
+        let (branch_packs, file_packs) = tokio::join!(
+            self.generate_branch_reorg_packs_with_metrics(root_path, &metrics_map),
+            self.generate_file_split_packs_with_metrics(root_path, metrics)
+        );
+
+        let mut branch_reorg_packs = branch_packs?;
+        let mut file_split_packs = file_packs?;
+
+        // Sort by impact/value and limit to configured top packs
+        branch_reorg_packs.sort_by(|a, b| {
+            b.gain
+                .imbalance_delta
+                .partial_cmp(&a.gain.imbalance_delta)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        branch_reorg_packs.truncate(self.config.top_packs);
+
+        file_split_packs.sort_by(|a, b| {
+            b.value
+                .score
+                .partial_cmp(&a.value.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        file_split_packs.truncate(self.config.top_packs);
+
+        Ok(StructureRecommendations {
+            branch_reorg_packs,
+            file_split_packs,
+        })
+    }
+
+    /// Generate branch reorganization packs using pre-computed LOC data
+    async fn generate_branch_reorg_packs_with_metrics(
+        &self,
+        root_path: &Path,
+        metrics_map: &HashMap<PathBuf, &PrecomputedFileMetrics>,
+    ) -> Result<Vec<BranchReorgPack>> {
+        if !self.config.enable_branch_packs {
+            return Ok(Vec::new());
+        }
+
+        // Still need to discover directories, but we skip file reading inside
+        let directories = self
+            .directory_analyzer
+            .discover_directories(root_path)
+            .await?;
+
+        let packs: Vec<BranchReorgPack> = directories
+            .iter()
+            .filter_map(|dir_path| {
+                self.directory_analyzer
+                    .analyze_directory_for_reorg_with_metrics(dir_path, metrics_map)
+                    .ok()
+                    .flatten()
+            })
+            .collect();
+
+        Ok(packs)
+    }
+
+    /// Generate file split packs using pre-computed source and entity data
+    async fn generate_file_split_packs_with_metrics(
+        &self,
+        root_path: &Path,
+        metrics: &[PrecomputedFileMetrics],
+    ) -> Result<Vec<FileSplitPack>> {
+        if !self.config.enable_file_split_packs {
+            return Ok(Vec::new());
+        }
+
+        // Filter to large files using pre-computed LOC
+        let large_files: Vec<&PrecomputedFileMetrics> = metrics
+            .iter()
+            .filter(|m| m.loc >= self.config.fsfile.huge_loc)
+            .collect();
+
+        let packs: Vec<FileSplitPack> = large_files
+            .iter()
+            .filter_map(|file_metrics| {
+                self.file_analyzer
+                    .analyze_file_for_split_with_metrics(file_metrics, root_path)
+                    .ok()
+                    .flatten()
+            })
+            .collect();
+
+        Ok(packs)
+    }
+
     /// Calculate directory metrics - exposed for testing and external use
     pub fn calculate_directory_metrics(&self, dir_path: &Path) -> Result<DirectoryMetrics> {
         self.directory_analyzer
@@ -339,6 +470,8 @@ mod tests {
             branch_pressure: 0.3,
             size_pressure: 0.6,
             dispersion: 0.55,
+            file_count_score: 0.5,
+            subdir_count_score: 0.8,
             imbalance: 0.9,
         }
     }

@@ -1472,6 +1472,27 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             style: healthStyle,
             title: 'Aggregate health score (higher is better)'
         }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
+
+        // Cohesion badge for folders
+        if (typeof data.cohesion === 'number') {
+            const cohesionPct = Math.round(data.cohesion * 100);
+            const cohesionStyle = {
+                marginLeft: '0.5rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                ...getHealthBadgeStyle(cohesionPct)
+            };
+            const outlierCount = Array.isArray(data.cohesionOutliers) ? data.cohesionOutliers.length : 0;
+            const title = outlierCount > 0
+                ? `Semantic cohesion: ${cohesionPct}% (${outlierCount} outlier file${outlierCount > 1 ? 's' : ''})`
+                : `Semantic cohesion: ${cohesionPct}% (how semantically aligned files are)`;
+            children.push(React.createElement('div', {
+                key: 'cohesion-folder',
+                className: 'tree-badge cohesion-badge',
+                style: cohesionStyle,
+                title
+            }, `Cohesion: ${cohesionPct}%`));
+        }
     }
     if (isFile) {
         children.push(React.createElement('div', {
@@ -1480,6 +1501,27 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
             style: healthStyle,
             title: 'File health score (higher is better)'
         }, `Health: ${nodeHealthPercent.toFixed(0)}%`));
+
+        // Cohesion badge for files
+        if (typeof data.cohesion === 'number') {
+            const cohesionPct = Math.round(data.cohesion * 100);
+            const cohesionStyle = {
+                marginLeft: '0.5rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                ...getHealthBadgeStyle(cohesionPct)
+            };
+            const outlierCount = Array.isArray(data.cohesionOutliers) ? data.cohesionOutliers.length : 0;
+            const title = outlierCount > 0
+                ? `Semantic cohesion: ${cohesionPct}% (${outlierCount} outlier entit${outlierCount > 1 ? 'ies' : 'y'})`
+                : `Semantic cohesion: ${cohesionPct}% (how semantically focused the file is)`;
+            children.push(React.createElement('div', {
+                key: 'cohesion-file',
+                className: 'tree-badge cohesion-badge',
+                style: cohesionStyle,
+                title
+            }, `Cohesion: ${cohesionPct}%`));
+        }
     }
     if (isEntity) {
         children.push(React.createElement('div', {

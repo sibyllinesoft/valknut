@@ -11,153 +11,8 @@ use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rust_adapter_creation() {
-        let adapter = RustAdapter::new();
-        assert!(adapter.is_ok(), "Should create Rust adapter successfully");
-    }
-
-    #[test]
-    fn test_parse_simple_function() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source = r#"
-fn greet(name: &str) -> String {
-    format!("Hello, {}!", name)
-}
-"#;
-        let result = adapter.parse_source(source, "test.rs");
-        assert!(result.is_ok(), "Should parse simple function");
-
-        let index = result.unwrap();
-        assert!(
-            index.get_entities_in_file("test.rs").len() >= 1,
-            "Should find at least one entity"
-        );
-    }
-
-    #[test]
-    fn test_parse_struct_and_impl() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source = r#"
-struct User {
-    name: String,
-    age: u32,
-}
-
-impl User {
-    fn new(name: String, age: u32) -> Self {
-        Self { name, age }
-    }
-    
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-}
-"#;
-        let result = adapter.parse_source(source, "test.rs");
-        assert!(result.is_ok(), "Should parse struct and impl");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("test.rs");
-        assert!(
-            entities.len() >= 2,
-            "Should find at least struct and impl entities"
-        );
-
-        let has_struct = entities
-            .iter()
-            .any(|e| matches!(e.kind, EntityKind::Struct));
-        assert!(has_struct, "Should find a struct entity");
-    }
-
-    #[test]
-    fn test_parse_traits_and_enums() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source = r#"
-trait Display {
-    fn display(&self) -> String;
-}
-
-enum Color {
-    Red,
-    Green,
-    Blue,
-}
-
-impl Display for Color {
-    fn display(&self) -> String {
-        match self {
-            Color::Red => "Red".to_string(),
-            Color::Green => "Green".to_string(),
-            Color::Blue => "Blue".to_string(),
-        }
-    }
-}
-"#;
-        let result = adapter.parse_source(source, "traits.rs");
-        assert!(result.is_ok(), "Should parse traits and enums");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("traits.rs");
-        assert!(entities.len() >= 2, "Should find multiple entities");
-
-        let has_enum = entities.iter().any(|e| matches!(e.kind, EntityKind::Enum));
-        assert!(has_enum, "Should find an enum entity");
-    }
-
-    #[test]
-    fn test_parse_modules() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source = r#"
-mod network {
-    use std::net::TcpStream;
-    
-    pub fn connect(addr: &str) -> Result<TcpStream, std::io::Error> {
-        TcpStream::connect(addr)
-    }
-}
-
-pub mod utils {
-    pub fn format_string(s: &str) -> String {
-        s.to_uppercase()
-    }
-}
-"#;
-        let result = adapter.parse_source(source, "modules.rs");
-        assert!(result.is_ok(), "Should parse modules");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("modules.rs");
-        assert!(
-            entities.len() >= 2,
-            "Should find multiple entities including modules"
-        );
-
-        let has_module = entities
-            .iter()
-            .any(|e| matches!(e.kind, EntityKind::Module));
-        assert!(has_module, "Should find module entities");
-    }
-
-    #[test]
-    fn test_empty_rust_file() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source = "// Rust file with just comments\n/* Block comment */";
-        let result = adapter.parse_source(source, "empty.rs");
-        assert!(result.is_ok(), "Should handle empty Rust file");
-
-        let index = result.unwrap();
-        let entities = index.get_entities_in_file("empty.rs");
-        assert_eq!(
-            entities.len(),
-            0,
-            "Should find no entities in comment-only file"
-        );
-    }
-}
+#[path = "rust_lang_tests.rs"]
+mod tests;
 
 /// Rust-specific parsing and analysis
 pub struct RustAdapter {
@@ -262,35 +117,51 @@ impl RustAdapter {
         )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-
-            // Process child nodes with this entity as parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    Some(entity_id.clone()),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
         } else {
-            // Process child nodes with current parent
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                self.extract_entities_recursive(
-                    child,
-                    source_code,
-                    file_path,
-                    parent_id.clone(),
-                    index,
-                    entity_id_counter,
-                )?;
-            }
+            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
         }
-
         Ok(())
+    }
+
+    /// Traverse and process all child nodes recursively.
+    fn traverse_children(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_entities_recursive(
+                child,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                index,
+                entity_id_counter,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Determine entity kind from node kind, returning None for non-entity nodes.
+    fn determine_entity_kind(&self, node: Node) -> Option<EntityKind> {
+        match node.kind() {
+            "function_item" | "function_signature_item" => {
+                if self.is_inside_trait(node) { None } else { Some(EntityKind::Function) }
+            }
+            "impl_item" => None,
+            "struct_item" => Some(EntityKind::Struct),
+            "enum_item" => Some(EntityKind::Enum),
+            "trait_item" => Some(EntityKind::Interface),
+            "mod_item" => Some(EntityKind::Module),
+            "const_item" | "static_item" => Some(EntityKind::Constant),
+            _ => None,
+        }
     }
 
     /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
@@ -302,31 +173,9 @@ impl RustAdapter {
         parent_id: Option<String>,
         entity_id_counter: &mut usize,
     ) -> Result<Option<ParsedEntity>> {
-        let entity_kind = match node.kind() {
-            "function_item" => {
-                // Skip function items that are inside traits
-                // They should be included as metadata of the trait, not separate entities
-                if self.is_inside_trait(node) {
-                    return Ok(None);
-                }
-                EntityKind::Function
-            }
-            "impl_item" => return Ok(None), // Skip impl blocks themselves
-            "struct_item" => EntityKind::Struct,
-            "enum_item" => EntityKind::Enum,
-            "trait_item" => EntityKind::Interface, // Treat traits as interfaces
-            "mod_item" => EntityKind::Module,
-            "const_item" => EntityKind::Constant,
-            "static_item" => EntityKind::Constant,
-            "function_signature_item" => {
-                // Skip function signatures that are inside traits
-                // They should be included as metadata of the trait, not separate entities
-                if self.is_inside_trait(node) {
-                    return Ok(None);
-                }
-                EntityKind::Function
-            }
-            _ => return Ok(None),
+        let entity_kind = match self.determine_entity_kind(node) {
+            Some(kind) => kind,
+            None => return Ok(None),
         };
 
         let name = self
@@ -357,25 +206,7 @@ impl RustAdapter {
         );
 
         // Extract additional metadata based on entity type
-        match entity_kind {
-            EntityKind::Function => {
-                self.extract_function_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Struct => {
-                self.extract_struct_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Enum => {
-                self.extract_enum_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Interface => {
-                // trait
-                self.extract_trait_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Module => {
-                self.extract_module_metadata(&node, source_code, &mut metadata)?;
-            }
-            _ => {}
-        }
+        self.extract_entity_metadata(&entity_kind, &node, source_code, &mut metadata)?;
 
         let entity = ParsedEntity {
             id: entity_id,
@@ -418,6 +249,61 @@ impl RustAdapter {
         Ok(None)
     }
 
+    /// Check if a node or its function_modifiers children contain a specific modifier kind.
+    fn has_modifier(node: &Node, modifier_kind: &str) -> bool {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == modifier_kind {
+                return true;
+            }
+            if child.kind() == "function_modifiers" {
+                let mut mod_cursor = child.walk();
+                for mod_child in child.children(&mut mod_cursor) {
+                    if mod_child.kind() == modifier_kind {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Extract parameter names from a parameters node.
+    fn extract_parameters<'a>(params_node: &Node, source_code: &'a str) -> Result<Vec<&'a str>> {
+        let mut parameters = Vec::new();
+        let mut cursor = params_node.walk();
+        for param in params_node.children(&mut cursor) {
+            if param.kind() == "parameter" {
+                let mut inner = param.walk();
+                for child in param.children(&mut inner) {
+                    if child.kind() == "identifier" {
+                        parameters.push(child.utf8_text(source_code.as_bytes())?);
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(parameters)
+    }
+
+    /// Extract metadata based on entity kind, dispatching to the appropriate extractor.
+    fn extract_entity_metadata(
+        &self,
+        entity_kind: &EntityKind,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, Value>,
+    ) -> Result<()> {
+        match entity_kind {
+            EntityKind::Function => self.extract_function_metadata(node, source_code, metadata),
+            EntityKind::Struct => self.extract_struct_metadata(node, source_code, metadata),
+            EntityKind::Enum => self.extract_enum_metadata(node, source_code, metadata),
+            EntityKind::Interface => self.extract_trait_metadata(node, source_code, metadata),
+            EntityKind::Module => self.extract_module_metadata(node, source_code, metadata),
+            _ => Ok(()),
+        }
+    }
+
     /// Extract function-specific metadata
     fn extract_function_metadata(
         &self,
@@ -425,74 +311,23 @@ impl RustAdapter {
         source_code: &str,
         metadata: &mut HashMap<String, Value>,
     ) -> Result<()> {
-        let mut cursor = node.walk();
+        let is_async = Self::has_modifier(node, "async");
+        let is_unsafe = Self::has_modifier(node, "unsafe");
+        let is_const = Self::has_modifier(node, "const");
+
         let mut parameters = Vec::new();
-        let mut is_async = false;
-        let mut is_unsafe = false;
-        let mut is_const = false;
         let mut return_type = None;
         let mut visibility = "private".to_string();
 
-        // Check for modifiers in the function signature using AST structure
-        // Look for modifier nodes before the function keyword
-        let mut signature_cursor = node.walk();
-        for sig_child in node.children(&mut signature_cursor) {
-            match sig_child.kind() {
-                "async" => is_async = true,
-                "unsafe" => is_unsafe = true,
-                "const" => is_const = true,
-                "function_modifiers" => {
-                    // Check inside function_modifiers for async/unsafe
-                    let mut mod_cursor = sig_child.walk();
-                    for mod_child in sig_child.children(&mut mod_cursor) {
-                        match mod_child.kind() {
-                            "async" => is_async = true,
-                            "unsafe" => is_unsafe = true,
-                            "const" => is_const = true,
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
+        let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
-                "parameters" => {
-                    // Extract parameter information
-                    let mut param_cursor = child.walk();
-                    for param_child in child.children(&mut param_cursor) {
-                        if param_child.kind() == "parameter" {
-                            let mut inner_cursor = param_child.walk();
-                            for inner_child in param_child.children(&mut inner_cursor) {
-                                if inner_child.kind() == "identifier" {
-                                    let param_name =
-                                        inner_child.utf8_text(source_code.as_bytes())?;
-                                    parameters.push(param_name);
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                "parameters" => parameters = Self::extract_parameters(&child, source_code)?,
+                "visibility_modifier" => visibility = child.utf8_text(source_code.as_bytes())?.to_string(),
+                "type_identifier" | "reference_type" | "tuple_type" | "array_type" | "generic_type" => {
+                    return_type = Some(child.utf8_text(source_code.as_bytes())?.to_string());
                 }
-                "visibility_modifier" => {
-                    let vis_text = child.utf8_text(source_code.as_bytes())?;
-                    visibility = vis_text.to_string();
-                }
-                _ => {
-                    // Check for specific return type nodes in function signature
-                    if matches!(
-                        child.kind(),
-                        "type_identifier"
-                            | "reference_type"
-                            | "tuple_type"
-                            | "array_type"
-                            | "generic_type"
-                    ) {
-                        return_type = Some(child.utf8_text(source_code.as_bytes())?.to_string());
-                    }
-                }
+                _ => {}
             }
         }
 
@@ -508,6 +343,28 @@ impl RustAdapter {
         Ok(())
     }
 
+    /// Extract identifiers from nested children matching outer/inner kind patterns.
+    fn extract_nested_identifiers<'a>(
+        parent: &Node,
+        source_code: &'a str,
+        outer_kind: &str,
+        inner_kind: &str,
+    ) -> Result<Vec<&'a str>> {
+        let mut results = Vec::new();
+        let mut cursor = parent.walk();
+        for child in parent.children(&mut cursor) {
+            if child.kind() == outer_kind {
+                let mut inner = child.walk();
+                for inner_child in child.children(&mut inner) {
+                    if inner_child.kind() == inner_kind {
+                        results.push(inner_child.utf8_text(source_code.as_bytes())?);
+                    }
+                }
+            }
+        }
+        Ok(results)
+    }
+
     /// Extract struct-specific metadata
     fn extract_struct_metadata(
         &self,
@@ -515,47 +372,21 @@ impl RustAdapter {
         source_code: &str,
         metadata: &mut HashMap<String, Value>,
     ) -> Result<()> {
-        let mut cursor = node.walk();
         let mut fields = Vec::new();
         let mut visibility = "private".to_string();
         let mut generic_params = Vec::new();
 
+        let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "field_declaration_list" => {
-                    let mut field_cursor = child.walk();
-                    for field_child in child.children(&mut field_cursor) {
-                        if field_child.kind() == "field_declaration" {
-                            let mut inner_cursor = field_child.walk();
-                            for inner_child in field_child.children(&mut inner_cursor) {
-                                if inner_child.kind() == "field_identifier" {
-                                    let field_name =
-                                        inner_child.utf8_text(source_code.as_bytes())?;
-                                    fields.push(field_name);
-                                }
-                            }
-                        }
-                    }
+                    fields = Self::extract_nested_identifiers(&child, source_code, "field_declaration", "field_identifier")?;
                 }
                 "visibility_modifier" => {
-                    let vis_text = child.utf8_text(source_code.as_bytes())?;
-                    visibility = vis_text.to_string();
+                    visibility = child.utf8_text(source_code.as_bytes())?.to_string();
                 }
                 "type_parameters" => {
-                    let mut param_cursor = child.walk();
-                    for param_child in child.children(&mut param_cursor) {
-                        if param_child.kind() == "type_parameter" {
-                            // Look for the name field within the type_parameter
-                            let mut inner_cursor = param_child.walk();
-                            for inner_child in param_child.children(&mut inner_cursor) {
-                                if inner_child.kind() == "type_identifier" {
-                                    let param_name =
-                                        inner_child.utf8_text(source_code.as_bytes())?;
-                                    generic_params.push(param_name);
-                                }
-                            }
-                        }
-                    }
+                    generic_params = Self::extract_nested_identifiers(&child, source_code, "type_parameter", "type_identifier")?;
                 }
                 _ => {}
             }
@@ -564,10 +395,7 @@ impl RustAdapter {
         metadata.insert("fields".to_string(), serde_json::json!(fields));
         metadata.insert("visibility".to_string(), Value::String(visibility));
         if !generic_params.is_empty() {
-            metadata.insert(
-                "generic_parameters".to_string(),
-                serde_json::json!(generic_params),
-            );
+            metadata.insert("generic_parameters".to_string(), serde_json::json!(generic_params));
         }
 
         Ok(())
@@ -587,24 +415,10 @@ impl RustAdapter {
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "enum_variant_list" => {
-                    let mut variant_cursor = child.walk();
-                    for variant_child in child.children(&mut variant_cursor) {
-                        if variant_child.kind() == "enum_variant" {
-                            let mut inner_cursor = variant_child.walk();
-                            for inner_child in variant_child.children(&mut inner_cursor) {
-                                if inner_child.kind() == "identifier" {
-                                    let variant_name =
-                                        inner_child.utf8_text(source_code.as_bytes())?;
-                                    variants.push(variant_name);
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    variants = self.collect_enum_variants(&child, source_code)?;
                 }
                 "visibility_modifier" => {
-                    let vis_text = child.utf8_text(source_code.as_bytes())?;
-                    visibility = vis_text.to_string();
+                    visibility = self.extract_visibility(&child, source_code)?;
                 }
                 _ => {}
             }
@@ -614,6 +428,47 @@ impl RustAdapter {
         metadata.insert("visibility".to_string(), Value::String(visibility));
 
         Ok(())
+    }
+
+    /// Collect enum variant names from an enum_variant_list node
+    fn collect_enum_variants<'a>(
+        &self,
+        list_node: &Node<'a>,
+        source_code: &'a str,
+    ) -> Result<Vec<&'a str>> {
+        let mut variants = Vec::new();
+        let mut cursor = list_node.walk();
+
+        for variant_child in list_node.children(&mut cursor) {
+            if variant_child.kind() != "enum_variant" {
+                continue;
+            }
+            if let Some(name) = self.find_identifier_in_node(&variant_child, source_code)? {
+                variants.push(name);
+            }
+        }
+
+        Ok(variants)
+    }
+
+    /// Find the first identifier child in a node
+    fn find_identifier_in_node<'a>(
+        &self,
+        node: &Node<'a>,
+        source_code: &'a str,
+    ) -> Result<Option<&'a str>> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                return Ok(Some(child.utf8_text(source_code.as_bytes())?));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Extract visibility modifier text from a node
+    fn extract_visibility(&self, node: &Node, source_code: &str) -> Result<String> {
+        Ok(node.utf8_text(source_code.as_bytes())?.to_string())
     }
 
     /// Extract trait-specific metadata
@@ -631,28 +486,13 @@ impl RustAdapter {
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "declaration_list" => {
-                    let mut method_cursor = child.walk();
-                    for method_child in child.children(&mut method_cursor) {
-                        if method_child.kind() == "function_signature_item" {
-                            let method_name = self.extract_name(&method_child, source_code)?;
-                            if let Some(name) = method_name {
-                                methods.push(name);
-                            }
-                        }
-                    }
+                    methods = self.collect_trait_methods(&child, source_code)?;
                 }
                 "visibility_modifier" => {
-                    let vis_text = child.utf8_text(source_code.as_bytes())?;
-                    visibility = vis_text.to_string();
+                    visibility = self.extract_visibility(&child, source_code)?;
                 }
                 "trait_bounds" => {
-                    let mut bounds_cursor = child.walk();
-                    for bounds_child in child.children(&mut bounds_cursor) {
-                        if bounds_child.kind() == "type_identifier" {
-                            let bound_name = bounds_child.utf8_text(source_code.as_bytes())?;
-                            supertrait_bounds.push(bound_name);
-                        }
-                    }
+                    supertrait_bounds = self.collect_trait_bounds(&child, source_code)?;
                 }
                 _ => {}
             }
@@ -668,6 +508,41 @@ impl RustAdapter {
         }
 
         Ok(())
+    }
+
+    /// Collect method names from a trait's declaration_list node
+    fn collect_trait_methods(&self, list_node: &Node, source_code: &str) -> Result<Vec<String>> {
+        let mut methods = Vec::new();
+        let mut cursor = list_node.walk();
+
+        for child in list_node.children(&mut cursor) {
+            if child.kind() != "function_signature_item" {
+                continue;
+            }
+            if let Some(name) = self.extract_name(&child, source_code)? {
+                methods.push(name);
+            }
+        }
+
+        Ok(methods)
+    }
+
+    /// Collect supertrait bounds from a trait_bounds node
+    fn collect_trait_bounds<'a>(
+        &self,
+        bounds_node: &Node<'a>,
+        source_code: &'a str,
+    ) -> Result<Vec<&'a str>> {
+        let mut bounds = Vec::new();
+        let mut cursor = bounds_node.walk();
+
+        for child in bounds_node.children(&mut cursor) {
+            if child.kind() == "type_identifier" {
+                bounds.push(child.utf8_text(source_code.as_bytes())?);
+            }
+        }
+
+        Ok(bounds)
     }
 
     /// Extract module-specific metadata
@@ -845,33 +720,32 @@ impl LanguageAdapter for RustAdapter {
                 continue;
             }
 
-            if let Some(use_part) = trimmed.strip_prefix("use ") {
-                let use_part = use_part.trim_end_matches(';');
+            // Handle mod declarations (e.g., `mod foo;` or `pub mod bar;`)
+            let mod_part = trimmed
+                .strip_prefix("pub mod ")
+                .or_else(|| trimmed.strip_prefix("pub(crate) mod "))
+                .or_else(|| trimmed.strip_prefix("pub(super) mod "))
+                .or_else(|| trimmed.strip_prefix("mod "));
 
-                if let Some(brace_pos) = use_part.find('{') {
-                    let module = use_part[..brace_pos].trim().to_string();
-                    let items_part = &use_part[brace_pos + 1..];
-
-                    if let Some(close_brace) = items_part.find('}') {
-                        let items = &items_part[..close_brace];
-                        let specific_imports =
-                            Some(items.split(',').map(|s| s.trim().to_string()).collect());
-
+            if let Some(mod_decl) = mod_part {
+                // Only handle external mod declarations (ending with ;), not inline modules
+                if let Some(mod_name) = mod_decl.strip_suffix(';') {
+                    let mod_name = mod_name.trim();
+                    if !mod_name.is_empty() && !mod_name.contains('{') {
                         imports.push(ImportStatement {
-                            module,
-                            imports: specific_imports,
-                            import_type: "named".to_string(),
+                            module: mod_name.to_string(),
+                            imports: None,
+                            import_type: "mod".to_string(),
                             line_number: line_number + 1,
                         });
                     }
-                } else {
-                    imports.push(ImportStatement {
-                        module: use_part.to_string(),
-                        imports: None,
-                        import_type: "module".to_string(),
-                        line_number: line_number + 1,
-                    });
                 }
+            }
+
+            // Handle use statements
+            if let Some(use_part) = trimmed.strip_prefix("use ") {
+                let use_part = use_part.trim_end_matches(';');
+                Self::parse_use_statement(use_part, line_number + 1, &mut imports);
             }
         }
 
@@ -884,6 +758,44 @@ impl LanguageAdapter for RustAdapter {
         file_path: &str,
     ) -> Result<Vec<crate::core::featureset::CodeEntity>> {
         RustAdapter::extract_code_entities(self, source, file_path)
+    }
+}
+
+impl RustAdapter {
+    /// Parse a use statement and extract all module references
+    fn parse_use_statement(use_part: &str, line_number: usize, imports: &mut Vec<ImportStatement>) {
+        // Handle grouped imports: use foo::{bar, baz};
+        if let Some(brace_pos) = use_part.find('{') {
+            let module = use_part[..brace_pos].trim().trim_end_matches(':').to_string();
+            let items_part = &use_part[brace_pos + 1..];
+
+            if let Some(close_brace) = items_part.find('}') {
+                let items = &items_part[..close_brace];
+                let specific_imports: Vec<String> = items
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                // Add the grouped import with all named items
+                if !module.is_empty() {
+                    imports.push(ImportStatement {
+                        module: format!("{}::", module),
+                        imports: Some(specific_imports),
+                        import_type: "named".to_string(),
+                        line_number,
+                    });
+                }
+            }
+        } else {
+            // Simple use: use foo::bar;
+            imports.push(ImportStatement {
+                module: use_part.to_string(),
+                imports: None,
+                import_type: "module".to_string(),
+                line_number,
+            });
+        }
     }
 }
 
@@ -900,212 +812,5 @@ impl Default for RustAdapter {
                     .unwrap_or_else(|_| tree_sitter_rust::LANGUAGE.into()),
             }
         })
-    }
-}
-
-#[cfg(test)]
-mod additional_tests {
-    use super::*;
-
-    #[test]
-    fn test_rust_adapter_creation_additional() {
-        let adapter = RustAdapter::new();
-        assert!(adapter.is_ok());
-    }
-
-    #[test]
-    fn test_function_parsing() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-pub fn calculate(x: i32, y: i32) -> i32 {
-    x + y
-}
-
-async unsafe fn complex_function() -> Result<(), Error> {
-    Ok(())
-}
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-        assert_eq!(entities.len(), 2);
-
-        let calc_func = entities.iter().find(|e| e.name == "calculate").unwrap();
-        assert_eq!(calc_func.entity_type, "Function");
-        assert_eq!(
-            calc_func.properties.get("visibility"),
-            Some(&Value::String("pub".to_string()))
-        );
-
-        let complex_func = entities
-            .iter()
-            .find(|e| e.name == "complex_function")
-            .unwrap();
-        assert_eq!(
-            complex_func.properties.get("is_async"),
-            Some(&Value::Bool(true))
-        );
-        assert_eq!(
-            complex_func.properties.get("is_unsafe"),
-            Some(&Value::Bool(true))
-        );
-    }
-
-    #[test]
-    fn test_struct_parsing() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-pub struct User {
-    id: u64,
-    name: String,
-    email: Option<String>,
-}
-
-struct Point<T> {
-    x: T,
-    y: T,
-}
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-
-        let struct_entities: Vec<_> = entities
-            .iter()
-            .filter(|e| e.entity_type == "Struct")
-            .collect();
-        assert_eq!(struct_entities.len(), 2);
-
-        let user_struct = struct_entities.iter().find(|e| e.name == "User").unwrap();
-        assert_eq!(
-            user_struct.properties.get("visibility"),
-            Some(&Value::String("pub".to_string()))
-        );
-
-        let point_struct = struct_entities.iter().find(|e| e.name == "Point").unwrap();
-        let generic_params = point_struct.properties.get("generic_parameters");
-        assert!(generic_params.is_some());
-    }
-
-    #[test]
-    fn test_enum_parsing() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-#[derive(Debug, Clone)]
-pub enum Status {
-    Active,
-    Inactive,
-    Pending(String),
-    Expired { reason: String },
-}
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-        assert_eq!(entities.len(), 1);
-
-        let enum_entity = &entities[0];
-        assert_eq!(enum_entity.entity_type, "Enum");
-        assert_eq!(enum_entity.name, "Status");
-        assert_eq!(
-            enum_entity.properties.get("visibility"),
-            Some(&Value::String("pub".to_string()))
-        );
-
-        let variants = enum_entity.properties.get("variants");
-        assert!(variants.is_some());
-    }
-
-    #[test]
-    fn test_trait_parsing() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-pub trait Display: Debug + Clone {
-    fn fmt(&self) -> String;
-    fn print(&self) {
-        println!("{}", self.fmt());
-    }
-}
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-        assert_eq!(entities.len(), 1);
-
-        let trait_entity = &entities[0];
-        assert_eq!(trait_entity.entity_type, "Interface");
-        assert_eq!(trait_entity.name, "Display");
-        assert_eq!(
-            trait_entity.properties.get("visibility"),
-            Some(&Value::String("pub".to_string()))
-        );
-
-        let methods = trait_entity.properties.get("methods");
-        assert!(methods.is_some());
-    }
-
-    #[test]
-    fn test_module_parsing() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-pub mod utils;
-
-mod internal {
-    pub fn helper() -> i32 {
-        42
-    }
-}
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-
-        let module_entities: Vec<_> = entities
-            .iter()
-            .filter(|e| e.entity_type == "Module")
-            .collect();
-        assert!(module_entities.len() >= 2); // utils and internal modules
-
-        let internal_mod = module_entities
-            .iter()
-            .find(|e| e.name == "internal")
-            .unwrap();
-        assert_eq!(
-            internal_mod.properties.get("is_inline"),
-            Some(&Value::Bool(true))
-        );
-    }
-
-    #[test]
-    fn test_const_and_static() {
-        let mut adapter = RustAdapter::new().unwrap();
-        let source_code = r#"
-const PI: f64 = 3.14159;
-static GLOBAL_COUNT: AtomicUsize = AtomicUsize::new(0);
-"#;
-
-        let entities = adapter
-            .extract_code_entities(source_code, "test.rs")
-            .unwrap();
-
-        let const_entities: Vec<_> = entities
-            .iter()
-            .filter(|e| e.entity_type == "Constant")
-            .collect();
-        assert_eq!(const_entities.len(), 2);
-
-        let pi_const = const_entities.iter().find(|e| e.name == "PI").unwrap();
-        assert_eq!(pi_const.entity_type, "Constant");
-
-        let global_static = const_entities
-            .iter()
-            .find(|e| e.name == "GLOBAL_COUNT")
-            .unwrap();
-        assert_eq!(global_static.entity_type, "Constant");
     }
 }

@@ -38,48 +38,38 @@ pub(super) fn register_fallback_template(handlebars: &mut Handlebars<'static>) {
     }
 }
 
+/// Process .hbs files in a directory, calling the provided registration function for each.
+fn process_hbs_files<F>(dir: &Path, mut register: F) -> Result<(), ReportError>
+where
+    F: FnMut(&str, String) -> Result<(), ReportError>,
+{
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("hbs") {
+            let name = path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid template filename")
+            })?;
+            register(name, fs::read_to_string(&path)?)?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn load_templates_from_dir(
     handlebars: &mut Handlebars<'static>,
     templates_dir: &Path,
 ) -> Result<(), ReportError> {
-    for entry in fs::read_dir(templates_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) == Some("hbs") {
-            let template_name = path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid template filename")
-            })?;
-
-            let template_content = fs::read_to_string(&path)?;
-            handlebars.register_template_string(template_name, template_content)?;
-        }
-    }
+    process_hbs_files(templates_dir, |name, content| {
+        handlebars.register_template_string(name, content)?;
+        Ok(())
+    })?;
 
     let partials_dir = templates_dir.join("partials");
     if partials_dir.exists() && partials_dir.is_dir() {
-        register_partials(handlebars, &partials_dir)?;
-    }
-
-    Ok(())
-}
-
-fn register_partials(
-    handlebars: &mut Handlebars<'static>,
-    partials_dir: &Path,
-) -> Result<(), ReportError> {
-    for entry in fs::read_dir(partials_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) == Some("hbs") {
-            let partial_name = path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid partial filename")
-            })?;
-
-            let partial_content = fs::read_to_string(&path)?;
-            handlebars.register_partial(partial_name, partial_content)?;
-        }
+        process_hbs_files(&partials_dir, |name, content| {
+            handlebars.register_partial(name, content)?;
+            Ok(())
+        })?;
     }
 
     Ok(())
@@ -163,20 +153,21 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn register_partials_errors_on_invalid_filename() {
+    fn load_templates_errors_on_invalid_partial_filename() {
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;
 
         let temp = tempdir().unwrap();
-        let partials_dir = temp.path().join("partials");
+        let templates_dir = temp.path();
+        let partials_dir = templates_dir.join("partials");
         std::fs::create_dir_all(&partials_dir).unwrap();
         let invalid_partial = OsString::from_vec(vec![0xFE, b'.', b'h', b'b', b's']);
         std::fs::write(partials_dir.join(&invalid_partial), "{{this}}").unwrap();
 
         let mut handlebars = Handlebars::new();
-        let err = super::register_partials(&mut handlebars, &partials_dir).unwrap_err();
+        let err = super::load_templates_from_dir(&mut handlebars, templates_dir).unwrap_err();
         assert!(
-            format!("{}", err).contains("Invalid partial filename"),
+            format!("{}", err).contains("Invalid template filename"),
             "unexpected error: {err:?}"
         );
     }

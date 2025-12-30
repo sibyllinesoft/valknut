@@ -6,6 +6,26 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
+#[cfg(test)]
+#[path = "helpers_tests.rs"]
+mod tests;
+
+/// Directories considered part of the source tree
+const SOURCE_DIRECTORIES: &[&str] = &[
+    "src/", "src", "tests/", "tests", "benches/", "benches",
+    "examples/", "examples", "scripts/", "scripts",
+    "vscode-extension/", "vscode-extension",
+];
+
+/// Path prefixes for CSS file lookup
+const CSS_PREFIXES: &[&str] = &["themes/", "./themes/", "templates/", "./templates/", ""];
+
+/// Path prefixes for JavaScript file lookup
+const JS_PREFIXES: &[&str] = &[
+    "templates/assets/dist/", "./templates/assets/dist/",
+    "templates/assets/", "./templates/assets/", "",
+];
+
 /// Serialize a value to JSON for template consumption. Returns `Value::Null` on error.
 pub fn safe_json_value<T: Serialize>(value: T) -> Value {
     serde_json::to_value(value).unwrap_or_else(|e| {
@@ -16,7 +36,120 @@ pub fn safe_json_value<T: Serialize>(value: T) -> Value {
 
 /// Register all Handlebars helpers used by Valknut reports.
 pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
-    // Helper: pretty-print JSON objects
+    register_json_helper(handlebars);
+    register_format_helper(handlebars);
+    register_percentage_helper(handlebars);
+    register_multiply_helper(handlebars);
+
+    // Helper: capitalize the first letter of a string
+    register_string_transform_helper(handlebars, "capitalize", |value| {
+        let mut chars = value.chars();
+        if let Some(first) = chars.next() {
+            format!("{}{}", first.to_uppercase(), chars.as_str())
+        } else {
+            value.to_string()
+        }
+    });
+
+    register_replace_helper(handlebars);
+
+    // Helper: subtract two numbers
+    register_simple_numeric_helper(handlebars, "subtract", |a, b| a - b);
+    // Helper: add two numbers
+    register_simple_numeric_helper(handlebars, "add", |a, b| a + b);
+    // Helper: greater-than comparison
+    register_simple_numeric_helper(handlebars, "gt", |a, b| (a > b) as i32 as f64);
+
+    // Helper: count required tasks in an array (where required == true)
+    register_array_helper(handlebars, "count_required", |array| {
+        array
+            .iter()
+            .filter(|item| {
+                item.get("required")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+            .count()
+            .to_string()
+    });
+
+    // Helper: count optional tasks in an array (where required == false or missing)
+    register_array_helper(handlebars, "count_optional", |array| {
+        array
+            .iter()
+            .filter(|item| {
+                !item
+                    .get("required")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+            .count()
+            .to_string()
+    });
+
+    // Helper: array length
+    register_array_helper(handlebars, "length", |array| array.len().to_string());
+
+    // Helper: array emptiness check
+    register_array_helper(handlebars, "has_children", |array| {
+        (!array.is_empty()).to_string()
+    });
+
+    // Helper: basename extraction
+    register_string_transform_helper(handlebars, "basename", |path_str| {
+        Path::new(path_str)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(path_str)
+            .to_string()
+    });
+
+    register_eq_helper(handlebars);
+
+    // Helper: extract function name from entity identifiers
+    register_string_transform_helper(handlebars, "function_name", |value| {
+        value.rsplit(':').next().unwrap_or(value).to_string()
+    });
+
+    // Helper: map health score to CSS badge class
+    register_numeric_threshold_helper(handlebars, "health_badge_class", |value| {
+        if value >= 75.0 {
+            "tree-badge-High"
+        } else if value >= 50.0 {
+            "tree-badge-Medium"
+        } else {
+            "tree-badge-Low"
+        }
+    });
+
+    // Helper: determine if a directory path likely belongs to the source tree
+    register_string_transform_helper(handlebars, "is_source_directory", |dir_path| {
+        let is_source = SOURCE_DIRECTORIES.iter()
+            .any(|d| dir_path.starts_with(d) || dir_path == *d);
+        is_source.to_string()
+    });
+
+    // Helper: inline CSS file content
+    register_inline_file_helper(handlebars, InlineFileConfig {
+        name: "inline_css",
+        prefixes: CSS_PREFIXES,
+        fallback: Some(("sibylline.css", super::assets::MINIMAL_SIBYLLINE_CSS)),
+        file_type: "CSS",
+    });
+
+    // Helper: inline JavaScript file content
+    register_inline_file_helper(handlebars, InlineFileConfig {
+        name: "inline_js",
+        prefixes: JS_PREFIXES,
+        fallback: None,
+        file_type: "JavaScript",
+    });
+
+    register_logo_data_url_helper(handlebars);
+}
+
+/// Register the JSON pretty-print helper
+fn register_json_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "json",
         Box::new(
@@ -37,8 +170,10 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: format numbers using a shorthand format string
+/// Register the format number helper
+fn register_format_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "format",
         Box::new(
@@ -62,8 +197,10 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: convert a fraction to a percentage string with optional precision
+/// Register the percentage helper
+fn register_percentage_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "percentage",
         Box::new(
@@ -88,8 +225,10 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: multiply two numeric values
+/// Register the multiply helper
+fn register_multiply_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "multiply",
         Box::new(
@@ -110,33 +249,10 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: capitalize the first letter of a string
-    handlebars.register_helper(
-        "capitalize",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("capitalize helper requires a string parameter")
-                })?;
-                let mut chars = value.chars();
-                let transformed = if let Some(first) = chars.next() {
-                    format!("{}{}", first.to_uppercase(), chars.as_str())
-                } else {
-                    value.to_string()
-                };
-                out.write(&transformed)?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: replace text within a string
+/// Register the replace helper
+fn register_replace_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "replace",
         Box::new(
@@ -161,142 +277,10 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: subtract two numbers
-    register_simple_numeric_helper(handlebars, "subtract", |a, b| a - b);
-    // Helper: add two numbers
-    register_simple_numeric_helper(handlebars, "add", |a, b| a + b);
-    // Helper: greater-than comparison
-    register_simple_numeric_helper(handlebars, "gt", |a, b| (a > b) as i32 as f64);
-
-    // Helper: count required tasks in an array (where required == true)
-    handlebars.register_helper(
-        "count_required",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let array = h
-                    .param(0)
-                    .and_then(|v| v.value().as_array())
-                    .ok_or_else(|| {
-                        RenderError::new("count_required helper requires an array parameter")
-                    })?;
-                let count = array
-                    .iter()
-                    .filter(|item| {
-                        item.get("required")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false)
-                    })
-                    .count();
-                out.write(&count.to_string())?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: count optional tasks in an array (where required == false or missing)
-    handlebars.register_helper(
-        "count_optional",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let array = h
-                    .param(0)
-                    .and_then(|v| v.value().as_array())
-                    .ok_or_else(|| {
-                        RenderError::new("count_optional helper requires an array parameter")
-                    })?;
-                let count = array
-                    .iter()
-                    .filter(|item| {
-                        !item
-                            .get("required")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false)
-                    })
-                    .count();
-                out.write(&count.to_string())?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: array length
-    handlebars.register_helper(
-        "length",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let array = h
-                    .param(0)
-                    .and_then(|v| v.value().as_array())
-                    .ok_or_else(|| RenderError::new("length helper requires an array parameter"))?;
-                out.write(&array.len().to_string())?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: array emptiness check
-    handlebars.register_helper(
-        "has_children",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let array = h
-                    .param(0)
-                    .and_then(|v| v.value().as_array())
-                    .ok_or_else(|| {
-                        RenderError::new("has_children helper requires an array parameter")
-                    })?;
-                out.write(&(!array.is_empty()).to_string())?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: basename extraction
-    handlebars.register_helper(
-        "basename",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let path_str = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("basename helper requires a string parameter")
-                })?;
-                let path = Path::new(path_str);
-                let basename = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(path_str);
-                out.write(basename)?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: equality comparison
+/// Register the equality comparison helper
+fn register_eq_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "eq",
         Box::new(
@@ -319,169 +303,22 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
             },
         ),
     );
+}
 
-    // Helper: extract function name from entity identifiers
-    handlebars.register_helper(
-        "function_name",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("function_name helper requires a string parameter")
-                })?;
-                let name = value.rsplit(':').next().unwrap_or(value);
-                out.write(name)?;
-                Ok(())
-            },
-        ),
-    );
+/// Logo paths to search for the data URL helper
+const LOGO_PATHS: &[&str] = &[
+    "assets/logo.webp",
+    "./assets/logo.webp",
+    "webpage_files/valknut-large.webp",
+    "./webpage_files/valknut-large.webp",
+    ".valknut/webpage_files/valknut-large.webp",
+];
 
-    // Helper: map health score to CSS badge class
-    handlebars.register_helper(
-        "health_badge_class",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
-                    RenderError::new("health_badge_class helper requires a numeric parameter")
-                })?;
-                let badge_class = if value >= 75.0 {
-                    "tree-badge-High"
-                } else if value >= 50.0 {
-                    "tree-badge-Medium"
-                } else {
-                    "tree-badge-Low"
-                };
-                out.write(badge_class)?;
-                Ok(())
-            },
-        ),
-    );
+/// SVG placeholder for when logo is not found
+const LOGO_SVG_PLACEHOLDER: &str = r#"data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMzMzMyIvPgogIDx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmFsa251dDwvdGV4dD4KICA8L3N2Zz4="#;
 
-    // Helper: determine if a directory path likely belongs to the source tree
-    handlebars.register_helper(
-        "is_source_directory",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let dir_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("is_source_directory helper requires a string parameter")
-                })?;
-                let is_source = dir_path.starts_with("src/")
-                    || dir_path == "src"
-                    || dir_path.starts_with("tests/")
-                    || dir_path == "tests"
-                    || dir_path.starts_with("benches/")
-                    || dir_path == "benches"
-                    || dir_path.starts_with("examples/")
-                    || dir_path == "examples"
-                    || dir_path.starts_with("scripts/")
-                    || dir_path == "scripts"
-                    || dir_path.starts_with("vscode-extension/")
-                    || dir_path == "vscode-extension";
-                out.write(&is_source.to_string())?;
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: inline CSS file content
-    handlebars.register_helper(
-        "inline_css",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let file_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("inline_css helper requires a file path parameter")
-                })?;
-
-                // Try multiple possible locations for the CSS file
-                let possible_paths = [
-                    format!("themes/{}", file_path),
-                    format!("./themes/{}", file_path),
-                    format!("templates/{}", file_path),
-                    format!("./templates/{}", file_path),
-                    file_path.to_string(),
-                ];
-
-                for path in &possible_paths {
-                    if let Ok(content) = fs::read_to_string(path) {
-                        out.write(&content)?;
-                        return Ok(());
-                    }
-                }
-
-                // If no file found, use minimal fallback
-                if file_path.contains("sibylline.css") {
-                    out.write(super::assets::MINIMAL_SIBYLLINE_CSS)?;
-                } else {
-                    eprintln!(
-                        "Warning: CSS file '{}' not found, using empty content",
-                        file_path
-                    );
-                }
-
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: inline JavaScript file content
-    handlebars.register_helper(
-        "inline_js",
-        Box::new(
-            |h: &Helper,
-             _: &Handlebars,
-             _: &handlebars::Context,
-             _: &mut RenderContext,
-             out: &mut dyn handlebars::Output|
-             -> HelperResult {
-                let file_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new("inline_js helper requires a file path parameter")
-                })?;
-
-                // Try multiple possible locations for the JavaScript file
-                let possible_paths = [
-                    format!("templates/assets/dist/{}", file_path),
-                    format!("./templates/assets/dist/{}", file_path),
-                    format!("templates/assets/{}", file_path),
-                    format!("./templates/assets/{}", file_path),
-                    file_path.to_string(),
-                ];
-
-                for path in &possible_paths {
-                    if let Ok(content) = fs::read_to_string(path) {
-                        out.write(&content)?;
-                        return Ok(());
-                    }
-                }
-
-                eprintln!(
-                    "Warning: JavaScript file '{}' not found, using empty content",
-                    file_path
-                );
-                Ok(())
-            },
-        ),
-    );
-
-    // Helper: inline logo as data URL
+/// Register the logo data URL helper
+fn register_logo_data_url_helper(handlebars: &mut Handlebars<'static>) {
     handlebars.register_helper(
         "logo_data_url",
         Box::new(
@@ -491,16 +328,7 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
              _: &mut RenderContext,
              out: &mut dyn handlebars::Output|
              -> HelperResult {
-                // Try to find the logo file
-                let possible_paths = [
-                    "assets/logo.webp",
-                    "./assets/logo.webp",
-                    "webpage_files/valknut-large.webp",
-                    "./webpage_files/valknut-large.webp",
-                    ".valknut/webpage_files/valknut-large.webp",
-                ];
-
-                for path in &possible_paths {
+                for path in LOGO_PATHS {
                     if let Ok(content) = fs::read(path) {
                         if !content.is_empty() {
                             let base64_content = general_purpose::STANDARD.encode(&content);
@@ -510,10 +338,7 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
                         }
                     }
                 }
-
-                // Fallback: Use a simple SVG placeholder
-                let svg_placeholder = r#"data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMzMzMyIvPgogIDx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmFsa251dDwvdGV4dD4KICA8L3N2Zz4="#;
-                out.write(svg_placeholder)?;
+                out.write(LOGO_SVG_PLACEHOLDER)?;
                 Ok(())
             },
         ),
@@ -554,380 +379,139 @@ where
     );
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use handlebars::Handlebars;
-    use serde::ser::{Serialize, Serializer};
-    use serde_json::{json, Value};
-    use serial_test::serial;
-    use std::env;
-    use std::path::{Path, PathBuf};
-    use tempfile::tempdir;
+/// Register a helper that transforms a single string parameter.
+fn register_string_transform_helper<F>(handlebars: &mut Handlebars<'static>, name: &str, transform: F)
+where
+    F: Fn(&str) -> String + Send + Sync + 'static,
+{
+    let helper_name = name.to_string();
+    handlebars.register_helper(
+        name,
+        Box::new(
+            move |h: &Helper,
+                  _: &Handlebars,
+                  _: &handlebars::Context,
+                  _: &mut RenderContext,
+                  out: &mut dyn handlebars::Output|
+                  -> HelperResult {
+                let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                    RenderError::new(&format!("{} helper requires a string parameter", helper_name))
+                })?;
+                out.write(&transform(value))?;
+                Ok(())
+            },
+        ),
+    );
+}
 
-    fn expect_render_error(
-        handlebars: &Handlebars<'static>,
-        ctx: &Value,
-        template: &str,
-        expected_fragment: &str,
-    ) {
-        let err = handlebars
-            .render_template(template, ctx)
-            .expect_err("template should error");
-        let error_text = err.to_string();
-        assert!(
-            error_text.contains(expected_fragment),
-            "expected error containing '{expected_fragment}', got '{error_text}'"
-        );
-    }
+/// Register a helper that computes a result from an array parameter.
+fn register_array_helper<F>(handlebars: &mut Handlebars<'static>, name: &str, compute: F)
+where
+    F: Fn(&[Value]) -> String + Send + Sync + 'static,
+{
+    let helper_name = name.to_string();
+    handlebars.register_helper(
+        name,
+        Box::new(
+            move |h: &Helper,
+                  _: &Handlebars,
+                  _: &handlebars::Context,
+                  _: &mut RenderContext,
+                  out: &mut dyn handlebars::Output|
+                  -> HelperResult {
+                let array = h
+                    .param(0)
+                    .and_then(|v| v.value().as_array())
+                    .ok_or_else(|| {
+                        RenderError::new(&format!("{} helper requires an array parameter", helper_name))
+                    })?;
+                out.write(&compute(array))?;
+                Ok(())
+            },
+        ),
+    );
+}
 
-    #[test]
-    fn safe_json_value_returns_null_on_error() {
-        struct FailingValue;
-        impl Serialize for FailingValue {
-            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                Err(serde::ser::Error::custom("intentional failure"))
-            }
-        }
+/// Register a helper that maps a numeric value to a string via thresholds.
+fn register_numeric_threshold_helper<F>(handlebars: &mut Handlebars<'static>, name: &str, classify: F)
+where
+    F: Fn(f64) -> &'static str + Send + Sync + 'static,
+{
+    let helper_name = name.to_string();
+    handlebars.register_helper(
+        name,
+        Box::new(
+            move |h: &Helper,
+                  _: &Handlebars,
+                  _: &handlebars::Context,
+                  _: &mut RenderContext,
+                  out: &mut dyn handlebars::Output|
+                  -> HelperResult {
+                let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
+                    RenderError::new(&format!("{} helper requires a numeric parameter", helper_name))
+                })?;
+                out.write(classify(value))?;
+                Ok(())
+            },
+        ),
+    );
+}
 
-        let null_value = safe_json_value(FailingValue);
-        assert_eq!(null_value, Value::Null);
+/// Configuration for inline file helper registration
+struct InlineFileConfig {
+    name: &'static str,
+    prefixes: &'static [&'static str],
+    fallback: Option<(&'static str, &'static str)>, // (pattern, content)
+    file_type: &'static str,
+}
 
-        let data_value = safe_json_value(json!({"name": "valknut"}));
-        assert_eq!(data_value["name"], "valknut");
-    }
+/// Register a helper that inlines file content from disk, trying multiple paths.
+fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: InlineFileConfig) {
+    let helper_name = config.name.to_string();
+    let prefixes: Vec<String> = config.prefixes.iter().map(|s| s.to_string()).collect();
+    let fallback_pattern = config.fallback.map(|(p, _)| p.to_string());
+    let fallback_content = config.fallback.map(|(_, c)| c);
+    let file_type = config.file_type.to_string();
 
-    #[test]
-    fn template_helpers_render_expected_values() {
-        let mut handlebars = Handlebars::new();
-        register_helpers(&mut handlebars);
+    handlebars.register_helper(
+        config.name,
+        Box::new(
+            move |h: &Helper,
+                  _: &Handlebars,
+                  _: &handlebars::Context,
+                  _: &mut RenderContext,
+                  out: &mut dyn handlebars::Output|
+                  -> HelperResult {
+                let file_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+                    RenderError::new(&format!("{} helper requires a file path parameter", helper_name))
+                })?;
 
-        let ctx = json!({
-            "obj": { "name": "valknut" },
-            "number": 42.1234,
-            "ratio": 0.256,
-            "a": 6.0,
-            "b": 7.0,
-            "word": "valknut",
-            "text": "foo baz",
-            "num1": 10.0,
-            "num2": 4.0,
-            "collection": [1,2],
-            "path": "src/lib.rs",
-            "lhs": 10,
-            "rhs": 10,
-            "entity": "crate::module::function_name",
-            "health_high": 82.5,
-            "health_mid": 60.0,
-            "health_low": 25.0,
-            "dir": "src/core",
-            "other_dir": "docs"
-        });
+                // Try each prefix location
+                for prefix in &prefixes {
+                    let full_path = if prefix.is_empty() {
+                        file_path.to_string()
+                    } else {
+                        format!("{}{}", prefix, file_path)
+                    };
+                    if let Ok(content) = fs::read_to_string(&full_path) {
+                        out.write(&content)?;
+                        return Ok(());
+                    }
+                }
 
-        let json_out = handlebars.render_template("{{json obj}}", &ctx).unwrap();
-        assert!(json_out.contains("\"name\": \"valknut\""));
-
-        let format_out = handlebars
-            .render_template("{{format number \"0.2\"}}", &ctx)
-            .unwrap();
-        assert_eq!(format_out, "42.12");
-
-        let percentage_out = handlebars
-            .render_template("{{percentage ratio \"1\"}}", &ctx)
-            .unwrap();
-        assert_eq!(percentage_out, "25.6");
-
-        let multiply_out = handlebars
-            .render_template("{{multiply a b}}", &ctx)
-            .unwrap();
-        assert_eq!(multiply_out, "42");
-
-        let capitalize_out = handlebars
-            .render_template("{{capitalize word}}", &ctx)
-            .unwrap();
-        assert_eq!(capitalize_out, "Valknut");
-
-        let replace_out = handlebars
-            .render_template("{{replace text \"foo\" \"bar\"}}", &ctx)
-            .unwrap();
-        assert_eq!(replace_out, "bar baz");
-
-        let subtract_out = handlebars
-            .render_template("{{subtract num1 num2}}", &ctx)
-            .unwrap();
-        assert_eq!(subtract_out, "6");
-
-        let add_out = handlebars
-            .render_template("{{add num1 num2}}", &ctx)
-            .unwrap();
-        assert_eq!(add_out, "14");
-
-        let gt_out = handlebars
-            .render_template("{{gt num1 num2}}", &ctx)
-            .unwrap();
-        assert_eq!(gt_out, "1");
-
-        let length_out = handlebars
-            .render_template("{{length collection}}", &ctx)
-            .unwrap();
-        assert_eq!(length_out, "2");
-
-        let has_children_out = handlebars
-            .render_template("{{has_children collection}}", &ctx)
-            .unwrap();
-        assert_eq!(has_children_out, "true");
-
-        let basename_out = handlebars
-            .render_template("{{basename path}}", &ctx)
-            .unwrap();
-        assert_eq!(basename_out, "lib.rs");
-
-        let eq_out = handlebars.render_template("{{eq lhs rhs}}", &ctx).unwrap();
-        assert_eq!(eq_out, "true");
-
-        let fn_name_out = handlebars
-            .render_template("{{function_name entity}}", &ctx)
-            .unwrap();
-        assert_eq!(fn_name_out, "function_name");
-
-        let high_badge = handlebars
-            .render_template("{{health_badge_class health_high}}", &ctx)
-            .unwrap();
-        assert_eq!(high_badge, "tree-badge-High");
-        let mid_badge = handlebars
-            .render_template("{{health_badge_class health_mid}}", &ctx)
-            .unwrap();
-        assert_eq!(mid_badge, "tree-badge-Medium");
-        let low_badge = handlebars
-            .render_template("{{health_badge_class health_low}}", &ctx)
-            .unwrap();
-        assert_eq!(low_badge, "tree-badge-Low");
-
-        let is_source_out = handlebars
-            .render_template("{{is_source_directory dir}}", &ctx)
-            .unwrap();
-        assert_eq!(is_source_out, "true");
-        let non_source_out = handlebars
-            .render_template("{{is_source_directory other_dir}}", &ctx)
-            .unwrap();
-        assert_eq!(non_source_out, "false");
-    }
-
-    #[test]
-    fn template_helpers_cover_defaults_and_error_paths() {
-        let mut handlebars = Handlebars::new();
-        register_helpers(&mut handlebars);
-
-        let ctx = json!({
-            "ratio": 0.256,
-            "word": "",
-            "text": "foo baz",
-            "number": 42.1234,
-            "num1": 10.0
-        });
-
-        // Cover default percentage formatting (no precision argument)
-        let default_percentage = handlebars
-            .render_template("{{percentage ratio}}", &ctx)
-            .unwrap();
-        assert_eq!(default_percentage, "26");
-
-        // Cover capitalize branch when string is empty
-        let empty_capitalized = handlebars
-            .render_template("{{capitalize word}}", &ctx)
-            .unwrap();
-        assert!(empty_capitalized.is_empty());
-
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{format}}",
-            "format helper requires a numeric parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{percentage}}",
-            "percentage helper requires a numeric parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{multiply}}",
-            "multiply helper requires a numeric parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{multiply number}}",
-            "multiply helper requires a second numeric parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{capitalize}}",
-            "capitalize helper requires a string parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{replace}}",
-            "replace helper requires a string parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{replace text}}",
-            "replace helper requires a search string",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{replace text \"foo\"}}",
-            "replace helper requires a replacement string",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{length}}",
-            "length helper requires an array parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{has_children}}",
-            "has_children helper requires an array parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{basename}}",
-            "basename helper requires a string parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{function_name}}",
-            "function_name helper requires a string parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{health_badge_class}}",
-            "health_badge_class helper requires a numeric parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{is_source_directory}}",
-            "is_source_directory helper requires a string parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{inline_css}}",
-            "inline_css helper requires a file path parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{inline_js}}",
-            "inline_js helper requires a file path parameter",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{subtract}}",
-            "subtract helper requires numeric parameters",
-        );
-        expect_render_error(
-            &handlebars,
-            &ctx,
-            "{{subtract num1}}",
-            "subtract helper requires two numeric parameters",
-        );
-
-        // Ensure missing CSS asset path falls back to warning branch
-        let missing_css = handlebars
-            .render_template("{{inline_css \"missing.css\"}}", &ctx)
-            .unwrap();
-        assert!(missing_css.is_empty());
-    }
-
-    struct DirGuard {
-        original: PathBuf,
-    }
-
-    impl DirGuard {
-        fn new<P: AsRef<Path>>(target: P) -> Self {
-            let original = env::current_dir().expect("current dir");
-            env::set_current_dir(target.as_ref()).expect("set current dir");
-            Self { original }
-        }
-    }
-
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            env::set_current_dir(&self.original).expect("restore current dir");
-        }
-    }
-
-    #[serial]
-    #[test]
-    fn file_helpers_load_assets_and_fallback_gracefully() {
-        let temp = tempdir().unwrap();
-        let _guard = DirGuard::new(temp.path());
-
-        fs::create_dir_all("themes").unwrap();
-        fs::write("themes/custom.css", "body { color: blue; }").unwrap();
-
-        fs::create_dir_all("templates/assets/dist").unwrap();
-        fs::write(
-            "templates/assets/dist/app.js",
-            "console.log('hello valknut');",
-        )
-        .unwrap();
-
-        fs::create_dir_all("assets").unwrap();
-        fs::write("assets/logo.webp", &[0u8, 1, 2, 3]).unwrap();
-
-        let mut handlebars = Handlebars::new();
-        register_helpers(&mut handlebars);
-
-        let empty = json!({});
-
-        let css = handlebars
-            .render_template("{{inline_css \"custom.css\"}}", &empty)
-            .unwrap();
-        assert!(css.contains("color: blue"));
-
-        let js = handlebars
-            .render_template("{{inline_js \"app.js\"}}", &empty)
-            .unwrap();
-        assert!(js.contains("hello valknut"));
-
-        let logo = handlebars
-            .render_template("{{logo_data_url}}", &empty)
-            .unwrap();
-        assert!(logo.starts_with("data:image/webp;base64"));
-
-        let fallback_css = handlebars
-            .render_template("{{inline_css \"sibylline.css\"}}", &empty)
-            .unwrap();
-        assert!(fallback_css.contains("font-family"));
-
-        let missing_js = handlebars
-            .render_template("{{inline_js \"missing.js\"}}", &empty)
-            .unwrap();
-        assert!(missing_js.is_empty());
-
-        fs::remove_file("assets/logo.webp").unwrap();
-        let fallback_logo = handlebars
-            .render_template("{{logo_data_url}}", &empty)
-            .unwrap();
-        assert!(fallback_logo.contains("data:image/svg+xml;base64"));
-    }
+                // Handle fallback
+                if let (Some(ref pattern), Some(content)) = (&fallback_pattern, fallback_content) {
+                    if file_path.contains(pattern) {
+                        out.write(content)?;
+                        return Ok(());
+                    }
+                }
+                eprintln!(
+                    "Warning: {} file '{}' not found, using empty content",
+                    file_type, file_path
+                );
+                Ok(())
+            },
+        ),
+    );
 }

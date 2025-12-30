@@ -70,6 +70,16 @@ fn apply_advanced_sections_from_file(target: &mut ValknutConfig, source: &Valknu
     target.structure = source.structure.clone();
     target.live_reach = source.live_reach.clone();
     target.analysis.enable_names_analysis = source.analysis.enable_names_analysis;
+    // Preserve file-level include/exclude/ignore patterns
+    if !source.analysis.exclude_patterns.is_empty() {
+        target.analysis.exclude_patterns = source.analysis.exclude_patterns.clone();
+    }
+    if !source.analysis.include_patterns.is_empty() {
+        target.analysis.include_patterns = source.analysis.include_patterns.clone();
+    }
+    if !source.analysis.ignore_patterns.is_empty() {
+        target.analysis.ignore_patterns = source.analysis.ignore_patterns.clone();
+    }
 }
 
 /// Enhanced configuration loading with layered approach
@@ -149,14 +159,15 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
             self.analysis.max_files = other.analysis.max_files;
         }
 
-        // Replace include/exclude/ignore patterns when explicitly provided
-        if !other.analysis.include_patterns.is_empty() {
+        // Replace include/exclude/ignore patterns only when explicitly changed from defaults
+        let default_analysis = valknut_rs::core::config::AnalysisConfig::default();
+        if other.analysis.include_patterns != default_analysis.include_patterns {
             self.analysis.include_patterns = other.analysis.include_patterns.clone();
         }
-        if !other.analysis.exclude_patterns.is_empty() {
+        if other.analysis.exclude_patterns != default_analysis.exclude_patterns {
             self.analysis.exclude_patterns = other.analysis.exclude_patterns.clone();
         }
-        if !other.analysis.ignore_patterns.is_empty() {
+        if other.analysis.ignore_patterns != default_analysis.ignore_patterns {
             self.analysis.ignore_patterns = other.analysis.ignore_patterns.clone();
         }
 
@@ -181,6 +192,12 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         }
         if other.io.enable_caching != self.io.enable_caching {
             self.io.enable_caching = other.io.enable_caching;
+        }
+
+        // Merge cohesion config (only if explicitly enabled)
+        if other.cohesion.enabled {
+            self.cohesion = other.cohesion.clone();
+            self.analysis.enable_cohesion_analysis = true;
         }
     }
 }
@@ -511,6 +528,22 @@ impl FromCliArgs<AnalyzeArgs> for ValknutConfig {
         if let Some(max_pairs) = args.advanced_clone.apted_max_pairs {
             config.lsh.apted_max_pairs_per_entity = max_pairs;
         }
+
+        // Cohesion analysis configuration
+        if args.analysis_control.cohesion {
+            config.cohesion.enabled = true;
+            config.analysis.enable_cohesion_analysis = true;
+            if let Some(min_score) = args.cohesion.cohesion_min_score {
+                config.cohesion.thresholds.min_cohesion = min_score;
+            }
+            if let Some(min_doc_alignment) = args.cohesion.cohesion_min_doc_alignment {
+                config.cohesion.thresholds.min_doc_alignment = min_doc_alignment;
+            }
+            if let Some(outlier_percentile) = args.cohesion.cohesion_outlier_percentile {
+                config.cohesion.thresholds.outlier_percentile = outlier_percentile;
+            }
+        }
+
         config
     }
 }

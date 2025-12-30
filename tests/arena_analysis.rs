@@ -111,6 +111,8 @@ fn arena_batch_result_metrics_are_consistent() {
         arena_bytes_used: arena_bytes,
         memory_efficiency_score: memory_efficiency,
         entities: Vec::new(),
+        lines_of_code: 100,
+        source_code: String::new(),
     };
 
     assert_eq!(sample_result.file_path_str(), "batch/sample.py");

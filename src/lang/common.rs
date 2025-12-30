@@ -19,6 +19,24 @@ pub enum EntityKind {
     Struct,
 }
 
+impl EntityKind {
+    /// Generate a fallback name for an anonymous entity of this kind.
+    pub fn fallback_name(self, counter: usize) -> String {
+        let kind_str = match self {
+            EntityKind::Function => "function",
+            EntityKind::Method => "method",
+            EntityKind::Class => "class",
+            EntityKind::Interface => "interface",
+            EntityKind::Module => "module",
+            EntityKind::Variable => "variable",
+            EntityKind::Constant => "constant",
+            EntityKind::Enum => "enum",
+            EntityKind::Struct => "struct",
+        };
+        format!("anonymous_{}_{}", kind_str, counter)
+    }
+}
+
 /// Language-agnostic representation of a parsed entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedEntity {

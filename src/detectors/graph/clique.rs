@@ -93,127 +93,14 @@ impl SimilarityCliquePartitioner {
             return CliquePartitions::new();
         }
 
-        let mut token_sets: Vec<HashSet<u64>> = Vec::with_capacity(entities.len());
-        let mut token_buckets: HashMap<u64, Vec<usize>> = HashMap::new();
+        let (token_sets, token_buckets) = self.build_token_sets_and_buckets(entities);
+        let (pair_counts, candidate_pairs, skipped_large_buckets) =
+            self.count_candidate_pairs(token_buckets, &token_sets);
+        let (adjacency, edges_added) =
+            self.build_adjacency_graph(pair_counts, &token_sets, entities.len());
 
-        for (idx, entity) in entities.iter().enumerate() {
-            let tokens = self.extract_tokens(&entity.source_code);
-            if tokens.is_empty() {
-                token_sets.push(HashSet::new());
-                continue;
-            }
-
-            for token_hash in &tokens {
-                token_buckets.entry(*token_hash).or_default().push(idx);
-            }
-
-            token_sets.push(tokens);
-        }
-
-        let mut pair_counts: HashMap<(usize, usize), usize> = HashMap::new();
-
-        let mut skipped_large_buckets = 0usize;
-        let mut candidate_pairs = 0usize;
-        let mut edges_added = 0usize;
-
-        for indices in token_buckets.values_mut() {
-            if indices.len() < 2 {
-                continue;
-            }
-            if indices.len() > self.max_token_bucket {
-                skipped_large_buckets += 1;
-                continue;
-            }
-            indices.sort_unstable();
-            for i in 0..indices.len() {
-                for j in (i + 1)..indices.len() {
-                    let a = indices[i];
-                    let b = indices[j];
-                    if token_sets[a].is_empty() || token_sets[b].is_empty() {
-                        continue;
-                    }
-                    candidate_pairs += 1;
-                    *pair_counts.entry((a.min(b), a.max(b))).or_insert(0) += 1;
-                }
-            }
-        }
-
-        let mut adjacency: Vec<Vec<usize>> = vec![Vec::new(); entities.len()];
-
-        for ((i, j), shared) in pair_counts.into_iter() {
-            let set_i_len = token_sets[i].len();
-            let set_j_len = token_sets[j].len();
-            if shared < self.min_shared_tokens || set_i_len == 0 || set_j_len == 0 {
-                continue;
-            }
-
-            let union = set_i_len + set_j_len - shared;
-            if union == 0 {
-                continue;
-            }
-
-            let jaccard = shared as f64 / union as f64;
-            if jaccard >= self.min_jaccard {
-                adjacency[i].push(j);
-                adjacency[j].push(i);
-                edges_added += 1;
-            }
-        }
-
-        let mut visited = vec![false; entities.len()];
-        let mut partitions = CliquePartitions::new();
-        let mut total_group_members = 0usize;
-        let mut largest_group = 0usize;
-
-        for start in 0..entities.len() {
-            if visited[start] {
-                continue;
-            }
-
-            visited[start] = true;
-            let mut queue = VecDeque::new();
-            queue.push_back(start);
-            let mut component = Vec::new();
-
-            while let Some(current) = queue.pop_front() {
-                component.push(current);
-                for &neigh in &adjacency[current] {
-                    if !visited[neigh] {
-                        visited[neigh] = true;
-                        queue.push_back(neigh);
-                    }
-                }
-            }
-
-            if component.len() <= 1 {
-                continue;
-            }
-
-            component.sort_unstable();
-            largest_group = largest_group.max(component.len());
-            total_group_members += component.len();
-
-            if component.len() > self.max_group_size {
-                // Break large components into deterministic chunks so that the
-                // downstream stages never explode in complexity.
-                let mut ids: Vec<String> = component
-                    .iter()
-                    .map(|&idx| entities[idx].id.clone())
-                    .collect();
-                ids.sort();
-                for chunk in ids.chunks(self.max_group_size) {
-                    if chunk.len() > 1 {
-                        self.register_group(chunk, &mut partitions);
-                    }
-                }
-            } else {
-                let ids: Vec<String> = component
-                    .iter()
-                    .map(|&idx| entities[idx].id.clone())
-                    .collect();
-                self.register_group(&ids, &mut partitions);
-            }
-        }
+        let (partitions, total_group_members, largest_group) =
+            self.find_and_register_components(&adjacency, entities);
 
         let group_count = partitions.len();
         let average_group = if group_count > 0 {
@@ -233,6 +120,191 @@ impl SimilarityCliquePartitioner {
         );
 
         partitions
+    }
+
+    /// Build token sets for each entity and inverted index buckets.
+    fn build_token_sets_and_buckets(
+        &self,
+        entities: &[CodeEntity],
+    ) -> (Vec<HashSet<u64>>, HashMap<u64, Vec<usize>>) {
+        let mut token_sets: Vec<HashSet<u64>> = Vec::with_capacity(entities.len());
+        let mut token_buckets: HashMap<u64, Vec<usize>> = HashMap::new();
+
+        for (idx, entity) in entities.iter().enumerate() {
+            let tokens = self.extract_tokens(&entity.source_code);
+            if tokens.is_empty() {
+                token_sets.push(HashSet::new());
+                continue;
+            }
+
+            for token_hash in &tokens {
+                token_buckets.entry(*token_hash).or_default().push(idx);
+            }
+
+            token_sets.push(tokens);
+        }
+
+        (token_sets, token_buckets)
+    }
+
+    /// Count candidate pairs from token buckets.
+    /// Returns (pair_counts, candidate_pairs_count, skipped_large_buckets).
+    fn count_candidate_pairs(
+        &self,
+        mut token_buckets: HashMap<u64, Vec<usize>>,
+        token_sets: &[HashSet<u64>],
+    ) -> (HashMap<(usize, usize), usize>, usize, usize) {
+        let mut pair_counts: HashMap<(usize, usize), usize> = HashMap::new();
+        let mut skipped_large_buckets = 0usize;
+        let mut candidate_pairs = 0usize;
+
+        for indices in token_buckets.values_mut() {
+            if indices.len() < 2 {
+                continue;
+            }
+            if indices.len() > self.max_token_bucket {
+                skipped_large_buckets += 1;
+                continue;
+            }
+            indices.sort_unstable();
+            self.count_pairs_in_bucket(indices, token_sets, &mut pair_counts, &mut candidate_pairs);
+        }
+
+        (pair_counts, candidate_pairs, skipped_large_buckets)
+    }
+
+    /// Count pairs within a single bucket (extracted to reduce nesting).
+    fn count_pairs_in_bucket(
+        &self,
+        indices: &[usize],
+        token_sets: &[HashSet<u64>],
+        pair_counts: &mut HashMap<(usize, usize), usize>,
+        candidate_pairs: &mut usize,
+    ) {
+        for i in 0..indices.len() {
+            for j in (i + 1)..indices.len() {
+                let a = indices[i];
+                let b = indices[j];
+                if token_sets[a].is_empty() || token_sets[b].is_empty() {
+                    continue;
+                }
+                *candidate_pairs += 1;
+                *pair_counts.entry((a.min(b), a.max(b))).or_insert(0) += 1;
+            }
+        }
+    }
+
+    /// Build adjacency graph from pair counts using jaccard similarity filtering.
+    fn build_adjacency_graph(
+        &self,
+        pair_counts: HashMap<(usize, usize), usize>,
+        token_sets: &[HashSet<u64>],
+        entity_count: usize,
+    ) -> (Vec<Vec<usize>>, usize) {
+        let mut adjacency: Vec<Vec<usize>> = vec![Vec::new(); entity_count];
+        let mut edges_added = 0usize;
+
+        for ((i, j), shared) in pair_counts {
+            let set_i_len = token_sets[i].len();
+            let set_j_len = token_sets[j].len();
+            if shared < self.min_shared_tokens || set_i_len == 0 || set_j_len == 0 {
+                continue;
+            }
+
+            let union = set_i_len + set_j_len - shared;
+            if union == 0 {
+                continue;
+            }
+
+            let jaccard = shared as f64 / union as f64;
+            if jaccard >= self.min_jaccard {
+                adjacency[i].push(j);
+                adjacency[j].push(i);
+                edges_added += 1;
+            }
+        }
+
+        (adjacency, edges_added)
+    }
+
+    /// Find connected components via BFS and register them as partitions.
+    fn find_and_register_components(
+        &self,
+        adjacency: &[Vec<usize>],
+        entities: &[CodeEntity],
+    ) -> (CliquePartitions, usize, usize) {
+        let mut visited = vec![false; entities.len()];
+        let mut partitions = CliquePartitions::new();
+        let mut total_group_members = 0usize;
+        let mut largest_group = 0usize;
+
+        for start in 0..entities.len() {
+            if visited[start] {
+                continue;
+            }
+
+            let component = self.bfs_component(start, adjacency, &mut visited);
+            if component.len() <= 1 {
+                continue;
+            }
+
+            largest_group = largest_group.max(component.len());
+            total_group_members += component.len();
+
+            self.register_component(&component, entities, &mut partitions);
+        }
+
+        (partitions, total_group_members, largest_group)
+    }
+
+    /// Perform BFS to find a connected component starting from `start`.
+    fn bfs_component(
+        &self,
+        start: usize,
+        adjacency: &[Vec<usize>],
+        visited: &mut [bool],
+    ) -> Vec<usize> {
+        visited[start] = true;
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        let mut component = Vec::new();
+
+        while let Some(current) = queue.pop_front() {
+            component.push(current);
+            for &neigh in &adjacency[current] {
+                if !visited[neigh] {
+                    visited[neigh] = true;
+                    queue.push_back(neigh);
+                }
+            }
+        }
+
+        component.sort_unstable();
+        component
+    }
+
+    /// Register a component as partition(s), splitting large ones into chunks.
+    fn register_component(
+        &self,
+        component: &[usize],
+        entities: &[CodeEntity],
+        partitions: &mut CliquePartitions,
+    ) {
+        let ids: Vec<String> = component.iter().map(|&idx| entities[idx].id.clone()).collect();
+
+        if component.len() > self.max_group_size {
+            // Break large components into deterministic chunks so that the
+            // downstream stages never explode in complexity.
+            let mut sorted_ids = ids;
+            sorted_ids.sort();
+            for chunk in sorted_ids.chunks(self.max_group_size) {
+                if chunk.len() > 1 {
+                    self.register_group(chunk, partitions);
+                }
+            }
+        } else {
+            self.register_group(&ids, partitions);
+        }
     }
 
     fn extract_tokens(&self, source: &str) -> HashSet<u64> {

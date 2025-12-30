@@ -20,6 +20,9 @@ use std::sync::Arc;
 use tracing::warn;
 use types::{FileCoverage, LineCoverage};
 
+#[cfg(test)]
+mod tests;
+
 /// Primary entry point for coverage analysis.
 #[derive(Debug)]
 pub struct CoverageExtractor {
@@ -466,34 +469,61 @@ impl CoverageExtractor {
         cached_tree: Option<&Arc<crate::core::ast_service::CachedTree>>,
         gap: &mut CoverageGap,
     ) -> Result<()> {
-        if cached_tree.is_none() {
+        let Some(cached_tree) = cached_tree else {
             return Ok(());
-        }
-        let cached_tree = cached_tree.unwrap();
+        };
+
         let path_repr = gap.path.to_string_lossy().to_string();
         let context = self.ast_service.create_context(cached_tree, &path_repr);
         let metrics = self.ast_service.calculate_complexity(&context)?;
 
-        let decision_points_in_gap: Vec<_> = metrics
+        let decision_points = self.filter_decision_points_in_span(&metrics, &gap.span);
+        self.populate_complexity_features(&decision_points, gap);
+
+        let snippet = self.extract_snippet(content, gap.span.start, gap.span.end);
+        self.populate_code_style_features(&snippet, gap);
+
+        gap.symbols =
+            self.extract_symbols_from_ast(content, cached_tree, gap.span.start, gap.span.end);
+        self.populate_symbol_features(content, gap);
+        self.populate_exception_density(&snippet, gap);
+
+        Ok(())
+    }
+
+    /// Filter decision points that fall within the gap span.
+    fn filter_decision_points_in_span<'a>(
+        &self,
+        metrics: &'a crate::core::ast_service::ComplexityMetrics,
+        span: &UncoveredSpan,
+    ) -> Vec<&'a crate::core::ast_service::DecisionPoint> {
+        metrics
             .decision_points
             .iter()
-            .filter(|dp| {
-                dp.location.start_line >= gap.span.start && dp.location.end_line <= gap.span.end
-            })
-            .collect();
+            .filter(|dp| dp.location.start_line >= span.start && dp.location.end_line <= span.end)
+            .collect()
+    }
 
-        gap.features.cyclomatic_in_gap = if decision_points_in_gap.is_empty() {
+    /// Populate cyclomatic and cognitive complexity features from decision points.
+    fn populate_complexity_features(
+        &self,
+        decision_points: &[&crate::core::ast_service::DecisionPoint],
+        gap: &mut CoverageGap,
+    ) {
+        gap.features.cyclomatic_in_gap = if decision_points.is_empty() {
             0.0
         } else {
-            1.0 + decision_points_in_gap.len() as f64
+            1.0 + decision_points.len() as f64
         };
 
-        gap.features.cognitive_in_gap = decision_points_in_gap
+        gap.features.cognitive_in_gap = decision_points
             .iter()
             .map(|dp| self.cognitive_weight(&dp.kind) as f64 + dp.nesting_level as f64)
             .sum();
+    }
 
-        let snippet = self.extract_snippet(content, gap.span.start, gap.span.end);
+    /// Populate exports and documentation features from snippet.
+    fn populate_code_style_features(&self, snippet: &[String], gap: &mut CoverageGap) {
         gap.features.exports_touched = snippet.iter().any(|line| {
             let trimmed = line.trim_start();
             trimmed.starts_with("pub ")
@@ -504,43 +534,44 @@ impl CoverageExtractor {
 
         gap.features.docstring_or_comment_present = snippet.iter().any(|line| {
             let trimmed = line.trim();
-            trimmed.starts_with("#")
+            trimmed.starts_with('#')
                 || trimmed.starts_with("///")
                 || trimmed.starts_with("//")
                 || trimmed.starts_with("/*")
                 || trimmed.starts_with("\"\"\"")
         });
+    }
 
-        gap.symbols =
-            self.extract_symbols_from_ast(content, cached_tree, gap.span.start, gap.span.end);
+    /// Populate interface surface and fan-in features from symbols.
+    fn populate_symbol_features(&self, content: &str, gap: &mut CoverageGap) {
         gap.features.interface_surface = gap
             .symbols
             .iter()
             .map(|symbol| symbol.signature.matches(',').count() + 1)
             .sum();
 
-        if !gap.symbols.is_empty() {
-            let rest = self.remove_span_from_content(content, gap.span.start, gap.span.end);
-            let mut fan_in = 0;
-            for symbol in &gap.symbols {
-                fan_in += rest.matches(&symbol.name).count();
-            }
-            gap.features.fan_in_gap = fan_in.max(gap.symbols.len());
+        if gap.symbols.is_empty() {
+            return;
         }
 
-        if !snippet.is_empty() {
-            let exception_keywords = ["except", "catch", "Result<", "Err("];
-            let mut exceptions = 0;
-            for line in &snippet {
-                if exception_keywords.iter().any(|kw| line.contains(kw)) {
-                    exceptions += 1;
-                }
-            }
-            gap.features.exception_density_in_gap =
-                exceptions as f64 / gap.features.gap_loc.max(1) as f64;
+        let rest = self.remove_span_from_content(content, gap.span.start, gap.span.end);
+        let fan_in: usize = gap.symbols.iter().map(|s| rest.matches(&s.name).count()).sum();
+        gap.features.fan_in_gap = fan_in.max(gap.symbols.len());
+    }
+
+    /// Populate exception density feature from snippet.
+    fn populate_exception_density(&self, snippet: &[String], gap: &mut CoverageGap) {
+        if snippet.is_empty() {
+            return;
         }
 
-        Ok(())
+        const EXCEPTION_KEYWORDS: &[&str] = &["except", "catch", "Result<", "Err("];
+        let exceptions = snippet
+            .iter()
+            .filter(|line| EXCEPTION_KEYWORDS.iter().any(|kw| line.contains(kw)))
+            .count();
+        gap.features.exception_density_in_gap =
+            exceptions as f64 / gap.features.gap_loc.max(1) as f64;
     }
 
     fn extract_snippet(&self, content: &str, start: usize, end: usize) -> Vec<String> {
@@ -794,145 +825,5 @@ impl FeatureExtractor for CoverageExtractor {
         _context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
         Ok(HashMap::new())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[tokio::test]
-    async fn coverage_extractor_default_builds() {
-        let extractor = CoverageExtractor::with_ast(Arc::new(AstService::new()));
-        let packs = extractor.build_coverage_packs(Vec::new()).await.unwrap();
-        assert!(packs.is_empty());
-    }
-
-    fn make_extractor(mut config: CoverageConfig) -> CoverageExtractor {
-        config.enabled = true;
-        CoverageExtractor::new(config, Arc::new(AstService::new()))
-    }
-
-    #[tokio::test]
-    async fn builds_coverage_pack_from_minimal_lcov_report() {
-        let tmp = tempdir().expect("temp dir");
-        let source_path = tmp.path().join("sample.rs");
-        let source = r#"pub fn add(a: i32, b: i32) -> i32 {
-    if a > 0 {
-        a + b
-    } else {
-        b - a
-    }
-}
-"#;
-        fs::write(&source_path, source).expect("write source file");
-
-        let lcov_path = tmp.path().join("coverage.lcov");
-        let lcov_report = format!(
-            "TN:\nSF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:4,0\nDA:5,0\nDA:6,0\nDA:7,0\nDA:8,1\nend_of_record\n",
-            source_path.display()
-        );
-        fs::write(&lcov_path, lcov_report).expect("write lcov file");
-
-        let mut config = CoverageConfig::default();
-        config.min_gap_loc = 1;
-        config.snippet_context_lines = 1;
-        config.long_gap_head_tail = 1;
-
-        let extractor = make_extractor(config);
-        let packs = extractor
-            .build_coverage_packs(vec![lcov_path])
-            .await
-            .expect("pack generation");
-
-        let pack = packs
-            .iter()
-            .find(|pack| pack.path == source_path)
-            .expect("pack for source file");
-
-        assert!(!pack.gaps.is_empty());
-        let gap = &pack.gaps[0];
-        assert_eq!(gap.span.start, 2);
-        assert!(gap.span.end >= gap.span.start);
-        assert!(gap.features.gap_loc >= 1);
-        assert!(gap.preview.head.len() <= 1);
-    }
-
-    #[test]
-    fn lines_to_spans_respects_min_gap_and_merges_runs() {
-        let mut config = CoverageConfig::default();
-        config.min_gap_loc = 3;
-        let extractor = make_extractor(config);
-
-        let lines = vec![
-            LineCoverage {
-                line_number: 1,
-                hits: 0,
-                is_covered: false,
-            },
-            LineCoverage {
-                line_number: 2,
-                hits: 0,
-                is_covered: false,
-            },
-            LineCoverage {
-                line_number: 3,
-                hits: 0,
-                is_covered: false,
-            },
-            LineCoverage {
-                line_number: 5,
-                hits: 0,
-                is_covered: false,
-            },
-            LineCoverage {
-                line_number: 10,
-                hits: 0,
-                is_covered: false,
-            },
-        ];
-        let path = PathBuf::from("fake.rs");
-        let spans = extractor
-            .lines_to_spans(&path, &lines)
-            .expect("compute spans");
-
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].start, 1);
-        assert_eq!(spans[0].end, 3);
-    }
-
-    #[test]
-    fn chunk_spans_python_splits_on_function_boundaries() {
-        let tmp = tempdir().expect("temp dir");
-        let path = tmp.path().join("module.py");
-        let python_source = r#"
-def a():
-    return 1
-
-
-def b():
-    return 2
-"#;
-        fs::write(&path, python_source).expect("write python file");
-
-        let mut config = CoverageConfig::default();
-        config.min_gap_loc = 1;
-        let extractor = make_extractor(config);
-
-        let span = UncoveredSpan {
-            path: path.clone(),
-            start: 1,
-            end: 6,
-            hits: Some(0),
-        };
-
-        let chunked = extractor
-            .chunk_spans_python(&path, &[span])
-            .expect("python chunking");
-
-        assert!(chunked.len() >= 2);
-        assert_eq!(chunked[0].start, 1);
-        assert!(chunked.iter().any(|s| s.start > 1));
     }
 }

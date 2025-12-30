@@ -20,6 +20,8 @@ pub struct StructureConfig {
     pub fsfile: FsFileConfig,
     /// Graph partitioning settings
     pub partitioning: PartitioningConfig,
+    /// Entity health scoring settings
+    pub entity_health: EntityHealthConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +48,14 @@ pub struct FsDirectoryConfig {
     pub min_files_for_split: usize,
     /// Target lines of code per subdirectory when partitioning
     pub target_loc_per_subdir: usize,
+    /// Optimal number of files per directory (mean of distribution)
+    pub optimal_files: usize,
+    /// Standard deviation for file count distribution scoring
+    pub optimal_files_stddev: f64,
+    /// Optimal number of subdirectories per directory (mean of distribution)
+    pub optimal_subdirs: usize,
+    /// Standard deviation for subdirectory count distribution scoring
+    pub optimal_subdirs_stddev: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +68,64 @@ pub struct FsFileConfig {
     pub min_split_loc: usize,
     /// Minimum entities per file split
     pub min_entities_per_split: usize,
+    /// Optimal file size in AST nodes (mode of lognormal distribution).
+    /// Default 2000 corresponds to ~200 LOC at ~10 nodes/line.
+    pub optimal_ast_nodes: usize,
+    /// AST node count at 95th percentile of the lognormal distribution.
+    /// Default 6000 corresponds to ~600 LOC. Used to derive distribution shape.
+    pub ast_nodes_95th_percentile: usize,
+}
+
+/// Configuration for entity health scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityHealthConfig {
+    /// Function/method size scoring parameters
+    pub function_size: EntitySizeParams,
+    /// Class/struct size scoring parameters
+    pub class_size: EntitySizeParams,
+    /// File size scoring parameters
+    pub file_size: EntitySizeParams,
+}
+
+/// Parameters for entity size health scoring using lognormal distribution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntitySizeParams {
+    /// Optimal size in AST nodes (mode of lognormal distribution)
+    pub optimal: usize,
+    /// Size at 95th percentile of the lognormal distribution
+    pub percentile_95: usize,
+    /// Logistic shaping: percentile where penalty ramp centers (0.0-1.0)
+    pub penalty_center: f64,
+    /// Logistic shaping: steepness of the penalty ramp (smaller = steeper)
+    pub penalty_steepness: f64,
+}
+
+impl Default for EntityHealthConfig {
+    fn default() -> Self {
+        Self {
+            function_size: EntitySizeParams {
+                // ~20 LOC optimal (~200 AST nodes), ~80 LOC at P95 (~800 AST nodes)
+                optimal: 200,
+                percentile_95: 800,
+                penalty_center: 0.90,
+                penalty_steepness: 0.05,
+            },
+            class_size: EntitySizeParams {
+                // ~50 LOC optimal (~500 AST nodes), ~300 LOC at P95 (~3000 AST nodes)
+                optimal: 500,
+                percentile_95: 3000,
+                penalty_center: 0.90,
+                penalty_steepness: 0.05,
+            },
+            file_size: EntitySizeParams {
+                // ~200 LOC optimal (~2000 AST nodes), ~600 LOC at P95 (~6000 AST nodes)
+                optimal: 2000,
+                percentile_95: 6000,
+                penalty_center: 0.90,
+                penalty_steepness: 0.05,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,12 +153,18 @@ impl Default for StructureConfig {
                 min_branch_recommendation_gain: 0.15,
                 min_files_for_split: 5,
                 target_loc_per_subdir: 1000,
+                optimal_files: 7,
+                optimal_files_stddev: 2.0,
+                optimal_subdirs: 3,
+                optimal_subdirs_stddev: 1.5,
             },
             fsfile: FsFileConfig {
                 huge_loc: 800,
                 huge_bytes: 128_000,
                 min_split_loc: 200,
                 min_entities_per_split: 3,
+                optimal_ast_nodes: 2000,
+                ast_nodes_95th_percentile: 6000,
             },
             partitioning: PartitioningConfig {
                 balance_tolerance: 0.25,
@@ -103,6 +177,7 @@ impl Default for StructureConfig {
                     "util".to_string(),
                 ],
             },
+            entity_health: EntityHealthConfig::default(),
         }
     }
 }
@@ -128,8 +203,40 @@ pub struct DirectoryMetrics {
     pub size_pressure: f64,
     /// Dispersion metric combining gini and entropy
     pub dispersion: f64,
+    /// Distribution-based score for file count (1.0 = optimal, decreases away from optimal)
+    pub file_count_score: f64,
+    /// Distribution-based score for subdirectory count (1.0 = optimal, decreases away from optimal)
+    pub subdir_count_score: f64,
     /// Overall imbalance score
     pub imbalance: f64,
+}
+
+/// File-level metrics for size scoring
+#[derive(Debug, Clone, Serialize)]
+pub struct FileMetrics {
+    /// File path
+    pub path: PathBuf,
+    /// Number of AST nodes (named nodes only, excludes punctuation/whitespace)
+    pub ast_nodes: usize,
+    /// Lines of code (for reference, not used in scoring)
+    pub loc: usize,
+    /// Lognormal distribution-based score for file size (1.0 = optimal, decreases away from optimal)
+    pub size_score: f64,
+    /// Entity health summary for functions/classes in this file
+    pub entity_health: Option<FileEntityHealth>,
+}
+
+/// Aggregated entity health metrics for a file
+#[derive(Debug, Clone, Serialize)]
+pub struct FileEntityHealth {
+    /// Number of entities analyzed
+    pub entity_count: usize,
+    /// Total AST nodes across all entities
+    pub total_ast_nodes: usize,
+    /// AST-weighted average health score (0.0-1.0)
+    pub health: f64,
+    /// Minimum entity health (worst entity)
+    pub min_health: f64,
 }
 
 /// Branch reorganization pack recommendation
@@ -270,6 +377,8 @@ pub struct EntityNode {
     pub entity_type: String,
     /// Lines of code for entity
     pub loc: usize,
+    /// AST node count for entity (for health scoring)
+    pub ast_nodes: usize,
     /// Referenced symbols/identifiers
     pub symbols: HashSet<String>,
 }

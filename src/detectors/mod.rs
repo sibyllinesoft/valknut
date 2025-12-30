@@ -12,6 +12,7 @@
 //! - **coverage**: Code coverage analysis and gap identification
 //! - **refactoring**: Refactoring opportunity detection and ranking
 //! - **graph**: Dependency analysis and architectural metrics (v1.1)
+//! - **cohesion**: Semantic cohesion and doc-code alignment analysis
 //!
 //! Experimental concepts that are not yet production-ready should live on
 //! feature branches rather than in this crate to keep the public surface
@@ -30,9 +31,10 @@
 //! let features = detector.extract_features(&source_file)?;
 //! ```
 
+pub mod cohesion;
 pub mod complexity;
+pub mod coverage;
 pub mod graph;
 pub mod lsh;
-pub mod structure;
-pub mod coverage;
 pub mod refactoring;
+pub mod structure;

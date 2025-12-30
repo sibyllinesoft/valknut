@@ -92,6 +92,7 @@ pub mod core {
     pub mod config;
     pub mod dependency;
     pub mod errors;
+    pub mod partitioning;
     pub mod featureset;
     pub mod file_utils;
     pub mod interned_entities;
@@ -105,6 +106,7 @@ pub mod core {
 pub mod detectors {
     //! Specialized code analysis detectors.
 
+    pub mod cohesion;
     pub mod complexity;
     pub mod coverage;
     pub mod graph;
@@ -143,6 +145,9 @@ pub mod io {
 
 // AI refactoring oracle
 pub mod oracle;
+
+// Documentation audit utilities
+pub mod doc_audit;
 
 // Public API and engine interface
 pub mod api {

@@ -1,9 +1,31 @@
+/**
+ * Valknut Dev Server
+ *
+ * This script runs a development server for testing report templates.
+ *
+ * IMPORTANT FILE STRUCTURE:
+ * - public/report-dev.html  <- The dev server serves THIS file (via webpack-dev-server)
+ * - data/analysis.json      <- Input data used by render-report.cjs
+ * - ../report-dev.html      <- NOT served by dev server (only for file:// access)
+ *
+ * To update the dev server report:
+ * 1. Copy a generated report: cp docs/report_*.html templates/dev/public/report-dev.html
+ * 2. OR update data/analysis.json and let the server auto-regenerate
+ *
+ * The server watches for changes in:
+ * - .valknut/ directory (for new analysis JSON)
+ * - templates/partials/ (for template changes)
+ * - data/*.json (for data changes)
+ * - assets/react-tree-bundle.js (for bundle updates)
+ */
+
 const fs = require('fs');
 const path = require('path');
 const { spawnSync, spawn } = require('child_process');
 const net = require('net');
 const chokidar = require('chokidar');
 
+// Source directory for valknut analysis output
 const reportsDir = path.join(__dirname, '../../../.valknut');
 const devDataDir = path.join(__dirname, '../data');
 const analysisJsonPath = path.join(devDataDir, 'analysis.json');

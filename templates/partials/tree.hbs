@@ -24,7 +24,7 @@
             "directory_health_tree": {{#if directory_health_tree}}{{{json directory_health_tree}}}{{else}}null{{/if}},
             "documentation": {{#if documentation}}{{{json documentation}}}{{else}}null{{/if}},
             "graph_insights": {{#if graph_insights}}{{{json graph_insights}}}{{else}}{"hasInsights":false}{{/if}},
-            "passes": {{#if passes}}{{{json passes}}}{{else}}null{{/if}},
+            "cohesion": {{#if cohesion}}{{{json cohesion}}}{{else}}null{{/if}},
             "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
             "clone_analysis": {{#if clone_analysis}}{{{json clone_analysis}}}{{else}}null{{/if}}
         }
@@ -369,6 +369,108 @@
                 });
             }
 
+            function buildCohesionLookup(cohesionData) {
+                const map = {};
+                if (!cohesionData || !cohesionData.enabled) return map;
+
+                // Detect project root from paths for stripping absolute prefixes
+                const projectRoot = normalizePath(payload.projectRoot || '');
+
+                const addVariants = (path, score, type) => {
+                    const normalized = normalizePath(path);
+                    const variants = new Set();
+
+                    // Add absolute path
+                    variants.add(normalized);
+
+                    // Add relative path by stripping project root
+                    if (projectRoot && normalized.startsWith(projectRoot + '/')) {
+                        const relative = normalized.slice(projectRoot.length + 1);
+                        variants.add(relative);
+                        variants.add('./' + relative);
+                    }
+
+                    // Try common prefixes (src/, templates/, etc.)
+                    const commonPrefixes = ['src/', 'templates/', 'tests/', 'benchmarks/', 'datasets/', 'docs/', 'examples/', 'vscode-extension/'];
+                    for (const prefix of commonPrefixes) {
+                        const idx = normalized.indexOf('/' + prefix);
+                        if (idx >= 0) {
+                            const relative = normalized.slice(idx + 1);
+                            variants.add(relative);
+                            variants.add('./' + relative);
+                        }
+                    }
+
+                    // Add without leading ./
+                    variants.add(normalized.replace(/^\.\//, ''));
+
+                    // Add just the last component (folder/file name)
+                    const lastComponent = normalized.split('/').pop();
+                    if (lastComponent) variants.add(lastComponent);
+
+                    variants.forEach(k => {
+                        if (!k) return;
+                        // For files, always set; for folders, don't override files
+                        if (type === 'file') {
+                            if (!map[k]) {
+                                map[k] = { cohesion: score.cohesion, outliers: score.outliers || [], type: 'file' };
+                            }
+                        } else {
+                            if (!map[k] || map[k].type !== 'file') {
+                                map[k] = { cohesion: score.cohesion, outliers: score.outliers || [], type: 'folder' };
+                            }
+                        }
+                    });
+                };
+
+                // Build lookup from file_scores
+                if (cohesionData.file_scores) {
+                    Object.entries(cohesionData.file_scores).forEach(([path, score]) => {
+                        addVariants(path, score, 'file');
+                    });
+                }
+
+                // Build lookup from folder_scores
+                if (cohesionData.folder_scores) {
+                    Object.entries(cohesionData.folder_scores).forEach(([path, score]) => {
+                        addVariants(path, score, 'folder');
+                    });
+                }
+
+                return map;
+            }
+
+            function applyCohesionToHierarchy(nodes, cohesionMap, parentPath = '') {
+                if (!Array.isArray(nodes)) return;
+
+                nodes.forEach((node) => {
+                    if (!node || typeof node !== 'object') return;
+
+                    const explicitPath = node.path || node.file_path || node.filePath || null;
+                    let derivedPath = parentPath ? `${parentPath}/${node.name || ''}` : (node.name || '');
+                    let pathKey = normalizePath(explicitPath || derivedPath || '.');
+
+                    const altKey = pathKey.startsWith('./') ? pathKey.slice(2) : `./${pathKey}`;
+                    const base = pathKey.split('/').filter(Boolean).pop();
+
+                    const cohesionSource =
+                        cohesionMap[pathKey]
+                        || cohesionMap[altKey]
+                        || (base ? cohesionMap[base] : null);
+
+                    if (cohesionSource && typeof cohesionSource.cohesion === 'number') {
+                        node.cohesion = cohesionSource.cohesion;
+                        if (Array.isArray(cohesionSource.outliers) && cohesionSource.outliers.length > 0) {
+                            node.cohesionOutliers = cohesionSource.outliers;
+                        }
+                    }
+
+                    if (Array.isArray(node.children) && node.children.length > 0) {
+                        applyCohesionToHierarchy(node.children, cohesionMap, pathKey);
+                    }
+                });
+            }
+
             function mountReactTree() {
                 try {
                     const React = window.React;
@@ -379,25 +481,25 @@
                         throw new Error('React tree bundle not available');
                     }
 
-                    if (Array.isArray(payload.unifiedHierarchy)) {
-                        collectEntityDetails(payload.unifiedHierarchy);
+                    if (Array.isArray(payload.unified_hierarchy) && payload.unified_hierarchy.length > 0) {
+                        collectEntityDetails(payload.unified_hierarchy);
                         if (payload.directory_health_tree && payload.directory_health_tree.directories) {
                             const { map: healthMap, rootPath } = buildHealthLookup(
                                 payload.directory_health_tree,
                                 (payload.documentation && payload.documentation.file_doc_health) || {}
                             );
-                                window.__TREE_HEALTH_DEBUG = { healthMap, rootPath };
-                                console.warn('[TreeHealth] ACTIVE lookup sizes', Object.keys(healthMap || {}).length, 'root', rootPath);
-                                console.warn('[TreeHealth] sample keys', Object.keys(healthMap || {}).slice(0, 5));
-console.warn('[TreeHealth] ACTIVE lookup sizes', Object.keys(healthMap || {}).length, 'root', rootPath);
-                                console.warn('[TreeHealth] sample keys', Object.keys(healthMap || {}).slice(0, 5));
-
-                            applyHealthToHierarchy(payload.unifiedHierarchy, healthMap, '', rootPath);
+                            applyHealthToHierarchy(payload.unified_hierarchy, healthMap, '', rootPath);
                         }
-                        aggregateHierarchy(payload.unifiedHierarchy);
+
+                        // Apply cohesion scores to hierarchy
+                        if (payload.cohesion && payload.cohesion.enabled) {
+                            const cohesionMap = buildCohesionLookup(payload.cohesion);
+                            applyCohesionToHierarchy(payload.unified_hierarchy, cohesionMap, '');
+                        }
+
+                        aggregateHierarchy(payload.unified_hierarchy);
                     }
 
-                    console.log('Mounting Valknut virtualized tree with data:', payload);
                     const root = ReactDOM.createRoot(container);
                     root.render(React.createElement(TreeComponent, { data: payload }));
                 } catch (error) {
