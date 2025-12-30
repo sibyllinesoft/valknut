@@ -9,7 +9,12 @@ use crate::cli::args::{
     McpStdioArgs, OutputFormat, PerformanceProfile, QualityGateArgs, SurveyVerbosity,
     ValidateConfigArgs,
 };
+use crate::cli::config_builder::build_valknut_config;
 use crate::cli::config_layer::build_layered_valknut_config;
+use crate::cli::quality_gates::{
+    evaluate_quality_gates_if_enabled, handle_quality_gate_result, quality_status,
+};
+use crate::cli::reports::is_quiet;
 use anyhow::{self, Context};
 use chrono;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -43,11 +48,6 @@ use valknut_rs::doc_audit;
 use valknut_rs::oracle::{OracleConfig, RefactoringOracle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Determines whether CLI output should be suppressed for the given args.
-fn is_quiet(args: &AnalyzeArgs) -> bool {
-    args.quiet || args.format.is_machine_readable()
-}
 
 /// Main analyze command implementation with comprehensive analysis pipeline
 pub async fn analyze_command(
@@ -147,20 +147,6 @@ async fn run_analysis_phase(
     }
 }
 
-/// Evaluate quality gates if enabled.
-fn evaluate_quality_gates_if_enabled(
-    result: &AnalysisResults,
-    args: &AnalyzeArgs,
-    quiet_mode: bool,
-) -> anyhow::Result<Option<QualityGateResult>> {
-    if !args.quality_gate.quality_gate && !args.quality_gate.fail_on_issues {
-        return Ok(None);
-    }
-    let quality_config = build_quality_gate_config(args);
-    let gate_result = evaluate_quality_gates(result, &quality_config, !quiet_mode)?;
-    Ok(Some(gate_result))
-}
-
 /// Run Oracle analysis if enabled.
 async fn run_oracle_if_enabled(
     valid_paths: &[PathBuf],
@@ -186,100 +172,12 @@ async fn run_oracle_if_enabled(
     Ok(None)
 }
 
-/// Handle quality gate result and return error if failed.
-fn handle_quality_gate_result(
-    result: Option<QualityGateResult>,
-    quiet_mode: bool,
-    detail_mode: bool,
-) -> anyhow::Result<()> {
-    let Some(quality_result) = result else {
-        return Ok(());
-    };
-
-    if !quality_result.passed {
-        if !quiet_mode {
-            println!("Quality gate: failed");
-            display_quality_failures(&quality_result, detail_mode);
-        }
-        return Err(anyhow::anyhow!("Quality gates failed"));
-    }
-
-    if !quiet_mode {
-        println!("Quality gate: passed");
-    }
-    Ok(())
-}
-
 /// Load doc-audit settings from a YAML file.
 fn load_doc_audit_config_file(path: &Path) -> anyhow::Result<DocAuditConfigFile> {
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read doc audit config at {}", path.display()))?;
     serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse doc audit config {}", path.display()))
-}
-
-/// Build comprehensive ValknutConfig from CLI arguments.
-async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutConfig> {
-    // Use the new layered configuration approach
-    let mut config = build_layered_valknut_config(args)?;
-
-    // Apply performance profile optimizations
-    apply_performance_profile(&mut config, &args.profile);
-
-    Ok(config)
-}
-
-/// Apply performance profile optimizations to the configuration.
-fn apply_performance_profile(config: &mut ValknutConfig, profile: &PerformanceProfile) {
-    match profile {
-        PerformanceProfile::Fast => {
-            // Fast mode - minimal analysis, optimized for speed
-            config.analysis.max_files = 500; // Limit file count
-            config.lsh.num_bands = 10; // Reduce LSH precision for speed
-            config.lsh.num_hashes = 50; // Fewer hash functions
-            info!("🚀 Performance profile: Fast mode - optimized for speed");
-        }
-        PerformanceProfile::Balanced => {
-            // Balanced mode - good default (no changes needed)
-            info!("⚖️  Performance profile: Balanced mode - default settings");
-        }
-        PerformanceProfile::Thorough => {
-            // Thorough mode - more comprehensive analysis
-            config.analysis.max_files = 2000; // Allow more files
-            config.lsh.num_bands = 20; // Higher LSH precision
-            config.lsh.num_hashes = 150; // More hash functions
-            config.denoise.enabled = true; // Enable all denoising
-            info!("🔍 Performance profile: Thorough mode - comprehensive analysis");
-        }
-        PerformanceProfile::Extreme => {
-            // Extreme mode - maximum analysis depth
-            config.analysis.max_files = 5000; // Maximum files
-            config.lsh.num_bands = 50; // Highest LSH precision
-            config.lsh.num_hashes = 200; // Maximum hash functions
-            config.denoise.enabled = true;
-            info!("🔥 Performance profile: Extreme mode - maximum analysis depth");
-        }
-    }
-
-    // Optional dev/demo preset to ensure UI clone pairs appear with low thresholds.
-    if env::var("VALKNUT_DEV_DEMO").is_ok() || cfg!(debug_assertions) {
-        apply_dev_clone_presets(config);
-    }
-}
-
-/// Lower clone thresholds and enable semantic similarity for demos/UI snapshots.
-fn apply_dev_clone_presets(config: &mut ValknutConfig) {
-    config.analysis.enable_lsh_analysis = true;
-    config.denoise.enabled = true;
-    config.denoise.min_function_tokens = config.denoise.min_function_tokens.min(8).max(1);
-    config.denoise.min_match_tokens = config.denoise.min_match_tokens.min(6).max(1);
-    config.denoise.require_blocks = 1;
-    config.denoise.similarity = config.denoise.similarity.min(0.7);
-    config.denoise.threshold_s = config.denoise.similarity;
-    config.dedupe.min_ast_nodes = config.dedupe.min_ast_nodes.min(8).max(1);
-    config.dedupe.min_match_tokens = config.dedupe.min_match_tokens.min(8).max(1);
-    config.lsh.use_semantic_similarity = true;
-    config.lsh.similarity_threshold = config.lsh.similarity_threshold.min(0.7);
 }
 
 /// Preview coverage file discovery to show what will be analyzed
@@ -460,16 +358,6 @@ fn coverage_status(config: &ValknutConfig, args: &AnalyzeArgs) -> String {
         )
     } else {
         "on (manual)".to_string()
-    }
-}
-
-fn quality_status(args: &QualityGateArgs) -> String {
-    if args.fail_on_issues {
-        "fail on issues".to_string()
-    } else if args.quality_gate {
-        "on".to_string()
-    } else {
-        "off".to_string()
     }
 }
 

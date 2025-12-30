@@ -1,4 +1,5 @@
     use super::*;
+    use crate::cli::config_builder::apply_performance_profile;
     use anyhow::Result;
     use gag::BufferRedirect;
     use serial_test::serial;
