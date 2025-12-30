@@ -10,14 +10,34 @@
 //! - Per-slice analysis with result aggregation
 //! - Configurable models for different slice sizes
 
+pub mod gemini;
+pub mod helpers;
+pub mod types;
+
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
 use crate::core::partitioning::{CodeSlice, ImportGraphPartitioner, PartitionConfig, PartitionResult};
-use crate::core::pipeline::{AnalysisResults, CodeDictionary, StageResultsBundle};
+use crate::core::pipeline::{AnalysisResults, StageResultsBundle};
 use crate::core::scoring::Priority;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+// Re-export public types
+pub use types::{
+    CodebaseAssessment, OracleConfig, RefactoringOracleResponse, RefactoringRoadmap,
+    RefactoringTask,
+};
+
+// Re-export Gemini types for external use
+pub use gemini::{
+    GeminiCandidate, GeminiContent, GeminiGenerationConfig, GeminiPart, GeminiRequest,
+    GeminiResponse, GeminiResponseContent, GeminiResponsePart, SliceAnalysisResult,
+};
+
+// Re-export helper functions and types
+pub use helpers::{
+    abbreviate_label, build_refactor_hints, calculate_file_priority, html_escape, is_test_file,
+    normalize_path_for_key, task_priority_score, truncate_hint, FileCandidate,
+};
 
 /// Token budget for valknut analysis output (70k tokens)
 const VALKNUT_OUTPUT_TOKEN_BUDGET: usize = 70_000;
@@ -31,27 +51,6 @@ const SKIP_DIRS: &[&str] = &[
 const SOURCE_EXTENSIONS: &[&str] = &[
     "rs", "py", "js", "ts", "tsx", "jsx", "go", "java", "cpp", "c", "h", "hpp", "cs", "php",
 ];
-
-/// High-priority file patterns (boost priority significantly)
-const HIGH_PRIORITY_PATTERNS: &[&str] = &["main.rs", "lib.rs", "mod.rs"];
-
-/// Medium-priority file patterns (moderate boost)
-const MEDIUM_PRIORITY_PATTERNS: &[&str] = &["config", "error", "api"];
-
-/// Low-priority file patterns (small boost)
-const LOW_PRIORITY_PATTERNS: &[&str] = &["core", "engine"];
-
-/// Extension priority boosts (extension, boost amount)
-const EXTENSION_PRIORITIES: &[(&str, f32)] = &[
-    ("rs", 2.0), ("py", 1.5), ("js", 1.5), ("ts", 1.5),
-    ("go", 1.0), ("java", 1.0), ("cpp", 1.0),
-];
-
-/// Penalty patterns for low-value files
-const PENALTY_PATTERNS: &[&str] = &["test", "spec", "_test"];
-
-/// Strong penalty patterns for generated/build files
-const STRONG_PENALTY_PATTERNS: &[&str] = &["generated", "target/", "build/"];
 
 /// Codebook for oracle request/response - reduces token usage by using short codes
 /// Include this in prompts so the model knows the mapping
@@ -92,232 +91,6 @@ const ORACLE_CODEBOOK: &str = r#"## Codebook (use these codes in your response)
 pub struct RefactoringOracle {
     config: OracleConfig,
     client: reqwest::Client,
-}
-
-/// Configuration for the refactoring oracle
-#[derive(Debug, Clone)]
-pub struct OracleConfig {
-    /// Gemini API key
-    pub api_key: String,
-    /// Maximum tokens to send to Gemini for full codebase analysis (default: 400_000)
-    pub max_tokens: usize,
-    /// Gemini API endpoint
-    pub api_endpoint: String,
-    /// Model name to use for full codebase analysis
-    pub model: String,
-    /// Whether to use sliced analysis for large codebases
-    pub enable_slicing: bool,
-    /// Token budget per slice (default: 200_000)
-    pub slice_token_budget: usize,
-    /// Model to use for slice analysis (default: gemini-2.0-flash)
-    pub slice_model: String,
-    /// Threshold for enabling slicing (if total tokens > this, use slices)
-    pub slicing_threshold: usize,
-}
-
-impl OracleConfig {
-    /// Create configuration from environment variables
-    pub fn from_env() -> Result<Self> {
-        let api_key = std::env::var("GEMINI_API_KEY").map_err(|_| {
-            ValknutError::config("GEMINI_API_KEY environment variable not set".to_string())
-        })?;
-
-        Ok(Self {
-            api_key,
-            max_tokens: 400_000, // Default 400k tokens for codebase bundle
-            api_endpoint: "https://generativelanguage.googleapis.com/v1beta/models".to_string(),
-            model: "gemini-3-flash-preview".to_string(),
-            enable_slicing: true,
-            slice_token_budget: 200_000,
-            slice_model: "gemini-3-flash-preview".to_string(),
-            slicing_threshold: 300_000, // Use slicing if codebase > 300k tokens
-        })
-    }
-
-    pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
-        self.max_tokens = max_tokens;
-        self
-    }
-
-    pub fn with_slice_budget(mut self, budget: usize) -> Self {
-        self.slice_token_budget = budget;
-        self
-    }
-
-    pub fn with_slice_model(mut self, model: String) -> Self {
-        self.slice_model = model;
-        self
-    }
-
-    pub fn with_slicing(mut self, enabled: bool) -> Self {
-        self.enable_slicing = enabled;
-        self
-    }
-}
-
-/// Response from the AI refactoring oracle
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefactoringOracleResponse {
-    /// Overall assessment of the codebase
-    pub assessment: CodebaseAssessment,
-    /// Flat list of tasks (new schema)
-    #[serde(default)]
-    pub tasks: Vec<RefactoringTask>,
-    /// Legacy: flat list in roadmap wrapper (for backwards compat)
-    #[serde(default)]
-    pub refactoring_roadmap: Option<RefactoringRoadmap>,
-}
-
-impl RefactoringOracleResponse {
-    /// Get all tasks, whether from new `tasks` field or legacy `refactoring_roadmap`
-    pub fn all_tasks(&self) -> &[RefactoringTask] {
-        if !self.tasks.is_empty() {
-            &self.tasks
-        } else if let Some(ref roadmap) = self.refactoring_roadmap {
-            &roadmap.tasks
-        } else {
-            &[]
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CodebaseAssessment {
-    /// Brief summary of code quality (new schema)
-    #[serde(default)]
-    pub summary: Option<String>,
-    /// Legacy: narrative field
-    #[serde(default)]
-    pub architectural_narrative: Option<String>,
-    /// Legacy: architectural style
-    #[serde(default)]
-    pub architectural_style: Option<String>,
-    /// Code strengths identified
-    #[serde(default)]
-    pub strengths: Vec<String>,
-    /// Key issues identified
-    #[serde(default)]
-    pub issues: Vec<String>,
-}
-
-impl CodebaseAssessment {
-    /// Get summary text, preferring new field, falling back to legacy
-    pub fn get_summary(&self) -> &str {
-        self.summary
-            .as_deref()
-            .or(self.architectural_narrative.as_deref())
-            .unwrap_or("No summary provided")
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RefactoringRoadmap {
-    /// Flat list of tasks in safe execution order
-    #[serde(default)]
-    pub tasks: Vec<RefactoringTask>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefactoringTask {
-    /// Task ID (e.g., "T1", "T2")
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    /// Category code (C1-C7) or legacy string
-    pub category: String,
-    pub files: Vec<String>,
-    /// Risk code (R1-R3) - new field name
-    #[serde(default, alias = "risk_level")]
-    pub risk: Option<String>,
-    /// Legacy risk_level field
-    #[serde(default)]
-    pub risk_level: Option<String>,
-    /// Impact code (I1-I3)
-    #[serde(default)]
-    pub impact: Option<String>,
-    /// Effort code (E1-E3)
-    #[serde(default)]
-    pub effort: Option<String>,
-    /// Mitigation strategy for this task's risks
-    #[serde(default)]
-    pub mitigation: Option<String>,
-    /// Whether this task is required (legacy, optional now)
-    #[serde(default)]
-    pub required: Option<bool>,
-    /// Dependencies on other task IDs that must be completed first
-    #[serde(default)]
-    pub depends_on: Vec<String>,
-    /// Expected benefits from this change (legacy, optional now)
-    #[serde(default)]
-    pub benefits: Vec<String>,
-}
-
-impl RefactoringTask {
-    /// Get risk level, checking both new and legacy field names
-    pub fn get_risk(&self) -> Option<&str> {
-        self.risk.as_deref().or(self.risk_level.as_deref())
-    }
-}
-
-#[derive(Serialize)]
-struct GeminiRequest {
-    contents: Vec<GeminiContent>,
-    #[serde(rename = "generationConfig")]
-    generation_config: GeminiGenerationConfig,
-}
-
-#[derive(Serialize)]
-struct GeminiContent {
-    parts: Vec<GeminiPart>,
-}
-
-#[derive(Serialize)]
-struct GeminiPart {
-    text: String,
-}
-
-#[derive(Serialize)]
-struct GeminiGenerationConfig {
-    temperature: f32,
-    #[serde(rename = "topK")]
-    top_k: i32,
-    #[serde(rename = "topP")]
-    top_p: f32,
-    #[serde(rename = "maxOutputTokens")]
-    max_output_tokens: i32,
-    #[serde(rename = "responseMimeType")]
-    response_mime_type: String,
-}
-
-#[derive(Deserialize)]
-struct GeminiResponse {
-    candidates: Vec<GeminiCandidate>,
-}
-
-#[derive(Deserialize)]
-struct GeminiCandidate {
-    content: GeminiResponseContent,
-}
-
-#[derive(Deserialize)]
-struct GeminiResponseContent {
-    parts: Vec<GeminiResponsePart>,
-}
-
-#[derive(Deserialize)]
-struct GeminiResponsePart {
-    text: String,
-}
-
-/// Result from analyzing a single slice
-#[derive(Debug, Clone)]
-struct SliceAnalysisResult {
-    /// Slice identifier
-    slice_id: usize,
-    /// Primary module/directory this slice covers
-    primary_module: Option<String>,
-    /// Oracle response for this slice
-    response: RefactoringOracleResponse,
 }
 
 impl RefactoringOracle {
@@ -1144,41 +917,6 @@ impl RefactoringOracle {
         Ok(final_bundle)
     }
 
-    /// Condense valknut analysis results for AI consumption
-    fn condense_analysis_results(&self, results: &AnalysisResults) -> String {
-        serde_json::to_string_pretty(&serde_json::json!({
-            "health_score": results.summary.code_health_score,
-            "total_issues": results.summary.refactoring_needed,
-            "high_priority": results.summary.high_priority,
-            "critical": results.summary.critical,
-            "files_analyzed": results.summary.files_processed,
-            "entities_analyzed": results.summary.entities_analyzed,
-            "avg_refactoring_score": results.summary.avg_refactoring_score,
-            "code_dictionary": results.code_dictionary.clone(),
-            "top_refactoring_candidates": results.refactoring_candidates.iter()
-                .take(10)
-                .map(|c| serde_json::json!({
-                    "file": c.file_path,
-                    "entity": c.name,
-                    "score": c.score,
-                    "issue_codes": c.issues.iter().map(|issue| &issue.code).collect::<Vec<_>>(),
-                    "suggestion_codes": c.suggestions.iter().map(|s| &s.code).collect::<Vec<_>>(),
-                    "issues": c.issues,
-                    "suggestions": c.suggestions
-                }))
-                .collect::<Vec<_>>(),
-            "coverage": if !results.coverage_packs.is_empty() {
-                Some(serde_json::json!({
-                    "files_with_coverage": results.coverage_packs.len(),
-                    "total_gaps": results.coverage_packs.iter()
-                        .map(|p| p.gaps.len())
-                        .sum::<usize>()
-                }))
-            } else { None }
-        }))
-        .unwrap_or_else(|_| "Failed to serialize analysis".to_string())
-    }
-
     /// Query Gemini API with the bundled content
     async fn query_gemini(&self, content: &str, model: &str) -> Result<RefactoringOracleResponse> {
         let url = format!(
@@ -1242,6 +980,41 @@ impl RefactoringOracle {
             serde_json::from_str(&response_text).map_json_err("Oracle response")?;
 
         Ok(oracle_response)
+    }
+
+    /// Condense valknut analysis results for AI consumption
+    pub fn condense_analysis_results(&self, results: &AnalysisResults) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "health_score": results.summary.code_health_score,
+            "total_issues": results.summary.refactoring_needed,
+            "high_priority": results.summary.high_priority,
+            "critical": results.summary.critical,
+            "files_analyzed": results.summary.files_processed,
+            "entities_analyzed": results.summary.entities_analyzed,
+            "avg_refactoring_score": results.summary.avg_refactoring_score,
+            "code_dictionary": results.code_dictionary.clone(),
+            "top_refactoring_candidates": results.refactoring_candidates.iter()
+                .take(10)
+                .map(|c| serde_json::json!({
+                    "file": c.file_path,
+                    "entity": c.name,
+                    "score": c.score,
+                    "issue_codes": c.issues.iter().map(|issue| &issue.code).collect::<Vec<_>>(),
+                    "suggestion_codes": c.suggestions.iter().map(|s| &s.code).collect::<Vec<_>>(),
+                    "issues": c.issues,
+                    "suggestions": c.suggestions
+                }))
+                .collect::<Vec<_>>(),
+            "coverage": if !results.coverage_packs.is_empty() {
+                Some(serde_json::json!({
+                    "files_with_coverage": results.coverage_packs.len(),
+                    "total_gaps": results.coverage_packs.iter()
+                        .map(|p| p.gaps.len())
+                        .sum::<usize>()
+                }))
+            } else { None }
+        }))
+        .unwrap_or_else(|_| "Failed to serialize analysis".to_string())
     }
 
     /// Condense analysis results with a specific token budget
@@ -1378,267 +1151,6 @@ impl RefactoringOracle {
 
         Ok(condensed)
     }
-}
-
-/// Candidate file for inclusion in the codebase bundle
-#[derive(Debug)]
-struct FileCandidate {
-    path: String,
-    content: String,
-    tokens: usize,
-    priority: f32,
-    file_type: String,
-}
-
-/// Check if a file path indicates it's a test file
-fn is_test_file(path: &str) -> bool {
-    let normalized = path.replace('\\', "/");
-    let lower = normalized.to_lowercase();
-
-    // Directory-based markers
-    const DIR_MARKERS: [&str; 4] = ["/test/", "/tests/", "/__tests__/", "/spec/"];
-    if DIR_MARKERS.iter().any(|marker| lower.contains(marker)) {
-        return true;
-    }
-
-    // Leading path components that typically house tests
-    const DIR_PREFIXES: [&str; 3] = ["tests/", "test/", "spec/"];
-    if DIR_PREFIXES.iter().any(|prefix| lower.starts_with(prefix)) {
-        return true;
-    }
-
-    // File-name driven patterns (lowercased for case-insensitive matches)
-    const SUFFIXES: [&str; 16] = [
-        "_test.rs",
-        "_test.py",
-        "_test.js",
-        "_test.ts",
-        ".test.js",
-        ".test.ts",
-        ".test.tsx",
-        ".test.jsx",
-        "_spec.js",
-        "_spec.ts",
-        ".spec.js",
-        ".spec.ts",
-        "_test.go",
-        "_test.java",
-        "_test.cpp",
-        "_test.c",
-    ];
-    if SUFFIXES.iter().any(|suffix| lower.ends_with(suffix)) {
-        return true;
-    }
-
-    // Java naming conventions rely on original casing
-    if normalized.ends_with("Test.java")
-        || normalized.ends_with("Tests.java")
-        || (normalized.ends_with(".java") && normalized.contains("Test"))
-    {
-        return true;
-    }
-
-    // Rust in-module tests (e.g., src/foo/tests.rs), but ignore the top-level tests.rs file
-    if lower.contains("tests.rs") && !lower.ends_with("/tests.rs") {
-        return true;
-    }
-
-    // Python conventions
-    if lower.starts_with("test_")
-        || lower.contains("/test_")
-        || lower.ends_with("/conftest.py")
-        || lower == "conftest.py"
-    {
-        return true;
-    }
-
-    false
-}
-
-/// Calculate priority score for file inclusion
-fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 {
-    let mut priority = 1.0;
-
-    // Boost priority for important files using const arrays
-    if HIGH_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
-        priority += 3.0;
-    }
-    if MEDIUM_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
-        priority += 2.0;
-    }
-    if LOW_PRIORITY_PATTERNS.iter().any(|p| path.contains(p)) {
-        priority += 1.5;
-    }
-
-    // Language-specific priority adjustments using const array
-    if let Some((_, boost)) = EXTENSION_PRIORITIES.iter().find(|(ext, _)| *ext == extension) {
-        priority += boost;
-    }
-
-    // Penalize very large files (they consume too many tokens)
-    if size > 50_000 {
-        priority *= 0.5;
-    } else if size > 20_000 {
-        priority *= 0.7;
-    }
-
-    // Boost smaller, focused files
-    if size < 1_000 {
-        priority *= 1.2;
-    }
-
-    // Penalize test files and generated files using const arrays
-    if PENALTY_PATTERNS.iter().any(|p| path.contains(p)) {
-        priority *= 0.3;
-    }
-    if STRONG_PENALTY_PATTERNS.iter().any(|p| path.contains(p)) {
-        priority *= 0.1;
-    }
-
-    priority
-}
-
-/// Calculate a priority score for a task based on impact and effort
-/// Supports both new codes (I1-I3, E1-E3) and legacy strings (low/medium/high)
-fn task_priority_score(task: &RefactoringTask) -> f64 {
-    let impact_score = match task.impact.as_deref() {
-        Some("I3") | Some("high") => 3.0,
-        Some("I2") | Some("medium") => 2.0,
-        Some("I1") | Some("low") => 1.0,
-        _ => 1.5,
-    };
-
-    let effort_penalty = match task.effort.as_deref() {
-        Some("E3") | Some("high") => 0.5,
-        Some("E2") | Some("medium") => 0.75,
-        Some("E1") | Some("low") => 1.0,
-        _ => 0.75,
-    };
-
-    let required_bonus = if task.required.unwrap_or(false) { 1.5 } else { 1.0 };
-
-    impact_score * effort_penalty * required_bonus
-}
-
-fn build_refactor_hints(
-    results: &AnalysisResults,
-    project_root: &Path,
-) -> HashMap<String, Vec<String>> {
-    let mut hints: HashMap<String, Vec<String>> = HashMap::new();
-
-    for candidate in &results.refactoring_candidates {
-        if !matches!(candidate.priority, Priority::Critical | Priority::High) {
-            continue;
-        }
-
-        let issue = match candidate.issues.iter().max_by(|a, b| {
-            a.severity
-                .partial_cmp(&b.severity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }) {
-            Some(issue) => issue,
-            None => continue,
-        };
-
-        let mut severity_pct = (issue.severity * 100.0).round() as i32;
-        severity_pct = severity_pct.clamp(0, 999);
-
-        let category = abbreviate_label(&issue.category);
-        let suggestion_label = candidate
-            .suggestions
-            .iter()
-            .max_by(|a, b| {
-                a.priority
-                    .partial_cmp(&b.priority)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|s| abbreviate_label(&s.refactoring_type));
-
-        let mut hint = if let Some(suggestion) = suggestion_label {
-            format!("{} {}% {}", category, severity_pct, suggestion)
-        } else {
-            format!("{} {}%", category, severity_pct)
-        };
-
-        hint = truncate_hint(&hint, 60);
-
-        let normalized_path = normalize_path_for_key(
-            Path::new(&candidate.file_path)
-                .strip_prefix(project_root)
-                .unwrap_or_else(|_| Path::new(&candidate.file_path))
-                .to_string_lossy()
-                .as_ref(),
-        );
-
-        hints.entry(normalized_path).or_default().push(hint);
-    }
-
-    hints
-}
-
-fn abbreviate_label(label: &str) -> String {
-    let words = label
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .collect::<Vec<_>>();
-
-    if words.is_empty() {
-        let trimmed = label.trim();
-        return trimmed.chars().take(8).collect();
-    }
-
-    if words.len() == 1 {
-        let word = words[0];
-        let mut chars = word.chars();
-        let first = chars
-            .next()
-            .map(|c| c.to_ascii_uppercase())
-            .unwrap_or_default();
-        let rest: String = chars.take(6).collect();
-        return format!("{}{}", first, rest);
-    }
-
-    let mut abbr = String::new();
-    for word in words.iter().take(3) {
-        if let Some(ch) = word.chars().next() {
-            abbr.push(ch.to_ascii_uppercase());
-        }
-    }
-
-    if abbr.is_empty() {
-        label.chars().take(3).collect()
-    } else {
-        abbr
-    }
-}
-
-fn truncate_hint(hint: &str, max_len: usize) -> String {
-    if hint.len() <= max_len {
-        return hint.to_string();
-    }
-    let mut truncated = hint
-        .chars()
-        .take(max_len.saturating_sub(1))
-        .collect::<String>();
-    truncated.push('…');
-    truncated
-}
-
-fn normalize_path_for_key(path: &str) -> String {
-    if path.is_empty() {
-        return String::new();
-    }
-    path.replace('\\', "/")
-}
-
-/// HTML escape utility function
-fn html_escape(content: &str) -> String {
-    content
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
 }
 
 
