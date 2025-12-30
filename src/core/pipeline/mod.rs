@@ -47,6 +47,7 @@ pub use services::{
     GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator, StageResultsBundle,
 };
 
+mod clone_detection;
 mod code_dictionary;
 mod file_discovery;
 mod pipeline_config;
@@ -172,6 +173,7 @@ mod tests {
                 analysis_method: "none".to_string(),
             },
             documentation: pipeline_results::DocumentationAnalysisResults::default(),
+            cohesion: crate::detectors::cohesion::CohesionAnalysisResults::default(),
             health_metrics: pipeline_results::HealthMetrics {
                 overall_health_score: 88.0,
                 maintainability_score: 85.0,

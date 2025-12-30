@@ -1,4 +1,11 @@
     use super::*;
+    use crate::core::pipeline::clone_detection::{
+        build_simple_ast_for_entity, build_simple_ast_recursive, compute_apted_limit,
+        filter_small_pairs, get_or_build_simple_ast, hash_kind, ordered_pair_key,
+        parse_byte_range, serialize_clone_pairs, should_skip_small_pair, CachedSimpleAst,
+        CloneDetectionStats, CloneEndpoint, ClonePairReport, CloneVerificationDetail,
+        LshDetectionParams, LshEntityCollection,
+    };
     use crate::core::arena_analysis::ArenaAnalysisResult;
     use crate::core::dependency::ProjectDependencyAnalysis;
     use crate::core::featureset::CodeEntity;
