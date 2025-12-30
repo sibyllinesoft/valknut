@@ -576,9 +576,10 @@
         fs::write(root.join("src/huge.rs"), large_body).unwrap();
 
         let results = analysis_results_fixture(&root);
-        let oracle = RefactoringOracle::new(oracle_config_fixture(180));
+        let config = oracle_config_fixture(180);
+        let builder = BundleBuilder::new(&config);
 
-        let bundle = oracle
+        let bundle = builder
             .create_codebase_bundle(&root, &results)
             .await
             .expect("bundle creation");
@@ -604,10 +605,8 @@
         fs::write(root.join("src/utils.rs"), "fn helper() {}\n").unwrap();
 
         let results = analysis_results_fixture(&root);
-        let oracle = RefactoringOracle::new(oracle_config_fixture(500));
 
-        let limited = oracle
-            .condense_analysis_results_with_budget(&results, 90)
+        let limited = condense_analysis_results_with_budget(&results, 90)
             .expect("condense with tight budget");
         assert!(
             !limited.contains("crate::lib::hotspot") && !limited.contains("crate::utils::helper"),
@@ -628,8 +627,7 @@
                 0.6,
             ));
 
-        let expanded = oracle
-            .condense_analysis_results_with_budget(&expanded_results, 420)
+        let expanded = condense_analysis_results_with_budget(&expanded_results, 420)
             .expect("condense with ample budget");
         // Health section is optional after normalization removal
         // ensure condensed text still produced
