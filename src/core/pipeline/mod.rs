@@ -49,7 +49,9 @@ pub use services::{
 
 mod clone_detection;
 mod code_dictionary;
+mod coverage_stage;
 mod file_discovery;
+mod lsh_stage;
 mod pipeline_config;
 mod pipeline_executor;
 mod pipeline_results;
@@ -57,6 +59,10 @@ mod pipeline_stages;
 mod result_conversions;
 mod result_types;
 mod services;
+
+// Re-export stage modules
+pub use coverage_stage::CoverageStage;
+pub use lsh_stage::LshStage;
 
 /// Additional tests for pipeline modules to improve coverage
 
