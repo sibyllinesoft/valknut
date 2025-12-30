@@ -374,18 +374,17 @@ impl StructureExtractor {
 
     /// Calculate Gini coefficient - exposed for testing
     pub fn calculate_gini_coefficient(&self, values: &[usize]) -> f64 {
-        self.directory_analyzer.calculate_gini_coefficient(values)
+        directory::calculate_gini_coefficient(values)
     }
 
-    /// Calculate entropy - exposed for testing  
+    /// Calculate entropy - exposed for testing
     pub fn calculate_entropy(&self, values: &[usize]) -> f64 {
-        self.directory_analyzer.calculate_entropy(values)
+        directory::calculate_entropy(values)
     }
 
     /// Calculate size normalization factor - exposed for testing
     pub fn calculate_size_normalization_factor(&self, files: usize, total_loc: usize) -> f64 {
-        self.directory_analyzer
-            .calculate_size_normalization_factor(files, total_loc)
+        directory::calculate_size_normalization_factor(files, total_loc)
     }
 }
 

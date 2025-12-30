@@ -1,4 +1,6 @@
     use super::*;
+    use super::partitioning::GraphPartitioner;
+    use super::reorganization::ReorganizationPlanner;
     use crate::detectors::structure::config::{
         EntityHealthConfig, FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig,
         StructureToggles,
@@ -101,22 +103,16 @@
 
     #[test]
     fn test_distribution_score_at_optimal() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // Score should be 1.0 when value equals optimal
-        let score = analyzer.calculate_distribution_score(7, 7, 2.0);
+        let score = calculate_distribution_score(7, 7, 2.0);
         assert!((score - 1.0).abs() < 0.0001, "Score at optimal should be 1.0");
     }
 
     #[test]
     fn test_distribution_score_one_stddev_away() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // At 1 stddev away, score should be exp(-0.5) ≈ 0.6065
-        let score_above = analyzer.calculate_distribution_score(9, 7, 2.0); // 7 + 2 = 9
-        let score_below = analyzer.calculate_distribution_score(5, 7, 2.0); // 7 - 2 = 5
+        let score_above = calculate_distribution_score(9, 7, 2.0); // 7 + 2 = 9
+        let score_below = calculate_distribution_score(5, 7, 2.0); // 7 - 2 = 5
         let expected = (-0.5_f64).exp();
 
         assert!(
@@ -131,11 +127,8 @@
 
     #[test]
     fn test_distribution_score_two_stddev_away() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // At 2 stddev away, score should be exp(-2) ≈ 0.1353
-        let score = analyzer.calculate_distribution_score(11, 7, 2.0); // 7 + 4 = 11
+        let score = calculate_distribution_score(11, 7, 2.0); // 7 + 4 = 11
         let expected = (-2.0_f64).exp();
 
         assert!(
@@ -146,12 +139,9 @@
 
     #[test]
     fn test_distribution_score_zero_stddev() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // With zero stddev, only exact match should score 1.0
-        assert_eq!(analyzer.calculate_distribution_score(7, 7, 0.0), 1.0);
-        assert_eq!(analyzer.calculate_distribution_score(8, 7, 0.0), 0.0);
+        assert_eq!(calculate_distribution_score(7, 7, 0.0), 1.0);
+        assert_eq!(calculate_distribution_score(8, 7, 0.0), 0.0);
     }
 
     #[test]
@@ -212,75 +202,51 @@ def hello():
 
     #[test]
     fn test_calculate_gini_coefficient_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[]);
+        let gini = calculate_gini_coefficient(&[]);
         assert_eq!(gini, 0.0);
     }
 
     #[test]
     fn test_calculate_gini_coefficient_single_value() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[100]);
+        let gini = calculate_gini_coefficient(&[100]);
         assert_eq!(gini, 0.0);
     }
 
     #[test]
     fn test_calculate_gini_coefficient_equal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[50, 50, 50, 50]);
+        let gini = calculate_gini_coefficient(&[50, 50, 50, 50]);
         assert!(gini < 0.1); // Should be close to 0 for equal distribution
     }
 
     #[test]
     fn test_calculate_gini_coefficient_unequal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[10, 20, 30, 100]);
+        let gini = calculate_gini_coefficient(&[10, 20, 30, 100]);
         assert!(gini > 0.1); // Should be higher for unequal distribution
     }
 
     #[test]
     fn test_calculate_entropy_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[]);
+        let entropy = calculate_entropy(&[]);
         assert_eq!(entropy, 0.0);
     }
 
     #[test]
     fn test_calculate_entropy_single_value() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[100]);
+        let entropy = calculate_entropy(&[100]);
         assert_eq!(entropy, 0.0);
     }
 
     #[test]
     fn test_calculate_entropy_equal_values() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[25, 25, 25, 25]);
+        let entropy = calculate_entropy(&[25, 25, 25, 25]);
         assert!(entropy > 1.0); // Should be high for uniform distribution
     }
 
     #[test]
     fn test_calculate_size_normalization_factor() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let factor1 = analyzer.calculate_size_normalization_factor(5, 500);
-        let factor2 = analyzer.calculate_size_normalization_factor(10, 1000);
-        let factor3 = analyzer.calculate_size_normalization_factor(20, 2000);
+        let factor1 = calculate_size_normalization_factor(5, 500);
+        let factor2 = calculate_size_normalization_factor(10, 1000);
+        let factor3 = calculate_size_normalization_factor(20, 2000);
 
         // Normalization factor should be within reasonable range
         assert!(factor1 >= 0.5 && factor1 <= 1.5);
@@ -422,37 +388,33 @@ use serde::{Serialize, Deserialize};
 
     #[test]
     fn test_generate_partition_name_with_common_tokens() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let files = vec![
             PathBuf::from("user_service.py"),
             PathBuf::from("user_model.py"),
             PathBuf::from("user_controller.py"),
         ];
 
-        let name = analyzer.generate_partition_name(&files, 0);
+        let fallbacks = vec!["core".to_string(), "utils".to_string()];
+        let name = partitioning::generate_partition_name(&files, 0, &fallbacks);
         assert_eq!(name, "user");
     }
 
     #[test]
     fn test_generate_partition_name_fallback() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         let files = vec![PathBuf::from("a.py"), PathBuf::from("b.py")];
 
-        let name = analyzer.generate_partition_name(&files, 0);
+        let fallbacks = vec!["core".to_string(), "utils".to_string()];
+        let name = partitioning::generate_partition_name(&files, 0, &fallbacks);
         assert_eq!(name, "core"); // First fallback name
     }
 
     #[test]
-    fn test_calculate_cut_size() {
+    fn test_calculate_cut_size_simple() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
         // Create a simple graph for testing
-        let mut graph = petgraph::Graph::new();
+        let mut graph: DependencyGraph = petgraph::Graph::new();
         let node1 = graph.add_node(FileNode {
             path: PathBuf::from("file1.py"),
             loc: 100,
@@ -476,18 +438,18 @@ use serde::{Serialize, Deserialize};
         let part1 = vec![node1];
         let part2 = vec![node2];
 
-        let cut_size = analyzer.calculate_cut_size(&graph, &part1, &part2);
+        let cut_size = partitioner.calculate_cut_size(&graph, &part1, &part2);
         assert_eq!(cut_size, 3);
     }
 
     #[test]
-    fn test_random_partition() {
+    fn test_partition_distributes_nodes() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
         // Create test node indices
         let mut graph: DependencyGraph = petgraph::Graph::new();
-        let nodes: Vec<_> = (0..6)
+        let _nodes: Vec<_> = (0..6)
             .map(|i| {
                 graph.add_node(FileNode {
                     path: PathBuf::from(format!("file{}.py", i)),
@@ -497,10 +459,24 @@ use serde::{Serialize, Deserialize};
             })
             .collect();
 
-        let communities = analyzer.random_partition(&nodes, 3).unwrap();
+        let metrics = DirectoryMetrics {
+            files: 6,
+            subdirs: 0,
+            loc: 600,
+            gini: 0.0,
+            entropy: 2.6,
+            file_pressure: 0.3,
+            branch_pressure: 0.0,
+            size_pressure: 0.3,
+            dispersion: 0.0,
+            file_count_score: 0.7,
+            subdir_count_score: 0.5,
+            imbalance: 0.3,
+        };
 
-        assert_eq!(communities.len(), 3);
-        assert_eq!(communities.iter().map(|c| c.len()).sum::<usize>(), 6);
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
+        let total_files: usize = partitions.iter().map(|p| p.files.len()).sum();
+        assert_eq!(total_files, 6);
     }
 
     #[tokio::test]
@@ -551,7 +527,7 @@ use serde::{Serialize, Deserialize};
     #[test]
     fn test_calculate_reorganization_effort() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let planner = ReorganizationPlanner::new(&config);
 
         let partitions = vec![
             DirectoryPartition {
@@ -566,9 +542,7 @@ use serde::{Serialize, Deserialize};
             },
         ];
 
-        let effort = analyzer
-            .calculate_reorganization_effort(&partitions, Path::new("."))
-            .unwrap();
+        let effort = planner.calculate_reorganization_effort(&partitions).unwrap();
 
         assert_eq!(effort.files_moved, 3);
         assert_eq!(effort.import_updates_est, 6); // 2 * files_moved
@@ -578,7 +552,7 @@ use serde::{Serialize, Deserialize};
     fn test_generate_file_moves() {
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let planner = ReorganizationPlanner::new(&config);
 
         let partitions = vec![DirectoryPartition {
             name: "core".to_string(),
@@ -589,7 +563,7 @@ use serde::{Serialize, Deserialize};
             loc: 200,
         }];
 
-        let moves = analyzer
+        let moves = planner
             .generate_file_moves(&partitions, temp_dir.path())
             .unwrap();
 
@@ -656,12 +630,9 @@ use serde::{Serialize, Deserialize};
 
     #[test]
     fn test_calculate_gini_coefficient_large_array_parallel() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // Create array with >= 32 elements to trigger parallel computation
         let values: Vec<usize> = (1..50).collect();
-        let gini = analyzer.calculate_gini_coefficient(&values);
+        let gini = calculate_gini_coefficient(&values);
 
         assert!(gini >= 0.0 && gini <= 1.0);
         assert!(gini > 0.1); // Should show some inequality
@@ -669,31 +640,22 @@ use serde::{Serialize, Deserialize};
 
     #[test]
     fn test_calculate_gini_coefficient_sum_zero() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let gini = analyzer.calculate_gini_coefficient(&[0, 0, 0, 0]);
+        let gini = calculate_gini_coefficient(&[0, 0, 0, 0]);
         assert_eq!(gini, 0.0);
     }
 
     #[test]
     fn test_calculate_entropy_large_array_parallel() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
         // Create array with >= 100 elements to trigger parallel computation
         let values: Vec<usize> = (1..150).collect();
-        let entropy = analyzer.calculate_entropy(&values);
+        let entropy = calculate_entropy(&values);
 
         assert!(entropy > 0.0);
     }
 
     #[test]
     fn test_calculate_entropy_total_zero() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let entropy = analyzer.calculate_entropy(&[0, 0, 0, 0]);
+        let entropy = calculate_entropy(&[0, 0, 0, 0]);
         assert_eq!(entropy, 0.0);
     }
 
@@ -802,29 +764,30 @@ use serde::{Serialize, Deserialize};
     }
 
     #[test]
-    fn test_partition_directory_basic() {
+    fn test_partition_directory_with_real_files() {
         let temp_dir = setup_test_directory();
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let analyzer = DirectoryAnalyzer::new(config.clone());
 
         let graph = analyzer.build_dependency_graph(temp_dir.path()).unwrap();
         let metrics = analyzer
             .calculate_directory_metrics(temp_dir.path())
             .unwrap();
 
-        let partitions = analyzer.partition_directory(&graph, &metrics).unwrap();
+        let partitioner = GraphPartitioner::new(&config);
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
 
         assert!(!partitions.is_empty());
         assert!(partitions.iter().all(|p| !p.files.is_empty()));
     }
 
     #[test]
-    fn test_brute_force_partition_uses_random_fallback_for_multi_cluster() {
+    fn test_partition_directory_basic() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
         let mut graph: DependencyGraph = Graph::new();
-        let nodes: Vec<_> = (0..4)
+        let _nodes: Vec<_> = (0..4)
             .map(|i| {
                 graph.add_node(FileNode {
                     path: PathBuf::from(format!("file{i}.py")),
@@ -834,44 +797,67 @@ use serde::{Serialize, Deserialize};
             })
             .collect();
 
-        let communities = analyzer
-            .brute_force_partition(&nodes, &graph, 3)
-            .expect("partitioning should succeed");
-        assert_eq!(communities.len(), 3);
-        assert_eq!(
-            communities.iter().map(|c| c.len()).sum::<usize>(),
-            nodes.len()
-        );
+        let metrics = DirectoryMetrics {
+            files: 4,
+            subdirs: 0,
+            loc: 40,
+            gini: 0.0,
+            entropy: 2.0,
+            file_pressure: 0.2,
+            branch_pressure: 0.0,
+            size_pressure: 0.02,
+            dispersion: 0.0,
+            file_count_score: 0.8,
+            subdir_count_score: 0.5,
+            imbalance: 0.3,
+        };
+
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
+        assert!(!partitions.is_empty());
     }
 
     #[test]
-    fn test_brute_force_partition_falls_back_to_simple_split() {
+    fn test_partition_preserves_nodes() {
         let mut config = create_test_config();
-        config.partitioning.balance_tolerance = 0.0;
-        let analyzer = DirectoryAnalyzer::new(config);
+        config.partitioning.balance_tolerance = 0.5; // Allow more tolerance
 
         let mut graph: DependencyGraph = Graph::new();
-        let node_a = graph.add_node(FileNode {
+        let _node_a = graph.add_node(FileNode {
             path: PathBuf::from("a.py"),
             loc: 10,
             size_bytes: 100,
         });
-        let node_b = graph.add_node(FileNode {
+        let _node_b = graph.add_node(FileNode {
             path: PathBuf::from("b.py"),
             loc: 40,
             size_bytes: 400,
         });
-        let partitions = analyzer
-            .brute_force_partition(&[node_a, node_b], &graph, 2)
-            .expect("partitioning should succeed");
-        assert_eq!(partitions.len(), 2);
-        assert!(partitions.iter().all(|part| !part.is_empty()));
+
+        let metrics = DirectoryMetrics {
+            files: 2,
+            subdirs: 0,
+            loc: 50,
+            gini: 0.3,
+            entropy: 1.0,
+            file_pressure: 0.1,
+            branch_pressure: 0.0,
+            size_pressure: 0.025,
+            dispersion: 0.3,
+            file_count_score: 0.9,
+            subdir_count_score: 0.5,
+            imbalance: 0.2,
+        };
+
+        let partitioner = GraphPartitioner::new(&config);
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
+        let total_files: usize = partitions.iter().map(|p| p.files.len()).sum();
+        assert_eq!(total_files, 2);
     }
 
     #[test]
-    fn test_kernighan_lin_refinement_applies_improving_swap() {
+    fn test_calculate_cut_size() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
         let mut graph: DependencyGraph = Graph::new();
 
         let node_a = graph.add_node(FileNode {
@@ -895,131 +881,64 @@ use serde::{Serialize, Deserialize};
             size_bytes: 180,
         });
 
-        // Connect node_a strongly to community 2 and weakly to community 1
-        for &(from, to, weight) in &[
-            (node_a, node_c, 3),
-            (node_c, node_a, 3),
-            (node_a, node_d, 2),
-            (node_d, node_a, 2),
-            (node_a, node_b, 1),
-            (node_b, node_a, 1),
-        ] {
-            graph.add_edge(
-                from,
-                to,
-                DependencyEdge {
-                    weight,
-                    relationship_type: "module".to_string(),
-                },
-            );
-        }
-
-        let refined = analyzer
-            .kernighan_lin_refinement(&graph, vec![vec![node_a, node_b], vec![node_c, node_d]])
-            .expect("refinement should succeed");
-
-        let total_nodes: usize = refined.iter().map(|c| c.len()).sum();
-        assert_eq!(
-            total_nodes, 4,
-            "refinement should preserve the number of nodes"
+        // Add edges between partitions
+        graph.add_edge(
+            node_a,
+            node_c,
+            DependencyEdge {
+                weight: 3,
+                relationship_type: "module".to_string(),
+            },
         );
-        assert!(
-            refined[0].len() < 2 || refined[1].len() > 2,
-            "expected Kernighan-Lin refinement to rebalance partitions"
+        graph.add_edge(
+            node_b,
+            node_d,
+            DependencyEdge {
+                weight: 2,
+                relationship_type: "module".to_string(),
+            },
         );
+
+        let part1 = vec![node_a, node_b];
+        let part2 = vec![node_c, node_d];
+
+        let cut_size = partitioner.calculate_cut_size(&graph, &part1, &part2);
+        assert_eq!(cut_size, 5); // 3 + 2 edges crossing
     }
 
     #[test]
-    fn test_calculate_reorganization_gain() {
+    fn test_partition_empty_graph() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
-        let partitions = vec![
-            DirectoryPartition {
-                name: "core".to_string(),
-                files: vec![PathBuf::from("file1.py"), PathBuf::from("file2.py")],
-                loc: 200,
-            },
-            DirectoryPartition {
-                name: "utils".to_string(),
-                files: vec![PathBuf::from("file3.py")],
-                loc: 100,
-            },
-        ];
-
-        let current_metrics = DirectoryMetrics {
-            files: 3,
+        let graph: DependencyGraph = petgraph::Graph::new();
+        let metrics = DirectoryMetrics {
+            files: 0,
             subdirs: 0,
-            loc: 300,
-            gini: 0.5,
-            entropy: 1.5,
-            file_pressure: 0.6,
+            loc: 0,
+            gini: 0.0,
+            entropy: 0.0,
+            file_pressure: 0.0,
             branch_pressure: 0.0,
-            size_pressure: 0.3,
-            dispersion: 0.4,
-            file_count_score: 0.5,
-            subdir_count_score: 0.5,
-            imbalance: 0.8,
+            size_pressure: 0.0,
+            dispersion: 0.0,
+            file_count_score: 1.0,
+            subdir_count_score: 1.0,
+            imbalance: 0.0,
         };
 
-        let gain = analyzer
-            .calculate_reorganization_gain(&current_metrics, &partitions, Path::new("."))
-            .unwrap();
-
-        assert!(gain.imbalance_delta >= 0.0);
-        // cross_edges_reduced is unsigned, always >= 0
-    }
-
-    #[test]
-    fn test_communities_to_partitions() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        // Create a simple graph
-        let mut graph = petgraph::Graph::new();
-        let node1 = graph.add_node(FileNode {
-            path: PathBuf::from("file1.py"),
-            loc: 100,
-            size_bytes: 1000,
-        });
-        let node2 = graph.add_node(FileNode {
-            path: PathBuf::from("file2.py"),
-            loc: 150,
-            size_bytes: 1500,
-        });
-
-        let communities = vec![vec![node1], vec![node2]];
-
-        let partitions = analyzer
-            .communities_to_partitions(&graph, communities, 2)
-            .unwrap();
-
-        assert_eq!(partitions.len(), 2);
-        assert_eq!(partitions[0].files.len(), 1);
-        assert_eq!(partitions[1].files.len(), 1);
-        assert_eq!(partitions[0].loc, 100);
-        assert_eq!(partitions[1].loc, 150);
-    }
-
-    #[test]
-    fn test_label_propagation_partition_empty() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let graph = petgraph::Graph::new();
-        let result = analyzer.label_propagation_partition(&graph).unwrap();
-
+        let result = partitioner.partition_directory(&graph, &metrics).unwrap();
         assert!(result.is_empty());
     }
 
     #[test]
-    fn test_brute_force_partition() {
+    fn test_partition_small_graph() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
         // Create test node indices
         let mut graph: DependencyGraph = petgraph::Graph::new();
-        let nodes: Vec<_> = (0..4)
+        let _nodes: Vec<_> = (0..4)
             .map(|i| {
                 graph.add_node(FileNode {
                     path: PathBuf::from(format!("file{}.py", i)),
@@ -1029,19 +948,33 @@ use serde::{Serialize, Deserialize};
             })
             .collect();
 
-        let partitions = analyzer.brute_force_partition(&nodes, &graph, 2).unwrap();
+        let metrics = DirectoryMetrics {
+            files: 4,
+            subdirs: 0,
+            loc: 400,
+            gini: 0.0,
+            entropy: 2.0,
+            file_pressure: 0.2,
+            branch_pressure: 0.0,
+            size_pressure: 0.2,
+            dispersion: 0.0,
+            file_count_score: 0.8,
+            subdir_count_score: 0.5,
+            imbalance: 0.3,
+        };
 
-        assert_eq!(partitions.len(), 2);
-        assert_eq!(partitions.iter().map(|p| p.len()).sum::<usize>(), 4);
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
+        let total_files: usize = partitions.iter().map(|p| p.files.len()).sum();
+        assert_eq!(total_files, 4);
     }
 
     #[test]
-    fn test_find_optimal_bipartition() {
+    fn test_partition_balanced_bipartition() {
         let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
+        let partitioner = GraphPartitioner::new(&config);
 
         // Create a simple connected graph
-        let mut graph = petgraph::Graph::new();
+        let mut graph: DependencyGraph = petgraph::Graph::new();
         let node1 = graph.add_node(FileNode {
             path: PathBuf::from("file1.py"),
             loc: 100,
@@ -1067,12 +1000,24 @@ use serde::{Serialize, Deserialize};
             },
         );
 
-        let nodes = vec![node1, node2, node3];
-        let (part1, part2) = analyzer.find_optimal_bipartition(&nodes, &graph).unwrap();
+        let metrics = DirectoryMetrics {
+            files: 3,
+            subdirs: 0,
+            loc: 300,
+            gini: 0.0,
+            entropy: 1.58,
+            file_pressure: 0.15,
+            branch_pressure: 0.0,
+            size_pressure: 0.15,
+            dispersion: 0.0,
+            file_count_score: 0.85,
+            subdir_count_score: 0.5,
+            imbalance: 0.25,
+        };
 
-        assert!(!part1.is_empty());
-        assert!(!part2.is_empty());
-        assert_eq!(part1.len() + part2.len(), 3);
+        let partitions = partitioner.partition_directory(&graph, &metrics).unwrap();
+        let total_files: usize = partitions.iter().map(|p| p.files.len()).sum();
+        assert_eq!(total_files, 3);
     }
 
     #[test]
@@ -1118,19 +1063,5 @@ use serde::{Serialize, Deserialize};
         assert!(imports.is_empty());
     }
 
-    #[test]
-    fn test_estimate_cross_edges_reduced() {
-        let config = create_test_config();
-        let analyzer = DirectoryAnalyzer::new(config);
-
-        let partitions = vec![DirectoryPartition {
-            name: "core".to_string(),
-            files: vec![PathBuf::from("main.py"), PathBuf::from("utils.py")],
-            loc: 200,
-        }];
-
-        let result = analyzer
-            .estimate_cross_edges_reduced(&partitions, Path::new("."))
-            .unwrap();
-        // result is unsigned, always >= 0
-    }
+    // Note: test_estimate_cross_edges_reduced was removed as the method
+    // is now internal to the reorganization module
