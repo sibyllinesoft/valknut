@@ -1,7 +1,7 @@
     use super::*;
     use crate::detectors::structure::config::{
-        EntityHealthConfig, FsDirectoryConfig, FsFileConfig, PartitioningConfig, StructureConfig,
-        StructureToggles,
+        CohesionEdge, EntityHealthConfig, FsDirectoryConfig, FsFileConfig, ImportStatement,
+        PartitioningConfig, StructureConfig, StructureToggles,
     };
     use crate::lang::common::{EntityKind, ParsedEntity, SourceLocation};
     use crate::lang::registry::adapter_for_language;
