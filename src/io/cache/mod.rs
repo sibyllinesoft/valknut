@@ -1,5 +1,8 @@
 //! Cache implementation with support for stop-motifs and other analysis caches.
 
+pub mod language_adapters;
+pub mod types;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,7 +14,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
-// Note: PdgMotif and MotifCategory will be imported when needed
+
+// Re-export types from submodules
+pub use language_adapters::{
+    GoLanguageAdapter, JavaScriptLanguageAdapter, LanguageAdapter, PythonLanguageAdapter,
+    RustLanguageAdapter, TypeScriptLanguageAdapter,
+};
+pub use types::{
+    AstExtractionConfig, AstPattern, AstPatternExtractor, AstPatternType, PatternThresholds,
+};
 
 /// Phase 3 Stop-Motifs Cache for automatic boilerplate pattern detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -626,10 +637,26 @@ impl PatternMiner {
     /// Pattern definitions for motif extraction: (patterns, pattern_name, category)
     const MOTIF_PATTERNS: &'static [(&'static [&'static str], &'static str, PatternCategory)] = &[
         (&["if ", "else"], "branch", PatternCategory::ControlFlow),
-        (&["for ", "while ", "loop"], "loop", PatternCategory::ControlFlow),
-        (&["Vec::", "HashMap::", "HashSet::"], "collection", PatternCategory::DataStructure),
-        (&["println!", "eprintln!", "dbg!"], "debug_print", PatternCategory::Boilerplate),
-        (&["unwrap()", "expect("], "error_unwrap", PatternCategory::Boilerplate),
+        (
+            &["for ", "while ", "loop"],
+            "loop",
+            PatternCategory::ControlFlow,
+        ),
+        (
+            &["Vec::", "HashMap::", "HashSet::"],
+            "collection",
+            PatternCategory::DataStructure,
+        ),
+        (
+            &["println!", "eprintln!", "dbg!"],
+            "debug_print",
+            PatternCategory::Boilerplate,
+        ),
+        (
+            &["unwrap()", "expect("],
+            "error_unwrap",
+            PatternCategory::Boilerplate,
+        ),
     ];
 
     /// Extract simplified structural motifs from source code
@@ -718,7 +745,7 @@ impl PatternMiner {
             let key = format!("motif:{}", motif);
             let idf = idf_scores.get(&key).copied().unwrap_or(0.0);
 
-            let category = self.categorize_motif(&motif);
+            let category = self.categorize_motif(motif);
             all_patterns.push(PatternCandidate {
                 pattern: motif.clone(),
                 support,
@@ -869,538 +896,6 @@ pub struct AstStopMotifMiner {
     frequency_thresholds: PatternThresholds,
 }
 
-/// Language adapter trait for AST analysis
-pub trait LanguageAdapter: Send + Sync {
-    fn language_name(&self) -> &str;
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex>;
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>>;
-}
-
-/// Extract token sequence patterns from source code.
-/// The `sanitize` closure transforms the sequence into a valid ID component.
-fn extract_token_sequence_patterns<F>(
-    source_code: &str,
-    sequences: &[&str],
-    language: &str,
-    sanitize: F,
-) -> Vec<AstPattern>
-where
-    F: Fn(&str) -> String,
-{
-    let mut patterns = Vec::new();
-    for line in source_code.lines() {
-        let line = line.trim();
-        for sequence in sequences {
-            if line.contains(sequence) {
-                patterns.push(AstPattern {
-                    id: format!("token_seq:{}", sanitize(sequence)),
-                    pattern_type: AstPatternType::TokenSequence,
-                    node_type: None,
-                    subtree_signature: None,
-                    token_sequence: Some(sequence.to_string()),
-                    language: language.to_string(),
-                    metadata: HashMap::new(),
-                });
-            }
-        }
-    }
-    patterns
-}
-
-/// Python language adapter implementation
-pub struct PythonLanguageAdapter {
-    adapter: crate::lang::python::PythonAdapter,
-}
-
-impl PythonLanguageAdapter {
-    pub fn new() -> Result<Self> {
-        let adapter = crate::lang::python::PythonAdapter::new()?;
-        Ok(Self { adapter })
-    }
-}
-
-impl LanguageAdapter for PythonLanguageAdapter {
-    fn language_name(&self) -> &str {
-        "python"
-    }
-
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex> {
-        self.adapter.parse_source(source_code, file_path)
-    }
-
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>> {
-        let mut patterns = Vec::new();
-
-        // Extract node type patterns from entities
-        for (_id, entity) in &parse_index.entities {
-            // Node type pattern
-            let node_type = format!("{:?}", entity.kind);
-            let node_pattern = AstPattern {
-                id: format!("node_type:{}", node_type),
-                pattern_type: AstPatternType::NodeType,
-                node_type: Some(node_type),
-                subtree_signature: None,
-                token_sequence: None,
-                language: "python".to_string(),
-                metadata: HashMap::new(),
-            };
-            patterns.push(node_pattern);
-
-            // Extract metadata-based patterns for Python-specific constructs
-            if let Some(serde_json::Value::Bool(true)) = entity.metadata.get("has_decorators") {
-                let decorator_pattern = AstPattern {
-                    id: "decorator_usage".to_string(),
-                    pattern_type: AstPatternType::FrameworkPattern,
-                    node_type: None,
-                    subtree_signature: Some("decorator_list".to_string()),
-                    token_sequence: None,
-                    language: "python".to_string(),
-                    metadata: entity.metadata.clone(),
-                };
-                patterns.push(decorator_pattern);
-            }
-
-            // Extract function parameter patterns
-            if let Some(serde_json::Value::Array(params)) = entity.metadata.get("parameters") {
-                if !params.is_empty() {
-                    let param_pattern = AstPattern {
-                        id: format!("function_params:{}", params.len()),
-                        pattern_type: AstPatternType::SubtreePattern,
-                        node_type: None,
-                        subtree_signature: Some(format!(
-                            "function_definition->parameters[{}]",
-                            params.len()
-                        )),
-                        token_sequence: None,
-                        language: "python".to_string(),
-                        metadata: HashMap::new(),
-                    };
-                    patterns.push(param_pattern);
-                }
-            }
-        }
-
-        // Extract token sequence patterns from source
-        let token_patterns = self.extract_token_sequences(source_code)?;
-        patterns.extend(token_patterns);
-
-        Ok(patterns)
-    }
-}
-
-impl PythonLanguageAdapter {
-    fn extract_token_sequences(&self, source_code: &str) -> Result<Vec<AstPattern>> {
-        const COMMON_SEQUENCES: &[&str] = &[
-            "if __name__ == \"__main__\":",
-            "from typing import",
-            "import os",
-            "import sys",
-            "def __init__(self",
-            "self.",
-            "return None",
-            "raise ValueError",
-            "except Exception",
-            "with open(",
-        ];
-        Ok(extract_token_sequence_patterns(
-            source_code,
-            COMMON_SEQUENCES,
-            "python",
-            |s| s.replace(' ', "_"),
-        ))
-    }
-}
-
-/// JavaScript language adapter implementation
-pub struct JavaScriptLanguageAdapter {
-    adapter: crate::lang::javascript::JavaScriptAdapter,
-}
-
-impl JavaScriptLanguageAdapter {
-    pub fn new() -> Result<Self> {
-        let adapter = crate::lang::javascript::JavaScriptAdapter::new()?;
-        Ok(Self { adapter })
-    }
-}
-
-impl LanguageAdapter for JavaScriptLanguageAdapter {
-    fn language_name(&self) -> &str {
-        "javascript"
-    }
-
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex> {
-        self.adapter.parse_source(source_code, file_path)
-    }
-
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>> {
-        let mut patterns = Vec::new();
-
-        // Extract entity-based patterns
-        for (_id, entity) in &parse_index.entities {
-            let node_type = format!("{:?}", entity.kind);
-            let node_pattern = AstPattern {
-                id: format!("node_type:{}", node_type),
-                pattern_type: AstPatternType::NodeType,
-                node_type: Some(node_type),
-                subtree_signature: None,
-                token_sequence: None,
-                language: "javascript".to_string(),
-                metadata: HashMap::new(),
-            };
-            patterns.push(node_pattern);
-        }
-
-        // JavaScript-specific token patterns
-        let token_patterns = self.extract_js_token_sequences(source_code)?;
-        patterns.extend(token_patterns);
-
-        Ok(patterns)
-    }
-}
-
-impl JavaScriptLanguageAdapter {
-    fn extract_js_token_sequences(&self, source_code: &str) -> Result<Vec<AstPattern>> {
-        const COMMON_JS_SEQUENCES: &[&str] = &[
-            "const ", "let ", "var ", "function(", "() => {", "require(",
-            "module.exports", "console.log(", "JSON.stringify(", "JSON.parse(",
-            ".then(", ".catch(", "async ", "await ",
-        ];
-        Ok(extract_token_sequence_patterns(
-            source_code,
-            COMMON_JS_SEQUENCES,
-            "javascript",
-            |s| s.replace(' ', "_").replace('(', "").replace(')', ""),
-        ))
-    }
-}
-
-/// TypeScript language adapter implementation  
-pub struct TypeScriptLanguageAdapter {
-    adapter: crate::lang::typescript::TypeScriptAdapter,
-}
-
-impl TypeScriptLanguageAdapter {
-    pub fn new() -> Result<Self> {
-        let adapter = crate::lang::typescript::TypeScriptAdapter::new()?;
-        Ok(Self { adapter })
-    }
-}
-
-impl LanguageAdapter for TypeScriptLanguageAdapter {
-    fn language_name(&self) -> &str {
-        "typescript"
-    }
-
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex> {
-        self.adapter.parse_source(source_code, file_path)
-    }
-
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>> {
-        let mut patterns = Vec::new();
-
-        // Extract entity-based patterns
-        for (_id, entity) in &parse_index.entities {
-            let node_type = format!("{:?}", entity.kind);
-            let node_pattern = AstPattern {
-                id: format!("node_type:{}", node_type),
-                pattern_type: AstPatternType::NodeType,
-                node_type: Some(node_type),
-                subtree_signature: None,
-                token_sequence: None,
-                language: "typescript".to_string(),
-                metadata: HashMap::new(),
-            };
-            patterns.push(node_pattern);
-        }
-
-        // TypeScript-specific patterns
-        let token_patterns = self.extract_ts_token_sequences(source_code)?;
-        patterns.extend(token_patterns);
-
-        Ok(patterns)
-    }
-}
-
-impl TypeScriptLanguageAdapter {
-    fn extract_ts_token_sequences(&self, source_code: &str) -> Result<Vec<AstPattern>> {
-        const COMMON_TS_SEQUENCES: &[&str] = &[
-            ": string", ": number", ": boolean", ": void", "interface ", "type ",
-            "enum ", "export ", "import ", "extends ", "implements ", "public ",
-            "private ", "protected ", "readonly ", "as ",
-        ];
-        Ok(extract_token_sequence_patterns(
-            source_code,
-            COMMON_TS_SEQUENCES,
-            "typescript",
-            |s| s.replace(' ', "_"),
-        ))
-    }
-}
-
-/// Rust language adapter implementation
-pub struct RustLanguageAdapter {
-    adapter: crate::lang::rust_lang::RustAdapter,
-}
-
-impl RustLanguageAdapter {
-    pub fn new() -> Result<Self> {
-        let adapter = crate::lang::rust_lang::RustAdapter::new()?;
-        Ok(Self { adapter })
-    }
-}
-
-impl LanguageAdapter for RustLanguageAdapter {
-    fn language_name(&self) -> &str {
-        "rust"
-    }
-
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex> {
-        self.adapter.parse_source(source_code, file_path)
-    }
-
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>> {
-        let mut patterns = Vec::new();
-
-        for (_id, entity) in &parse_index.entities {
-            let node_type = format!("{:?}", entity.kind);
-            let node_pattern = AstPattern {
-                id: format!("node_type:{}", node_type),
-                pattern_type: AstPatternType::NodeType,
-                node_type: Some(node_type),
-                subtree_signature: None,
-                token_sequence: None,
-                language: "rust".to_string(),
-                metadata: HashMap::new(),
-            };
-            patterns.push(node_pattern);
-        }
-
-        let token_patterns = self.extract_rust_token_sequences(source_code)?;
-        patterns.extend(token_patterns);
-
-        Ok(patterns)
-    }
-}
-
-impl RustLanguageAdapter {
-    fn extract_rust_token_sequences(&self, source_code: &str) -> Result<Vec<AstPattern>> {
-        const COMMON_RUST_SEQUENCES: &[&str] = &[
-            "use ", "pub ", "fn ", "struct ", "enum ", "impl ", "trait ", "let ", "mut ",
-            "&self", "&mut self", "Result<", "Option<", "Vec<", "HashMap<", "println!",
-            "eprintln!", "dbg!", ".unwrap()", ".expect(", "match ", "if let", "Some(",
-            "None", "Ok(", "Err(",
-        ];
-        Ok(extract_token_sequence_patterns(
-            source_code,
-            COMMON_RUST_SEQUENCES,
-            "rust",
-            |s| s.replace(' ', "_").replace('<', "").replace('(', ""),
-        ))
-    }
-}
-
-/// Go language adapter implementation
-pub struct GoLanguageAdapter {
-    adapter: crate::lang::go::GoAdapter,
-}
-
-impl GoLanguageAdapter {
-    pub fn new() -> Result<Self> {
-        let adapter = crate::lang::go::GoAdapter::new()?;
-        Ok(Self { adapter })
-    }
-}
-
-impl LanguageAdapter for GoLanguageAdapter {
-    fn language_name(&self) -> &str {
-        "go"
-    }
-
-    fn parse_source(
-        &mut self,
-        source_code: &str,
-        file_path: &str,
-    ) -> Result<crate::lang::common::ParseIndex> {
-        self.adapter.parse_source(source_code, file_path)
-    }
-
-    fn extract_ast_patterns(
-        &self,
-        parse_index: &crate::lang::common::ParseIndex,
-        source_code: &str,
-    ) -> Result<Vec<AstPattern>> {
-        let mut patterns = Vec::new();
-
-        for (_id, entity) in &parse_index.entities {
-            let node_type = format!("{:?}", entity.kind);
-            let node_pattern = AstPattern {
-                id: format!("node_type:{}", node_type),
-                pattern_type: AstPatternType::NodeType,
-                node_type: Some(node_type),
-                subtree_signature: None,
-                token_sequence: None,
-                language: "go".to_string(),
-                metadata: HashMap::new(),
-            };
-            patterns.push(node_pattern);
-        }
-
-        let token_patterns = self.extract_go_token_sequences(source_code)?;
-        patterns.extend(token_patterns);
-
-        Ok(patterns)
-    }
-}
-
-impl GoLanguageAdapter {
-    fn extract_go_token_sequences(&self, source_code: &str) -> Result<Vec<AstPattern>> {
-        const COMMON_GO_SEQUENCES: &[&str] = &[
-            "package ", "import ", "func ", "var ", "const ", "type ", "struct {",
-            "interface {", "if err != nil", "return ", "fmt.Println(", "fmt.Printf(",
-            "log.Fatal(", "make(", "append(", "len(", "cap(", ":= ", "go ", "defer ",
-            "chan ", "select {", "for ", "range ",
-        ];
-        Ok(extract_token_sequence_patterns(
-            source_code,
-            COMMON_GO_SEQUENCES,
-            "go",
-            |s| s.replace(' ', "_").replace('{', "").replace('(', ""),
-        ))
-    }
-}
-
-/// AST pattern extracted from tree-sitter analysis
-#[derive(Debug, Clone)]
-pub struct AstPattern {
-    /// Pattern identifier
-    pub id: String,
-
-    /// Pattern type
-    pub pattern_type: AstPatternType,
-
-    /// Node type (for NodeType patterns)
-    pub node_type: Option<String>,
-
-    /// Subtree structure (for SubtreePattern)
-    pub subtree_signature: Option<String>,
-
-    /// Token sequence (for TokenSequence patterns)
-    pub token_sequence: Option<String>,
-
-    /// Language where pattern was found
-    pub language: String,
-
-    /// Metadata about the pattern
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-/// Types of AST patterns that can be extracted
-#[derive(Debug, Clone, PartialEq)]
-pub enum AstPatternType {
-    /// Common AST node type
-    NodeType,
-
-    /// Structural subtree pattern
-    SubtreePattern,
-
-    /// Token sequence pattern
-    TokenSequence,
-
-    /// Control flow pattern
-    ControlFlowPattern,
-
-    /// Framework-specific pattern
-    FrameworkPattern,
-}
-
-/// AST pattern extractor that analyzes parsed code
-#[derive(Debug)]
-pub struct AstPatternExtractor {
-    /// Node type frequency tracking
-    node_type_frequencies: HashMap<String, usize>,
-
-    /// Subtree pattern frequencies
-    subtree_frequencies: HashMap<String, usize>,
-
-    /// Token sequence frequencies
-    token_sequence_frequencies: HashMap<String, usize>,
-
-    /// Pattern extraction configuration
-    config: AstExtractionConfig,
-}
-
-/// Configuration for AST pattern extraction
-#[derive(Debug, Clone)]
-pub struct AstExtractionConfig {
-    /// Minimum support count for patterns
-    pub min_support: usize,
-
-    /// Maximum subtree depth to analyze
-    pub max_subtree_depth: usize,
-
-    /// Token sequence length for analysis
-    pub token_sequence_length: usize,
-
-    /// Languages to process
-    pub enabled_languages: HashSet<String>,
-}
-
-/// Frequency thresholds for pattern selection
-#[derive(Debug, Clone)]
-pub struct PatternThresholds {
-    /// Top percentile for node types (e.g., top 5%)
-    pub node_type_percentile: f64,
-
-    /// Top percentile for subtree patterns
-    pub subtree_percentile: f64,
-
-    /// Top percentile for token sequences
-    pub token_sequence_percentile: f64,
-
-    /// Minimum IDF score for pattern selection
-    pub min_idf_score: f64,
-}
-
 impl AstStopMotifMiner {
     /// Create a new AST stop-motif miner
     pub fn new() -> Self {
@@ -1427,26 +922,12 @@ impl AstStopMotifMiner {
             language_adapters.insert("go".to_string(), Box::new(go_adapter));
         }
 
-        let config = AstExtractionConfig {
-            min_support: 3,
-            max_subtree_depth: 4,
-            token_sequence_length: 5,
-            enabled_languages: ["python", "javascript", "typescript", "rust", "go"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        };
-
-        let thresholds = PatternThresholds {
-            node_type_percentile: 0.95,      // Top 5% most frequent node types
-            subtree_percentile: 0.90,        // Top 10% most frequent subtrees
-            token_sequence_percentile: 0.95, // Top 5% most frequent token sequences
-            min_idf_score: 0.1,
-        };
+        let config = AstExtractionConfig::default();
+        let thresholds = PatternThresholds::default();
 
         Self {
             language_adapters,
-            pattern_extractor: AstPatternExtractor::new(config.clone()),
+            pattern_extractor: AstPatternExtractor::new(config),
             frequency_thresholds: thresholds,
         }
     }
@@ -1607,97 +1088,6 @@ impl AstStopMotifMiner {
     }
 }
 
-impl AstPatternExtractor {
-    /// Create a new AST pattern extractor
-    pub fn new(config: AstExtractionConfig) -> Self {
-        Self {
-            node_type_frequencies: HashMap::new(),
-            subtree_frequencies: HashMap::new(),
-            token_sequence_frequencies: HashMap::new(),
-            config,
-        }
-    }
-
-    /// Analyze frequencies of all extracted patterns
-    pub fn analyze_pattern_frequencies(&mut self, patterns: &[AstPattern]) {
-        self.node_type_frequencies.clear();
-        self.subtree_frequencies.clear();
-        self.token_sequence_frequencies.clear();
-
-        for pattern in patterns {
-            match &pattern.pattern_type {
-                AstPatternType::NodeType => {
-                    if let Some(ref node_type) = pattern.node_type {
-                        *self
-                            .node_type_frequencies
-                            .entry(node_type.clone())
-                            .or_insert(0) += 1;
-                    }
-                }
-                AstPatternType::SubtreePattern => {
-                    if let Some(ref signature) = pattern.subtree_signature {
-                        *self
-                            .subtree_frequencies
-                            .entry(signature.clone())
-                            .or_insert(0) += 1;
-                    }
-                }
-                AstPatternType::TokenSequence => {
-                    if let Some(ref sequence) = pattern.token_sequence {
-                        *self
-                            .token_sequence_frequencies
-                            .entry(sequence.clone())
-                            .or_insert(0) += 1;
-                    }
-                }
-                AstPatternType::ControlFlowPattern => {
-                    // Treat as subtree pattern for frequency analysis
-                    if let Some(ref signature) = pattern.subtree_signature {
-                        *self
-                            .subtree_frequencies
-                            .entry(signature.clone())
-                            .or_insert(0) += 1;
-                    }
-                }
-                AstPatternType::FrameworkPattern => {
-                    // Treat as subtree pattern for frequency analysis
-                    if let Some(ref signature) = pattern.subtree_signature {
-                        *self
-                            .subtree_frequencies
-                            .entry(signature.clone())
-                            .or_insert(0) += 1;
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl Default for AstExtractionConfig {
-    fn default() -> Self {
-        Self {
-            min_support: 3,
-            max_subtree_depth: 4,
-            token_sequence_length: 5,
-            enabled_languages: ["python", "javascript", "typescript", "rust", "go"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        }
-    }
-}
-
-impl Default for PatternThresholds {
-    fn default() -> Self {
-        Self {
-            node_type_percentile: 0.95,
-            subtree_percentile: 0.90,
-            token_sequence_percentile: 0.95,
-            min_idf_score: 0.1,
-        }
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Cache;
 
@@ -1706,7 +1096,6 @@ impl Cache {
         Self::default()
     }
 }
-
 
 #[cfg(test)]
 mod tests;
