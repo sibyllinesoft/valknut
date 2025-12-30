@@ -3,7 +3,11 @@
 //! This module provides efficient duplicate code detection using MinHash signatures
 //! and LSH banding techniques for sub-linear similarity search.
 
+pub mod ast_analysis;
+pub mod comparison;
 pub mod config;
+pub mod shingles;
+
 pub use config::{
     AdaptiveDenoiseConfig, AutoCalibrationConfig, DedupeConfig, DedupeWeights, DenoiseConfig,
     DenoiseWeights, LshConfig, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
@@ -18,10 +22,16 @@ mod similarity_context;
 pub mod weighted;
 
 // Re-export submodule types
+pub use ast_analysis::{
+    count_ast_nodes_from_index, count_distinct_blocks_from_index, detect_language_from_path,
+    AstAnalyzer, EntityAstStats,
+};
+pub use comparison::{jaccard_similarity, summarise_similarities, SimilarityComparator};
 pub use index::LshIndex;
 pub use lsh_cache::{CacheStatistics, LshCache};
 pub use memory_pool::{LshMemoryPools, PoolStatistics};
 pub use metrics::{LshContextStatistics, LshPerformanceMetrics};
+pub use shingles::{count_tokens, ShingleGenerator};
 pub use signature::MinHashSignature;
 pub use similarity_context::LshSimilarityContext;
 pub use weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats};
@@ -93,12 +103,7 @@ pub struct LshExtractor {
     similarity_context_cache: std::sync::RwLock<Option<(String, Arc<LshSimilarityContext>)>>,
 }
 
-#[derive(Debug, Clone)]
-struct EntityAstStats {
-    node_count: usize,
-    block_count: usize,
-    has_stop_motif: bool,
-}
+// EntityAstStats has been moved to ast_analysis module
 
 impl LshExtractor {
     /// Create a new LSH extractor
@@ -1457,19 +1462,7 @@ impl LshExtractor {
     }
 }
 
-fn summarise_similarities(similarities: &[f64]) -> (f64, f64, f64) {
-    if similarities.is_empty() {
-        return (0.0, 0.0, 0.0);
-    }
-
-    let max_similarity = similarities
-        .iter()
-        .fold(0.0_f64, |acc, &value| acc.max(value));
-    let avg_similarity = similarities.iter().copied().sum::<f64>() / similarities.len() as f64;
-    let duplicate_count = similarities.iter().filter(|&&s| s > 0.8).count() as f64;
-
-    (max_similarity, avg_similarity, duplicate_count)
-}
+// summarise_similarities has been moved to comparison module
 
 #[cfg(test)]
 mod tests;
