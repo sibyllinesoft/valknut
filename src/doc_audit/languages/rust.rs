@@ -1,6 +1,6 @@
 //! Rust rustdoc scanner for doc audit.
 
-use super::{extract_comment_text, is_incomplete_doc, relative_path, DocIssue};
+use super::super::{extract_comment_text, is_incomplete_doc, relative_path, DocIssue};
 use std::path::Path;
 
 /// Scans Rust source code for missing or incomplete rustdoc documentation.

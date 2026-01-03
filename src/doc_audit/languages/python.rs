@@ -1,6 +1,6 @@
 //! Python docstring scanner for doc audit.
 
-use super::{is_incomplete_doc, relative_path, DocIssue};
+use super::super::{is_incomplete_doc, relative_path, DocIssue};
 use std::path::Path;
 
 /// Scans Python source code for missing or incomplete docstrings.

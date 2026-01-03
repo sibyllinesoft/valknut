@@ -5,11 +5,10 @@
 //! stale READMEs that haven't been updated alongside the code.
 
 mod git_utils;
-mod python;
-mod rust;
-mod typescript;
+mod languages;
 
 use git_utils::GitHelper;
+use languages::{scan_python, scan_rust, scan_typescript};
 
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -396,10 +395,10 @@ fn scan_documentation(
             .map(|e| e.to_ascii_lowercase());
 
         match ext.as_deref() {
-            Some("py") => scan_file_with(file_path, &config.root, python::scan_python, &mut issues),
-            Some("rs") => scan_file_with(file_path, &config.root, rust::scan_rust, &mut issues),
+            Some("py") => scan_file_with(file_path, &config.root, scan_python, &mut issues),
+            Some("rs") => scan_file_with(file_path, &config.root, scan_rust, &mut issues),
             Some("ts" | "tsx" | "js" | "jsx") => {
-                scan_file_with(file_path, &config.root, typescript::scan_typescript, &mut issues)
+                scan_file_with(file_path, &config.root, scan_typescript, &mut issues)
             }
             _ => {}
         }

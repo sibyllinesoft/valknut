@@ -1,3 +1,4 @@
+use super::languages::{scan_python, scan_rust, scan_typescript};
 use super::*;
 use git2::Repository;
 use std::collections::{HashMap, HashSet};
@@ -236,7 +237,7 @@ async def helper():
     return 3
 "#;
 
-    let issues = python::scan_python(source, &path, &root);
+    let issues = scan_python(source, &path, &root);
     let symbols: Vec<_> = issues
         .iter()
         .map(|issue| issue.symbol.clone().unwrap_or_default())
@@ -271,7 +272,7 @@ pub struct Widget;
 fn needs_docs() {}
 "#;
 
-    let issues = rust::scan_rust(source, &path, &root);
+    let issues = scan_rust(source, &path, &root);
     let mut categories: Vec<_> = issues.iter().map(|issue| issue.category.as_str()).collect();
     categories.sort();
 
@@ -314,7 +315,7 @@ const compute = (value: number) => {
 };
 "#;
 
-    let issues = typescript::scan_typescript(source, &path, &root);
+    let issues = scan_typescript(source, &path, &root);
     let categories: HashSet<_> = issues.iter().map(|issue| issue.category.as_str()).collect();
 
     assert!(categories.contains("undocumented_ts_function"));
