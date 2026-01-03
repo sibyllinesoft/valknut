@@ -638,7 +638,6 @@ impl NormalizationSchemeExt for NormalizationScheme {
     }
 }
 
-
 #[cfg(test)]
-#[path = "scoring_tests.rs"]
+#[path = "features_tests.rs"]
 mod tests;

@@ -87,16 +87,15 @@ pub mod core {
 
     pub mod arena_analysis;
     pub mod ast;
-    pub mod bayesian;
     pub mod config;
     pub mod coverage_discovery;
     pub mod dependency;
     pub mod errors;
-    pub mod partitioning;
     pub mod featureset;
     pub mod file_utils;
     pub mod interned_entities;
     pub mod interning;
+    pub mod partitioning;
     pub mod pipeline;
     pub mod scoring;
 
@@ -104,6 +103,9 @@ pub mod core {
     pub use ast::service as ast_service;
     pub use ast::utils as ast_utils;
     pub use ast::visitor as unified_visitor;
+
+    // Re-export scoring types at original paths for backward compatibility
+    pub use scoring::bayesian;
 }
 
 // Specialized detection algorithms

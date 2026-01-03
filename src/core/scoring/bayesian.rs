@@ -671,7 +671,6 @@ impl BayesianNormalizer {
     }
 }
 
-
 #[cfg(test)]
 #[path = "bayesian_tests.rs"]
 mod tests;
