@@ -42,70 +42,6 @@ pub fn format_location(rec: &serde_json::Value) -> String {
     }
 }
 
-/// Get CSS class based on metric value and thresholds.
-pub fn metric_class(
-    value: f64,
-    good_threshold: f64,
-    warning_threshold: f64,
-    higher_is_better: bool,
-) -> &'static str {
-    if higher_is_better {
-        if value >= good_threshold {
-            "good"
-        } else if value >= warning_threshold {
-            "warning"
-        } else {
-            "danger"
-        }
-    } else if value <= good_threshold {
-        "good"
-    } else if value <= warning_threshold {
-        "warning"
-    } else {
-        "danger"
-    }
-}
-
-/// Render a metric card HTML snippet.
-pub fn render_metric_card(
-    title: &str,
-    value: f64,
-    class: &str,
-    suffix: &str,
-    note: Option<&str>,
-) -> String {
-    let note_html = note.map_or(String::new(), |n| format!("<small>{}</small>", n));
-    format!(
-        r#"<div class="metric-card {}"><h3>{}</h3><div class="value">{:.1}{}</div>{}</div>"#,
-        class, title, value, suffix, note_html
-    )
-}
-
-/// Get severity indicator (emoji and CSS class).
-pub fn severity_indicator(severity: &str) -> (&'static str, &'static str) {
-    match severity.to_lowercase().as_str() {
-        "critical" | "blocker" => ("🔴", "critical"),
-        "high" | "major" => ("🟠", "high"),
-        "medium" | "minor" => ("🟡", "medium"),
-        "low" | "info" => ("🟢", "low"),
-        _ => ("⚪", "unknown"),
-    }
-}
-
-/// Get effort level CSS class.
-pub fn effort_class(effort: u64) -> &'static str {
-    match effort {
-        1..=3 => "low-effort",
-        4..=6 => "medium-effort",
-        _ => "high-effort",
-    }
-}
-
-/// Escape a string for CSV output.
-pub fn escape_csv(s: &str) -> String {
-    format!("\"{}\"", s.replace('"', "\"\""))
-}
-
 /// Map an `OutputFormat` to its CLI/output string representation.
 #[allow(dead_code)]
 pub fn format_to_string(format: &OutputFormat) -> &str {
@@ -119,16 +55,5 @@ pub fn format_to_string(format: &OutputFormat) -> &str {
         OutputFormat::Csv => "csv",
         OutputFormat::CiSummary => "ci-summary",
         OutputFormat::Pretty => "pretty",
-    }
-}
-
-/// Map severity string to SonarQube severity level.
-pub fn map_severity_to_sonar(severity: Option<&str>) -> &'static str {
-    match severity {
-        Some("critical") | Some("blocker") => "BLOCKER",
-        Some("high") | Some("major") => "MAJOR",
-        Some("medium") | Some("minor") => "MINOR",
-        Some("low") | Some("info") => "INFO",
-        _ => "MINOR",
     }
 }

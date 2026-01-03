@@ -1,3 +1,34 @@
+//! Dependency analysis for function-level call graphs.
+//!
+//! This module provides analysis of function dependencies within a codebase,
+//! including:
+//!
+//! - **Call graph construction**: Builds directed graphs of function calls
+//! - **Cycle detection**: Identifies strongly connected components using Kosaraju's algorithm
+//! - **Chokepoint analysis**: Finds functions with high fan-in × fan-out products
+//! - **Closeness centrality**: Measures how central each function is in the call graph
+//! - **Module graph**: Aggregates function-level data to file-level visualization
+//!
+//! # Example
+//!
+//! ```ignore
+//! let files = vec![PathBuf::from("src/main.rs"), PathBuf::from("src/lib.rs")];
+//! let analysis = ProjectDependencyAnalysis::analyze(&files)?;
+//!
+//! // Check for dependency cycles
+//! for cycle in analysis.cycles() {
+//!     println!("Cycle detected: {:?}", cycle);
+//! }
+//!
+//! // Find chokepoint functions
+//! for chokepoint in analysis.chokepoints() {
+//!     println!("{} (score: {})", chokepoint.node.name, chokepoint.score);
+//! }
+//! ```
+
+mod call_resolution;
+pub mod types;
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
@@ -10,202 +41,33 @@ use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
 
-#[derive(Debug, Clone)]
-pub struct FunctionNode {
-    pub unique_id: String,
-    pub name: String,
-    pub qualified_name: String,
-    pub namespace: Vec<String>,
-    pub file_path: PathBuf,
-    pub start_line: Option<usize>,
-    pub end_line: Option<usize>,
-    pub calls: Vec<String>,
-}
+pub use types::{
+    Chokepoint, DependencyMetrics, EntityKey, FunctionNode, ModuleGraph, ModuleGraphEdge,
+    ModuleGraphNode,
+};
+use call_resolution::{select_target, CallIdentifier};
 
-#[derive(Debug, Clone)]
-struct CallIdentifier {
-    segments: Vec<String>,
-}
-
-impl CallIdentifier {
-    fn parse(raw: &str) -> Option<Self> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-
-        let mut segments = Vec::with_capacity(4); // Typical call has 2-4 segments
-        let mut buffer = String::new();
-        let mut chars = trimmed.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            if ch.is_alphanumeric() || ch == '_' {
-                buffer.push(ch);
-            } else if ch == '.' || ch == ':' {
-                if !buffer.is_empty() {
-                    segments.push(buffer.to_lowercase());
-                    buffer.clear();
-                }
-                while matches!(chars.peek(), Some(':')) {
-                    chars.next();
-                }
-            } else if ch == '(' {
-                if !buffer.is_empty() {
-                    segments.push(buffer.to_lowercase());
-                    buffer.clear();
-                }
-                break;
-            } else if ch.is_whitespace() {
-                if !buffer.is_empty() {
-                    segments.push(buffer.to_lowercase());
-                    buffer.clear();
-                }
-            } else {
-                if !buffer.is_empty() {
-                    segments.push(buffer.to_lowercase());
-                    buffer.clear();
-                }
-            }
-        }
-
-        if !buffer.is_empty() {
-            segments.push(buffer.to_lowercase());
-        }
-
-        while matches!(segments.first(), Some(segment) if matches!(segment.as_str(), "self" | "this" | "cls" | "super"))
-        {
-            segments.remove(0);
-        }
-
-        if segments.is_empty() {
-            return None;
-        }
-
-        Some(Self { segments })
-    }
-
-    fn base(&self) -> &str {
-        self.segments.last().map(|s| s.as_str()).unwrap_or("")
-    }
-
-    fn namespace(&self) -> &[String] {
-        if self.segments.len() <= 1 {
-            &self.segments[..0]
-        } else {
-            &self.segments[..self.segments.len() - 1]
-        }
-    }
-
-    fn candidate_keys(&self) -> Vec<String> {
-        let mut keys = Vec::with_capacity(self.segments.len()); // Pre-allocate based on segments
-        for start in 0..self.segments.len() {
-            let candidate = self.segments[start..].join("::");
-            if !keys.contains(&candidate) {
-                keys.push(candidate);
-            }
-        }
-        keys
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EntityKey {
-    file_path: PathBuf,
-    name: String,
-    qualified_name: String,
-    start_line: Option<usize>,
-}
-
-impl EntityKey {
-    pub fn new(
-        path: PathBuf,
-        name: String,
-        qualified_name: String,
-        start_line: Option<usize>,
-    ) -> Self {
-        Self {
-            file_path: path,
-            name,
-            qualified_name,
-            start_line,
-        }
-    }
-
-    pub fn from_node(node: &FunctionNode) -> Self {
-        Self {
-            file_path: node.file_path.clone(),
-            name: node.name.clone(),
-            qualified_name: node.qualified_name.clone(),
-            start_line: node.start_line,
-        }
-    }
-
-    pub fn file_path(&self) -> &Path {
-        &self.file_path
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn qualified_name(&self) -> &str {
-        &self.qualified_name
-    }
-
-    pub fn start_line(&self) -> Option<usize> {
-        self.start_line
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DependencyMetrics {
-    pub fan_in: f64,
-    pub fan_out: f64,
-    pub closeness: f64,
-    pub choke_score: f64,
-    pub in_cycle: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct Chokepoint {
-    pub node: FunctionNode,
-    pub score: f64,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ModuleGraph {
-    pub nodes: Vec<ModuleGraphNode>,
-    pub edges: Vec<ModuleGraphEdge>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleGraphNode {
-    pub id: String,
-    pub path: PathBuf,
-    pub functions: usize,
-    pub fan_in: usize,
-    pub fan_out: usize,
-    pub chokepoint_score: f64,
-    pub in_cycle: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleGraphEdge {
-    pub source: usize,
-    pub target: usize,
-    pub weight: usize,
-}
-
+/// Results of dependency analysis for a project.
+///
+/// Contains the complete call graph analysis including function nodes,
+/// computed metrics, detected cycles, and identified chokepoints.
 #[derive(Debug, Default)]
 pub struct ProjectDependencyAnalysis {
+    /// All function nodes indexed by their unique key.
     nodes: HashMap<EntityKey, FunctionNode>,
+    /// Computed dependency metrics for each function.
     metrics: HashMap<EntityKey, DependencyMetrics>,
+    /// Detected dependency cycles (strongly connected components).
     cycles: Vec<Vec<FunctionNode>>,
+    /// Functions identified as chokepoints (high coupling).
     chokepoints: Vec<Chokepoint>,
+    /// Module-level aggregation of the dependency graph.
     module_graph: ModuleGraph,
 }
 
+/// Analysis and query methods for [`ProjectDependencyAnalysis`].
 impl ProjectDependencyAnalysis {
+    /// Creates an empty analysis result with no data.
     pub fn empty() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -216,6 +78,11 @@ impl ProjectDependencyAnalysis {
         }
     }
 
+    /// Analyzes the given files to build a complete dependency graph.
+    ///
+    /// Parses each file to extract function definitions and their calls,
+    /// then constructs a graph and computes metrics including fan-in,
+    /// fan-out, closeness centrality, cycle membership, and chokepoint scores.
     pub fn analyze(files: &[PathBuf]) -> Result<Self> {
         let mut nodes = HashMap::with_capacity(files.len() * 10); // Estimate ~10 functions per file
 
@@ -252,10 +119,15 @@ impl ProjectDependencyAnalysis {
         })
     }
 
+    /// Returns true if no function nodes were found.
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }
 
+    /// Retrieves dependency metrics for a specific entity.
+    ///
+    /// Performs exact key lookup first, then falls back to fuzzy matching
+    /// by file path and name (case-insensitive) if exact match fails.
     pub fn metrics_for(&self, key: &EntityKey) -> Option<&DependencyMetrics> {
         if let Some(metrics) = self.metrics.get(key) {
             return Some(metrics);
@@ -275,23 +147,37 @@ impl ProjectDependencyAnalysis {
         })
     }
 
+    /// Returns detected dependency cycles as groups of function nodes.
+    ///
+    /// Each cycle represents a strongly connected component where functions
+    /// mutually depend on each other, potentially indicating tight coupling.
     pub fn cycles(&self) -> &[Vec<FunctionNode>] {
         &self.cycles
     }
 
+    /// Returns the top chokepoint functions ranked by score.
+    ///
+    /// Chokepoints are functions with high fan-in × fan-out products,
+    /// indicating they are bottlenecks in the dependency graph.
     pub fn chokepoints(&self) -> &[Chokepoint] {
         &self.chokepoints
     }
 
+    /// Returns the module-level dependency graph for visualization.
+    ///
+    /// Aggregates function-level dependencies to the file level,
+    /// useful for understanding high-level architecture.
     pub fn module_graph(&self) -> &ModuleGraph {
         &self.module_graph
     }
 
+    /// Iterates over all entity keys and their dependency metrics.
     pub fn metrics_iter(&self) -> impl Iterator<Item = (&EntityKey, &DependencyMetrics)> {
         self.metrics.iter()
     }
 }
 
+/// Parses a file and extracts function nodes with their call information.
 fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
     let mut adapter = adapter_for_file(path)?;
     let source = FileReader::read_to_string(path)?;
@@ -351,6 +237,7 @@ fn collect_function_nodes(path: &Path) -> Result<Vec<FunctionNode>> {
     Ok(functions)
 }
 
+/// Builds the namespace path by traversing parent entities.
 fn build_namespace(entity: &ParsedEntity, index: &ParseIndex) -> Vec<String> {
     let mut namespace = Vec::with_capacity(3); // Typical nesting depth is 1-3 levels
     let mut current = entity.parent.clone();
@@ -378,9 +265,45 @@ fn build_namespace(entity: &ParsedEntity, index: &ParseIndex) -> Vec<String> {
 type DependencyGraph = Graph<EntityKey, (), petgraph::Directed>;
 type IndexMap = HashMap<EntityKey, NodeIndex>;
 
+/// Find the matching target key for a call identifier by searching candidate names.
+fn find_target_for_call<'a>(
+    call_id: &CallIdentifier,
+    name_lookup: &'a HashMap<String, Vec<&'a EntityKey>>,
+    node: &FunctionNode,
+    nodes: &HashMap<EntityKey, FunctionNode>,
+) -> Option<&'a EntityKey> {
+    let candidate_keys = call_id.candidate_keys();
+    for candidate_name in &candidate_keys {
+        let Some(candidates) = name_lookup.get(candidate_name) else {
+            continue;
+        };
+        if let Some(target_key) = select_target(candidates.as_slice(), node, nodes, call_id, &candidate_keys) {
+            return Some(target_key);
+        }
+    }
+    None
+}
+
+/// Try to add an edge from source to target if target exists and not already connected.
+fn try_add_edge(
+    graph: &mut DependencyGraph,
+    index_map: &IndexMap,
+    seen_targets: &mut HashSet<NodeIndex>,
+    from_index: NodeIndex,
+    target_key: &EntityKey,
+) {
+    let Some(&target_index) = index_map.get(target_key) else {
+        return;
+    };
+    if seen_targets.insert(target_index) {
+        graph.add_edge(from_index, target_index, ());
+    }
+}
+
+/// Builds a directed graph from function nodes and their call relationships.
 fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, IndexMap) {
     let node_count = nodes.len();
-    let mut graph = DependencyGraph::with_capacity(node_count, node_count * 2); // Estimate 2 edges per node
+    let mut graph = DependencyGraph::with_capacity(node_count, node_count * 2);
     let mut index_map = HashMap::with_capacity(node_count);
 
     for key in nodes.keys() {
@@ -398,32 +321,11 @@ fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, In
         let mut seen_targets = HashSet::new();
 
         for raw_call in &node.calls {
-            if let Some(call_id) = CallIdentifier::parse(raw_call) {
-                let candidate_keys = call_id.candidate_keys();
-                let mut matched_target: Option<&EntityKey> = None;
-
-                for candidate_name in &candidate_keys {
-                    if let Some(candidates) = name_lookup.get(candidate_name) {
-                        if let Some(target_key) = select_target(
-                            candidates.as_slice(),
-                            node,
-                            nodes,
-                            &call_id,
-                            &candidate_keys,
-                        ) {
-                            matched_target = Some(target_key);
-                            break;
-                        }
-                    }
-                }
-
-                if let Some(target_key) = matched_target {
-                    if let Some(&target_index) = index_map.get(target_key) {
-                        if seen_targets.insert(target_index) {
-                            graph.add_edge(from_index, target_index, ());
-                        }
-                    }
-                }
+            let Some(call_id) = CallIdentifier::parse(raw_call) else {
+                continue;
+            };
+            if let Some(target_key) = find_target_for_call(&call_id, &name_lookup, node, nodes) {
+                try_add_edge(&mut graph, &index_map, &mut seen_targets, from_index, target_key);
             }
         }
     }
@@ -431,6 +333,7 @@ fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, In
     (graph, index_map)
 }
 
+/// Builds a lookup table from function names to their entity keys.
 fn build_name_lookup<'a>(
     nodes: &'a HashMap<EntityKey, FunctionNode>,
 ) -> HashMap<String, Vec<&'a EntityKey>> {
@@ -468,140 +371,7 @@ fn build_name_lookup<'a>(
     map
 }
 
-fn select_target<'a>(
-    candidates: &'a [&'a EntityKey],
-    source: &FunctionNode,
-    nodes: &HashMap<EntityKey, FunctionNode>,
-    call: &CallIdentifier,
-    candidate_keys: &[String],
-) -> Option<&'a EntityKey> {
-    candidates
-        .iter()
-        .filter_map(|&key| {
-            let node = nodes.get(key)?;
-            let score = score_candidate(source, node, call, candidate_keys)?;
-            Some((key, score))
-        })
-        .max_by_key(|(_, score)| *score)
-        .map(|(key, _)| key)
-}
-
-/// Calculate match score for a candidate node. Returns None if candidate should be skipped.
-fn score_candidate(
-    source: &FunctionNode,
-    candidate: &FunctionNode,
-    call: &CallIdentifier,
-    candidate_keys: &[String],
-) -> Option<i32> {
-    let is_self_call = candidate.unique_id == source.unique_id;
-
-    // Skip self-calls that don't match the call name
-    if is_self_call && !call.base().eq_ignore_ascii_case(&candidate.name) {
-        return None;
-    }
-
-    let mut score = 0;
-
-    // Self-call bonus
-    if is_self_call {
-        score += 120;
-    }
-
-    // Qualified name matching
-    score += score_qualified_name_match(candidate, call, candidate_keys);
-
-    // Namespace matching
-    if namespace_matches(call.namespace(), &candidate.namespace) {
-        score += 50;
-    }
-
-    // Same file bonus
-    if candidate.file_path == source.file_path {
-        score += 20;
-    }
-
-    // Namespace proximity
-    score += score_namespace_proximity(source, candidate);
-
-    // Line proximity
-    score += score_line_proximity(source.start_line, candidate.start_line);
-
-    Some(score)
-}
-
-/// Score based on qualified name matching
-fn score_qualified_name_match(
-    candidate: &FunctionNode,
-    call: &CallIdentifier,
-    candidate_keys: &[String],
-) -> i32 {
-    let qualified_lower = candidate.qualified_name.to_lowercase();
-
-    if !candidate_keys.is_empty() && qualified_lower == candidate_keys[0] {
-        100
-    } else if candidate_keys.iter().any(|k| k == &qualified_lower) {
-        75
-    } else if candidate.name.eq_ignore_ascii_case(call.base()) {
-        40
-    } else {
-        0
-    }
-}
-
-/// Score based on namespace proximity between source and candidate
-fn score_namespace_proximity(source: &FunctionNode, candidate: &FunctionNode) -> i32 {
-    if namespace_equals(&source.namespace, &candidate.namespace) {
-        15
-    } else if namespace_shares_tail(&source.namespace, &candidate.namespace) {
-        8
-    } else {
-        0
-    }
-}
-
-/// Score based on line distance between source and candidate
-fn score_line_proximity(src_line: Option<usize>, dst_line: Option<usize>) -> i32 {
-    match (src_line, dst_line) {
-        (Some(src), Some(dst)) => {
-            let distance = src.abs_diff(dst).min(400);
-            15 - (distance as i32 / 25)
-        }
-        _ => 0,
-    }
-}
-
-fn namespace_matches(call_ns: &[String], candidate_ns: &[String]) -> bool {
-    if call_ns.is_empty() || call_ns.len() > candidate_ns.len() {
-        return false;
-    }
-
-    let offset = candidate_ns.len() - call_ns.len();
-    for (idx, segment) in call_ns.iter().enumerate() {
-        if !candidate_ns[offset + idx].eq_ignore_ascii_case(segment) {
-            return false;
-        }
-    }
-
-    true
-}
-
-fn namespace_equals(a: &[String], b: &[String]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-
-    a.iter()
-        .zip(b.iter())
-        .all(|(lhs, rhs)| lhs.eq_ignore_ascii_case(rhs))
-}
-
-fn namespace_shares_tail(a: &[String], b: &[String]) -> bool {
-    match (a.last(), b.last()) {
-        (Some(lhs), Some(rhs)) => lhs.eq_ignore_ascii_case(rhs),
-        _ => false,
-    }
-}
-
+/// Computes dependency metrics (fan-in, fan-out, closeness) for all nodes.
 fn compute_metrics(
     graph: &DependencyGraph,
     index_map: &IndexMap,
@@ -640,6 +410,7 @@ fn compute_metrics(
     metrics
 }
 
+/// Computes closeness centrality for a node using BFS traversal.
 fn compute_closeness(graph: &DependencyGraph, start: NodeIndex) -> f64 {
     let mut visited: HashMap<NodeIndex, usize> = HashMap::with_capacity(16); // Typical BFS explores ~10-20 nodes
     let mut queue = VecDeque::new();
@@ -669,36 +440,57 @@ fn compute_closeness(graph: &DependencyGraph, start: NodeIndex) -> f64 {
     ((visited.len() - 1) as f64) / (total_distance as f64)
 }
 
+/// Extract cycle nodes from a multi-node strongly connected component.
+fn extract_multi_node_cycle(
+    component: &[NodeIndex],
+    graph: &DependencyGraph,
+    nodes: &HashMap<EntityKey, FunctionNode>,
+    members: &mut HashSet<EntityKey>,
+) -> Vec<FunctionNode> {
+    let mut cycle_nodes = Vec::with_capacity(component.len());
+    for &index in component {
+        let Some(key) = graph.node_weight(index) else { continue };
+        let Some(node) = nodes.get(key) else { continue };
+        cycle_nodes.push(node.clone());
+        members.insert(key.clone());
+    }
+    cycle_nodes
+}
+
+/// Check if a single-node component has a self-loop and return the cycle if so.
+fn check_self_loop_cycle(
+    index: NodeIndex,
+    graph: &DependencyGraph,
+    nodes: &HashMap<EntityKey, FunctionNode>,
+    members: &mut HashSet<EntityKey>,
+) -> Option<Vec<FunctionNode>> {
+    if graph.find_edge(index, index).is_none() {
+        return None;
+    }
+    let key = graph.node_weight(index)?;
+    let node = nodes.get(key)?;
+    members.insert(key.clone());
+    Some(vec![node.clone()])
+}
+
+/// Identifies dependency cycles using Kosaraju's algorithm for SCCs.
 fn identify_cycles(
     graph: &DependencyGraph,
-    index_map: &IndexMap,
+    _index_map: &IndexMap,
     nodes: &HashMap<EntityKey, FunctionNode>,
 ) -> (Vec<Vec<FunctionNode>>, HashSet<EntityKey>) {
     let sccs = kosaraju_scc(graph);
 
-    let mut cycles = Vec::with_capacity(sccs.len() / 4); // Estimate ~25% of SCCs are cycles
-    let mut members = HashSet::with_capacity(nodes.len() / 10); // Estimate ~10% of nodes in cycles
+    let mut cycles = Vec::with_capacity(sccs.len() / 4);
+    let mut members = HashSet::with_capacity(nodes.len() / 10);
 
     for component in sccs {
         if component.len() > 1 {
-            let mut cycle_nodes = Vec::with_capacity(component.len());
-            for index in component {
-                if let Some(key) = graph.node_weight(index) {
-                    if let Some(node) = nodes.get(key) {
-                        cycle_nodes.push(node.clone());
-                        members.insert(key.clone());
-                    }
-                }
-            }
+            let cycle_nodes = extract_multi_node_cycle(&component, graph, nodes, &mut members);
             cycles.push(cycle_nodes);
         } else if let Some(&index) = component.first() {
-            if graph.find_edge(index, index).is_some() {
-                if let Some(key) = graph.node_weight(index) {
-                    if let Some(node) = nodes.get(key) {
-                        cycles.push(vec![node.clone()]);
-                        members.insert(key.clone());
-                    }
-                }
+            if let Some(cycle) = check_self_loop_cycle(index, graph, nodes, &mut members) {
+                cycles.push(cycle);
             }
         }
     }
@@ -706,6 +498,7 @@ fn identify_cycles(
     (cycles, members)
 }
 
+/// Marks entities that are part of dependency cycles in the metrics map.
 fn mark_cycle_members(
     metrics: &mut HashMap<EntityKey, DependencyMetrics>,
     members: &HashSet<EntityKey>,
@@ -717,6 +510,7 @@ fn mark_cycle_members(
     }
 }
 
+/// Computes the top chokepoint functions ranked by coupling score.
 fn compute_chokepoints(
     metrics: &HashMap<EntityKey, DependencyMetrics>,
     nodes: &HashMap<EntityKey, FunctionNode>,
@@ -744,6 +538,7 @@ fn compute_chokepoints(
         .collect()
 }
 
+/// Aggregates function-level dependencies into a module-level graph.
 fn build_module_graph(
     graph: &DependencyGraph,
     nodes: &HashMap<EntityKey, FunctionNode>,
@@ -753,6 +548,7 @@ fn build_module_graph(
         return ModuleGraph::default();
     }
 
+    /// Temporary aggregation structure for module-level metrics.
     #[derive(Clone)]
     struct ModuleAgg {
         path: String,
@@ -850,10 +646,16 @@ fn build_module_graph(
     ModuleGraph { nodes, edges }
 }
 
+/// Normalizes a path to a forward-slash string for consistent keys.
 fn normalize_path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+/// Normalizes a path for consistent dependency tracking.
+///
+/// Preserves relative paths when the file exists to avoid absolute path
+/// display issues. Only canonicalizes when necessary for existence checking,
+/// and attempts to convert back to relative paths when possible.
 pub fn canonicalize_path(path: &Path) -> PathBuf {
     // Preserve relative paths to avoid absolute path display issues
     // Only canonicalize for existence checking if path doesn't exist as-is

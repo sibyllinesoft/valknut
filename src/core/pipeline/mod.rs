@@ -3,6 +3,14 @@
 //! This module provides the core analysis pipeline for valknut, which orchestrates
 //! the entire code analysis process through multiple stages.
 //!
+//! ## Module Organization
+//!
+//! - **stages/**: Analysis stage implementations (complexity, coverage, LSH, etc.)
+//! - **results/**: Result types and conversions
+//! - **discovery/**: File discovery and pipeline services
+//! - **health/**: Health metrics and scoring
+//! - **verification/**: Clone detection and verification
+//!
 //! ## Key Components
 //!
 //! - **AnalysisPipeline**: Main orchestrator that coordinates all analysis stages
@@ -28,49 +36,42 @@
 //! println!("Health score: {}", results.health_metrics.overall_health_score);
 //! ```
 
-pub use code_dictionary::*;
+// Subdirectory modules
+pub mod discovery;
+pub mod health;
+pub mod results;
+pub mod stages;
+pub mod verification;
+
+// Core pipeline modules (kept in root for central orchestration)
+mod pipeline_config;
+mod pipeline_executor;
+mod pipeline_stages;
+
+// Re-export from subdirectories
+pub use discovery::*;
+pub use health::*;
+pub use results::*;
+pub use stages::*;
+pub use verification::*;
+
+// Re-export core pipeline types
 pub use pipeline_config::{
     AnalysisConfig, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
 pub use pipeline_executor::{AnalysisPipeline, ExtractorRegistry, ProgressCallback};
-pub use pipeline_results::{
-    CloneVerificationResults, ComplexityAnalysisResults, ComprehensiveAnalysisResult,
-    CoverageAnalysisResults, FileScore, HealthMetrics, ImpactAnalysisResults, PipelineResults,
-    PipelineStatistics, PipelineStatus, RefactoringAnalysisResults, ResultSummary, ScoringResults,
-    StructureAnalysisResults,
-};
 pub use pipeline_stages::AnalysisStages;
-pub use result_conversions::*;
-pub use result_types::*;
-pub use services::{
-    BatchedFileReader, DefaultResultAggregator, FileBatchReader, FileDiscoverer,
-    GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator, StageResultsBundle,
-};
-
-mod clone_detection;
-mod code_dictionary;
-mod coverage_stage;
-mod file_discovery;
-mod lsh_stage;
-mod pipeline_config;
-mod pipeline_executor;
-mod pipeline_results;
-mod pipeline_stages;
-mod result_conversions;
-mod result_types;
-mod services;
-
-// Re-export stage modules
-pub use coverage_stage::CoverageStage;
-pub use lsh_stage::LshStage;
-
-/// Additional tests for pipeline modules to improve coverage
 
 #[cfg(test)]
-mod tests {
+mod pipeline_executor_tests;
+#[cfg(test)]
+mod pipeline_stages_tests;
+
+/// Additional tests for pipeline modules to improve coverage
+#[cfg(test)]
+mod inline_tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -109,11 +110,11 @@ mod tests {
     async fn test_quality_gates_evaluation() {
         let pipeline = AnalysisPipeline::default();
         let config = QualityGateConfig::default();
-        let results = pipeline_results::ComprehensiveAnalysisResult {
+        let results = ComprehensiveAnalysisResult {
             analysis_id: "test".to_string(),
             timestamp: chrono::Utc::now(),
             processing_time: 1.0,
-            config: pipeline_config::AnalysisConfig::default(),
+            config: AnalysisConfig::default(),
             summary: AnalysisSummary {
                 files_processed: 1,
                 entities_analyzed: 1,
@@ -132,13 +133,13 @@ mod tests {
                 doc_health_score: 1.0,
                 doc_issue_count: 0,
             },
-            structure: pipeline_results::StructureAnalysisResults {
+            structure: StructureAnalysisResults {
                 enabled: true,
                 directory_recommendations: vec![],
                 file_splitting_recommendations: vec![],
                 issues_count: 0,
             },
-            complexity: pipeline_results::ComplexityAnalysisResults {
+            complexity: ComplexityAnalysisResults {
                 enabled: true,
                 detailed_results: vec![],
                 average_cyclomatic_complexity: 2.0,
@@ -147,19 +148,19 @@ mod tests {
                 average_maintainability_index: 85.0,
                 issues_count: 0,
             },
-            refactoring: pipeline_results::RefactoringAnalysisResults {
+            refactoring: RefactoringAnalysisResults {
                 enabled: true,
                 detailed_results: vec![],
                 opportunities_count: 0,
             },
-            impact: pipeline_results::ImpactAnalysisResults {
+            impact: ImpactAnalysisResults {
                 enabled: true,
                 dependency_cycles: vec![],
                 chokepoints: vec![],
                 clone_groups: vec![],
                 issues_count: 0,
             },
-            lsh: pipeline_results::LshAnalysisResults {
+            lsh: LshAnalysisResults {
                 enabled: false,
                 clone_pairs: vec![],
                 max_similarity: 0.0,
@@ -170,7 +171,7 @@ mod tests {
                 denoising_enabled: false,
                 tfidf_stats: None,
             },
-            coverage: pipeline_results::CoverageAnalysisResults {
+            coverage: CoverageAnalysisResults {
                 enabled: false,
                 coverage_files_used: vec![],
                 coverage_gaps: vec![],
@@ -178,9 +179,9 @@ mod tests {
                 overall_coverage_percentage: None,
                 analysis_method: "none".to_string(),
             },
-            documentation: pipeline_results::DocumentationAnalysisResults::default(),
+            documentation: DocumentationAnalysisResults::default(),
             cohesion: crate::detectors::cohesion::CohesionAnalysisResults::default(),
-            health_metrics: pipeline_results::HealthMetrics {
+            health_metrics: HealthMetrics {
                 overall_health_score: 88.0,
                 maintainability_score: 85.0,
                 technical_debt_ratio: 10.0,

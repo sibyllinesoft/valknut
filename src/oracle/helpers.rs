@@ -169,6 +169,7 @@ pub fn task_priority_score(task: &RefactoringTask) -> f64 {
     impact_score * effort_penalty * required_bonus
 }
 
+/// Builds a map of refactoring hints keyed by normalized file path.
 pub fn build_refactor_hints(
     results: &AnalysisResults,
     project_root: &Path,
@@ -225,6 +226,7 @@ pub fn build_refactor_hints(
     hints
 }
 
+/// Abbreviates a label to a short identifier for display.
 pub fn abbreviate_label(label: &str) -> String {
     let words = label
         .split(|c: char| !c.is_alphanumeric())
@@ -261,6 +263,7 @@ pub fn abbreviate_label(label: &str) -> String {
     }
 }
 
+/// Truncates a hint string to the given maximum length with an ellipsis.
 pub fn truncate_hint(hint: &str, max_len: usize) -> String {
     if hint.len() <= max_len {
         return hint.to_string();
@@ -273,6 +276,7 @@ pub fn truncate_hint(hint: &str, max_len: usize) -> String {
     truncated
 }
 
+/// Normalizes a file path by replacing backslashes with forward slashes.
 pub fn normalize_path_for_key(path: &str) -> String {
     if path.is_empty() {
         return String::new();

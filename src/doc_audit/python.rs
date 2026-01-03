@@ -3,6 +3,10 @@
 use super::{is_incomplete_doc, relative_path, DocIssue};
 use std::path::Path;
 
+/// Scans Python source code for missing or incomplete docstrings.
+///
+/// Detects undocumented functions, async functions, and classes.
+/// Tracks nesting via indentation to report fully-qualified symbol names.
 pub fn scan_python(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
     let lines: Vec<&str> = source.lines().collect();
     let mut issues = Vec::new();
@@ -34,33 +38,19 @@ pub fn scan_python(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
                 full_name.push(&symbol);
                 let symbol_name = full_name.join(".");
 
-                match find_docstring(&lines, index + 1, indent) {
+                let issue_message = match find_docstring(&lines, index + 1, indent) {
                     Some((docstring, end_index)) => {
-                        if is_incomplete_doc(&docstring) {
-                            issues.push(build_issue(
-                                path,
-                                root,
-                                index + 1,
-                                kind,
-                                &symbol_name,
-                                format!("{} '{}' has incomplete docstring", kind, symbol_name),
-                            ));
-                        }
-                        stack.push((indent, symbol));
                         index = end_index;
+                        is_incomplete_doc(&docstring)
+                            .then(|| format!("{} '{}' has incomplete docstring", kind, symbol_name))
                     }
-                    None => {
-                        issues.push(build_issue(
-                            path,
-                            root,
-                            index + 1,
-                            kind,
-                            &symbol_name,
-                            format!("{} '{}' is missing a docstring", kind, symbol_name),
-                        ));
-                        stack.push((indent, symbol));
-                    }
+                    None => Some(format!("{} '{}' is missing a docstring", kind, symbol_name)),
+                };
+
+                if let Some(message) = issue_message {
+                    issues.push(build_issue(path, root, index + 1, kind, &symbol_name, message));
                 }
+                stack.push((indent, symbol));
             }
         }
 
@@ -70,6 +60,7 @@ pub fn scan_python(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
     issues
 }
 
+/// Creates a documentation issue for an undocumented Python symbol.
 fn build_issue(
     path: &Path,
     root: &Path,
@@ -87,12 +78,14 @@ fn build_issue(
     }
 }
 
+/// Returns the number of leading whitespace characters in a line.
 fn indentation(line: &str) -> usize {
     line.chars()
         .take_while(|ch| ch.is_ascii_whitespace())
         .count()
 }
 
+/// Parses a Python symbol definition (class, def, async def) and returns name and kind.
 fn parse_symbol(line: &str) -> Option<(String, &'static str)> {
     if line.starts_with("class ") {
         return extract_symbol_name(line, "class ", "Class");
@@ -106,6 +99,7 @@ fn parse_symbol(line: &str) -> Option<(String, &'static str)> {
     None
 }
 
+/// Extracts the symbol name from a definition line after the given prefix.
 fn extract_symbol_name(line: &str, prefix: &str, kind: &'static str) -> Option<(String, &'static str)> {
     let name = line[prefix.len()..]
         .split(|c: char| c == '(' || c == ':' || c.is_whitespace())
@@ -113,6 +107,9 @@ fn extract_symbol_name(line: &str, prefix: &str, kind: &'static str) -> Option<(
     Some((name.to_string(), kind))
 }
 
+/// Searches for a docstring following a symbol definition.
+///
+/// Returns the docstring content and the line index where it ends.
 fn find_docstring(lines: &[&str], mut index: usize, indent: usize) -> Option<(String, usize)> {
     while index < lines.len() {
         let line = lines[index];
@@ -137,6 +134,7 @@ fn find_docstring(lines: &[&str], mut index: usize, indent: usize) -> Option<(St
     None
 }
 
+/// Extracts a triple-quoted docstring starting at the given line index.
 fn extract_docstring(lines: &[&str], index: usize) -> Option<(String, usize)> {
     let line = lines[index].trim_start();
     let (prefix_len, quote_char) = find_string_prefix(line)?;
@@ -176,6 +174,7 @@ fn extract_docstring(lines: &[&str], index: usize) -> Option<(String, usize)> {
     None
 }
 
+/// Finds the start of a string literal, handling optional prefixes (r, f, u, b).
 fn find_string_prefix(line: &str) -> Option<(usize, char)> {
     let mut index = 0;
     let chars: Vec<char> = line.chars().collect();

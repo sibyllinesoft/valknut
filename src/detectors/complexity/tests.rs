@@ -1,6 +1,6 @@
     use super::*;
     use crate::core::config::ValknutConfig;
-    use crate::core::featureset::{CodeEntity, ExtractionContext};
+    use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureExtractor};
     use tempfile::TempDir;
 
     #[tokio::test]

@@ -19,7 +19,9 @@ pub struct CohesionConfig {
     pub issues: IssueConfig,
 }
 
+/// Default implementation for [`CohesionConfig`].
 impl Default for CohesionConfig {
+    /// Returns the default cohesion analysis configuration (disabled by default).
     fn default() -> Self {
         Self {
             enabled: false, // Opt-in for now
@@ -47,7 +49,9 @@ pub struct EmbeddingConfig {
     pub dimension: usize,
 }
 
+/// Default implementation for [`EmbeddingConfig`].
 impl Default for EmbeddingConfig {
+    /// Returns the default embedding configuration using EmbeddingGemma.
     fn default() -> Self {
         Self {
             model: EmbeddingModel::EmbeddingGemma300M,
@@ -78,6 +82,7 @@ pub enum EmbeddingModel {
     JinaEmbeddingsV2BaseCode,
 }
 
+/// Model metadata methods for [`EmbeddingModel`].
 impl EmbeddingModel {
     /// Get the embedding dimension for this model
     pub fn dimension(&self) -> usize {
@@ -124,7 +129,9 @@ pub struct SymbolConfig {
     pub max_doc_summary_tokens: usize,
 }
 
+/// Default implementation for [`SymbolConfig`].
 impl Default for SymbolConfig {
+    /// Returns the default symbol extraction configuration.
     fn default() -> Self {
         Self {
             tfidf_mass_threshold: 0.80,
@@ -158,7 +165,9 @@ pub struct CohesionThresholds {
     pub use_percentile_thresholds: bool,
 }
 
+/// Default implementation for [`CohesionThresholds`].
 impl Default for CohesionThresholds {
+    /// Returns the default cohesion threshold configuration.
     fn default() -> Self {
         Self {
             min_cohesion: 0.3,           // Below 0.3 is concerning
@@ -189,7 +198,9 @@ pub struct RollupConfig {
     pub mad_multiplier: f64,
 }
 
+/// Default implementation for [`RollupConfig`].
 impl Default for RollupConfig {
+    /// Returns the default hierarchical rollup configuration.
     fn default() -> Self {
         Self {
             min_file_entities: 5,
@@ -213,6 +224,7 @@ pub enum WeightFunction {
     Sqrt,
 }
 
+/// Weight calculation methods for [`WeightFunction`].
 impl WeightFunction {
     /// Calculate weight for a count
     pub fn weight(&self, n: usize) -> f64 {
@@ -238,7 +250,9 @@ pub struct IssueConfig {
     pub include_patterns: Vec<String>,
 }
 
+/// Default implementation for [`IssueConfig`].
 impl Default for IssueConfig {
+    /// Returns the default issue reporting configuration.
     fn default() -> Self {
         Self {
             max_issues_per_category: 50,

@@ -67,3 +67,26 @@ pub fn validate_positive_u32(value: u32, field: &str) -> Result<()> {
     }
     Ok(())
 }
+
+/// Validate that a usize value is within a bounded range (inclusive).
+pub fn validate_bounded_usize(value: usize, min: usize, max: usize, field: &str) -> Result<()> {
+    if value < min || value > max {
+        return Err(ValknutError::validation(format!(
+            "{} must be between {} and {}",
+            field, min, max
+        )));
+    }
+    Ok(())
+}
+
+/// Validate that weights sum to approximately 1.0 (within tolerance).
+pub fn validate_weights_sum(weights: &[f64], tolerance: f64, field: &str) -> Result<()> {
+    let sum: f64 = weights.iter().sum();
+    if (sum - 1.0).abs() > tolerance {
+        return Err(ValknutError::validation(format!(
+            "{} should sum to approximately 1.0",
+            field
+        )));
+    }
+    Ok(())
+}

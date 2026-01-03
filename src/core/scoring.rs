@@ -54,6 +54,7 @@ pub struct NormalizationStatistics {
     pub iqr: f64,
 }
 
+/// Factory and calculation methods for [`NormalizationStatistics`].
 impl NormalizationStatistics {
     /// Calculate statistics from a vector of values
     pub fn from_values(mut values: Vec<f64>) -> Self {
@@ -147,6 +148,7 @@ impl NormalizationStatistics {
     }
 }
 
+/// Factory, fitting, and normalization methods for [`FeatureNormalizer`].
 impl FeatureNormalizer {
     /// Create a new feature normalizer with the given configuration
     pub fn new(config: ScoringConfig) -> Self {
@@ -247,53 +249,9 @@ impl FeatureNormalizer {
         }
 
         let normalized = match self.config.normalization_scheme {
-            NormalizationScheme::ZScore => {
-                if stats.variance < f64::EPSILON {
-                    // Handle zero variance case
-                    if self.config.use_bayesian_fallbacks {
-                        // Use Bayesian fallback if available
-                        self.bayesian_fallback_normalize(value, stats)
-                    } else {
-                        0.0
-                    }
-                } else {
-                    (value - stats.mean) / stats.std_dev
-                }
-            }
-
-            NormalizationScheme::MinMax => {
-                let range = stats.max - stats.min;
-                if range < f64::EPSILON {
-                    // Handle zero range case
-                    if self.config.use_bayesian_fallbacks {
-                        self.bayesian_fallback_normalize(value, stats)
-                    } else {
-                        0.5 // Middle of [0, 1] range
-                    }
-                } else {
-                    (value - stats.min) / range
-                }
-            }
-
-            NormalizationScheme::Robust => {
-                if stats.mad < f64::EPSILON {
-                    // Fallback to IQR if MAD is zero
-                    if stats.iqr < f64::EPSILON {
-                        if self.config.use_bayesian_fallbacks {
-                            self.bayesian_fallback_normalize(value, stats)
-                        } else {
-                            0.0
-                        }
-                    } else {
-                        (value - stats.median) / stats.iqr
-                    }
-                } else {
-                    // Standard robust normalization using median and MAD
-                    (value - stats.median) / (1.4826 * stats.mad) // 1.4826 makes MAD consistent with std dev
-                }
-            }
-
-            // Bayesian schemes should not reach here due to earlier delegation
+            NormalizationScheme::ZScore => self.zscore_normalize(value, stats),
+            NormalizationScheme::MinMax => self.minmax_normalize(value, stats),
+            NormalizationScheme::Robust => self.robust_normalize(value, stats),
             NormalizationScheme::ZScoreBayesian
             | NormalizationScheme::MinMaxBayesian
             | NormalizationScheme::RobustBayesian => {
@@ -303,13 +261,51 @@ impl FeatureNormalizer {
             }
         };
 
-        Ok(normalized.clamp(-10.0, 10.0)) // Prevent extreme outliers
+        Ok(normalized.clamp(-10.0, 10.0))
     }
 
-    /// Bayesian fallback for zero variance cases
+    /// Z-score normalization with zero variance handling
+    fn zscore_normalize(&self, value: f64, stats: &NormalizationStatistics) -> f64 {
+        if stats.variance < f64::EPSILON {
+            return self.fallback_or_default(value, stats, 0.0);
+        }
+        (value - stats.mean) / stats.std_dev
+    }
+
+    /// Min-max normalization with zero range handling
+    fn minmax_normalize(&self, value: f64, stats: &NormalizationStatistics) -> f64 {
+        let range = stats.max - stats.min;
+        if range < f64::EPSILON {
+            return self.fallback_or_default(value, stats, 0.5);
+        }
+        (value - stats.min) / range
+    }
+
+    /// Robust normalization using median and MAD/IQR
+    fn robust_normalize(&self, value: f64, stats: &NormalizationStatistics) -> f64 {
+        // Try MAD-based normalization first
+        if stats.mad >= f64::EPSILON {
+            return (value - stats.median) / (1.4826 * stats.mad);
+        }
+        // Fallback to IQR-based normalization
+        if stats.iqr >= f64::EPSILON {
+            return (value - stats.median) / stats.iqr;
+        }
+        // All divisors are zero, use fallback
+        self.fallback_or_default(value, stats, 0.0)
+    }
+
+    /// Return Bayesian fallback value if enabled, otherwise return default
+    fn fallback_or_default(&self, value: f64, stats: &NormalizationStatistics, default: f64) -> f64 {
+        if self.config.use_bayesian_fallbacks {
+            self.bayesian_fallback_normalize(value, stats)
+        } else {
+            default
+        }
+    }
+
+    /// Bayesian fallback for degenerate cases
     fn bayesian_fallback_normalize(&self, _value: f64, _stats: &NormalizationStatistics) -> f64 {
-        // Simple fallback - can be enhanced with proper Bayesian inference
-        // This would ideally use domain knowledge to generate reasonable normalized values
         0.0
     }
 
@@ -336,6 +332,7 @@ impl FeatureNormalizer {
         self.bayesian_normalizer.as_ref()
     }
 
+    /// Get a mutable reference to the Bayesian normalizer if available
     pub fn get_bayesian_normalizer_mut(&mut self) -> Option<&mut BayesianNormalizer> {
         self.bayesian_normalizer.as_mut()
     }
@@ -351,6 +348,7 @@ pub struct FeatureScorer {
     weights: WeightsConfig,
 }
 
+/// Scoring and weighting methods for [`FeatureScorer`].
 impl FeatureScorer {
     /// Create a new feature scorer
     pub fn new(config: ScoringConfig) -> Self {
@@ -365,6 +363,7 @@ impl FeatureScorer {
         self.normalizer.fit(feature_vectors)
     }
 
+    /// Get a mutable reference to the underlying normalizer
     pub fn normalizer(&mut self) -> &mut FeatureNormalizer {
         &mut self.normalizer
     }
@@ -547,6 +546,7 @@ pub enum Priority {
     Critical,
 }
 
+/// Conversion methods for [`Priority`].
 impl Priority {
     /// Get numeric priority value
     pub fn value(self) -> f64 {
@@ -585,6 +585,7 @@ pub struct ScoringResult {
     pub confidence: f64,
 }
 
+/// Query and analysis methods for [`ScoringResult`].
 impl ScoringResult {
     /// Check if this entity needs refactoring
     pub fn needs_refactoring(&self) -> bool {
@@ -616,12 +617,15 @@ impl ScoringResult {
     }
 }
 
-// Extension trait for NormalizationScheme to convert to string
+/// Extension trait for NormalizationScheme to convert to string.
 trait NormalizationSchemeExt {
+    /// Converts the scheme to its string representation.
     fn to_string(&self) -> String;
 }
 
+/// [`NormalizationSchemeExt`] implementation for [`NormalizationScheme`].
 impl NormalizationSchemeExt for NormalizationScheme {
+    /// Converts the normalization scheme to its string representation.
     fn to_string(&self) -> String {
         match self {
             Self::ZScore => "z_score".to_string(),

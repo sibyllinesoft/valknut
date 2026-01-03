@@ -7,8 +7,10 @@
     use tokio;
     use valknut_rs::core::pipeline::{
         AnalysisResults, AnalysisStatistics, AnalysisSummary, CodeDictionary, FeatureContribution,
-        MemoryStats, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
+        RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
     };
+    // Use the 3-field MemoryStats (for AnalysisStatistics)
+    use valknut_rs::core::pipeline::results::result_types::MemoryStats;
     use valknut_rs::core::scoring::Priority;
 
     fn minimal_analysis_value() -> serde_json::Value {

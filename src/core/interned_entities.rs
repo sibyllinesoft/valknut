@@ -1,3 +1,25 @@
+//! Interned entity types for memory-efficient code analysis.
+//!
+//! This module provides interned versions of core entity types used throughout
+//! the analysis pipeline. By replacing String fields with [`InternedString`] keys,
+//! these types enable zero-copy string comparisons and significant memory savings.
+//!
+//! # Available Types
+//!
+//! - [`InternedSourceLocation`]: Location in source code with interned file path
+//! - [`InternedParsedEntity`]: AST entity with all strings interned
+//! - [`InternedCodeEntity`]: Code entity ready for feature extraction
+//! - [`InternedParseIndex`]: Index of parsed entities with interned keys
+//!
+//! # Conversion
+//!
+//! All types support bidirectional conversion with their non-interned counterparts:
+//!
+//! ```ignore
+//! let interned = InternedParsedEntity::from_parsed_entity(&entity);
+//! let back = interned.to_parsed_entity();
+//! ```
+
 use crate::core::featureset::CodeEntity;
 use crate::core::interning::{global_interner, intern, resolve, InternedString};
 use crate::lang::common::{EntityKind, ParsedEntity, SourceLocation};
@@ -20,6 +42,7 @@ pub struct InternedSourceLocation {
     pub end_column: usize,
 }
 
+/// Factory and conversion methods for [`InternedSourceLocation`].
 impl InternedSourceLocation {
     /// Create a new interned source location
     pub fn new(
@@ -85,6 +108,7 @@ pub struct InternedParsedEntity {
     pub metadata: HashMap<InternedString, serde_json::Value>,
 }
 
+/// Factory, conversion, and mutation methods for [`InternedParsedEntity`].
 impl InternedParsedEntity {
     /// Create a new interned parsed entity
     pub fn new(id: &str, kind: EntityKind, name: &str, location: InternedSourceLocation) -> Self {
@@ -189,6 +213,7 @@ pub struct InternedCodeEntity {
     pub properties: HashMap<InternedString, serde_json::Value>,
 }
 
+/// Factory, builder, and accessor methods for [`InternedCodeEntity`].
 impl InternedCodeEntity {
     /// Create a new interned code entity
     pub fn new(id: &str, entity_type: &str, name: &str, file_path: &str) -> Self {
@@ -243,11 +268,13 @@ impl InternedCodeEntity {
         self
     }
 
+    /// Sets the line range for this entity.
     pub fn with_line_range(mut self, start: usize, end: usize) -> Self {
         self.line_range = Some((start, end));
         self
     }
 
+    /// Adds a property to this entity.
     pub fn with_property(mut self, key: &str, value: serde_json::Value) -> Self {
         self.properties.insert(intern(key), value);
         self
@@ -289,6 +316,7 @@ pub struct InternedCodeEntityBuilder {
     entity: InternedCodeEntity,
 }
 
+/// Fluent builder methods for [`InternedCodeEntityBuilder`].
 impl InternedCodeEntityBuilder {
     /// Create a new builder with required fields
     pub fn new(id: &str, entity_type: &str, name: &str, file_path: &str) -> Self {
@@ -332,6 +360,7 @@ pub struct InternedParseIndex {
     pub dependencies: HashMap<InternedString, Vec<InternedString>>,
 }
 
+/// Factory, indexing, and query methods for [`InternedParseIndex`].
 impl InternedParseIndex {
     /// Create a new empty interned parse index
     pub fn new() -> Self {
@@ -399,8 +428,9 @@ impl InternedParseIndex {
     }
 }
 
-// Implement Display for debugging
+/// [`Display`] implementation for [`InternedCodeEntity`] debugging.
 impl fmt::Display for InternedCodeEntity {
+    /// Formats the entity as a debug string with id, type, name, and file path.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -413,7 +443,9 @@ impl fmt::Display for InternedCodeEntity {
     }
 }
 
+/// [`Display`] implementation for [`InternedParsedEntity`] debugging.
 impl fmt::Display for InternedParsedEntity {
+    /// Formats the entity for display with id, kind, and name.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

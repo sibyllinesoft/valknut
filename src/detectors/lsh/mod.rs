@@ -6,7 +6,8 @@
 pub mod ast_analysis;
 pub mod comparison;
 pub mod config;
-pub mod shingles;
+pub mod memory_pool;
+pub mod signatures;
 
 pub use config::{
     AdaptiveDenoiseConfig, AutoCalibrationConfig, DedupeConfig, DedupeWeights, DenoiseConfig,
@@ -15,26 +16,28 @@ pub use config::{
 
 mod index;
 mod lsh_cache;
-pub mod memory_pool;
 mod metrics;
-mod signature;
 mod similarity_context;
-pub mod weighted;
 
 // Re-export submodule types
 pub use ast_analysis::{
-    count_ast_nodes_from_index, count_distinct_blocks_from_index, detect_language_from_path,
-    AstAnalyzer, EntityAstStats,
+    count_ast_nodes_from_index, count_distinct_blocks_from_index, AstAnalyzer, EntityAstStats,
 };
-pub use comparison::{jaccard_similarity, summarise_similarities, SimilarityComparator};
+pub use comparison::{
+    collect_weighted_similarities, fallback_minhash_comparison, iterate_candidates,
+    jaccard_similarity, summarise_similarities, SimilarityComparator,
+};
 pub use index::LshIndex;
 pub use lsh_cache::{CacheStatistics, LshCache};
 pub use memory_pool::{LshMemoryPools, PoolStatistics};
 pub use metrics::{LshContextStatistics, LshPerformanceMetrics};
-pub use shingles::{count_tokens, ShingleGenerator};
-pub use signature::MinHashSignature;
 pub use similarity_context::LshSimilarityContext;
-pub use weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats};
+
+// Re-export from signatures submodule
+pub use signatures::{
+    count_tokens, MinHashSignature, ShingleGenerator, SignatureGenerator,
+    WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats,
+};
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -42,29 +45,24 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rayon::prelude::*;
-use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use xxhash_rust::xxh3::Xxh3;
 
 #[cfg(feature = "simd")]
 use wide::u64x4;
 
 use crate::core::ast_service::AstService;
-use crate::core::ast_utils::{
-    count_control_blocks, count_named_nodes, find_entity_node, node_text,
-};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{
     CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
 };
 use crate::core::interning::{intern, resolve, InternedString};
-use tree_sitter::Node;
 
 /// LSH-based similarity feature extractor with O(n) candidate search
 #[derive(Debug)]
 pub struct LshExtractor {
-    /// Shared AST service for structural analysis
-    ast_service: Arc<AstService>,
+    /// AST analyzer for fragment threshold checks (uses shared AST service)
+    ast_analyzer: AstAnalyzer,
     /// Feature definitions
     features: Vec<FeatureDefinition>,
 
@@ -105,37 +103,17 @@ pub struct LshExtractor {
 
 // EntityAstStats has been moved to ast_analysis module
 
+/// Core LSH extraction and comparison methods for [`LshExtractor`].
 impl LshExtractor {
-    /// Create a new LSH extractor
-    pub fn new() -> Self {
+    /// Create with specific parameters and optional dedupe config (internal helper).
+    fn create(num_hashes: usize, shingle_size: usize, dedupe_config: Option<DedupeConfig>) -> Self {
+        let ast_service = Arc::new(AstService::new());
         let mut extractor = Self {
-            ast_service: Arc::new(AstService::new()),
-            features: Vec::new(),
-            num_hashes: 128,
-            shingle_size: 3,
-            dedupe_config: None,
-            weighted_analyzer: None,
-            lsh_config: LshConfig::default(),
-            cache: LshCache::new(),
-            memory_pools: LshMemoryPools::new(),
-            performance_metrics: LshPerformanceMetrics::new(),
-            cached_weighted_signatures: std::sync::RwLock::new(None),
-            weighted_signatures_cache_key: std::sync::RwLock::new(None),
-            similarity_context_cache: std::sync::RwLock::new(None),
-        };
-
-        extractor.initialize_features();
-        extractor
-    }
-
-    /// Create with custom parameters
-    pub fn with_params(num_hashes: usize, shingle_size: usize) -> Self {
-        let mut extractor = Self {
-            ast_service: Arc::new(AstService::new()),
+            ast_analyzer: AstAnalyzer::new(ast_service),
             features: Vec::new(),
             num_hashes,
             shingle_size,
-            dedupe_config: None,
+            dedupe_config,
             weighted_analyzer: None,
             lsh_config: LshConfig::default(),
             cache: LshCache::new(),
@@ -145,37 +123,30 @@ impl LshExtractor {
             weighted_signatures_cache_key: std::sync::RwLock::new(None),
             similarity_context_cache: std::sync::RwLock::new(None),
         };
-
         extractor.initialize_features();
         extractor
     }
 
-    /// Create with enhanced dedupe configuration
-    pub fn with_dedupe_config(dedupe_config: DedupeConfig) -> Self {
-        let mut extractor = Self {
-            ast_service: Arc::new(AstService::new()),
-            features: Vec::new(),
-            num_hashes: 128,
-            shingle_size: dedupe_config.shingle_k,
-            dedupe_config: Some(dedupe_config),
-            weighted_analyzer: None,
-            lsh_config: LshConfig::default(),
-            cache: LshCache::new(),
-            memory_pools: LshMemoryPools::new(),
-            performance_metrics: LshPerformanceMetrics::new(),
-            cached_weighted_signatures: std::sync::RwLock::new(None),
-            weighted_signatures_cache_key: std::sync::RwLock::new(None),
-            similarity_context_cache: std::sync::RwLock::new(None),
-        };
+    /// Create a new LSH extractor with default parameters.
+    pub fn new() -> Self {
+        Self::create(128, 3, None)
+    }
 
-        extractor.initialize_features();
-        extractor
+    /// Create with custom hash and shingle parameters.
+    pub fn with_params(num_hashes: usize, shingle_size: usize) -> Self {
+        Self::create(num_hashes, shingle_size, None)
+    }
+
+    /// Create with enhanced dedupe configuration.
+    pub fn with_dedupe_config(dedupe_config: DedupeConfig) -> Self {
+        let shingle_size = dedupe_config.shingle_k;
+        Self::create(128, shingle_size, Some(dedupe_config))
     }
 
     /// Replace the internal AST service with a shared instance so multiple
     /// detectors operate on the same parse cache.
     pub fn with_shared_ast_service(mut self, ast_service: Arc<AstService>) -> Self {
-        self.ast_service = ast_service;
+        self.ast_analyzer = AstAnalyzer::new(ast_service);
         self
     }
 
@@ -206,6 +177,7 @@ impl LshExtractor {
         self.get_similarity_context(context)
     }
 
+    /// Returns candidate entities from partition map for similarity comparison.
     fn candidate_filter<'a>(
         &self,
         entity: &CodeEntity,
@@ -224,6 +196,14 @@ impl LshExtractor {
             return self.meets_fragment_thresholds(entity, config).await;
         }
         Ok(true)
+    }
+
+    /// Compute AST statistics for an entity (delegates to AstAnalyzer)
+    pub async fn compute_entity_ast_stats(
+        &self,
+        entity: &CodeEntity,
+    ) -> Result<Option<EntityAstStats>> {
+        self.ast_analyzer.compute_entity_ast_stats(entity).await
     }
 
     /// Compute weighted shingle signatures and statistics when denoising is enabled
@@ -366,6 +346,7 @@ impl LshExtractor {
         }
     }
 
+    /// Gets or creates a cached similarity context for fast lookups.
     fn get_similarity_context(
         &self,
         context: &ExtractionContext,
@@ -393,6 +374,26 @@ impl LshExtractor {
         Some(context_instance)
     }
 
+    /// Try to get cached weighted signatures if the cache key matches.
+    fn try_get_cached_weighted_signatures(
+        &self,
+        cache_key: &str,
+    ) -> Option<HashMap<String, WeightedMinHashSignature>> {
+        let cache_key_read = self.weighted_signatures_cache_key.read().ok()?;
+        let existing_key = cache_key_read.as_ref()?;
+        if existing_key != cache_key {
+            return None;
+        }
+
+        let cached_sigs = self.cached_weighted_signatures.read().ok()?;
+        let signatures = cached_sigs.as_ref()?;
+        debug!(
+            "Using cached weighted signatures for {} entities",
+            signatures.len()
+        );
+        Some(signatures.clone())
+    }
+
     /// Get cached weighted signatures or compute them if not cached
     fn get_or_compute_weighted_signatures(
         &self,
@@ -402,20 +403,8 @@ impl LshExtractor {
             let cache_key = self.generate_cache_key(entities);
 
             // Check if signatures are cached
-            if let Ok(cache_key_read) = self.weighted_signatures_cache_key.read() {
-                if let Some(ref existing_key) = *cache_key_read {
-                    if existing_key == &cache_key {
-                        if let Ok(cached_sigs) = self.cached_weighted_signatures.read() {
-                            if let Some(ref signatures) = *cached_sigs {
-                                debug!(
-                                    "Using cached weighted signatures for {} entities",
-                                    signatures.len()
-                                );
-                                return Ok(signatures.clone());
-                            }
-                        }
-                    }
-                }
+            if let Some(cached) = self.try_get_cached_weighted_signatures(&cache_key) {
+                return Ok(cached);
             }
 
             // Cache miss - compute signatures
@@ -451,20 +440,8 @@ impl LshExtractor {
             let cache_key = self.generate_cache_key(context_entities);
 
             // Check if signatures are cached
-            if let Ok(cache_key_read) = self.weighted_signatures_cache_key.read() {
-                if let Some(ref existing_key) = *cache_key_read {
-                    if existing_key == &cache_key {
-                        if let Ok(cached_sigs) = self.cached_weighted_signatures.read() {
-                            if let Some(ref signatures) = *cached_sigs {
-                                debug!(
-                                    "Using cached weighted signatures for {} entities",
-                                    signatures.len()
-                                );
-                                return Ok(signatures.clone());
-                            }
-                        }
-                    }
-                }
+            if let Some(cached) = self.try_get_cached_weighted_signatures(&cache_key) {
+                return Ok(cached);
             }
 
             // Cache miss - compute signatures for ALL entities (context + current)
@@ -494,24 +471,24 @@ impl LshExtractor {
 
     /// Public access to create_shingles for benchmarking
     pub fn create_shingles(&self, source_code: &str) -> Vec<String> {
-        self.create_shingles_internal(source_code)
+        signatures::generator::create_shingles(self, source_code)
     }
 
     /// Create interned shingles from source code for zero-allocation performance
     /// This is the high-performance version that uses string interning
     pub fn create_shingles_interned(&self, source_code: &str) -> Vec<InternedString> {
-        self.create_shingles_interned_internal(source_code)
+        signatures::generator::create_shingles_interned(self, source_code)
     }
 
     /// Public access to minhash signature generation for benchmarking
     pub fn generate_minhash_signature(&self, source_code: &str) -> Vec<u64> {
         #[cfg(feature = "simd")]
         {
-            self.generate_minhash_signature_simd(source_code)
+            signatures::generator::generate_minhash_signature_simd(self, source_code)
         }
         #[cfg(not(feature = "simd"))]
         {
-            self.generate_minhash_signature_internal(source_code)
+            signatures::generator::generate_minhash_signature(self, source_code)
         }
     }
 
@@ -520,11 +497,11 @@ impl LshExtractor {
     pub fn generate_minhash_signature_interned(&self, source_code: &str) -> Vec<u64> {
         #[cfg(feature = "simd")]
         {
-            self.generate_minhash_signature_simd(source_code)
+            signatures::generator::generate_minhash_signature_simd(self, source_code)
         }
         #[cfg(not(feature = "simd"))]
         {
-            self.generate_minhash_signature_interned_internal(source_code)
+            signatures::generator::generate_minhash_signature_interned(self, source_code)
         }
     }
 
@@ -547,22 +524,51 @@ impl LshExtractor {
     }
 }
 
+/// Default implementation for [`LshExtractor`].
 impl Default for LshExtractor {
+    /// Returns a new LSH extractor with default parameters.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// [`SignatureGenerator`] implementation for LSH signature creation.
+impl SignatureGenerator for LshExtractor {
+    /// Returns the number of hash functions used.
+    fn num_hashes(&self) -> usize {
+        self.num_hashes
+    }
+
+    /// Returns the shingle (k-gram) size.
+    fn shingle_size(&self) -> usize {
+        self.shingle_size
+    }
+
+    /// Returns a reference to the signature cache.
+    fn cache(&self) -> &LshCache {
+        &self.cache
+    }
+
+    /// Returns a reference to the memory pools for allocation reuse.
+    fn memory_pools(&self) -> &LshMemoryPools {
+        &self.memory_pools
+    }
+}
+
+/// [`FeatureExtractor`] implementation for LSH-based similarity features.
 #[async_trait]
 impl FeatureExtractor for LshExtractor {
+    /// Returns the extractor name ("lsh").
     fn name(&self) -> &str {
         "lsh"
     }
 
+    /// Returns the feature definitions for this extractor.
     fn features(&self) -> &[FeatureDefinition] {
         &self.features
     }
 
+    /// Extracts LSH similarity features for an entity.
     async fn extract(
         &self,
         entity: &CodeEntity,
@@ -582,7 +588,7 @@ impl FeatureExtractor for LshExtractor {
         }
 
         // Generate MinHash signature for this entity using optimized interned version
-        let signature = self.generate_minhash_signature_interned_internal(&entity.source_code);
+        let signature = signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
 
         // Compare with other entities in the context
         let (max_sim, avg_sim, dup_count) = self.compare_with_others(entity, context, &signature);
@@ -598,12 +604,14 @@ impl FeatureExtractor for LshExtractor {
         Ok(features)
     }
 
+    /// Checks if this extractor supports the given entity type.
     fn supports_entity(&self, _entity: &CodeEntity) -> bool {
         // LSH can work with any code entity
         true
     }
 }
 
+/// Signature generation and comparison helpers for [`LshExtractor`].
 impl LshExtractor {
     /// Generate MinHash signature for source code with performance tracking and caching
     fn generate_minhash_signature_internal(&self, source_code: &str) -> Vec<u64> {
@@ -718,32 +726,13 @@ impl LshExtractor {
     /// SIMD-accelerated hash computation for 4 seeds at once
     #[cfg(feature = "simd")]
     fn hash_with_seeds_simd(&self, data: &str, base_seed: usize) -> u64x4 {
-        // Use vectorized hashing with different seeds
-        let seeds = [
-            base_seed as u64,
-            (base_seed + 1) as u64,
-            (base_seed + 2) as u64,
-            (base_seed + 3) as u64,
-        ];
-
-        // Compute 4 hashes in parallel
-        let hashes = [
-            self.hash_with_seed_fast(data, seeds[0]),
-            self.hash_with_seed_fast(data, seeds[1]),
-            self.hash_with_seed_fast(data, seeds[2]),
-            self.hash_with_seed_fast(data, seeds[3]),
-        ];
-
-        u64x4::from(hashes)
+        signatures::generator::hash_with_seeds_simd(data, base_seed)
     }
 
     /// Fast hash implementation optimized for SIMD batch processing
     #[cfg(feature = "simd")]
     fn hash_with_seed_fast(&self, data: &str, seed: u64) -> u64 {
-        // Use xxHash3 for superior performance in bulk hashing scenarios
-        let mut hasher = Xxh3::with_seed(seed);
-        data.hash(&mut hasher);
-        hasher.finish()
+        signatures::generator::hash_with_seed_fast(data, seed)
     }
 
     /// Parallel MinHash signature generation for multiple entities
@@ -896,141 +885,9 @@ impl LshExtractor {
         shingles
     }
 
-    /// Normalize source code for comparison using basic text processing  
-    /// Note: Full tree-sitter normalization is available through language adapters separately
+    /// Normalize source code for comparison using basic text processing
     fn normalize_code(&self, source_code: &str) -> String {
-        // Use basic text normalization for now
-        // Tree-sitter normalization can be enabled later when all adapters implement the trait
-        let mut normalized = String::new();
-
-        for line in source_code.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with("//") || line.starts_with("#") {
-                continue;
-            }
-
-            // Basic normalization: lowercase, remove extra whitespace
-            let clean_line = line
-                .to_lowercase()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            normalized.push_str(&clean_line);
-            normalized.push(' ');
-        }
-
-        normalized
-    }
-
-    async fn compute_entity_ast_stats(
-        &self,
-        entity: &CodeEntity,
-    ) -> Result<Option<EntityAstStats>> {
-        let mut cache_key = entity.file_path.clone();
-        let source = match fs::read_to_string(&entity.file_path).await {
-            Ok(content) => content,
-            Err(err) => {
-                debug!(
-                    "Falling back to entity source for AST metrics ({}): {}",
-                    entity.file_path, err
-                );
-                if entity.source_code.is_empty() {
-                    return Ok(None);
-                }
-                cache_key = format!("{}::fragment:{}", entity.file_path, entity.id);
-                entity.source_code.clone()
-            }
-        };
-
-        let cached_tree = self.ast_service.get_ast(&cache_key, &source).await?;
-        let context = self
-            .ast_service
-            .create_context(&cached_tree, &entity.file_path);
-
-        let Some(entity_node) = find_entity_node(&context, entity) else {
-            return Ok(None);
-        };
-
-        let node_count = count_named_nodes(&entity_node);
-        let block_count = count_control_blocks(&entity_node);
-        let has_stop_motif = self.detect_ast_stop_motifs(&context, entity_node);
-
-        Ok(Some(EntityAstStats {
-            node_count,
-            block_count,
-            has_stop_motif,
-        }))
-    }
-
-    fn detect_ast_stop_motifs(
-        &self,
-        context: &crate::core::ast_service::AstContext<'_>,
-        root: Node<'_>,
-    ) -> bool {
-        let mut stack = vec![root];
-        while let Some(node) = stack.pop() {
-            if self.node_matches_stop_motif(context, node) {
-                return true;
-            }
-
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                stack.push(child);
-            }
-        }
-
-        false
-    }
-
-    /// Check if text matches any pattern in the list.
-    fn matches_any(text: &str, patterns: &[&str]) -> bool {
-        patterns.iter().any(|p| text.contains(p))
-    }
-
-    /// Check if text matches all patterns in the list.
-    fn matches_all(text: &str, patterns: &[&str]) -> bool {
-        patterns.iter().all(|p| text.contains(p))
-    }
-
-    fn node_matches_stop_motif(
-        &self,
-        context: &crate::core::ast_service::AstContext<'_>,
-        node: Node<'_>,
-    ) -> bool {
-        let text = node_text(node, context.source)
-            .unwrap_or_default()
-            .to_lowercase();
-        let kind = node.kind();
-
-        match context.language {
-            "py" | "pyw" => match kind {
-                "import_statement" | "import_from_statement" => {
-                    Self::matches_any(&text, &["import os", "import sys", "from typing"])
-                }
-                "if_statement" => Self::matches_all(&text, &["__name__", "__main__"]),
-                "function_definition" => text.contains("__init__"),
-                _ => false,
-            },
-            "js" | "jsx" => match kind {
-                "call_expression" => Self::matches_any(&text, &["console.log", "require("]),
-                "assignment_expression" => text.contains("module.exports"),
-                _ => false,
-            },
-            "ts" | "tsx" => match kind {
-                "call_expression" => text.contains("console.log"),
-                "import_statement" => text.contains("from \"@angular/core\""),
-                _ => false,
-            },
-            "rs" => match kind {
-                "macro_invocation" | "macro_invocation_body" => {
-                    Self::matches_any(&text, &["println!", "dbg!", "todo!"])
-                }
-                _ => false,
-            },
-            "go" => kind == "call_expression" && text.contains("fmt.println"),
-            _ => false,
-        }
+        signatures::generator::normalize_code(source_code)
     }
 
     /// Check if entity meets fragment analysis thresholds using structural data
@@ -1039,91 +896,12 @@ impl LshExtractor {
         entity: &CodeEntity,
         config: &DedupeConfig,
     ) -> Result<bool> {
-        let source_code = &entity.source_code;
-
-        let token_count = self.count_tokens(source_code);
-        if token_count < config.min_function_tokens {
-            return Ok(false);
-        }
-
-        let Some(stats) = self.compute_entity_ast_stats(entity).await? else {
-            return Ok(false);
-        };
-
-        if stats.node_count < config.min_ast_nodes {
-            return Ok(false);
-        }
-
-        if stats.block_count < config.require_distinct_blocks {
-            return Ok(false);
-        }
-
-        if stats.has_stop_motif {
-            return Ok(false);
-        }
-
-        Ok(true)
-    }
-
-    /// Count tokens in source code (simplified approach)
-    fn count_tokens(&self, source_code: &str) -> usize {
-        source_code
-            .split_whitespace()
-            .filter(|token| !token.is_empty())
-            .count()
-    }
-
-    /// Detect programming language from file path
-    fn detect_language_from_path(&self, file_path: &str) -> String {
-        crate::lang::registry::detect_language_from_path(file_path)
-    }
-
-    /// Count AST nodes from language adapter index
-    fn count_ast_nodes_from_index(&self, index: &crate::lang::common::ParseIndex) -> usize {
-        index.entities.len() * 10 // Simple heuristic - each entity has ~10 nodes
-    }
-
-    /// Count distinct code blocks from language adapter index
-    pub fn count_distinct_blocks_from_index(
-        &self,
-        index: &crate::lang::common::ParseIndex,
-    ) -> usize {
-        use crate::lang::common::EntityKind;
-
-        let mut block_count = 0;
-
-        for (_id, entity) in &index.entities {
-            match entity.kind {
-                EntityKind::Function | EntityKind::Method => block_count += 1,
-                EntityKind::Class | EntityKind::Struct | EntityKind::Enum => block_count += 1,
-                EntityKind::Interface => block_count += 1,
-                EntityKind::Module => block_count += 1,
-                // Control structures are typically not stored as entities in the index
-                // They would be counted by examining the AST structure more deeply
-                _ => {}
-            }
-        }
-
-        // Add heuristic for control structures based on function count
-        // Functions typically contain control structures, so estimate based on that
-        let function_count = index
-            .entities
-            .iter()
-            .filter(|(_id, entity)| {
-                matches!(entity.kind, EntityKind::Function | EntityKind::Method)
-            })
-            .count();
-
-        block_count += function_count * 2; // Heuristic: each function has ~2 control structures
-
-        block_count.max(1) // At least 1 block
+        self.ast_analyzer.meets_fragment_thresholds(entity, config).await
     }
 
     /// Hash a string with a seed
     fn hash_with_seed(&self, data: &str, seed: u64) -> u64 {
-        let mut hasher = Xxh3::with_seed(seed);
-        data.hash(&mut hasher);
-        hasher.finish()
+        signatures::generator::hash_with_seed(data, seed)
     }
 
     /// Build LSH index for all entities in the context for O(n) candidate search
@@ -1233,22 +1011,16 @@ impl LshExtractor {
                 Some(self.lsh_config.max_candidates)
             };
 
+            let threshold = self.lsh_config.similarity_threshold;
             let mut similarities: Vec<f64> = similarity_context
                 .find_similar_entities(&entity.id, max_results)
                 .into_iter()
-                .filter_map(|(candidate_id, similarity)| {
-                    if let Some(ref lookup) = candidate_lookup {
-                        if !lookup.contains(candidate_id.as_str()) {
-                            return None;
-                        }
-                    }
-
-                    if similarity >= self.lsh_config.similarity_threshold {
-                        Some(similarity)
-                    } else {
-                        None
-                    }
+                .filter(|(candidate_id, _)| {
+                    candidate_lookup
+                        .as_ref()
+                        .map_or(true, |lookup| lookup.contains(candidate_id.as_str()))
                 })
+                .filter_map(|(_, similarity)| (similarity >= threshold).then_some(similarity))
                 .collect();
 
             if !similarities.is_empty() {
@@ -1264,6 +1036,7 @@ impl LshExtractor {
         self.compare_with_others_bruteforce(entity, context, signature, candidate_filter)
     }
 
+    /// Compares entity against others using brute-force MinHash comparison.
     fn compare_with_others_bruteforce(
         &self,
         entity: &CodeEntity,
@@ -1346,15 +1119,16 @@ impl LshExtractor {
         candidate_filter: Option<&Vec<EntityId>>,
         max_candidates: usize,
     ) -> Vec<f64> {
-        let threshold = self.lsh_config.similarity_threshold;
-
-        self.iterate_candidates(context, candidate_filter, entity_id, max_candidates)
-            .filter_map(|other_id| {
-                let other_sig = weighted_signatures.get(other_id)?;
-                let similarity = analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                (similarity >= threshold).then_some(similarity)
-            })
-            .collect()
+        comparison::collect_weighted_similarities(
+            entity_id,
+            entity_sig,
+            weighted_signatures,
+            analyzer,
+            context,
+            candidate_filter,
+            max_candidates,
+            self.lsh_config.similarity_threshold,
+        )
     }
 
     /// Fallback to basic minhash similarity comparison.
@@ -1366,17 +1140,15 @@ impl LshExtractor {
         candidate_filter: Option<&Vec<EntityId>>,
         max_candidates: usize,
     ) -> Vec<f64> {
-        let threshold = self.lsh_config.similarity_threshold;
-
-        self.iterate_candidates(context, candidate_filter, &entity.id, max_candidates)
-            .filter_map(|other_id| {
-                let other_entity = context.entity_index.get(other_id)?;
-                let other_signature =
-                    self.generate_minhash_signature_cached(&other_entity.source_code, other_id);
-                let similarity = self.jaccard_similarity(signature, &other_signature);
-                (similarity >= threshold).then_some(similarity)
-            })
-            .collect()
+        comparison::fallback_minhash_comparison(
+            entity,
+            context,
+            signature,
+            candidate_filter,
+            max_candidates,
+            self.lsh_config.similarity_threshold,
+            |source_code, entity_id| self.generate_minhash_signature_cached(source_code, entity_id),
+        )
     }
 
     /// Iterate over candidate entity IDs, excluding self and respecting max limit.
@@ -1387,78 +1159,12 @@ impl LshExtractor {
         exclude_id: &'a EntityId,
         max_candidates: usize,
     ) -> impl Iterator<Item = &'a EntityId> + 'a {
-        let filtered_iter: Box<dyn Iterator<Item = &'a EntityId> + 'a> = match candidate_filter {
-            Some(filter) => Box::new(filter.iter()),
-            None => Box::new(context.entity_index.keys()),
-        };
-
-        filtered_iter
-            .filter(move |id| *id != exclude_id)
-            .take(max_candidates)
+        comparison::iterate_candidates(context, candidate_filter, exclude_id, max_candidates)
     }
 
     /// Calculate Jaccard similarity between two MinHash signatures
     fn jaccard_similarity(&self, sig1: &[u64], sig2: &[u64]) -> f64 {
-        if sig1.len() != sig2.len() {
-            return 0.0;
-        }
-
-        // Use SIMD acceleration for large signatures
-        #[cfg(feature = "simd")]
-        if sig1.len() >= 16 {
-            return self.jaccard_similarity_simd(sig1, sig2);
-        }
-
-        let matching = sig1.iter().zip(sig2.iter()).filter(|(a, b)| a == b).count();
-        matching as f64 / sig1.len() as f64
-    }
-
-    /// SIMD-accelerated Jaccard similarity calculation for large signatures
-    #[cfg(feature = "simd")]
-    fn jaccard_similarity_simd(&self, sig1: &[u64], sig2: &[u64]) -> f64 {
-        let len = sig1.len();
-        let chunks = len / 4;
-        let remainder = len % 4;
-        let mut matching_count = 0usize;
-
-        // Process in chunks of 4 using SIMD
-        for chunk_idx in 0..chunks {
-            let base_idx = chunk_idx * 4;
-
-            let vec1 = u64x4::from([
-                sig1[base_idx],
-                sig1[base_idx + 1],
-                sig1[base_idx + 2],
-                sig1[base_idx + 3],
-            ]);
-
-            let vec2 = u64x4::from([
-                sig2[base_idx],
-                sig2[base_idx + 1],
-                sig2[base_idx + 2],
-                sig2[base_idx + 3],
-            ]);
-
-            // Element-wise comparison
-            let eq_mask = vec1.cmp_eq(vec2);
-
-            // Count matching elements (each lane is either 0 or all 1s)
-            let matches = eq_mask.to_array();
-            for &match_val in &matches {
-                if match_val == u64::MAX {
-                    matching_count += 1;
-                }
-            }
-        }
-
-        // Handle remainder elements
-        for i in (chunks * 4)..(chunks * 4 + remainder) {
-            if sig1[i] == sig2[i] {
-                matching_count += 1;
-            }
-        }
-
-        matching_count as f64 / len as f64
+        comparison::jaccard_similarity(sig1, sig2)
     }
 }
 

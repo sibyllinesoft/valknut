@@ -3,7 +3,7 @@
 //! This module provides a clean, unified configuration interface that eliminates
 //! complexity and duplication while maintaining backward compatibility.
 
-use crate::core::config::ValknutConfig;
+use crate::core::config::{validate_unit_range, ValknutConfig};
 use crate::core::errors::{Result, ValknutError};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -117,7 +117,9 @@ pub struct CoverageSettings {
     pub search_paths: Vec<String>,
 }
 
+/// Default implementation for [`AnalysisConfig`].
 impl Default for AnalysisConfig {
+    /// Returns the default analysis configuration.
     fn default() -> Self {
         Self {
             modules: AnalysisModules::default(),
@@ -129,7 +131,9 @@ impl Default for AnalysisConfig {
     }
 }
 
+/// Default implementation for [`AnalysisModules`].
 impl Default for AnalysisModules {
+    /// Returns the default analysis modules configuration.
     fn default() -> Self {
         Self {
             complexity: true,
@@ -142,7 +146,9 @@ impl Default for AnalysisModules {
     }
 }
 
+/// Default implementation for [`LanguageSettings`].
 impl Default for LanguageSettings {
+    /// Returns the default language settings.
     fn default() -> Self {
         Self {
             enabled: vec![
@@ -165,7 +171,9 @@ impl Default for LanguageSettings {
     }
 }
 
+/// Default implementation for [`FileSettings`].
 impl Default for FileSettings {
+    /// Returns the default file settings.
     fn default() -> Self {
         Self {
             include_patterns: vec!["**/*".to_string()],
@@ -183,7 +191,9 @@ impl Default for FileSettings {
     }
 }
 
+/// Default implementation for [`QualitySettings`].
 impl Default for QualitySettings {
+    /// Returns the default quality settings.
     fn default() -> Self {
         Self {
             confidence_threshold: 0.7,
@@ -193,7 +203,9 @@ impl Default for QualitySettings {
     }
 }
 
+/// Default implementation for [`CoverageSettings`].
 impl Default for CoverageSettings {
+    /// Returns the default coverage settings.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -209,6 +221,7 @@ impl Default for CoverageSettings {
     }
 }
 
+/// Constructor and fluent builder methods for [`AnalysisConfig`].
 impl AnalysisConfig {
     /// Create a new analysis configuration
     pub fn new() -> Self {
@@ -319,12 +332,7 @@ impl AnalysisConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         // Validate confidence threshold
-        if !(0.0..=1.0).contains(&self.quality.confidence_threshold) {
-            return Err(ValknutError::validation(format!(
-                "confidence_threshold must be between 0.0 and 1.0, got {}",
-                self.quality.confidence_threshold
-            )));
-        }
+        validate_unit_range(self.quality.confidence_threshold, "confidence_threshold")?;
 
         // Validate file limits
         if let Some(max_files) = self.files.max_files {
@@ -500,8 +508,9 @@ impl AnalysisConfig {
 
 // Additional convenience implementations for the new config components
 
+/// Factory methods for [`AnalysisModules`] presets.
 impl AnalysisModules {
-    /// Enable all modules
+    /// Creates a configuration with all analysis modules enabled.
     pub fn all() -> Self {
         Self {
             complexity: true,
@@ -513,7 +522,10 @@ impl AnalysisModules {
         }
     }
 
-    /// Enable only essential modules for fast analysis
+    /// Creates a configuration with only essential modules for fast analysis.
+    ///
+    /// Only enables complexity analysis, which provides basic code health metrics
+    /// with minimal overhead.
     pub fn essential() -> Self {
         Self {
             complexity: true,
@@ -525,7 +537,9 @@ impl AnalysisModules {
         }
     }
 
-    /// Enable complexity and refactoring analysis
+    /// Creates a configuration focused on code quality analysis.
+    ///
+    /// Enables complexity, duplicate detection, and refactoring modules.
     pub fn code_quality() -> Self {
         Self {
             complexity: true,
@@ -538,6 +552,7 @@ impl AnalysisModules {
     }
 }
 
+/// Builder methods for [`LanguageSettings`].
 impl LanguageSettings {
     /// Add a language to the enabled list
     pub fn add_language(mut self, language: impl Into<String>) -> Self {
@@ -563,6 +578,7 @@ impl LanguageSettings {
     }
 }
 
+/// Builder methods for [`FileSettings`].
 impl FileSettings {
     /// Add multiple exclusion patterns
     pub fn exclude_patterns(mut self, patterns: Vec<String>) -> Self {
@@ -583,6 +599,7 @@ impl FileSettings {
     }
 }
 
+/// Builder methods for [`QualitySettings`].
 impl QualitySettings {
     /// Enable strict validation mode
     pub fn strict(mut self) -> Self {
@@ -597,6 +614,7 @@ impl QualitySettings {
     }
 }
 
+/// Factory and builder methods for [`CoverageSettings`].
 impl CoverageSettings {
     /// Disable coverage analysis
     pub fn disabled() -> Self {

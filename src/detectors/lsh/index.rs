@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use ahash::AHasher;
 
-use super::signature::MinHashSignature;
+use super::signatures::types::MinHashSignature;
 
 /// LSH index for efficient similarity search
 #[derive(Debug)]
@@ -20,6 +20,7 @@ pub struct LshIndex {
     signatures: HashMap<String, MinHashSignature>,
 }
 
+/// Factory, indexing, and query methods for [`LshIndex`].
 impl LshIndex {
     /// Create a new LSH index
     pub fn new(num_bands: usize) -> Self {

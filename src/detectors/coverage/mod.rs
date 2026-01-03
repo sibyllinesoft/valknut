@@ -3,6 +3,7 @@
 pub mod config;
 pub use config::CoverageConfig;
 
+mod gap_scoring;
 mod parsers;
 pub mod types;
 
@@ -11,6 +12,7 @@ pub use types::*;
 use crate::core::ast_service::{AstService, CachedTree, DecisionKind};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
+use crate::lang::registry::detect_language_from_path;
 use async_trait::async_trait;
 use parsers::parse_report;
 use std::collections::{HashMap, HashSet};
@@ -22,6 +24,15 @@ use types::{FileCoverage, LineCoverage};
 
 #[cfg(test)]
 mod tests;
+
+/// Intermediate struct for coverage statistics calculation.
+struct CoverageStats {
+    total_uncovered: usize,
+    coverage_before: f64,
+    coverage_after: f64,
+    file_cov_gain: f64,
+    repo_cov_gain_est: f64,
+}
 
 /// Primary entry point for coverage analysis.
 #[derive(Debug)]
@@ -44,6 +55,26 @@ impl CoverageExtractor {
 
     /// Build coverage packs from parsed coverage reports.
     pub async fn build_coverage_packs(&self, reports: Vec<PathBuf>) -> Result<Vec<CoveragePack>> {
+        let per_file = self.aggregate_coverage_lines(reports)?;
+
+        let mut packs = Vec::new();
+        for (path, mut lines) in per_file {
+            lines.sort_by_key(|line| line.line_number);
+
+            if let Some(pack) = self.build_pack_for_file(&path, lines).await? {
+                packs.push(pack);
+            }
+        }
+
+        self.sort_packs_by_priority(&mut packs);
+        Ok(packs)
+    }
+
+    /// Aggregate coverage lines from multiple reports into per-file collections.
+    fn aggregate_coverage_lines(
+        &self,
+        reports: Vec<PathBuf>,
+    ) -> Result<HashMap<PathBuf, Vec<LineCoverage>>> {
         let mut per_file: HashMap<PathBuf, Vec<LineCoverage>> = HashMap::new();
 
         for report_path in reports {
@@ -53,69 +84,95 @@ impl CoverageExtractor {
 
             let (_format, files) = parse_report(&report_path)?;
             for file in files {
-                let entry = per_file.entry(file.path).or_default();
-                entry.extend(file.lines);
+                per_file.entry(file.path).or_default().extend(file.lines);
             }
         }
 
-        let mut packs = Vec::new();
-        for (path, mut lines) in per_file {
-            lines.sort_by_key(|line| line.line_number);
-            let spans = self.lines_to_spans(&path, &lines)?;
-            if spans.is_empty() {
-                continue;
-            }
+        Ok(per_file)
+    }
 
-            let language = self.detect_language(&path);
-            let file_gaps = self.build_gaps_for_file(&path, spans, &language).await?;
-            if file_gaps.is_empty() {
-                continue;
-            }
-
-            let file_loc = self.read_file_loc(&path);
-            let total_uncovered: usize = file_gaps.iter().map(|gap| gap.features.gap_loc).sum();
-            let coverage_before = if file_loc > 0 {
-                1.0 - (total_uncovered as f64 / file_loc as f64)
-            } else {
-                1.0
-            };
-            let coverage_after_if_filled =
-                1.0_f64.min(coverage_before + (total_uncovered as f64 / file_loc.max(1) as f64));
-            let file_cov_gain = (coverage_after_if_filled - coverage_before).max(0.0);
-            let repo_cov_gain_est = file_cov_gain * (file_loc as f64 / 10_000_f64);
-
-            let tests_to_write_est = file_gaps.len().max(total_uncovered / 5).max(1);
-            let mocks_est = file_gaps
-                .iter()
-                .flat_map(|gap| gap.symbols.iter())
-                .filter(|symbol| matches!(symbol.kind, SymbolKind::Class | SymbolKind::Module))
-                .count()
-                .min(5);
-
-            let mut gaps = file_gaps;
-            self.score_gaps(&mut gaps)?;
-
-            packs.push(CoveragePack {
-                kind: "coverage".to_string(),
-                pack_id: format!("cov:{}", path.display()),
-                path,
-                file_info: FileInfo {
-                    loc: file_loc,
-                    coverage_before,
-                    coverage_after_if_filled,
-                },
-                gaps,
-                value: PackValue {
-                    file_cov_gain,
-                    repo_cov_gain_est,
-                },
-                effort: PackEffort {
-                    tests_to_write_est,
-                    mocks_est,
-                },
-            });
+    /// Build a coverage pack for a single file.
+    async fn build_pack_for_file(
+        &self,
+        path: &PathBuf,
+        lines: Vec<LineCoverage>,
+    ) -> Result<Option<CoveragePack>> {
+        let spans = self.lines_to_spans(path, &lines)?;
+        if spans.is_empty() {
+            return Ok(None);
         }
 
+        let language = self.detect_language(path);
+        let file_gaps = self.build_gaps_for_file(path, spans, &language).await?;
+        if file_gaps.is_empty() {
+            return Ok(None);
+        }
+
+        let file_loc = self.read_file_loc(path);
+        let coverage_stats = self.calculate_coverage_stats(&file_gaps, file_loc);
+        let effort = self.estimate_effort(&file_gaps, coverage_stats.total_uncovered);
+
+        let mut gaps = file_gaps;
+        gap_scoring::score_gaps(&self.config, &mut gaps)?;
+
+        Ok(Some(CoveragePack {
+            kind: "coverage".to_string(),
+            pack_id: format!("cov:{}", path.display()),
+            path: path.clone(),
+            file_info: FileInfo {
+                loc: file_loc,
+                coverage_before: coverage_stats.coverage_before,
+                coverage_after_if_filled: coverage_stats.coverage_after,
+            },
+            gaps,
+            value: PackValue {
+                file_cov_gain: coverage_stats.file_cov_gain,
+                repo_cov_gain_est: coverage_stats.repo_cov_gain_est,
+            },
+            effort,
+        }))
+    }
+
+    /// Calculate coverage statistics for a file.
+    fn calculate_coverage_stats(&self, gaps: &[CoverageGap], file_loc: usize) -> CoverageStats {
+        let total_uncovered: usize = gaps.iter().map(|gap| gap.features.gap_loc).sum();
+        let coverage_before = if file_loc > 0 {
+            1.0 - (total_uncovered as f64 / file_loc as f64)
+        } else {
+            1.0
+        };
+        let coverage_after =
+            1.0_f64.min(coverage_before + (total_uncovered as f64 / file_loc.max(1) as f64));
+        let file_cov_gain = (coverage_after - coverage_before).max(0.0);
+        let repo_cov_gain_est = file_cov_gain * (file_loc as f64 / 10_000_f64);
+
+        CoverageStats {
+            total_uncovered,
+            coverage_before,
+            coverage_after,
+            file_cov_gain,
+            repo_cov_gain_est,
+        }
+    }
+
+    /// Estimate effort required to cover gaps.
+    fn estimate_effort(&self, gaps: &[CoverageGap], total_uncovered: usize) -> PackEffort {
+        let tests_to_write_est = gaps.len().max(total_uncovered / 5).max(1);
+        let mocks_est = gaps
+            .iter()
+            .flat_map(|gap| gap.symbols.iter())
+            .filter(|symbol| matches!(symbol.kind, SymbolKind::Class | SymbolKind::Module))
+            .count()
+            .min(5);
+
+        PackEffort {
+            tests_to_write_est,
+            mocks_est,
+        }
+    }
+
+    /// Sort packs by priority (highest value/effort ratio first).
+    fn sort_packs_by_priority(&self, packs: &mut [CoveragePack]) {
         packs.sort_by(|a, b| {
             let score_a = a.value.repo_cov_gain_est / (a.effort.tests_to_write_est as f64 + 1.0);
             let score_b = b.value.repo_cov_gain_est / (b.effort.tests_to_write_est as f64 + 1.0);
@@ -123,8 +180,6 @@ impl CoverageExtractor {
                 .partial_cmp(&score_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-
-        Ok(packs)
     }
 
     async fn build_gaps_for_file(
@@ -219,48 +274,61 @@ impl CoverageExtractor {
 
         for line in lines {
             if line.is_covered {
-                if let Some(span) = current.take() {
-                    if (span.end - span.start + 1) >= self.config.min_gap_loc {
-                        uncovered.push(span);
-                    }
-                }
+                self.maybe_push_span(&mut uncovered, current.take());
                 continue;
             }
 
-            match &mut current {
-                Some(span) => {
-                    if line.line_number == span.end + 1 {
-                        span.end = line.line_number;
-                    } else {
-                        if (span.end - span.start + 1) >= self.config.min_gap_loc {
-                            uncovered.push(span.clone());
-                        }
-                        *span = UncoveredSpan {
-                            path: path.clone(),
-                            start: line.line_number,
-                            end: line.line_number,
-                            hits: Some(line.hits),
-                        };
-                    }
-                }
-                None => {
-                    current = Some(UncoveredSpan {
-                        path: path.clone(),
-                        start: line.line_number,
-                        end: line.line_number,
-                        hits: Some(line.hits),
-                    });
-                }
-            }
+            current = Some(self.process_uncovered_line(&mut uncovered, current, path, line));
         }
 
-        if let Some(span) = current {
-            if (span.end - span.start + 1) >= self.config.min_gap_loc {
-                uncovered.push(span);
-            }
-        }
-
+        self.maybe_push_span(&mut uncovered, current);
         Ok(uncovered)
+    }
+
+    /// Push a span to the list if it meets the minimum size requirement.
+    fn maybe_push_span(&self, spans: &mut Vec<UncoveredSpan>, span: Option<UncoveredSpan>) {
+        if let Some(span) = span {
+            if self.is_span_large_enough(&span) {
+                spans.push(span);
+            }
+        }
+    }
+
+    /// Check if a span meets the minimum size requirement.
+    fn is_span_large_enough(&self, span: &UncoveredSpan) -> bool {
+        (span.end - span.start + 1) >= self.config.min_gap_loc
+    }
+
+    /// Process an uncovered line, either extending the current span or starting a new one.
+    fn process_uncovered_line(
+        &self,
+        uncovered: &mut Vec<UncoveredSpan>,
+        current: Option<UncoveredSpan>,
+        path: &PathBuf,
+        line: &LineCoverage,
+    ) -> UncoveredSpan {
+        match current {
+            Some(mut span) if line.line_number == span.end + 1 => {
+                span.end = line.line_number;
+                span
+            }
+            Some(old_span) => {
+                // Non-contiguous line - push old span if valid, start new one
+                self.maybe_push_span(uncovered, Some(old_span));
+                self.create_span(path, line)
+            }
+            None => self.create_span(path, line),
+        }
+    }
+
+    /// Create a new uncovered span from a line.
+    fn create_span(&self, path: &PathBuf, line: &LineCoverage) -> UncoveredSpan {
+        UncoveredSpan {
+            path: path.clone(),
+            start: line.line_number,
+            end: line.line_number,
+            hits: Some(line.hits),
+        }
     }
 
     fn coalesce_spans_for_file(&self, spans: &[UncoveredSpan]) -> Result<Vec<UncoveredSpan>> {
@@ -343,18 +411,7 @@ impl CoverageExtractor {
     }
 
     fn detect_language(&self, file_path: &PathBuf) -> String {
-        match file_path.extension().and_then(|ext| ext.to_str()) {
-            Some("py") => "python".to_string(),
-            Some("js") => "javascript".to_string(),
-            Some("ts") => "typescript".to_string(),
-            Some("rs") => "rust".to_string(),
-            Some("go") => "go".to_string(),
-            Some("java") => "java".to_string(),
-            Some("cpp" | "cc" | "cxx") => "cpp".to_string(),
-            Some("c") => "c".to_string(),
-            Some("h" | "hpp") => "c".to_string(),
-            _ => "unknown".to_string(),
-        }
+        detect_language_from_path(&file_path.to_string_lossy())
     }
 
     fn generate_preview(&self, content: &str, gap: &mut CoverageGap) -> Result<()> {
@@ -419,18 +476,13 @@ impl CoverageExtractor {
             return Vec::new();
         }
 
-        let mut result = Vec::new();
-        for (idx, line) in lines.iter().enumerate() {
-            let line_no = idx + 1;
-            if line_no < start {
-                continue;
-            }
-            if line_no > end {
-                break;
-            }
-            result.push(format!("{:>4}: {}", line_no, line));
-        }
-        result
+        lines
+            .iter()
+            .enumerate()
+            .skip(start - 1)
+            .take(end - start + 1)
+            .map(|(idx, line)| format!("{:>4}: {}", idx + 1, line))
+            .collect()
     }
 
     fn extract_imports(&self, lines: &[&str], language: &str) -> Vec<String> {
@@ -575,17 +627,14 @@ impl CoverageExtractor {
     }
 
     fn extract_snippet(&self, content: &str, start: usize, end: usize) -> Vec<String> {
+        if start == 0 || end < start {
+            return Vec::new();
+        }
         content
             .lines()
-            .enumerate()
-            .filter_map(|(idx, line)| {
-                let line_no = idx + 1;
-                if line_no < start || line_no > end {
-                    None
-                } else {
-                    Some(line.to_string())
-                }
-            })
+            .skip(start - 1)
+            .take(end - start + 1)
+            .map(|line| line.to_string())
             .collect()
     }
 
@@ -678,124 +727,7 @@ impl CoverageExtractor {
         }
     }
 
-    fn score_gaps(&self, gaps: &mut [CoverageGap]) -> Result<()> {
-        let weights = &self.config.weights;
-        let file_metrics = self.calculate_file_metrics(gaps)?;
-
-        for gap in gaps.iter_mut() {
-            if let Some(metrics) = file_metrics.get(&gap.path) {
-                gap.features.dependency_centrality_file = metrics.centrality;
-                gap.file_loc = gap.file_loc.max(metrics.total_gap_loc);
-            }
-
-            let size_score = self.normalize_size_score(gap.features.gap_loc);
-            let complexity_score = self.normalize_complexity_score(
-                gap.features.cyclomatic_in_gap + gap.features.cognitive_in_gap,
-            );
-            let fan_in_score = self.normalize_fan_in_score(gap.features.fan_in_gap);
-            let exports_score = if gap.features.exports_touched {
-                1.0
-            } else {
-                0.0
-            };
-            let centrality_score = gap.features.dependency_centrality_file;
-            let docs_score = if gap.features.docstring_or_comment_present {
-                0.0
-            } else {
-                1.0
-            };
-
-            gap.score = (size_score * weights.size)
-                + (complexity_score * weights.complexity)
-                + (fan_in_score * weights.fan_in)
-                + (exports_score * weights.exports)
-                + (centrality_score * weights.centrality)
-                + (docs_score * weights.docs);
-
-            gap.score = gap.score.clamp(0.0, 1.0);
-        }
-
-        gaps.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        Ok(())
-    }
-
-    fn calculate_file_metrics(
-        &self,
-        gaps: &[CoverageGap],
-    ) -> Result<HashMap<PathBuf, FileMetrics>> {
-        let mut metrics = HashMap::new();
-        let mut grouped: HashMap<PathBuf, Vec<&CoverageGap>> = HashMap::new();
-        for gap in gaps {
-            grouped.entry(gap.path.clone()).or_default().push(gap);
-        }
-
-        for (path, file_gaps) in grouped {
-            let total_gap_loc: usize = file_gaps.iter().map(|g| g.features.gap_loc).sum();
-            let avg_complexity = if file_gaps.is_empty() {
-                0.0
-            } else {
-                file_gaps
-                    .iter()
-                    .map(|g| g.features.cyclomatic_in_gap + g.features.cognitive_in_gap)
-                    .sum::<f64>()
-                    / file_gaps.len() as f64
-            };
-
-            let centrality = self.estimate_file_centrality(&path);
-
-            metrics.insert(
-                path,
-                FileMetrics {
-                    total_gap_loc,
-                    avg_complexity,
-                    centrality,
-                    gap_count: file_gaps.len(),
-                },
-            );
-        }
-
-        Ok(metrics)
-    }
-
-    fn estimate_file_centrality(&self, file_path: &PathBuf) -> f64 {
-        let path_str = file_path.to_string_lossy().to_lowercase();
-        if path_str.contains("lib.rs")
-            || path_str.contains("main.rs")
-            || path_str.contains("__init__.py")
-            || path_str.contains("index.")
-        {
-            return 0.9;
-        }
-        if path_str.contains("core")
-            || path_str.contains("base")
-            || path_str.contains("common")
-            || path_str.contains("util")
-        {
-            return 0.7;
-        }
-        if path_str.contains("test") || path_str.contains("example") {
-            return 0.2;
-        }
-        0.5
-    }
-
-    fn normalize_size_score(&self, gap_loc: usize) -> f64 {
-        let x = gap_loc as f64;
-        1.0 - (-x / 20.0).exp()
-    }
-
-    fn normalize_complexity_score(&self, complexity: f64) -> f64 {
-        1.0 - (-complexity / 10.0).exp()
-    }
-
-    fn normalize_fan_in_score(&self, fan_in: usize) -> f64 {
-        let x = fan_in as f64;
-        (x / (x + 5.0)).clamp(0.0, 1.0)
-    }
+    // Gap scoring methods have been moved to gap_scoring module
 }
 
 fn symbol_kind_from_node(kind: &str) -> Option<SymbolKind> {

@@ -2,8 +2,10 @@ use std::path::Path;
 
 use valknut_rs::core::pipeline::{
     AnalysisResults, CodeDefinition, CodeDictionary, DirectoryHealthTree, FeatureContribution,
-    MemoryStats, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
+    RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
 };
+// Use the 3-field MemoryStats with merge method
+use valknut_rs::core::pipeline::results::result_types::MemoryStats;
 use valknut_rs::core::scoring::Priority;
 
 fn candidate(path: &str, severity: f64, priority: Priority) -> RefactoringCandidate {

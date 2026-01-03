@@ -1,12 +1,22 @@
     use super::*;
     use crate::api::config_types::AnalysisConfig;
+    use crate::io::reports::hierarchy::{
+        add_files_to_hierarchy, build_candidate_lookup, build_unified_hierarchy,
+        create_file_groups_from_candidates,
+    };
+    use crate::io::reports::path_utils::{
+        clean_directory_health_tree_paths, clean_path_prefixes, clean_path_prefixes_in_file_groups,
+        clean_path_string,
+    };
     use crate::core::pipeline::{
         AnalysisResults, AnalysisStatistics, AnalysisSummary, CodeDefinition, CodeDictionary,
-        DirectoryHealthScore, DirectoryHealthTree, FeatureContribution, MemoryStats,
+        DirectoryHealthScore, DirectoryHealthTree, FeatureContribution,
         NormalizedAnalysisResults, NormalizedEntity, NormalizedIssue, NormalizedIssueTotals,
         NormalizedSummary, RefactoringCandidate, RefactoringIssue, RefactoringSuggestion,
         TreeStatistics,
     };
+    // Use the 3-field MemoryStats from result_types (for AnalysisStatistics)
+    use crate::core::pipeline::results::result_types::MemoryStats;
     use crate::core::scoring::{Priority, ScoringResult};
     use crate::io::reports::templates;
     use crate::oracle::{
@@ -480,12 +490,12 @@
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let absolute_path = temp_dir.path().join("src/lib.rs");
-        let cleaned_abs = generator.clean_path_string(absolute_path.to_str().unwrap());
+        let cleaned_abs = clean_path_string(absolute_path.to_str().unwrap());
         assert_eq!(cleaned_abs, "src/lib.rs");
 
         std::env::set_current_dir(&original_dir).unwrap();
 
-        let with_dot = generator.clean_path_string("./src/main.rs");
+        let with_dot = clean_path_string("./src/main.rs");
         assert_eq!(with_dot, "src/main.rs");
     }
 
@@ -518,11 +528,11 @@
             entities: vec![entity_ref(&candidates[0])],
         }];
 
-        let cleaned_candidates = generator.clean_path_prefixes(&candidates);
+        let cleaned_candidates = clean_path_prefixes(&candidates);
         assert_eq!(cleaned_candidates[0].file_path, "src/lib.rs");
         assert_eq!(cleaned_candidates[0].entity_id, "src/lib.rs:function");
 
-        let cleaned_groups = generator.clean_path_prefixes_in_file_groups(&file_groups);
+        let cleaned_groups = clean_path_prefixes_in_file_groups(&file_groups);
         assert_eq!(cleaned_groups[0].file_path, "src/lib.rs");
         assert_eq!(cleaned_groups[0].entities[0].name, "src/lib.rs::function");
     }
@@ -767,7 +777,7 @@
         };
 
         // Clean the paths
-        let cleaned_tree = generator.clean_directory_health_tree_paths(&original_tree);
+        let cleaned_tree = clean_directory_health_tree_paths(&original_tree);
 
         // Verify that "./" prefixes are removed
         assert_eq!(cleaned_tree.root.path, PathBuf::from(""));
@@ -846,7 +856,7 @@
         let mut candidate_lookup = HashMap::new();
         candidate_lookup.insert(candidate.entity_id.clone(), candidate.clone());
 
-        let result = generator.add_files_to_hierarchy(
+        let result = add_files_to_hierarchy(
             &hierarchy,
             &file_groups,
             &CodeDictionary::default(),
@@ -953,7 +963,7 @@
         candidate_lookup.insert(main_candidate.entity_id.clone(), main_candidate.clone());
         candidate_lookup.insert(lib_candidate.entity_id.clone(), lib_candidate.clone());
 
-        let result = generator.add_files_to_hierarchy(
+        let result = add_files_to_hierarchy(
             &hierarchy,
             &file_groups,
             &CodeDictionary::default(),
@@ -1011,7 +1021,7 @@
 
         let file_groups = vec![];
         let candidate_lookup = HashMap::new();
-        let result = generator.add_files_to_hierarchy(
+        let result = add_files_to_hierarchy(
             &hierarchy,
             &file_groups,
             &CodeDictionary::default(),
@@ -1075,7 +1085,7 @@
         let mut candidate_lookup = HashMap::new();
         candidate_lookup.insert(new_candidate.entity_id.clone(), new_candidate.clone());
 
-        let result = generator.add_files_to_hierarchy(
+        let result = add_files_to_hierarchy(
             &hierarchy,
             &file_groups,
             &CodeDictionary::default(),
@@ -1248,7 +1258,7 @@
             },
         ];
 
-        let hierarchy = generator.build_unified_hierarchy(&tree, &file_groups);
+        let hierarchy = build_unified_hierarchy(&tree, &file_groups);
         assert_eq!(hierarchy.len(), 1);
 
         let src_node = &hierarchy[0];
@@ -1368,7 +1378,7 @@
             detailed_candidate.clone(),
         );
 
-        let enriched = generator.add_files_to_hierarchy(
+        let enriched = add_files_to_hierarchy(
             &hierarchy,
             &file_groups,
             &dictionary,
@@ -1455,7 +1465,7 @@
             coverage_percentage: None,
         };
 
-        let groups = generator.create_file_groups_from_candidates(&[
+        let groups = create_file_groups_from_candidates(&[
             candidate_a.clone(),
             candidate_b.clone(),
             candidate_c.clone(),

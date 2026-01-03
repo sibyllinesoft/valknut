@@ -4,13 +4,14 @@
 //! JSDoc in TypeScript/JavaScript), missing READMEs in complex directories, and
 //! stale READMEs that haven't been updated alongside the code.
 
+mod git_utils;
 mod python;
 mod rust;
 mod typescript;
 
+use git_utils::GitHelper;
+
 use anyhow::{Context, Result};
-use chrono::{DateTime, FixedOffset, TimeZone};
-use git2::{DiffOptions, Oid, Repository};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,9 @@ static DEFAULT_IGNORED_DIR_NAMES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "temp",
         "datasets",
         "archive",
+        ".fastembed_cache",
+        ".github",
+        "scripts",
     ]
     .into_iter()
     .collect()
@@ -66,11 +70,28 @@ static TODO_MARKERS: [&str; 3] = ["TODO", "FIXME", "TBD"];
 
 static DEFAULT_IGNORED_GLOBS: Lazy<Vec<&'static str>> = Lazy::new(|| {
     vec![
+        // Test files and directories
         "**/tests/**",
+        "**/tests.rs",
+        "**/test_dir/**",
         "**/*_test.*",
         "**/*-test.*",
         "**/*Test.*",
         "**/*Tests.*",
+        "**/*_tests.rs",
+        "**/*_tests.py",
+        "**/*_tests.ts",
+        // Generated/bundled files
+        "**/*bundle*.js",
+        "**/*-bundle*.js",
+        ".valknut/**",
+        // Templates and assets
+        "templates/**",
+        "docs/**",
+        // Extension and benchmark code
+        "vscode-extension/**",
+        "benchmarks/**",
+        "examples/**",
     ]
 });
 
@@ -91,6 +112,7 @@ pub struct DocAuditConfig {
     pub ignore_globs: Vec<String>,
 }
 
+/// Configuration builder methods for [`DocAuditConfig`].
 impl DocAuditConfig {
     /// Create a new configuration with defaults for the given root.
     pub fn new(root: PathBuf) -> Self {
@@ -151,6 +173,7 @@ pub struct AuditResult {
     pub stale_readmes: Vec<DocIssue>,
 }
 
+/// Query methods for [`AuditResult`].
 impl AuditResult {
     /// Returns true if any issues were found.
     pub fn has_issues(&self) -> bool {
@@ -160,8 +183,11 @@ impl AuditResult {
     }
 }
 
+/// Information about a directory's contents for complexity calculation.
 struct DirectoryInfo {
+    /// Files directly in this directory.
     files: Vec<PathBuf>,
+    /// Subdirectories of this directory.
     subdirs: Vec<PathBuf>,
 }
 
@@ -247,6 +273,7 @@ pub fn render_json(result: &AuditResult) -> Result<String> {
     serde_json::to_string_pretty(result).context("Failed to serialize audit results to JSON")
 }
 
+/// Builds a GlobSet from the ignore patterns for efficient matching.
 fn build_ignore_globset(patterns: &[String]) -> Result<GlobSet> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
@@ -259,6 +286,9 @@ fn build_ignore_globset(patterns: &[String]) -> Result<GlobSet> {
         .context("Failed to build globset for doc audit ignores")
 }
 
+/// Walks the repository tree, collecting directory info and file paths.
+///
+/// Returns a map of directory info for complexity calculation and a flat list of files.
 fn walk_repository(
     config: &DocAuditConfig,
     globset: &GlobSet,
@@ -309,6 +339,7 @@ fn walk_repository(
     Ok((directories, files))
 }
 
+/// Checks if a directory should be ignored based on config and glob patterns.
 fn should_ignore_dir(path: &Path, config: &DocAuditConfig, globset: &GlobSet) -> bool {
     let rel = relative_path(path, &config.root);
     if globset.is_match(&rel) {
@@ -346,6 +377,7 @@ where
     }
 }
 
+/// Scans all files for documentation issues based on file extension.
 fn scan_documentation(
     files: &[PathBuf],
     config: &DocAuditConfig,
@@ -376,6 +408,7 @@ fn scan_documentation(
     issues
 }
 
+/// Checks if a file should be ignored based on config and glob patterns.
 fn should_ignore_file(path: &Path, config: &DocAuditConfig, globset: &GlobSet) -> bool {
     let rel = relative_path(path, &config.root);
 
@@ -390,6 +423,7 @@ fn should_ignore_file(path: &Path, config: &DocAuditConfig, globset: &GlobSet) -
         .any(|suffix| path_str.ends_with(suffix))
 }
 
+/// Computes complexity scores for each directory (file count + subdirectory complexity).
 fn compute_complexities(dir_info: &HashMap<PathBuf, DirectoryInfo>) -> HashMap<PathBuf, usize> {
     let mut complexities = HashMap::new();
     let mut directories: Vec<_> = dir_info.keys().collect();
@@ -413,6 +447,9 @@ fn compute_complexities(dir_info: &HashMap<PathBuf, DirectoryInfo>) -> HashMap<P
     complexities
 }
 
+/// Detects directories that exceed complexity threshold but lack a README.
+///
+/// Returns issues for missing READMEs and an index of found READMEs for staleness checking.
 fn detect_missing_readmes(
     complexities: &HashMap<PathBuf, usize>,
     config: &DocAuditConfig,
@@ -445,6 +482,7 @@ fn detect_missing_readmes(
     (issues, readmes)
 }
 
+/// Searches for a README file in the given directory using common naming conventions.
 fn find_readme(directory: &Path) -> Option<PathBuf> {
     for candidate in README_CANDIDATES {
         let candidate_path = directory.join(candidate);
@@ -455,6 +493,7 @@ fn find_readme(directory: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Detects READMEs that haven't been updated since significant changes to their directory.
 fn detect_stale_readmes(
     git_helper: &GitHelper,
     readme_index: &HashMap<PathBuf, PathBuf>,
@@ -487,223 +526,31 @@ fn detect_stale_readmes(
     issues
 }
 
-#[derive(Clone)]
-struct CommitInfo {
-    oid: Oid,
-    timestamp: DateTime<FixedOffset>,
-}
+// Git utilities extracted to git_utils.rs
 
-struct GitHelper {
-    repo: Option<Repository>,
-    repo_root: PathBuf,
-}
-
-impl GitHelper {
-    fn new(root: &Path) -> Self {
-        match Repository::discover(root) {
-            Ok(repo) => {
-                let repo_root = repo
-                    .workdir()
-                    .map(|path| path.to_path_buf())
-                    .unwrap_or_else(|| root.to_path_buf());
-                Self {
-                    repo: Some(repo),
-                    repo_root,
-                }
-            }
-            Err(_) => Self {
-                repo: None,
-                repo_root: root.to_path_buf(),
-            },
-        }
-    }
-
-    fn repo(&self) -> Option<&Repository> {
-        self.repo.as_ref()
-    }
-
-    fn relative_to_repo(&self, path: &Path) -> Option<PathBuf> {
-        path.strip_prefix(&self.repo_root).map(PathBuf::from).ok()
-    }
-
-    fn last_commit_info(&self, path: &Path) -> Option<CommitInfo> {
-        let repo = self.repo()?;
-        let relative = self.relative_to_repo(path)?;
-
-        let mut walker = repo.revwalk().ok()?;
-        walker.push_head().ok()?;
-
-        for oid in walker {
-            let oid = oid.ok()?;
-            let commit = repo.find_commit(oid).ok()?;
-            if commit_touches_path(repo, &commit, &relative) {
-                let timestamp = to_datetime(commit.time());
-                return Some(CommitInfo { oid, timestamp });
-            }
-        }
-
-        None
-    }
-
-    fn commits_since(
-        &self,
-        since: Oid,
-        directory: &Path,
-        exclude_path: Option<&Path>,
-    ) -> Option<usize> {
-        let repo = self.repo()?;
-        let directory_rel = self.relative_to_repo(directory)?;
-        let exclude_rel = exclude_path.and_then(|path| self.relative_to_repo(path));
-
-        let mut walker = repo.revwalk().ok()?;
-        walker.push_head().ok()?;
-
-        let mut counter = 0usize;
-        for oid in walker {
-            let oid = oid.ok()?;
-            if oid == since {
-                break;
-            }
-            let commit = repo.find_commit(oid).ok()?;
-            if commit_touches_directory(repo, &commit, &directory_rel, exclude_rel.as_deref()) {
-                counter += 1;
-            }
-        }
-
-        Some(counter)
-    }
-}
-
-fn commit_touches_path(repo: &Repository, commit: &git2::Commit<'_>, path: &Path) -> bool {
-    let mut diff_opts = DiffOptions::new();
-    if let Some(path_str) = path.to_str() {
-        diff_opts.pathspec(path_str);
-    }
-
-    let tree = match commit.tree() {
-        Ok(tree) => tree,
-        Err(_) => return false,
-    };
-
-    if commit.parent_count() == 0 {
-        return repo
-            .diff_tree_to_tree(None, Some(&tree), Some(&mut diff_opts))
-            .map(|diff| diff.deltas().len() > 0)
-            .unwrap_or(false);
-    }
-
-    for parent in commit.parents() {
-        if let Ok(parent_tree) = parent.tree() {
-            if repo
-                .diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut diff_opts))
-                .map(|diff| diff.deltas().len() > 0)
-                .unwrap_or(false)
-            {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-fn commit_touches_directory(
-    repo: &Repository,
-    commit: &git2::Commit<'_>,
-    directory: &Path,
-    exclude_path: Option<&Path>,
-) -> bool {
-    let mut diff_opts = DiffOptions::new();
-    if let Some(dir_str) = directory.to_str() {
-        diff_opts.pathspec(dir_str);
-    }
-
-    let tree = match commit.tree() {
-        Ok(tree) => tree,
-        Err(_) => return false,
-    };
-
-    let mut touched = false;
-
-    let compare = |diff: git2::Diff<'_>| {
-        let mut relevant = false;
-        for delta in diff.deltas() {
-            let mut is_excluded = false;
-            if let Some(exclude) = exclude_path {
-                if delta
-                    .new_file()
-                    .path()
-                    .and_then(|path| Some(path == exclude))
-                    .unwrap_or(false)
-                {
-                    is_excluded = true;
-                }
-                if delta
-                    .old_file()
-                    .path()
-                    .and_then(|path| Some(path == exclude))
-                    .unwrap_or(false)
-                {
-                    is_excluded = true;
-                }
-            }
-
-            if !is_excluded {
-                relevant = true;
-                break;
-            }
-        }
-        relevant
-    };
-
-    if commit.parent_count() == 0 {
-        if let Ok(diff) = repo.diff_tree_to_tree(None, Some(&tree), Some(&mut diff_opts)) {
-            touched |= compare(diff);
-        }
-        return touched;
-    }
-
-    for parent in commit.parents() {
-        if let Ok(parent_tree) = parent.tree() {
-            if let Ok(diff) =
-                repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut diff_opts))
-            {
-                if compare(diff) {
-                    touched = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    touched
-}
-
-fn to_datetime(time: git2::Time) -> DateTime<FixedOffset> {
-    let seconds = time.seconds();
-    let offset_minutes = time.offset_minutes();
-    let offset = FixedOffset::east_opt(offset_minutes * 60).unwrap_or_else(|| FixedOffset::east(0));
-    let naive = chrono::NaiveDateTime::from_timestamp_opt(seconds, 0)
-        .unwrap_or_else(|| chrono::NaiveDateTime::from_timestamp(0, 0));
-    offset.from_utc_datetime(&naive)
-}
-
+/// Converts an absolute path to a relative path from the root.
 fn relative_path(path: &Path, root: &Path) -> PathBuf {
     path.strip_prefix(root)
         .map(PathBuf::from)
         .unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// Checks if text contains incomplete documentation markers (e.g., placeholder notes).
 fn contains_todo(text: &str) -> bool {
     let upper = text.to_ascii_uppercase();
     TODO_MARKERS.iter().any(|marker| upper.contains(marker))
 }
 
+/// Returns true if the documentation is empty or contains placeholder markers.
 fn is_incomplete_doc(text: &str) -> bool {
     let trimmed = text.trim();
     trimmed.is_empty() || contains_todo(trimmed)
 }
 
+/// Extracts documentation comment text preceding an item at the given line index.
+///
+/// Handles Rust-style doc comments (///, //!, /** */) and collects multiple
+/// consecutive comment lines into a single string.
 fn extract_comment_text(lines: &[&str], mut index: usize) -> Option<String> {
     let mut collected = Vec::new();
     while index > 0 {
@@ -743,6 +590,7 @@ fn extract_comment_text(lines: &[&str], mut index: usize) -> Option<String> {
     }
 }
 
+/// Normalizes collected doc comment lines by stripping comment markers.
 fn normalize_doc_lines(lines: &[String]) -> String {
     let mut cleaned = Vec::new();
     for line in lines {

@@ -16,6 +16,7 @@ pub struct StringVecPool {
     reused_count: Arc<Mutex<usize>>,
 }
 
+/// Factory, allocation, and statistics methods for [`StringVecPool`].
 impl StringVecPool {
     /// Create a new string vector pool
     pub fn new(max_size: usize) -> Self {
@@ -85,6 +86,7 @@ pub struct U64VecPool {
     reused_count: Arc<Mutex<usize>>,
 }
 
+/// Factory, allocation, and statistics methods for [`U64VecPool`].
 impl U64VecPool {
     /// Create a new u64 vector pool
     pub fn new(max_size: usize, signature_size: usize) -> Self {
@@ -158,6 +160,7 @@ pub struct PoolStatistics {
     pub max_pool_size: usize,
 }
 
+/// Analysis methods for [`PoolStatistics`].
 impl PoolStatistics {
     /// Calculate reuse rate as a percentage
     pub fn reuse_rate(&self) -> f64 {
@@ -186,6 +189,7 @@ pub struct LshMemoryPools {
     signature_pool: U64VecPool,
 }
 
+/// Factory, pool access, and statistics methods for [`LshMemoryPools`].
 impl LshMemoryPools {
     /// Create new memory pools with default sizes
     pub fn new() -> Self {
@@ -250,7 +254,9 @@ impl LshMemoryPools {
     }
 }
 
+/// Default implementation for [`LshMemoryPools`].
 impl Default for LshMemoryPools {
+    /// Returns memory pools with default sizes.
     fn default() -> Self {
         Self::new()
     }

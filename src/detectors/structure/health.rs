@@ -24,13 +24,16 @@ pub struct EntityHealth {
     pub health: f64,
 }
 
+/// Factory and scoring methods for [`HealthScorer`].
 impl HealthScorer {
+    /// Creates a new health scorer from structure configuration.
     pub fn new(config: StructureConfig) -> Self {
         Self {
             config: config.entity_health,
         }
     }
 
+    /// Creates a new health scorer from entity health configuration.
     pub fn from_entity_config(config: EntityHealthConfig) -> Self {
         Self { config }
     }
@@ -50,6 +53,7 @@ impl HealthScorer {
         self.score_with_params(ast_nodes, &self.config.file_size)
     }
 
+    /// Computes health score using the given entity size parameters.
     fn score_with_params(
         &self,
         ast_nodes: usize,
@@ -109,12 +113,12 @@ pub fn lognormal_cdf(value: usize, optimal: usize, percentile_95: usize) -> f64 
     standard_normal_cdf(z)
 }
 
-/// Standard normal CDF using the error function approximation
+/// Computes the standard normal CDF using the error function approximation.
 fn standard_normal_cdf(z: f64) -> f64 {
     0.5 * (1.0 + erf(z / 2.0_f64.sqrt()))
 }
 
-/// Error function approximation (Abramowitz and Stegun)
+/// Computes the error function using the Abramowitz and Stegun approximation.
 fn erf(x: f64) -> f64 {
     // Constants for the approximation
     let a1 = 0.254829592;

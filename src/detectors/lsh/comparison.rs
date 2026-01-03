@@ -14,7 +14,7 @@ use crate::core::featureset::{CodeEntity, EntityId, ExtractionContext};
 
 use super::config::LshConfig;
 use super::similarity_context::LshSimilarityContext;
-use super::weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer};
+use super::signatures::weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer};
 
 /// Similarity comparator for LSH-based clone detection.
 pub struct SimilarityComparator<'a> {
@@ -24,6 +24,7 @@ pub struct SimilarityComparator<'a> {
     weighted_analyzer: Option<&'a WeightedShingleAnalyzer>,
 }
 
+/// Factory and similarity comparison methods for [`SimilarityComparator`].
 impl<'a> SimilarityComparator<'a> {
     /// Create a new similarity comparator.
     pub fn new(
@@ -83,28 +84,20 @@ impl<'a> SimilarityComparator<'a> {
         }
 
         if let Some(sim_context) = similarity_context {
-            let max_results = if self.lsh_config.max_candidates == 0 {
-                None
-            } else {
-                Some(self.lsh_config.max_candidates)
-            };
+            let max_results = (self.lsh_config.max_candidates != 0)
+                .then_some(self.lsh_config.max_candidates);
+            let threshold = self.lsh_config.similarity_threshold;
 
             let mut similarities: Vec<f64> = sim_context
                 .find_similar_entities(&entity.id, max_results)
                 .into_iter()
-                .filter_map(|(candidate_id, similarity)| {
-                    if let Some(ref lookup) = candidate_lookup {
-                        if !lookup.contains(candidate_id.as_str()) {
-                            return None;
-                        }
-                    }
-
-                    if similarity >= self.lsh_config.similarity_threshold {
-                        Some(similarity)
-                    } else {
-                        None
-                    }
+                .filter(|(candidate_id, similarity)| {
+                    let passes_lookup = candidate_lookup
+                        .as_ref()
+                        .map_or(true, |lookup| lookup.contains(candidate_id.as_str()));
+                    passes_lookup && *similarity >= threshold
                 })
+                .map(|(_, similarity)| similarity)
                 .collect();
 
             if !similarities.is_empty() {
@@ -239,15 +232,16 @@ impl<'a> SimilarityComparator<'a> {
         candidate_filter: Option<&Vec<EntityId>>,
         max_candidates: usize,
     ) -> Vec<f64> {
-        let threshold = self.lsh_config.similarity_threshold;
-
-        self.iterate_candidates(context, candidate_filter, entity_id, max_candidates)
-            .filter_map(|other_id| {
-                let other_sig = weighted_signatures.get(other_id)?;
-                let similarity = analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
-                (similarity >= threshold).then_some(similarity)
-            })
-            .collect()
+        collect_weighted_similarities(
+            entity_id,
+            entity_sig,
+            weighted_signatures,
+            analyzer,
+            context,
+            candidate_filter,
+            max_candidates,
+            self.lsh_config.similarity_threshold,
+        )
     }
 
     /// Fallback to basic minhash similarity comparison.
@@ -263,16 +257,15 @@ impl<'a> SimilarityComparator<'a> {
     where
         F: Fn(&str, &str) -> Vec<u64>,
     {
-        let threshold = self.lsh_config.similarity_threshold;
-
-        self.iterate_candidates(context, candidate_filter, &entity.id, max_candidates)
-            .filter_map(|other_id| {
-                let other_entity = context.entity_index.get(other_id)?;
-                let other_signature = generate_signature_fn(&other_entity.source_code, other_id);
-                let similarity = jaccard_similarity(signature, &other_signature);
-                (similarity >= threshold).then_some(similarity)
-            })
-            .collect()
+        fallback_minhash_comparison(
+            entity,
+            context,
+            signature,
+            candidate_filter,
+            max_candidates,
+            self.lsh_config.similarity_threshold,
+            generate_signature_fn,
+        )
     }
 
     /// Iterate over candidate entity IDs, excluding self and respecting max limit.
@@ -283,15 +276,74 @@ impl<'a> SimilarityComparator<'a> {
         exclude_id: &'b EntityId,
         max_candidates: usize,
     ) -> impl Iterator<Item = &'b EntityId> + 'b {
-        let filtered_iter: Box<dyn Iterator<Item = &'b EntityId> + 'b> = match candidate_filter {
-            Some(filter) => Box::new(filter.iter()),
-            None => Box::new(context.entity_index.keys()),
-        };
-
-        filtered_iter
-            .filter(move |id| *id != exclude_id)
-            .take(max_candidates)
+        iterate_candidates(context, candidate_filter, exclude_id, max_candidates)
     }
+}
+
+/// Iterate over candidate entity IDs, excluding self and respecting max limit.
+///
+/// This is a shared utility function used by both `SimilarityComparator` and `LshExtractor`.
+pub fn iterate_candidates<'a>(
+    context: &'a ExtractionContext,
+    candidate_filter: Option<&'a Vec<EntityId>>,
+    exclude_id: &'a EntityId,
+    max_candidates: usize,
+) -> impl Iterator<Item = &'a EntityId> + 'a {
+    let filtered_iter: Box<dyn Iterator<Item = &'a EntityId> + 'a> = match candidate_filter {
+        Some(filter) => Box::new(filter.iter()),
+        None => Box::new(context.entity_index.keys()),
+    };
+
+    filtered_iter
+        .filter(move |id| *id != exclude_id)
+        .take(max_candidates)
+}
+
+/// Collect similarities using weighted Jaccard from candidate iterator.
+///
+/// This is a shared utility function used by both `SimilarityComparator` and `LshExtractor`.
+pub fn collect_weighted_similarities(
+    entity_id: &EntityId,
+    entity_sig: &WeightedMinHashSignature,
+    weighted_signatures: &HashMap<EntityId, WeightedMinHashSignature>,
+    analyzer: &WeightedShingleAnalyzer,
+    context: &ExtractionContext,
+    candidate_filter: Option<&Vec<EntityId>>,
+    max_candidates: usize,
+    threshold: f64,
+) -> Vec<f64> {
+    iterate_candidates(context, candidate_filter, entity_id, max_candidates)
+        .filter_map(|other_id| {
+            let other_sig = weighted_signatures.get(other_id)?;
+            let similarity = analyzer.weighted_jaccard_similarity(entity_sig, other_sig);
+            (similarity >= threshold).then_some(similarity)
+        })
+        .collect()
+}
+
+/// Fallback to basic minhash similarity comparison using a closure for signature generation.
+///
+/// This is a shared utility function used by both `SimilarityComparator` and `LshExtractor`.
+pub fn fallback_minhash_comparison<F>(
+    entity: &CodeEntity,
+    context: &ExtractionContext,
+    signature: &[u64],
+    candidate_filter: Option<&Vec<EntityId>>,
+    max_candidates: usize,
+    threshold: f64,
+    generate_signature_fn: F,
+) -> Vec<f64>
+where
+    F: Fn(&str, &str) -> Vec<u64>,
+{
+    iterate_candidates(context, candidate_filter, &entity.id, max_candidates)
+        .filter_map(|other_id| {
+            let other_entity = context.entity_index.get(other_id)?;
+            let other_signature = generate_signature_fn(&other_entity.source_code, other_id);
+            let similarity = jaccard_similarity(signature, &other_signature);
+            (similarity >= threshold).then_some(similarity)
+        })
+        .collect()
 }
 
 /// Calculate Jaccard similarity between two MinHash signatures.

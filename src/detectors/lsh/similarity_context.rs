@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use tracing::debug;
 
+use super::comparison::jaccard_similarity;
 use super::config::LshConfig;
 use super::index::LshIndex;
 use super::metrics::LshContextStatistics;
@@ -21,6 +22,7 @@ pub struct LshSimilarityContext {
     pub(crate) entities_count: usize,
 }
 
+/// Factory, similarity search, and statistics methods for [`LshSimilarityContext`].
 impl LshSimilarityContext {
     /// Create a new similarity context
     pub fn new(
@@ -69,17 +71,7 @@ impl LshSimilarityContext {
         let sig1 = self.signatures.get(entity1_id)?;
         let sig2 = self.signatures.get(entity2_id)?;
 
-        Some(Self::jaccard_similarity(sig1, sig2))
-    }
-
-    /// Calculate Jaccard similarity between two signatures
-    fn jaccard_similarity(sig1: &[u64], sig2: &[u64]) -> f64 {
-        if sig1.len() != sig2.len() {
-            return 0.0;
-        }
-
-        let matching = sig1.iter().zip(sig2.iter()).filter(|(a, b)| a == b).count();
-        matching as f64 / sig1.len() as f64
+        Some(jaccard_similarity(sig1, sig2))
     }
 
     /// Get performance statistics for the similarity context

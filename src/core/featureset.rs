@@ -44,6 +44,7 @@ pub struct FeatureDefinition {
     pub higher_is_worse: bool,
 }
 
+/// Factory and configuration methods for [`FeatureDefinition`].
 impl FeatureDefinition {
     /// Create a new feature definition
     pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
@@ -141,6 +142,7 @@ pub struct FeatureVector {
     pub refactoring_suggestions: Vec<RefactoringSuggestion>,
 }
 
+/// Factory, mutation, and analysis methods for [`FeatureVector`].
 impl FeatureVector {
     /// Create a new empty feature vector for an entity
     pub fn new(entity_id: impl Into<EntityId>) -> Self {
@@ -251,6 +253,7 @@ pub struct RefactoringSuggestion {
     pub context: Option<String>,
 }
 
+/// Factory and builder methods for [`RefactoringSuggestion`].
 impl RefactoringSuggestion {
     /// Create a new refactoring suggestion
     pub fn new(
@@ -364,6 +367,7 @@ pub struct CodeEntity {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
+/// Factory and builder methods for [`CodeEntity`].
 impl CodeEntity {
     /// Create a new code entity
     pub fn new(
@@ -429,6 +433,7 @@ pub struct ExtractionContext {
     pub candidate_partitions: Option<Arc<HashMap<EntityId, Vec<EntityId>>>>,
 }
 
+/// Factory and configuration methods for [`ExtractionContext`].
 impl ExtractionContext {
     /// Create a new extraction context
     pub fn new(
@@ -478,6 +483,7 @@ pub struct BaseFeatureExtractor {
     feature_definitions: Vec<FeatureDefinition>,
 }
 
+/// Factory and helper methods for [`BaseFeatureExtractor`].
 impl BaseFeatureExtractor {
     /// Create a new base feature extractor
     pub fn new(name: impl Into<String>) -> Self {
@@ -516,16 +522,20 @@ impl BaseFeatureExtractor {
     }
 }
 
+/// [`FeatureExtractor`] implementation providing default/empty extraction.
 #[async_trait]
 impl FeatureExtractor for BaseFeatureExtractor {
+    /// Returns the extractor name.
     fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns the list of feature definitions.
     fn features(&self) -> &[FeatureDefinition] {
         &self.feature_definitions
     }
 
+    /// Default implementation that returns empty features.
     async fn extract(
         &self,
         _entity: &CodeEntity,
@@ -546,6 +556,7 @@ pub struct FeatureExtractorRegistry {
     feature_definitions: HashMap<String, FeatureDefinition>,
 }
 
+/// Factory, registration, and extraction methods for [`FeatureExtractorRegistry`].
 impl FeatureExtractorRegistry {
     /// Create a new registry
     pub fn new() -> Self {

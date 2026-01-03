@@ -21,7 +21,9 @@ pub struct ComplexityConfig {
     pub function_length_thresholds: ComplexityThresholds,
 }
 
+/// Default implementation for [`ComplexityConfig`].
 impl Default for ComplexityConfig {
+    /// Returns the default complexity analysis configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -44,7 +46,9 @@ pub struct ComplexityThresholds {
     pub very_high: f64,
 }
 
+/// Factory methods for standard complexity thresholds.
 impl ComplexityThresholds {
+    /// Returns default thresholds for cyclomatic complexity.
     pub fn default_cyclomatic() -> Self {
         Self {
             low: 5.0,
@@ -54,6 +58,7 @@ impl ComplexityThresholds {
         }
     }
 
+    /// Returns default thresholds for cognitive complexity.
     pub fn default_cognitive() -> Self {
         Self {
             low: 5.0,
@@ -63,6 +68,7 @@ impl ComplexityThresholds {
         }
     }
 
+    /// Returns default thresholds for nesting depth.
     pub fn default_nesting() -> Self {
         Self {
             low: 2.0,
@@ -72,6 +78,7 @@ impl ComplexityThresholds {
         }
     }
 
+    /// Returns default thresholds for parameter count.
     pub fn default_parameters() -> Self {
         Self {
             low: 3.0,
@@ -81,6 +88,7 @@ impl ComplexityThresholds {
         }
     }
 
+    /// Returns default thresholds for file length in lines.
     pub fn default_file_length() -> Self {
         Self {
             low: 100.0,
@@ -90,6 +98,7 @@ impl ComplexityThresholds {
         }
     }
 
+    /// Returns default thresholds for function length in lines.
     pub fn default_function_length() -> Self {
         Self {
             low: 15.0,
@@ -111,7 +120,9 @@ pub enum ComplexitySeverity {
     Critical,
 }
 
+/// Severity classification methods for [`ComplexitySeverity`].
 impl ComplexitySeverity {
+    /// Determines severity level based on a value and thresholds.
     pub fn from_value(value: f64, thresholds: &ComplexityThresholds) -> Self {
         if value <= thresholds.low {
             Self::Low
@@ -180,6 +191,7 @@ pub struct ComplexityMetrics {
     pub decision_points: Vec<DecisionPointInfo>,
 }
 
+/// Accessor methods for [`ComplexityMetrics`].
 impl ComplexityMetrics {
     /// Alias for cyclomatic complexity for compatibility
     pub fn cyclomatic(&self) -> f64 {
@@ -218,7 +230,9 @@ pub struct HalsteadMetrics {
     pub bugs: f64,              // volume / 3000
 }
 
+/// Default implementation for [`HalsteadMetrics`].
 impl Default for HalsteadMetrics {
+    /// Returns zeroed Halstead metrics.
     fn default() -> Self {
         Self {
             n1: 0.0,

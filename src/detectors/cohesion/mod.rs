@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::errors::Result;
 use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
+use crate::lang::registry::detect_language_from_path;
 
 pub mod config;
 pub mod embeddings;
@@ -53,7 +54,9 @@ pub struct CohesionAnalysisResults {
     pub average_doc_alignment: f64,
 }
 
+/// Default implementation for [`CohesionAnalysisResults`].
 impl Default for CohesionAnalysisResults {
+    /// Returns disabled cohesion results with no issues.
     fn default() -> Self {
         Self {
             enabled: false,
@@ -170,6 +173,7 @@ pub struct CohesionExtractor {
     features: Vec<FeatureDefinition>,
 }
 
+/// Factory, configuration, and analysis methods for [`CohesionExtractor`].
 impl CohesionExtractor {
     /// Create a new cohesion extractor with default configuration
     pub fn new() -> Self {
@@ -199,6 +203,7 @@ impl CohesionExtractor {
         Ok(())
     }
 
+    /// Initializes the feature definitions for cohesion analysis.
     fn initialize_features(&mut self) {
         self.features = vec![
             FeatureDefinition::new(
@@ -220,7 +225,7 @@ impl CohesionExtractor {
     pub async fn analyze_with_sources(
         &mut self,
         file_sources: &[(PathBuf, String)],
-        root_path: &Path,
+        _root_path: &Path,
     ) -> Result<CohesionAnalysisResults> {
         use tracing::info;
 
@@ -235,186 +240,73 @@ impl CohesionExtractor {
         let dimension = embedding_provider.dimension();
 
         // Phase 1: Extract entities and build TF-IDF corpus
-        let mut tfidf = symbols::TfIdfCalculator::new(self.config.symbols.clone());
-        let mut all_file_entities: HashMap<PathBuf, Vec<extractor::CohesionEntity>> = HashMap::new();
+        let (all_file_entities, tfidf) = self.extract_entities_and_build_corpus(file_sources);
+        info!(
+            "Extracted entities from {} files, {} in TF-IDF corpus",
+            all_file_entities.len(),
+            tfidf.total_documents()
+        );
 
-        for (path, source) in file_sources {
-            let Some(lang) = self.detect_language(path) else { continue };
-            let Ok(mut entity_extractor) = extractor::CohesionEntityExtractor::new(&lang) else { continue };
-            let Ok(entities) = entity_extractor.extract_entities(source, path) else { continue };
-
-            for entity in &entities {
-                tfidf.add_document(&Self::collect_entity_symbols(entity));
-            }
-            all_file_entities.insert(path.clone(), entities);
-        }
-
-        info!("Extracted entities from {} files, {} in TF-IDF corpus",
-              all_file_entities.len(), tfidf.total_documents());
-
-        // Phase 2: Generate embeddings for each entity
+        // Phase 2: Process each file
         let mut file_scores: HashMap<PathBuf, FileCohesionScore> = HashMap::new();
         let mut all_issues: Vec<CohesionIssue> = Vec::new();
         let mut folder_rollups: HashMap<PathBuf, metrics::RollupState> = HashMap::new();
 
         for (path, entities) in &all_file_entities {
-            if entities.is_empty() {
+            let Some((score, issues, rollup)) = self.process_file_cohesion(
+                path,
+                entities,
+                &tfidf,
+                file_sources,
+                embedding_provider,
+                dimension,
+            ) else {
                 continue;
-            }
-
-            // Build code text for each entity using TF-IDF filtered symbols
-            let entity_texts: Vec<String> = entities
-                .iter()
-                .map(|entity| Self::build_entity_embedding_text(entity, &tfidf))
-                .collect();
-
-            // Generate embeddings in batch
-            let embeddings = match embedding_provider.embed_batch(&entity_texts) {
-                Ok(e) => e,
-                Err(_) => continue,
             };
 
-            if embeddings.is_empty() {
-                continue;
-            }
-
-            // Calculate file cohesion
-            let cohesion = self.calculator.cohesion_score(&embeddings);
-
-            // Get module docstring embedding for doc alignment
-            let doc_alignment = if let Some((_, source)) = file_sources.iter().find(|(p, _)| p == path) {
-                self.calculate_doc_alignment(path, source, &embeddings, embedding_provider)
-            } else {
-                None
-            };
-
-            // Find outliers
-            let mut outliers = Vec::new();
-            if let Some(centroid) = self.calculator.robust_centroid(&embeddings) {
-                let outlier_indices = self.calculator.find_outliers(
-                    &embeddings,
-                    &centroid,
-                    self.config.thresholds.outlier_percentile,
-                    self.config.thresholds.min_outlier_similarity,
-                );
-
-                for (idx, similarity) in outlier_indices {
-                    if idx < entities.len() {
-                        let entity = &entities[idx];
-                        outliers.push(EntityOutlier {
-                            name: entity.name.clone(),
-                            kind: entity.kind.clone(),
-                            line_range: Some(entity.line_range),
-                            similarity,
-                            doc_similarity: None,
-                        });
-
-                        // Generate issue for significant outliers
-                        if similarity < self.config.thresholds.min_outlier_similarity {
-                            all_issues.push(Self::create_outlier_issue(path, entity, similarity));
-                        }
-                    }
-                }
-            }
-
-            // Generate issue for low cohesion files
-            if cohesion < self.config.thresholds.min_cohesion && entities.len() >= self.config.rollup.min_file_entities {
-                all_issues.push(Self::create_low_cohesion_issue(path, cohesion));
-            }
-
-            // Generate issue for doc mismatch
-            if let Some(alignment) = doc_alignment {
-                if alignment < self.config.thresholds.min_doc_alignment {
-                    all_issues.push(Self::create_doc_mismatch_issue(path, alignment));
-                }
-            }
-
-            // Build rollup state for folder aggregation
-            let mut rollup = metrics::RollupState::new(dimension);
-            for emb in &embeddings {
-                rollup.add(emb);
-            }
-
-            file_scores.insert(path.clone(), FileCohesionScore {
-                path: path.clone(),
-                cohesion,
-                doc_alignment,
-                entity_count: entities.len(),
-                outliers,
-                rollup_n: rollup.n,
-                rollup_sum: Some(rollup.sum.clone()),
-            });
-
-            // Aggregate to all ancestor folders
-            let weight = self.calculator.file_weight(entities.len()) as f32;
-            let mut current = path.parent();
-            while let Some(parent) = current {
-                // Stop at reasonable boundaries (don't go above src-like directories)
-                let folder_name = parent.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if folder_name.is_empty() || parent.as_os_str().is_empty() {
-                    break;
-                }
-
-                let folder_path = parent.to_path_buf();
-                folder_rollups
-                    .entry(folder_path)
-                    .or_insert_with(|| metrics::RollupState::new(dimension))
-                    .add_rollup(&rollup, weight);
-
-                current = parent.parent();
-            }
+            self.aggregate_to_folders(path, &rollup, entities.len(), &mut folder_rollups, dimension);
+            file_scores.insert(path.clone(), score);
+            all_issues.extend(issues);
         }
 
         // Phase 3: Calculate folder-level cohesion
-        let mut folder_scores: HashMap<PathBuf, FolderCohesionScore> = HashMap::new();
-
-        for (folder_path, rollup) in &folder_rollups {
-            // Count all files under this folder (recursive)
-            let files_in_folder: Vec<&FileCohesionScore> = file_scores.values()
-                .filter(|f| f.path.starts_with(folder_path))
-                .collect();
-
-            if files_in_folder.len() < self.config.rollup.min_folder_files {
-                continue;
-            }
-
-            let folder_cohesion = rollup.cohesion();
-
-            // Find file outliers within folder
-            let mut file_outliers = Vec::new();
-            let centroid = rollup.centroid();
-
-            for file_score in &files_in_folder {
-                if let Some(ref sum) = file_score.rollup_sum {
-                    let file_centroid = metrics::normalize(sum);
-                    let similarity = metrics::cosine_similarity(&file_centroid, &centroid);
-
-                    if similarity < self.config.thresholds.min_outlier_similarity {
-                        file_outliers.push(FileOutlier {
-                            path: file_score.path.strip_prefix(folder_path).unwrap_or(&file_score.path).to_path_buf(),
-                            similarity,
-                        });
-                    }
-                }
-            }
-
-            folder_scores.insert(folder_path.clone(), FolderCohesionScore {
-                path: folder_path.clone(),
-                cohesion: folder_cohesion,
-                doc_alignment: None, // TODO: README analysis
-                file_count: files_in_folder.len(),
-                outliers: file_outliers,
-            });
-        }
+        let folder_scores = self.calculate_folder_scores(&file_scores, &folder_rollups);
 
         // Calculate averages
+        let (avg_cohesion, avg_doc_alignment) = Self::calculate_averages(&file_scores);
+        let issues_count = all_issues.len();
+        let files_analyzed = file_scores.len();
+
+        info!(
+            "Cohesion analysis complete: {} files, {} folders, {} issues, avg cohesion: {:.2}",
+            files_analyzed,
+            folder_scores.len(),
+            issues_count,
+            avg_cohesion
+        );
+
+        Ok(CohesionAnalysisResults {
+            enabled: true,
+            file_scores,
+            folder_scores,
+            issues: all_issues,
+            issues_count,
+            files_analyzed,
+            average_cohesion: avg_cohesion,
+            average_doc_alignment: avg_doc_alignment,
+        })
+    }
+
+    /// Calculate average cohesion and doc alignment scores.
+    fn calculate_averages(file_scores: &HashMap<PathBuf, FileCohesionScore>) -> (f64, f64) {
         let avg_cohesion = if file_scores.is_empty() {
             1.0
         } else {
             file_scores.values().map(|f| f.cohesion).sum::<f64>() / file_scores.len() as f64
         };
 
-        let doc_scores: Vec<f64> = file_scores.values()
+        let doc_scores: Vec<f64> = file_scores
+            .values()
             .filter_map(|f| f.doc_alignment)
             .collect();
         let avg_doc_alignment = if doc_scores.is_empty() {
@@ -423,21 +315,7 @@ impl CohesionExtractor {
             doc_scores.iter().sum::<f64>() / doc_scores.len() as f64
         };
 
-        let issues_count = all_issues.len();
-
-        info!("Cohesion analysis complete: {} files, {} folders, {} issues, avg cohesion: {:.2}",
-              file_scores.len(), folder_scores.len(), issues_count, avg_cohesion);
-
-        Ok(CohesionAnalysisResults {
-            enabled: true,
-            file_scores: file_scores.clone(),
-            folder_scores,
-            issues: all_issues,
-            issues_count,
-            files_analyzed: file_scores.len(),
-            average_cohesion: avg_cohesion,
-            average_doc_alignment: avg_doc_alignment,
-        })
+        (avg_cohesion, avg_doc_alignment)
     }
 
     /// Calculate doc-code alignment for a file
@@ -466,15 +344,15 @@ impl CohesionExtractor {
 
     /// Detect language from file extension
     fn detect_language(&self, path: &Path) -> Option<String> {
-        const LANG_EXTENSIONS: &[(&str, &str)] = &[
-            ("py", "python"), ("rs", "rust"), ("js", "javascript"),
-            ("jsx", "javascript"), ("mjs", "javascript"),
-            ("ts", "typescript"), ("tsx", "typescript"), ("go", "go"),
+        const SUPPORTED_LANGUAGES: &[&str] = &[
+            "python", "rust", "javascript", "typescript", "go",
         ];
-        let ext = path.extension()?.to_str()?;
-        LANG_EXTENSIONS.iter()
-            .find(|(e, _)| *e == ext)
-            .map(|(_, lang)| lang.to_string())
+        let lang = detect_language_from_path(&path.to_string_lossy());
+        if SUPPORTED_LANGUAGES.contains(&lang.as_str()) {
+            Some(lang)
+        } else {
+            None
+        }
     }
 
     /// Create an issue for a semantic outlier entity
@@ -550,6 +428,231 @@ impl CohesionExtractor {
         }
     }
 
+    /// Phase 1: Extract entities from files and build TF-IDF corpus.
+    fn extract_entities_and_build_corpus(
+        &self,
+        file_sources: &[(PathBuf, String)],
+    ) -> (HashMap<PathBuf, Vec<extractor::CohesionEntity>>, symbols::TfIdfCalculator) {
+        let mut tfidf = symbols::TfIdfCalculator::new(self.config.symbols.clone());
+        let mut all_file_entities: HashMap<PathBuf, Vec<extractor::CohesionEntity>> = HashMap::new();
+
+        for (path, source) in file_sources {
+            let Some(lang) = self.detect_language(path) else { continue };
+            let Ok(mut entity_extractor) = extractor::CohesionEntityExtractor::new(&lang) else { continue };
+            let Ok(entities) = entity_extractor.extract_entities(source, path) else { continue };
+
+            for entity in &entities {
+                tfidf.add_document(&Self::collect_entity_symbols(entity));
+            }
+            all_file_entities.insert(path.clone(), entities);
+        }
+
+        (all_file_entities, tfidf)
+    }
+
+    /// Phase 2: Process a single file and compute its cohesion score.
+    #[allow(clippy::too_many_arguments)]
+    fn process_file_cohesion(
+        &self,
+        path: &PathBuf,
+        entities: &[extractor::CohesionEntity],
+        tfidf: &symbols::TfIdfCalculator,
+        file_sources: &[(PathBuf, String)],
+        embedding_provider: &embeddings::EmbeddingProvider,
+        dimension: usize,
+    ) -> Option<(FileCohesionScore, Vec<CohesionIssue>, metrics::RollupState)> {
+        if entities.is_empty() {
+            return None;
+        }
+
+        // Build code text for each entity using TF-IDF filtered symbols
+        let entity_texts: Vec<String> = entities
+            .iter()
+            .map(|entity| Self::build_entity_embedding_text(entity, tfidf))
+            .collect();
+
+        // Generate embeddings in batch
+        let embeddings = embedding_provider.embed_batch(&entity_texts).ok()?;
+        if embeddings.is_empty() {
+            return None;
+        }
+
+        // Calculate file cohesion
+        let cohesion = self.calculator.cohesion_score(&embeddings);
+
+        // Get module docstring embedding for doc alignment
+        let doc_alignment = file_sources
+            .iter()
+            .find(|(p, _)| p == path)
+            .and_then(|(_, source)| {
+                self.calculate_doc_alignment(path, source, &embeddings, embedding_provider)
+            });
+
+        // Find outliers and collect issues
+        let (outliers, mut issues) = self.find_file_outliers(path, entities, &embeddings);
+
+        // Generate issue for low cohesion files
+        if cohesion < self.config.thresholds.min_cohesion
+            && entities.len() >= self.config.rollup.min_file_entities
+        {
+            issues.push(Self::create_low_cohesion_issue(path, cohesion));
+        }
+
+        // Generate issue for doc mismatch
+        if let Some(alignment) = doc_alignment {
+            if alignment < self.config.thresholds.min_doc_alignment {
+                issues.push(Self::create_doc_mismatch_issue(path, alignment));
+            }
+        }
+
+        // Build rollup state for folder aggregation
+        let mut rollup = metrics::RollupState::new(dimension);
+        for emb in &embeddings {
+            rollup.add(emb);
+        }
+
+        let score = FileCohesionScore {
+            path: path.clone(),
+            cohesion,
+            doc_alignment,
+            entity_count: entities.len(),
+            outliers,
+            rollup_n: rollup.n,
+            rollup_sum: Some(rollup.sum.clone()),
+        };
+
+        Some((score, issues, rollup))
+    }
+
+    /// Find outlier entities within a file.
+    fn find_file_outliers(
+        &self,
+        path: &Path,
+        entities: &[extractor::CohesionEntity],
+        embeddings: &[Vec<f32>],
+    ) -> (Vec<EntityOutlier>, Vec<CohesionIssue>) {
+        let mut outliers = Vec::new();
+        let mut issues = Vec::new();
+
+        let Some(centroid) = self.calculator.robust_centroid(embeddings) else {
+            return (outliers, issues);
+        };
+
+        let outlier_indices = self.calculator.find_outliers(
+            embeddings,
+            &centroid,
+            self.config.thresholds.outlier_percentile,
+            self.config.thresholds.min_outlier_similarity,
+        );
+
+        for (idx, similarity) in outlier_indices {
+            if idx < entities.len() {
+                let entity = &entities[idx];
+                outliers.push(EntityOutlier {
+                    name: entity.name.clone(),
+                    kind: entity.kind.clone(),
+                    line_range: Some(entity.line_range),
+                    similarity,
+                    doc_similarity: None,
+                });
+
+                // Generate issue for significant outliers
+                if similarity < self.config.thresholds.min_outlier_similarity {
+                    issues.push(Self::create_outlier_issue(path, entity, similarity));
+                }
+            }
+        }
+
+        (outliers, issues)
+    }
+
+    /// Phase 3: Calculate folder-level cohesion scores.
+    fn calculate_folder_scores(
+        &self,
+        file_scores: &HashMap<PathBuf, FileCohesionScore>,
+        folder_rollups: &HashMap<PathBuf, metrics::RollupState>,
+    ) -> HashMap<PathBuf, FolderCohesionScore> {
+        let mut folder_scores = HashMap::new();
+
+        for (folder_path, rollup) in folder_rollups {
+            // Count all files under this folder (recursive)
+            let files_in_folder: Vec<&FileCohesionScore> = file_scores
+                .values()
+                .filter(|f| f.path.starts_with(folder_path))
+                .collect();
+
+            if files_in_folder.len() < self.config.rollup.min_folder_files {
+                continue;
+            }
+
+            let folder_cohesion = rollup.cohesion();
+            let centroid = rollup.centroid();
+
+            // Find file outliers within folder
+            let file_outliers: Vec<FileOutlier> = files_in_folder
+                .iter()
+                .filter_map(|file_score| {
+                    let sum = file_score.rollup_sum.as_ref()?;
+                    let file_centroid = metrics::normalize(sum);
+                    let similarity = metrics::cosine_similarity(&file_centroid, &centroid);
+
+                    if similarity < self.config.thresholds.min_outlier_similarity {
+                        Some(FileOutlier {
+                            path: file_score
+                                .path
+                                .strip_prefix(folder_path)
+                                .unwrap_or(&file_score.path)
+                                .to_path_buf(),
+                            similarity,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            folder_scores.insert(
+                folder_path.clone(),
+                FolderCohesionScore {
+                    path: folder_path.clone(),
+                    cohesion: folder_cohesion,
+                    doc_alignment: None, // TODO: README analysis
+                    file_count: files_in_folder.len(),
+                    outliers: file_outliers,
+                },
+            );
+        }
+
+        folder_scores
+    }
+
+    /// Aggregate file rollups to ancestor folders.
+    fn aggregate_to_folders(
+        &self,
+        path: &Path,
+        rollup: &metrics::RollupState,
+        entity_count: usize,
+        folder_rollups: &mut HashMap<PathBuf, metrics::RollupState>,
+        dimension: usize,
+    ) {
+        let weight = self.calculator.file_weight(entity_count) as f32;
+        let mut current = path.parent();
+
+        while let Some(parent) = current {
+            let folder_name = parent.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if folder_name.is_empty() || parent.as_os_str().is_empty() {
+                break;
+            }
+
+            folder_rollups
+                .entry(parent.to_path_buf())
+                .or_insert_with(|| metrics::RollupState::new(dimension))
+                .add_rollup(rollup, weight);
+
+            current = parent.parent();
+        }
+    }
+
     /// Analyze cohesion for a set of files (legacy interface - reads files)
     pub async fn analyze(
         &mut self,
@@ -572,22 +675,28 @@ impl CohesionExtractor {
     }
 }
 
+/// Default implementation for [`CohesionExtractor`].
 impl Default for CohesionExtractor {
+    /// Returns a cohesion extractor with default configuration.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// [`FeatureExtractor`] implementation for semantic cohesion analysis.
 #[async_trait]
 impl FeatureExtractor for CohesionExtractor {
+    /// Returns the extractor name ("cohesion").
     fn name(&self) -> &str {
         "cohesion"
     }
 
+    /// Returns the cohesion feature definitions.
     fn features(&self) -> &[FeatureDefinition] {
         &self.features
     }
 
+    /// Extracts cohesion features for an entity (returns defaults).
     async fn extract(
         &self,
         entity: &CodeEntity,

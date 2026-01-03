@@ -15,7 +15,8 @@ use crate::lang::common::EntityKind;
 use crate::lang::registry::{adapter_for_file, get_tree_sitter_language};
 
 use super::config::{
-    CohesionGraph, EntityNode, FileEntityHealth, FileMetrics, FileSplitPack, StructureConfig,
+    is_code_extension, CohesionGraph, EntityNode, FileEntityHealth, FileMetrics, FileSplitPack,
+    StructureConfig, SKIP_DIRECTORIES,
 };
 use super::health::HealthScorer;
 use super::PrecomputedFileMetrics;
@@ -29,22 +30,15 @@ pub use cohesion::estimate_clone_factor;
 pub use imports::{ExportedEntity, FileDependencyMetrics, ProjectImportSnapshot};
 pub use splitting::analyze_entity_names;
 
-/// Code file extensions recognized for analysis
-const CODE_EXTENSIONS: &[&str] = &[
-    "py", "pyi", "js", "mjs", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
-];
-
-/// Directories to skip during file analysis
-const SKIP_DIRECTORIES: &[&str] = &[
-    "node_modules", "__pycache__", "target", ".git", "build", "dist",
-];
-
+/// Analyzer for file-level structure metrics and splitting recommendations.
 pub struct FileAnalyzer {
     config: StructureConfig,
     import_resolver: ImportResolver,
 }
 
+/// Factory, metrics, cohesion, and splitting methods for [`FileAnalyzer`].
 impl FileAnalyzer {
+    /// Creates a new file analyzer with the given configuration.
     pub fn new(config: StructureConfig) -> Self {
         Self {
             config,
@@ -54,7 +48,7 @@ impl FileAnalyzer {
 
     /// Check if file extension indicates a code file
     pub fn is_code_file(&self, extension: &str) -> bool {
-        CODE_EXTENSIONS.contains(&extension)
+        is_code_extension(extension)
     }
 
     /// Count lines of code in a file
@@ -205,6 +199,7 @@ impl FileAnalyzer {
         self.analyze_file_for_split_internal(file_path, Some(project_root))
     }
 
+    /// Internal implementation of file split analysis.
     fn analyze_file_for_split_internal(
         &self,
         file_path: &Path,
@@ -348,6 +343,7 @@ impl FileAnalyzer {
         }
     }
 
+    /// Extracts entities from a language adapter.
     fn extract_entities_from_adapter(
         &self,
         adapter: &mut dyn crate::lang::common::LanguageAdapter,
@@ -396,6 +392,7 @@ impl FileAnalyzer {
         Ok(entities)
     }
 
+    /// Checks if an entity kind is supported for analysis.
     fn is_supported_entity_kind(&self, kind: EntityKind) -> bool {
         matches!(
             kind,
@@ -462,32 +459,40 @@ impl FileAnalyzer {
 
             if child_path.is_dir() {
                 self.collect_large_files_recursive(&child_path, files)?;
-            } else if child_path.is_file() {
-                if let Some(ext) = child_path.extension().and_then(|e| e.to_str()) {
-                    if self.is_code_file(ext) {
-                        let metadata = std::fs::metadata(&child_path)?;
-                        let size_bytes = metadata.len() as usize;
-
-                        if size_bytes >= self.config.fsfile.huge_bytes {
-                            files.push(child_path);
-                        } else {
-                            let loc = self.count_lines_of_code(&child_path)?;
-                            if loc >= self.config.fsfile.huge_loc {
-                                files.push(child_path);
-                            }
-                        }
-                    }
-                }
+            } else if self.is_large_code_file(&child_path)? {
+                files.push(child_path);
             }
         }
 
         Ok(())
     }
 
+    /// Check if a file is a large code file that should be collected.
+    fn is_large_code_file(&self, path: &Path) -> Result<bool> {
+        if !path.is_file() {
+            return Ok(false);
+        }
+
+        let ext = match path.extension().and_then(|e| e.to_str()) {
+            Some(ext) if self.is_code_file(ext) => ext,
+            _ => return Ok(false),
+        };
+        let _ = ext; // Used in the match guard above
+
+        let metadata = std::fs::metadata(path)?;
+        let size_bytes = metadata.len() as usize;
+
+        if size_bytes >= self.config.fsfile.huge_bytes {
+            return Ok(true);
+        }
+
+        let loc = self.count_lines_of_code(path)?;
+        Ok(loc >= self.config.fsfile.huge_loc)
+    }
+
     /// Check if directory should be skipped
     pub fn should_skip_directory(&self, path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
-        SKIP_DIRECTORIES.iter().any(|d| path_str.contains(d))
+        self.import_resolver.should_skip_directory(path)
     }
 
     /// Estimate clone factor from cohesion graph

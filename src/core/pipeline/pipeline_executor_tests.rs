@@ -3,12 +3,17 @@
     use crate::core::featureset::FeatureVector;
     use crate::core::pipeline::pipeline_config::{AnalysisConfig, QualityGateConfig};
     use crate::core::pipeline::pipeline_results;
+    use crate::core::pipeline::scoring_conversion::{
+        convert_to_scoring_results, create_feature_vectors_from_results, health_from_scores,
+    };
     use crate::core::pipeline::pipeline_results::{
         CoverageAnalysisResults, CoverageFileInfo, HealthMetrics, ImpactAnalysisResults,
         LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
     };
     use crate::core::pipeline::result_types::AnalysisSummary;
     use crate::core::pipeline::DefaultResultAggregator;
+    use crate::detectors::cohesion::CohesionAnalysisResults;
+    use crate::ValknutError;
     use crate::core::scoring::{Priority, ScoringResult};
     use crate::detectors::complexity::{
         ComplexityAnalysisResult, ComplexityIssue, ComplexityMetrics, ComplexitySeverity,
@@ -188,7 +193,7 @@
 
     #[test]
     fn health_from_scores_handles_empty_and_weighted_values() {
-        let empty_health = AnalysisPipeline::health_from_scores(&[]);
+        let empty_health = health_from_scores(&[]);
         assert_eq!(empty_health.overall_health_score, 100.0);
         assert_eq!(empty_health.structure_quality_score, 100.0);
 
@@ -218,7 +223,7 @@
             },
         ];
 
-        let derived = AnalysisPipeline::health_from_scores(&populated);
+        let derived = health_from_scores(&populated);
         assert!(derived.overall_health_score < 100.0);
         assert!(derived.technical_debt_ratio > 0.0);
         assert!(derived.maintainability_score <= 100.0);
@@ -228,7 +233,7 @@
     fn converts_analysis_results_into_scoring_entries() {
         let results = build_sample_results();
 
-        let scoring = AnalysisPipeline::convert_to_scoring_results(&results);
+        let scoring = convert_to_scoring_results(&results);
         assert!(scoring
             .iter()
             .any(|result| result.entity_id == "src/lib.rs:function:sample_fn"));
@@ -254,7 +259,7 @@
     #[test]
     fn creates_feature_vectors_from_analysis_results() {
         let results = build_sample_results();
-        let vectors = AnalysisPipeline::create_feature_vectors_from_results(&results);
+        let vectors = create_feature_vectors_from_results(&results);
 
         let complexity_vector = vectors
             .iter()

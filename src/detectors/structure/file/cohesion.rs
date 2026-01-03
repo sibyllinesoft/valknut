@@ -70,7 +70,9 @@ pub struct CommunityFinder<'a> {
     config: &'a StructureConfig,
 }
 
+/// Community detection methods for [`CommunityFinder`].
 impl<'a> CommunityFinder<'a> {
+    /// Creates a new community finder with the given configuration.
     pub fn new(config: &'a StructureConfig) -> Self {
         Self { config }
     }

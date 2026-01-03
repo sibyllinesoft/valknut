@@ -23,6 +23,7 @@ pub struct ExtractedSymbols {
     pub doc_summary: Option<String>,
 }
 
+/// Text building and query methods for [`ExtractedSymbols`].
 impl ExtractedSymbols {
     /// Build the code text for embedding from extracted symbols.
     pub fn build_code_text(&self, config: &SymbolConfig) -> String {
@@ -74,6 +75,7 @@ pub struct TfIdfCalculator {
     config: SymbolConfig,
 }
 
+/// Factory and TF-IDF calculation methods for [`TfIdfCalculator`].
 impl TfIdfCalculator {
     /// Create a new TF-IDF calculator.
     pub fn new(config: SymbolConfig) -> Self {

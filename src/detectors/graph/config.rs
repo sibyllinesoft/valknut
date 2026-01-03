@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::config::validate_unit_range;
+use crate::core::errors::Result;
 
 /// Graph analysis configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +25,9 @@ pub struct GraphConfig {
     pub approximation_sample_rate: f64,
 }
 
+/// Default implementation for [`GraphConfig`].
 impl Default for GraphConfig {
+    /// Returns the default graph analysis configuration.
     fn default() -> Self {
         Self {
             enable_betweenness: true,
@@ -37,15 +40,11 @@ impl Default for GraphConfig {
     }
 }
 
+/// Validation methods for [`GraphConfig`].
 impl GraphConfig {
     /// Validate graph configuration
     pub fn validate(&self) -> Result<()> {
-        if !(0.0..=1.0).contains(&self.approximation_sample_rate) {
-            return Err(ValknutError::validation(format!(
-                "approximation_sample_rate must be between 0.0 and 1.0, got {}",
-                self.approximation_sample_rate
-            )));
-        }
+        validate_unit_range(self.approximation_sample_rate, "approximation_sample_rate")?;
         Ok(())
     }
 }

@@ -11,127 +11,86 @@
 //! - Strongly connected component detection for cohesive grouping
 //! - Configurable slice sizes and overlap handling
 
-use std::collections::{HashMap, HashSet, VecDeque};
+mod module_resolver;
+mod types;
+
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use petgraph::algo::{kosaraju_scc, tarjan_scc};
+use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
-use crate::detectors::structure::config::ImportStatement;
 use crate::lang::adapter_for_file;
+
+pub use types::{CodeSlice, PartitionConfig, PartitionResult, PartitionStats};
+use module_resolver::{build_module_map, resolve_import};
+use types::FileNode;
+
+/// Helper for incrementally building a slice.
+struct SliceBuilder {
+    files: Vec<PathBuf>,
+    contents: HashMap<PathBuf, String>,
+    token_count: usize,
+}
+
+/// Factory and building methods for [`SliceBuilder`].
+impl SliceBuilder {
+    /// Creates a new empty slice builder.
+    fn new() -> Self {
+        Self {
+            files: Vec::new(),
+            contents: HashMap::new(),
+            token_count: 0,
+        }
+    }
+
+    /// Check if adding more tokens would exceed the budget.
+    fn would_exceed_budget(&self, additional_tokens: usize, budget: usize) -> bool {
+        !self.files.is_empty() && self.token_count + additional_tokens > budget
+    }
+
+    /// Add a file to the current slice being built.
+    fn add_file(&mut self, path: &PathBuf, tokens: usize, project_path: &Path) {
+        let full_path = project_path.join(path);
+        if let Ok(content) = FileReader::read_to_string(&full_path) {
+            self.contents.insert(path.clone(), content);
+            self.token_count += tokens;
+            self.files.push(path.clone());
+        }
+    }
+
+    /// Finalize and return the current slice, resetting the builder.
+    fn finalize(&mut self, id: usize) -> Option<CodeSlice> {
+        if self.files.is_empty() {
+            return None;
+        }
+
+        let slice = CodeSlice {
+            id,
+            files: std::mem::take(&mut self.files),
+            contents: std::mem::take(&mut self.contents),
+            token_count: self.token_count,
+            bridge_dependencies: vec![],
+            primary_module: None,
+        };
+        self.token_count = 0;
+        Some(slice)
+    }
+}
 
 #[cfg(test)]
 mod tests;
-
-/// Configuration for codebase partitioning
-#[derive(Debug, Clone)]
-pub struct PartitionConfig {
-    /// Maximum tokens per slice (default: 200k)
-    pub slice_token_budget: usize,
-    /// Minimum files per slice (avoid tiny slices)
-    pub min_files_per_slice: usize,
-    /// Maximum files per slice (avoid giant slices)
-    pub max_files_per_slice: usize,
-    /// Whether to include shared dependencies in multiple slices
-    pub allow_overlap: bool,
-    /// Overlap budget as fraction of slice_token_budget (0.0-0.3)
-    pub overlap_fraction: f64,
-}
-
-impl Default for PartitionConfig {
-    fn default() -> Self {
-        Self {
-            slice_token_budget: 200_000,
-            min_files_per_slice: 3,
-            max_files_per_slice: 100,
-            allow_overlap: true,
-            overlap_fraction: 0.15,
-        }
-    }
-}
-
-impl PartitionConfig {
-    pub fn with_token_budget(mut self, budget: usize) -> Self {
-        self.slice_token_budget = budget;
-        self
-    }
-}
-
-/// A coherent slice of the codebase
-#[derive(Debug, Clone)]
-pub struct CodeSlice {
-    /// Unique slice identifier
-    pub id: usize,
-    /// Files in this slice (paths relative to project root)
-    pub files: Vec<PathBuf>,
-    /// File contents mapped by path
-    pub contents: HashMap<PathBuf, String>,
-    /// Estimated token count for this slice
-    pub token_count: usize,
-    /// Files that are "bridge" dependencies (imported by this slice but belong to another)
-    pub bridge_dependencies: Vec<PathBuf>,
-    /// Primary module/directory this slice represents (for naming)
-    pub primary_module: Option<String>,
-}
-
-impl CodeSlice {
-    /// Get all file paths including bridge dependencies
-    pub fn all_files(&self) -> impl Iterator<Item = &PathBuf> {
-        self.files.iter().chain(self.bridge_dependencies.iter())
-    }
-
-    /// Check if this slice contains a specific file
-    pub fn contains(&self, path: &Path) -> bool {
-        self.files.iter().any(|f| f == path) || self.bridge_dependencies.iter().any(|f| f == path)
-    }
-}
-
-/// Result of partitioning a codebase
-#[derive(Debug)]
-pub struct PartitionResult {
-    /// The computed slices
-    pub slices: Vec<CodeSlice>,
-    /// Files that couldn't be assigned to any slice
-    pub unassigned: Vec<PathBuf>,
-    /// Import graph statistics
-    pub stats: PartitionStats,
-}
-
-/// Statistics about the partitioning
-#[derive(Debug, Clone)]
-pub struct PartitionStats {
-    /// Total files processed
-    pub total_files: usize,
-    /// Total tokens across all files
-    pub total_tokens: usize,
-    /// Number of slices created
-    pub slice_count: usize,
-    /// Number of strongly connected components found
-    pub scc_count: usize,
-    /// Largest SCC size (files)
-    pub largest_scc: usize,
-    /// Number of cross-slice imports
-    pub cross_slice_imports: usize,
-}
-
-/// Node in the file import graph
-#[derive(Debug, Clone)]
-struct FileNode {
-    path: PathBuf,
-    tokens: usize,
-    imports: Vec<String>,
-}
 
 /// Import graph partitioner
 pub struct ImportGraphPartitioner {
     config: PartitionConfig,
 }
 
+/// Factory and partitioning methods for [`ImportGraphPartitioner`].
 impl ImportGraphPartitioner {
+    /// Creates a new partitioner with the given configuration.
     pub fn new(config: PartitionConfig) -> Self {
         Self { config }
     }
@@ -139,48 +98,21 @@ impl ImportGraphPartitioner {
     /// Partition a codebase into coherent slices
     pub fn partition(&self, project_path: &Path, files: &[PathBuf]) -> Result<PartitionResult> {
         if files.is_empty() {
-            return Ok(PartitionResult {
-                slices: vec![],
-                unassigned: vec![],
-                stats: PartitionStats {
-                    total_files: 0,
-                    total_tokens: 0,
-                    slice_count: 0,
-                    scc_count: 0,
-                    largest_scc: 0,
-                    cross_slice_imports: 0,
-                },
-            });
+            return Ok(Self::empty_result());
         }
 
-        // Build file nodes with import information
         let file_nodes = self.build_file_nodes(project_path, files)?;
         if file_nodes.is_empty() {
-            return Ok(PartitionResult {
-                slices: vec![],
-                unassigned: files.to_vec(),
-                stats: PartitionStats {
-                    total_files: files.len(),
-                    total_tokens: 0,
-                    slice_count: 0,
-                    scc_count: 0,
-                    largest_scc: 0,
-                    cross_slice_imports: 0,
-                },
-            });
+            return Ok(Self::unassigned_result(files));
         }
 
         let total_tokens: usize = file_nodes.values().map(|n| n.tokens).sum();
-
-        // Build import graph
         let (graph, index_map, reverse_map) = self.build_import_graph(&file_nodes, project_path);
 
-        // Find strongly connected components
         let sccs = tarjan_scc(&graph);
         let scc_count = sccs.len();
         let largest_scc = sccs.iter().map(|scc| scc.len()).max().unwrap_or(0);
 
-        // Partition based on SCCs and token budget
         let (slices, unassigned) = self.partition_by_budget(
             &file_nodes,
             &graph,
@@ -190,7 +122,6 @@ impl ImportGraphPartitioner {
             project_path,
         )?;
 
-        // Count cross-slice imports
         let cross_slice_imports = self.count_cross_slice_imports(&slices, &file_nodes);
 
         Ok(PartitionResult {
@@ -205,6 +136,38 @@ impl ImportGraphPartitioner {
                 cross_slice_imports,
             },
         })
+    }
+
+    /// Create an empty partition result.
+    fn empty_result() -> PartitionResult {
+        PartitionResult {
+            slices: vec![],
+            unassigned: vec![],
+            stats: PartitionStats {
+                total_files: 0,
+                total_tokens: 0,
+                slice_count: 0,
+                scc_count: 0,
+                largest_scc: 0,
+                cross_slice_imports: 0,
+            },
+        }
+    }
+
+    /// Create a result where all files are unassigned.
+    fn unassigned_result(files: &[PathBuf]) -> PartitionResult {
+        PartitionResult {
+            slices: vec![],
+            unassigned: files.to_vec(),
+            stats: PartitionStats {
+                total_files: files.len(),
+                total_tokens: 0,
+                slice_count: 0,
+                scc_count: 0,
+                largest_scc: 0,
+                cross_slice_imports: 0,
+            },
+        }
     }
 
     /// Build file nodes with content and import information
@@ -289,7 +252,7 @@ impl ImportGraphPartitioner {
         }
 
         // Build module-to-file mapping for import resolution
-        let module_map = self.build_module_map(nodes, project_path);
+        let module_map = build_module_map(nodes);
 
         // Add edges for imports
         for (path, node) in nodes {
@@ -298,227 +261,17 @@ impl ImportGraphPartitioner {
             };
 
             for import in &node.imports {
-                // Try to resolve import to a file in our codebase
-                if let Some(target_path) = self.resolve_import(import, path, &module_map) {
-                    if let Some(&to_idx) = index_map.get(&target_path) {
-                        if from_idx != to_idx {
-                            graph.add_edge(from_idx, to_idx, ());
-                        }
-                    }
+                let Some(to_idx) = resolve_import(import, path, &module_map)
+                    .and_then(|target| index_map.get(&target).copied()) else {
+                    continue;
+                };
+                if from_idx != to_idx {
+                    graph.add_edge(from_idx, to_idx, ());
                 }
             }
         }
 
         (graph, index_map, reverse_map)
-    }
-
-    /// Build mapping from module names to file paths
-    /// Creates multiple keys for each file to enable flexible resolution
-    fn build_module_map(
-        &self,
-        nodes: &HashMap<PathBuf, FileNode>,
-        _project_path: &Path,
-    ) -> HashMap<String, PathBuf> {
-        let mut map = HashMap::new();
-
-        for path in nodes.keys() {
-            let path_str = path.to_string_lossy();
-
-            // Get the path without extension
-            let without_ext = self.strip_extension(&path_str);
-
-            // For Rust: handle mod.rs specially
-            // e.g., "src/core/pipeline/mod.rs" -> "core::pipeline" and "core.pipeline"
-            if path_str.ends_with("mod.rs") {
-                if let Some(parent) = path.parent() {
-                    let parent_str = parent.to_string_lossy();
-                    let rust_module = self.path_to_rust_module(&parent_str);
-                    let dot_module = rust_module.replace("::", ".");
-                    map.insert(rust_module.clone(), path.clone());
-                    map.insert(dot_module.clone(), path.clone());
-                    // Also add crate:: prefixed version
-                    map.insert(format!("crate::{}", rust_module), path.clone());
-                    map.insert(format!("crate.{}", dot_module), path.clone());
-                }
-            }
-
-            // Standard module path: "src/core/config.rs" -> "core::config", "core.config", "config"
-            let rust_module = self.path_to_rust_module(&without_ext);
-            let dot_module = rust_module.replace("::", ".");
-            map.insert(rust_module.clone(), path.clone());
-            map.insert(dot_module.clone(), path.clone());
-
-            // Add crate:: prefixed version
-            map.insert(format!("crate::{}", rust_module), path.clone());
-            map.insert(format!("crate.{}", dot_module), path.clone());
-
-            // Add just the file stem for simple resolution
-            if let Some(stem) = path.file_stem() {
-                let stem_str = stem.to_string_lossy().to_string();
-                if stem_str != "mod" && stem_str != "lib" && stem_str != "main" {
-                    map.insert(stem_str, path.clone());
-                }
-            }
-
-            // For TypeScript/JavaScript: handle relative paths
-            // e.g., "./foo" or "../bar"
-            if path_str.ends_with(".ts")
-                || path_str.ends_with(".tsx")
-                || path_str.ends_with(".js")
-                || path_str.ends_with(".jsx")
-            {
-                // Add the path without src prefix
-                let no_src = without_ext
-                    .strip_prefix("src/")
-                    .unwrap_or(&without_ext);
-                map.insert(format!("./{}", no_src), path.clone());
-            }
-
-            // For Python: handle dot-separated module paths
-            if path_str.ends_with(".py") {
-                let py_module = without_ext
-                    .replace('/', ".")
-                    .replace('\\', ".");
-                map.insert(py_module, path.clone());
-            }
-
-            // For Go: the import path is typically the full package path
-            if path_str.ends_with(".go") {
-                // Just use the directory as the package
-                if let Some(parent) = path.parent() {
-                    let parent_str = parent.to_string_lossy().to_string();
-                    map.insert(parent_str, path.clone());
-                }
-            }
-        }
-
-        map
-    }
-
-    /// Strip file extension
-    fn strip_extension<'a>(&self, path: &'a str) -> String {
-        let extensions = [".rs", ".py", ".js", ".ts", ".tsx", ".jsx", ".go"];
-        for ext in extensions {
-            if let Some(stripped) = path.strip_suffix(ext) {
-                return stripped.to_string();
-            }
-        }
-        path.to_string()
-    }
-
-    /// Convert a file path to a Rust module path
-    /// e.g., "src/core/config" -> "core::config"
-    fn path_to_rust_module(&self, path: &str) -> String {
-        path.strip_prefix("src/")
-            .or_else(|| path.strip_prefix("src\\"))
-            .unwrap_or(path)
-            .replace(['/', '\\'], "::")
-    }
-
-    /// Try to resolve an import string to a file path
-    fn resolve_import(
-        &self,
-        import: &str,
-        from_file: &Path,
-        module_map: &HashMap<String, PathBuf>,
-    ) -> Option<PathBuf> {
-        // Handle Rust special prefixes
-        let normalized = if import.starts_with("crate::") {
-            // crate:: refers to the current crate root
-            import.to_string()
-        } else if import.starts_with("super::") {
-            // super:: refers to parent module - resolve relative to from_file
-            if let Some(parent) = from_file.parent() {
-                if let Some(grandparent) = parent.parent() {
-                    let rest = import.strip_prefix("super::").unwrap();
-                    let resolved = format!(
-                        "{}::{}",
-                        self.path_to_rust_module(&grandparent.to_string_lossy()),
-                        rest
-                    );
-                    resolved
-                } else {
-                    import.to_string()
-                }
-            } else {
-                import.to_string()
-            }
-        } else if import.starts_with("self::") {
-            // self:: refers to current module
-            if let Some(parent) = from_file.parent() {
-                let rest = import.strip_prefix("self::").unwrap();
-                format!(
-                    "{}::{}",
-                    self.path_to_rust_module(&parent.to_string_lossy()),
-                    rest
-                )
-            } else {
-                import.to_string()
-            }
-        } else {
-            import.to_string()
-        };
-
-        // Normalize separators
-        let normalized = normalized
-            .replace("::", ".")
-            .replace('/', ".")
-            .trim_start_matches('.')
-            .to_string();
-
-        // Try exact match first
-        if let Some(path) = module_map.get(&normalized) {
-            return Some(path.clone());
-        }
-
-        // Try with :: separator
-        let rust_style = normalized.replace('.', "::");
-        if let Some(path) = module_map.get(&rust_style) {
-            return Some(path.clone());
-        }
-
-        // Try progressively shorter prefixes
-        let parts: Vec<&str> = normalized.split('.').collect();
-        for end in (1..=parts.len()).rev() {
-            let prefix = parts[..end].join(".");
-            if let Some(path) = module_map.get(&prefix) {
-                return Some(path.clone());
-            }
-            let rust_prefix = parts[..end].join("::");
-            if let Some(path) = module_map.get(&rust_prefix) {
-                return Some(path.clone());
-            }
-        }
-
-        // For mod declarations in Rust, try resolving relative to the file
-        // e.g., `mod foo;` in `src/lib.rs` -> `src/foo.rs` or `src/foo/mod.rs`
-        if parts.len() == 1 {
-            if let Some(parent) = from_file.parent() {
-                let parent_str = parent.to_string_lossy();
-                let mod_name = parts[0];
-
-                // Try sibling file: parent/mod_name.rs
-                let sibling_path = format!("{}.{}", parent_str, mod_name);
-                if let Some(path) = module_map.get(&sibling_path) {
-                    return Some(path.clone());
-                }
-
-                // Try nested module: parent/mod_name/mod.rs -> mapped as parent::mod_name
-                let nested_path = format!("{}::{}", self.path_to_rust_module(&parent_str), mod_name);
-                if let Some(path) = module_map.get(&nested_path) {
-                    return Some(path.clone());
-                }
-            }
-        }
-
-        // Try just the last component as a fallback
-        if let Some(last) = parts.last() {
-            if let Some(path) = module_map.get(*last) {
-                return Some(path.clone());
-            }
-        }
-
-        None
     }
 
     /// Partition files into slices respecting token budget
@@ -586,12 +339,8 @@ impl ImportGraphPartitioner {
                 // Create new slice(s) for this SCC
                 let new_slices =
                     self.create_slices_for_files(&scc_paths, nodes, project_path, &mut slice_id)?;
-                for slice in new_slices {
-                    for path in &slice.files {
-                        assigned.insert(path.clone());
-                    }
-                    slices.push(slice);
-                }
+                assigned.extend(new_slices.iter().flat_map(|s| s.files.iter().cloned()));
+                slices.extend(new_slices);
             }
         }
 
@@ -627,16 +376,26 @@ impl ImportGraphPartitioner {
         assigned: &mut HashSet<PathBuf>,
     ) {
         for path in paths {
-            if let Some(node) = nodes.get(path) {
-                let full_path = project_path.join(path);
-                if let Ok(content) = FileReader::read_to_string(&full_path) {
-                    slice.contents.insert(path.clone(), content);
-                    slice.token_count += node.tokens;
-                }
-                slice.files.push(path.clone());
-                assigned.insert(path.clone());
-            }
+            let Some(node) = nodes.get(path) else { continue };
+            self.add_file_to_slice(path, node, project_path, slice);
+            assigned.insert(path.clone());
         }
+    }
+
+    /// Add a single file to a slice
+    fn add_file_to_slice(
+        &self,
+        path: &PathBuf,
+        node: &FileNode,
+        project_path: &Path,
+        slice: &mut CodeSlice,
+    ) {
+        let full_path = project_path.join(path);
+        if let Ok(content) = FileReader::read_to_string(&full_path) {
+            slice.contents.insert(path.clone(), content);
+            slice.token_count += node.tokens;
+        }
+        slice.files.push(path.clone());
     }
 
     /// Check if an SCC can fit in a slice based on token budget and file count limits.
@@ -832,65 +591,41 @@ impl ImportGraphPartitioner {
         slice_id: &mut usize,
     ) -> Result<Vec<CodeSlice>> {
         let mut slices = Vec::new();
-        let mut current_files = Vec::new();
-        let mut current_contents = HashMap::new();
-        let mut current_tokens = 0;
-
-        // Sort files by directory for better grouping
-        let mut sorted_files = files.to_vec();
-        sorted_files.sort_by(|a, b| {
-            let a_dir = a.parent().map(|p| p.to_string_lossy().to_string());
-            let b_dir = b.parent().map(|p| p.to_string_lossy().to_string());
-            a_dir.cmp(&b_dir).then_with(|| a.cmp(b))
-        });
+        let mut builder = SliceBuilder::new();
+        let sorted_files = Self::sort_files_by_directory(files);
 
         for path in sorted_files {
             let Some(node) = nodes.get(&path) else {
                 continue;
             };
 
-            // Check if adding this file would exceed budget
-            if current_tokens + node.tokens > self.config.slice_token_budget
-                && !current_files.is_empty()
-            {
-                // Finalize current slice
-                slices.push(CodeSlice {
-                    id: *slice_id,
-                    files: current_files.clone(),
-                    contents: current_contents.clone(),
-                    token_count: current_tokens,
-                    bridge_dependencies: vec![],
-                    primary_module: None,
-                });
-                *slice_id += 1;
-                current_files.clear();
-                current_contents.clear();
-                current_tokens = 0;
+            if builder.would_exceed_budget(node.tokens, self.config.slice_token_budget) {
+                if let Some(slice) = builder.finalize(*slice_id) {
+                    slices.push(slice);
+                    *slice_id += 1;
+                }
             }
 
-            // Add file to current slice
-            let full_path = project_path.join(&path);
-            if let Ok(content) = FileReader::read_to_string(&full_path) {
-                current_contents.insert(path.clone(), content);
-                current_tokens += node.tokens;
-                current_files.push(path);
-            }
+            builder.add_file(&path, node.tokens, project_path);
         }
 
-        // Don't forget the last slice
-        if !current_files.is_empty() {
-            slices.push(CodeSlice {
-                id: *slice_id,
-                files: current_files,
-                contents: current_contents,
-                token_count: current_tokens,
-                bridge_dependencies: vec![],
-                primary_module: None,
-            });
+        if let Some(slice) = builder.finalize(*slice_id) {
+            slices.push(slice);
             *slice_id += 1;
         }
 
         Ok(slices)
+    }
+
+    /// Sort files by directory for better grouping.
+    fn sort_files_by_directory(files: &[PathBuf]) -> Vec<PathBuf> {
+        let mut sorted = files.to_vec();
+        sorted.sort_by(|a, b| {
+            let a_dir = a.parent().map(|p| p.to_string_lossy().to_string());
+            let b_dir = b.parent().map(|p| p.to_string_lossy().to_string());
+            a_dir.cmp(&b_dir).then_with(|| a.cmp(b))
+        });
+        sorted
     }
 
     /// Determine the primary module name for a slice
@@ -952,7 +687,9 @@ impl ImportGraphPartitioner {
     }
 }
 
+/// Default implementation for [`ImportGraphPartitioner`].
 impl Default for ImportGraphPartitioner {
+    /// Returns a partitioner with default configuration.
     fn default() -> Self {
         Self::new(PartitionConfig::default())
     }

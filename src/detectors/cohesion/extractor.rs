@@ -38,6 +38,7 @@ pub struct CohesionEntityExtractor {
     language_key: String,
 }
 
+/// Entity extraction methods for [`CohesionEntityExtractor`].
 impl CohesionEntityExtractor {
     /// Create a new extractor for the given language.
     pub fn new(language_key: &str) -> Result<Self> {
@@ -78,6 +79,7 @@ impl CohesionEntityExtractor {
         self.find_module_docstring(tree.root_node(), source)
     }
 
+    /// Recursively extracts entities from AST nodes.
     fn extract_recursive(
         &self,
         node: Node,
@@ -133,6 +135,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Classifies a Python AST node as an entity type.
     fn classify_python_entity(&self, node: Node, source: &str) -> Option<(String, String)> {
         match node.kind() {
             "function_definition" => {
@@ -154,6 +157,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Classifies a JavaScript/TypeScript AST node as an entity type.
     fn classify_js_entity(&self, node: Node, source: &str) -> Option<(String, String)> {
         match node.kind() {
             "function_declaration" => {
@@ -170,19 +174,14 @@ impl CohesionEntityExtractor {
             }
             "arrow_function" => {
                 // Try to get name from parent variable declarator
-                if let Some(parent) = node.parent() {
-                    if parent.kind() == "variable_declarator" {
-                        if let Some(name) = self.get_child_text(parent, "name", source) {
-                            return Some(("function".to_string(), name));
-                        }
-                    }
-                }
-                None
+                self.get_arrow_function_name(node, source)
+                    .map(|name| ("function".to_string(), name))
             }
             _ => None,
         }
     }
 
+    /// Classifies a Rust AST node as an entity type.
     fn classify_rust_entity(&self, node: Node, source: &str) -> Option<(String, String)> {
         match node.kind() {
             "function_item" => {
@@ -211,6 +210,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Classifies a Go AST node as an entity type.
     fn classify_go_entity(&self, node: Node, source: &str) -> Option<(String, String)> {
         match node.kind() {
             "function_declaration" => {
@@ -222,16 +222,8 @@ impl CohesionEntityExtractor {
                 Some(("method".to_string(), name))
             }
             "type_declaration" => {
-                // Get the type spec
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "type_spec" {
-                        if let Some(name) = self.get_child_text(child, "name", source) {
-                            return Some(("type".to_string(), name));
-                        }
-                    }
-                }
-                None
+                self.get_go_type_spec_name(node, source)
+                    .map(|name| ("type".to_string(), name))
             }
             _ => None,
         }
@@ -248,6 +240,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Extracts docstring from a Python function or class body.
     fn extract_python_docstring(&self, node: Node, source: &str) -> Option<String> {
         // Python docstrings are the first statement in a function/class body
         let body = node.child_by_field_name("body")?;
@@ -270,6 +263,7 @@ impl CohesionEntityExtractor {
         None
     }
 
+    /// Extracts JSDoc comment preceding a JavaScript node.
     fn extract_js_docstring(&self, node: Node, source: &str) -> Option<String> {
         // Look for JSDoc comment before the node
         if let Some(prev) = node.prev_sibling() {
@@ -283,6 +277,7 @@ impl CohesionEntityExtractor {
         None
     }
 
+    /// Extracts doc comments preceding a Rust item.
     fn extract_rust_docstring(&self, node: Node, source: &str) -> Option<String> {
         // Rust doc comments are siblings before the item
         let mut docs = Vec::new();
@@ -318,6 +313,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Extracts doc comments preceding a Go declaration.
     fn extract_go_docstring(&self, node: Node, source: &str) -> Option<String> {
         // Go doc comments are line comments before the declaration
         let mut docs = Vec::new();
@@ -343,47 +339,47 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Finds module-level docstring based on language conventions.
     fn find_module_docstring(&self, root: Node, source: &str) -> Option<String> {
         match self.language_key.as_str() {
-            "python" => {
-                // First string in module
-                let mut cursor = root.walk();
-                for child in root.children(&mut cursor) {
-                    if child.kind() == "expression_statement" {
-                        let mut inner_cursor = child.walk();
-                        for inner in child.children(&mut inner_cursor) {
-                            if inner.kind() == "string" {
-                                return Some(self.strip_string_quotes(&self.node_text(inner, source)));
-                            }
-                        }
-                    }
-                    // Only check first statement
-                    break;
-                }
-            }
-            "rust" => {
-                // //! comments at start
-                let mut cursor = root.walk();
-                let mut docs = Vec::new();
-                for child in root.children(&mut cursor) {
-                    if child.kind() == "line_comment" {
-                        let text = self.node_text(child, source);
-                        if text.starts_with("//!") {
-                            docs.push(text[3..].trim().to_string());
-                        } else {
-                            break;
-                        }
-                    } else if child.kind() != "attribute_item" {
-                        break;
-                    }
-                }
-                if !docs.is_empty() {
-                    return Some(docs.join(" "));
-                }
-            }
-            _ => {}
+            "python" => self.find_python_module_docstring(root, source),
+            "rust" => self.find_rust_module_docstring(root, source),
+            _ => None,
         }
-        None
+    }
+
+    /// Find Python module docstring (first string in module).
+    fn find_python_module_docstring(&self, root: Node, source: &str) -> Option<String> {
+        let mut cursor = root.walk();
+        let first_child = root.children(&mut cursor).next()?;
+        if first_child.kind() != "expression_statement" {
+            return None;
+        }
+        let mut inner_cursor = first_child.walk();
+        let string_node = first_child
+            .children(&mut inner_cursor)
+            .find(|n| n.kind() == "string")?;
+        Some(self.strip_string_quotes(&self.node_text(string_node, source)))
+    }
+
+    /// Find Rust module docstring (//! comments at start).
+    fn find_rust_module_docstring(&self, root: Node, source: &str) -> Option<String> {
+        let mut cursor = root.walk();
+        let docs: Vec<String> = root
+            .children(&mut cursor)
+            .take_while(|child| {
+                child.kind() == "line_comment" || child.kind() == "attribute_item"
+            })
+            .filter_map(|child| {
+                if child.kind() != "line_comment" {
+                    return None;
+                }
+                let text = self.node_text(child, source);
+                text.starts_with("//!").then(|| text[3..].trim().to_string())
+            })
+            .collect();
+
+        (!docs.is_empty()).then(|| docs.join(" "))
     }
 
     /// Extract symbols from an entity for embedding.
@@ -412,49 +408,33 @@ impl CohesionEntityExtractor {
     fn extract_signature_tokens(&self, node: Node, source: &str) -> Vec<String> {
         let mut tokens = Vec::new();
 
-        match self.language_key.as_str() {
-            "python" => {
-                if let Some(params) = node.child_by_field_name("parameters") {
-                    self.collect_identifiers(params, source, &mut tokens);
-                }
-                if let Some(ret) = node.child_by_field_name("return_type") {
-                    self.collect_identifiers(ret, source, &mut tokens);
-                }
-            }
-            "rust" => {
-                if let Some(params) = node.child_by_field_name("parameters") {
-                    self.collect_identifiers(params, source, &mut tokens);
-                }
-                if let Some(ret) = node.child_by_field_name("return_type") {
-                    self.collect_identifiers(ret, source, &mut tokens);
-                }
-            }
-            "javascript" | "typescript" => {
-                if let Some(params) = node.child_by_field_name("parameters") {
-                    self.collect_identifiers(params, source, &mut tokens);
-                }
-                // TypeScript return type
-                if let Some(ret) = node.child_by_field_name("return_type") {
-                    self.collect_identifiers(ret, source, &mut tokens);
-                }
-            }
-            "go" => {
-                if let Some(params) = node.child_by_field_name("parameters") {
-                    self.collect_identifiers(params, source, &mut tokens);
-                }
-                if let Some(result) = node.child_by_field_name("result") {
-                    self.collect_identifiers(result, source, &mut tokens);
-                }
-            }
-            _ => {}
-        }
+        let (params_field, return_field) = match self.language_key.as_str() {
+            "go" => ("parameters", "result"),
+            "python" | "rust" | "javascript" | "typescript" => ("parameters", "return_type"),
+            _ => return Vec::new(),
+        };
 
-        // Filter and tokenize
+        self.collect_field_identifiers(node, params_field, source, &mut tokens);
+        self.collect_field_identifiers(node, return_field, source, &mut tokens);
+
         tokens
             .into_iter()
             .flat_map(|t| tokenize_name(&t))
             .filter(|t| !is_stop_token(t))
             .collect()
+    }
+
+    /// Collect identifiers from a named field of a node.
+    fn collect_field_identifiers(
+        &self,
+        node: Node,
+        field: &str,
+        source: &str,
+        tokens: &mut Vec<String>,
+    ) {
+        if let Some(child) = node.child_by_field_name(field) {
+            self.collect_identifiers(child, source, tokens);
+        }
     }
 
     /// Extract referenced symbols (calls, types, identifiers).
@@ -469,79 +449,96 @@ impl CohesionEntityExtractor {
             .collect()
     }
 
+    /// Recursively collects referenced symbols from AST nodes.
     fn collect_referenced_symbols_recursive(
         &self,
         node: Node,
         source: &str,
         symbols: &mut HashSet<String>,
     ) {
-        let kind = node.kind();
+        self.extract_symbol_from_node(node, source, symbols);
 
-        // Collect based on node type
-        match kind {
-            // Function/method calls
-            "call" | "call_expression" => {
-                if let Some(func) = node.child_by_field_name("function") {
-                    let text = self.node_text(func, source);
-                    // Handle method calls like obj.method
-                    if let Some(method) = text.split('.').last() {
-                        symbols.insert(method.to_string());
-                    } else {
-                        symbols.insert(text);
-                    }
-                }
-            }
-            // Type references
-            "type_identifier" | "type" | "primitive_type" | "generic_type" => {
-                let text = self.node_text(node, source);
-                symbols.insert(text);
-            }
-            // Identifiers (but filter out definitions)
-            "identifier" => {
-                // Check if this is a reference, not a definition
-                if let Some(parent) = node.parent() {
-                    let parent_kind = parent.kind();
-                    // Skip if it's a definition
-                    if !matches!(
-                        parent_kind,
-                        "function_definition"
-                            | "function_declaration"
-                            | "function_item"
-                            | "class_definition"
-                            | "class_declaration"
-                            | "struct_item"
-                            | "enum_item"
-                            | "parameter"
-                            | "formal_parameters"
-                    ) {
-                        let text = self.node_text(node, source);
-                        if text.len() > 1 {
-                            // Skip single-char identifiers
-                            symbols.insert(text);
-                        }
-                    }
-                }
-            }
-            // Attribute access
-            "attribute" | "member_expression" | "field_expression" => {
-                if let Some(attr) = node.child_by_field_name("attribute")
-                    .or_else(|| node.child_by_field_name("property"))
-                    .or_else(|| node.child_by_field_name("field"))
-                {
-                    let text = self.node_text(attr, source);
-                    symbols.insert(text);
-                }
-            }
-            _ => {}
-        }
-
-        // Recurse
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             self.collect_referenced_symbols_recursive(child, source, symbols);
         }
     }
 
+    /// Extract a symbol from a single node based on its type.
+    fn extract_symbol_from_node(
+        &self,
+        node: Node,
+        source: &str,
+        symbols: &mut HashSet<String>,
+    ) {
+        match node.kind() {
+            "call" | "call_expression" => self.extract_call_symbol(node, source, symbols),
+            "type_identifier" | "type" | "primitive_type" | "generic_type" => {
+                symbols.insert(self.node_text(node, source));
+            }
+            "identifier" => self.extract_identifier_symbol(node, source, symbols),
+            "attribute" | "member_expression" | "field_expression" => {
+                self.extract_attribute_symbol(node, source, symbols);
+            }
+            _ => {}
+        }
+    }
+
+    /// Extract symbol from a call expression.
+    fn extract_call_symbol(&self, node: Node, source: &str, symbols: &mut HashSet<String>) {
+        let Some(func) = node.child_by_field_name("function") else {
+            return;
+        };
+        let text = self.node_text(func, source);
+        let symbol = text.split('.').last().unwrap_or(&text);
+        symbols.insert(symbol.to_string());
+    }
+
+    /// Extract symbol from an identifier (filtering out definitions).
+    fn extract_identifier_symbol(&self, node: Node, source: &str, symbols: &mut HashSet<String>) {
+        let Some(parent) = node.parent() else {
+            return;
+        };
+
+        if self.is_definition_context(parent.kind()) {
+            return;
+        }
+
+        let text = self.node_text(node, source);
+        if text.len() > 1 {
+            symbols.insert(text);
+        }
+    }
+
+    /// Check if a parent node kind represents a definition context.
+    fn is_definition_context(&self, parent_kind: &str) -> bool {
+        matches!(
+            parent_kind,
+            "function_definition"
+                | "function_declaration"
+                | "function_item"
+                | "class_definition"
+                | "class_declaration"
+                | "struct_item"
+                | "enum_item"
+                | "parameter"
+                | "formal_parameters"
+        )
+    }
+
+    /// Extract symbol from an attribute/member/field expression.
+    fn extract_attribute_symbol(&self, node: Node, source: &str, symbols: &mut HashSet<String>) {
+        let attr = node
+            .child_by_field_name("attribute")
+            .or_else(|| node.child_by_field_name("property"))
+            .or_else(|| node.child_by_field_name("field"));
+
+        if let Some(attr_node) = attr {
+            symbols.insert(self.node_text(attr_node, source));
+        }
+    }
+
+    /// Collects all identifier tokens from a node subtree.
     fn collect_identifiers(&self, node: Node, source: &str, tokens: &mut Vec<String>) {
         if node.kind() == "identifier" || node.kind() == "type_identifier" {
             tokens.push(self.node_text(node, source));
@@ -553,15 +550,38 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Get the name of an arrow function from its parent variable declarator
+    fn get_arrow_function_name(&self, node: Node, source: &str) -> Option<String> {
+        let parent = node.parent()?;
+        if parent.kind() != "variable_declarator" {
+            return None;
+        }
+        self.get_child_text(parent, "name", source)
+    }
+
+    /// Get the type name from a Go type_spec node
+    fn get_go_type_spec_name(&self, node: Node, source: &str) -> Option<String> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "type_spec" {
+                return self.get_child_text(child, "name", source);
+            }
+        }
+        None
+    }
+
+    /// Gets the text content of a named child field.
     fn get_child_text(&self, node: Node, field: &str, source: &str) -> Option<String> {
         node.child_by_field_name(field)
             .map(|n| self.node_text(n, source))
     }
 
+    /// Extracts the source text covered by a node.
     fn node_text(&self, node: Node, source: &str) -> String {
         source[node.byte_range()].to_string()
     }
 
+    /// Strips quote characters from a string literal.
     fn strip_string_quotes(&self, s: &str) -> String {
         let s = s.trim();
         if s.starts_with("\"\"\"") || s.starts_with("'''") {
@@ -578,6 +598,7 @@ impl CohesionEntityExtractor {
         }
     }
 
+    /// Cleans JSDoc comment by removing delimiters and annotations.
     fn clean_jsdoc(&self, s: &str) -> String {
         s.trim_start_matches("/**")
             .trim_end_matches("*/")
@@ -590,6 +611,7 @@ impl CohesionEntityExtractor {
             .to_string()
     }
 
+    /// Cleans a block comment by removing delimiters.
     fn clean_block_comment(&self, s: &str) -> String {
         s.trim_start_matches("/**")
             .trim_start_matches("/*!")

@@ -1,4 +1,5 @@
 use super::*;
+use super::module_resolver::path_to_rust_module;
 use std::fs;
 use tempfile::TempDir;
 
@@ -122,21 +123,13 @@ fn test_code_slice_contains() {
 
 #[test]
 fn test_path_to_rust_module() {
-    let partitioner = ImportGraphPartitioner::default();
-
     // Test Rust module path conversion
+    assert_eq!(path_to_rust_module("src/core/config"), "core::config");
     assert_eq!(
-        partitioner.path_to_rust_module("src/core/config"),
-        "core::config"
-    );
-    assert_eq!(
-        partitioner.path_to_rust_module("src/core/pipeline/mod"),
+        path_to_rust_module("src/core/pipeline/mod"),
         "core::pipeline::mod"
     );
-    assert_eq!(
-        partitioner.path_to_rust_module("utils/helper"),
-        "utils::helper"
-    );
+    assert_eq!(path_to_rust_module("utils/helper"), "utils::helper");
 }
 
 #[test]

@@ -1,4 +1,6 @@
     use super::*;
+    use crate::core::ast_service::AstService;
+    use crate::core::config::ValknutConfig;
     use crate::core::pipeline::clone_detection::{
         build_simple_ast_for_entity, build_simple_ast_recursive, compute_apted_limit,
         filter_small_pairs, get_or_build_simple_ast, hash_kind, ordered_pair_key,
@@ -12,10 +14,12 @@
     use crate::core::featureset::CodeEntity;
     use crate::core::file_utils::{CoverageFile, CoverageFormat};
     use crate::core::interning::intern;
-    use crate::detectors::complexity::ComplexityConfig;
+    use crate::core::ast_service::CachedTree;
+    use crate::detectors::complexity::{ComplexityAnalyzer, ComplexityConfig};
+    use crate::detectors::coverage::{CoverageConfig as CoverageDetectorConfig, CoverageExtractor};
     use crate::detectors::lsh::LshExtractor;
     use crate::detectors::refactoring::{RefactoringAnalyzer, RefactoringConfig};
-    use crate::detectors::structure::StructureConfig;
+    use crate::detectors::structure::{StructureConfig, StructureExtractor};
     use crate::lang::registry::adapter_for_file;
     use std::collections::HashMap;
     use std::fs;

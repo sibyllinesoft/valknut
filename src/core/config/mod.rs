@@ -6,6 +6,7 @@
 
 pub mod dedupe;
 pub mod live_reach;
+pub mod scoring;
 pub mod validation;
 
 use std::collections::HashMap;
@@ -23,6 +24,7 @@ pub use dedupe::{
     DenoiseWeights, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
 };
 pub use live_reach::{BuildConfig, IngestConfig, IslandConfig, LiveReachConfig};
+pub use scoring::{NormalizationScheme, ScoringConfig, StatisticalParams, WeightsConfig};
 pub use validation::{
     validate_non_negative, validate_positive_f64, validate_positive_i64, validate_positive_u32,
     validate_positive_usize, validate_unit_range,
@@ -42,7 +44,9 @@ pub struct DocHealthConfig {
     pub min_files_per_dir: usize,
 }
 
+/// Default implementation for [`DocHealthConfig`].
 impl Default for DocHealthConfig {
+    /// Returns the default documentation health configuration.
     fn default() -> Self {
         Self {
             min_fn_nodes: Self::default_min_fn_nodes(),
@@ -52,15 +56,19 @@ impl Default for DocHealthConfig {
     }
 }
 
+/// Default value providers for [`DocHealthConfig`].
 impl DocHealthConfig {
+    /// Default minimum function nodes before documentation is required.
     const fn default_min_fn_nodes() -> usize {
         5
     }
 
+    /// Default minimum file nodes before documentation is required.
     const fn default_min_file_nodes() -> usize {
         50
     }
 
+    /// Default minimum files per directory before directory-level doc penalty.
     const fn default_min_files_per_dir() -> usize {
         5
     }
@@ -124,12 +132,15 @@ pub struct ValknutConfig {
     pub _names_placeholder: Option<()>,
 }
 
+/// Default implementation for [`ValknutConfig`].
 impl Default for ValknutConfig {
+    /// Returns the default valknut configuration.
     fn default() -> Self {
         Self::new_with_defaults()
     }
 }
 
+/// Configuration construction and I/O methods for [`ValknutConfig`].
 impl ValknutConfig {
     /// Construct a configuration using the canonical default values used across
     /// the CLI and public API layers. Keeping this in one place prevents the
@@ -335,7 +346,9 @@ pub struct AnalysisConfig {
     pub max_file_size_bytes: u64,
 }
 
+/// Default implementation for [`AnalysisConfig`].
 impl Default for AnalysisConfig {
+    /// Returns the default analysis configuration.
     fn default() -> Self {
         Self {
             enable_scoring: true,
@@ -362,6 +375,7 @@ impl Default for AnalysisConfig {
     }
 }
 
+/// Default values and validation for [`AnalysisConfig`].
 impl AnalysisConfig {
     /// Default maximum file size: 500KB
     pub const fn default_max_file_size_bytes() -> u64 {
@@ -370,191 +384,7 @@ impl AnalysisConfig {
 
     /// Validate analysis configuration
     pub fn validate(&self) -> Result<()> {
-        if !(0.0..=1.0).contains(&self.confidence_threshold) {
-            return Err(ValknutError::validation(format!(
-                "confidence_threshold must be between 0.0 and 1.0, got {}",
-                self.confidence_threshold
-            )));
-        }
-        Ok(())
-    }
-}
-
-/// Scoring and normalization configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScoringConfig {
-    /// Normalization scheme to use
-    #[serde(default)]
-    pub normalization_scheme: NormalizationScheme,
-
-    /// Enable Bayesian normalization fallbacks
-    #[serde(default)]
-    pub use_bayesian_fallbacks: bool,
-
-    /// Enable confidence reporting
-    #[serde(default)]
-    pub confidence_reporting: bool,
-
-    /// Feature weights configuration
-    #[serde(default)]
-    pub weights: WeightsConfig,
-
-    /// Statistical parameters
-    #[serde(default)]
-    pub statistical_params: StatisticalParams,
-}
-
-impl Default for ScoringConfig {
-    fn default() -> Self {
-        Self {
-            normalization_scheme: NormalizationScheme::ZScore,
-            use_bayesian_fallbacks: true,
-            confidence_reporting: false,
-            weights: WeightsConfig::default(),
-            statistical_params: StatisticalParams::default(),
-        }
-    }
-}
-
-impl ScoringConfig {
-    /// Validate scoring configuration
-    pub fn validate(&self) -> Result<()> {
-        self.weights.validate()?;
-        self.statistical_params.validate()?;
-        Ok(())
-    }
-}
-
-/// Available normalization schemes
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum NormalizationScheme {
-    /// Z-score normalization (standardization)
-    #[default]
-    ZScore,
-    /// Min-max normalization to [0, 1] range
-    MinMax,
-    /// Robust normalization using median and IQR
-    Robust,
-    /// Z-score with Bayesian priors
-    ZScoreBayesian,
-    /// Min-max with Bayesian estimation
-    MinMaxBayesian,
-    /// Robust with Bayesian estimation
-    RobustBayesian,
-}
-
-/// Feature weights configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeightsConfig {
-    /// Complexity feature weights
-    #[serde(default)]
-    pub complexity: f64,
-
-    /// Graph-based feature weights
-    #[serde(default)]
-    pub graph: f64,
-
-    /// Structure-based feature weights
-    #[serde(default)]
-    pub structure: f64,
-
-    /// Style-based feature weights
-    #[serde(default)]
-    pub style: f64,
-
-    /// Coverage-based feature weights
-    #[serde(default)]
-    pub coverage: f64,
-}
-
-impl Default for WeightsConfig {
-    fn default() -> Self {
-        Self {
-            complexity: 1.0,
-            graph: 0.8,
-            structure: 0.9,
-            style: 0.5,
-            coverage: 0.7,
-        }
-    }
-}
-
-impl WeightsConfig {
-    /// Validate weights configuration
-    pub fn validate(&self) -> Result<()> {
-        let weights = [
-            self.complexity,
-            self.graph,
-            self.structure,
-            self.style,
-            self.coverage,
-        ];
-
-        for (name, &weight) in ["complexity", "graph", "structure", "style", "coverage"]
-            .iter()
-            .zip(&weights)
-        {
-            if weight < 0.0 || weight > 10.0 {
-                return Err(ValknutError::validation(format!(
-                    "Weight for '{}' must be between 0.0 and 10.0, got {}",
-                    name, weight
-                )));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Statistical parameters for analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatisticalParams {
-    /// Confidence interval level (0.95 = 95%)
-    #[serde(default)]
-    pub confidence_level: f64,
-
-    /// Minimum sample size for statistical analysis
-    #[serde(default)]
-    pub min_sample_size: usize,
-
-    /// Outlier detection threshold (in standard deviations)
-    #[serde(default)]
-    pub outlier_threshold: f64,
-}
-
-impl Default for StatisticalParams {
-    fn default() -> Self {
-        Self {
-            confidence_level: 0.95,
-            min_sample_size: 10,
-            outlier_threshold: 3.0,
-        }
-    }
-}
-
-impl StatisticalParams {
-    /// Validate statistical parameters
-    pub fn validate(&self) -> Result<()> {
-        if !(0.0..1.0).contains(&self.confidence_level) {
-            return Err(ValknutError::validation(format!(
-                "confidence_level must be between 0.0 and 1.0, got {}",
-                self.confidence_level
-            )));
-        }
-
-        if self.min_sample_size == 0 {
-            return Err(ValknutError::validation(
-                "min_sample_size must be greater than 0",
-            ));
-        }
-
-        if self.outlier_threshold <= 0.0 {
-            return Err(ValknutError::validation(
-                "outlier_threshold must be positive",
-            ));
-        }
-
+        validate_unit_range(self.confidence_threshold, "confidence_threshold")?;
         Ok(())
     }
 }
@@ -587,7 +417,9 @@ pub struct GraphConfig {
     pub approximation_sample_rate: f64,
 }
 
+/// Default implementation for [`GraphConfig`].
 impl Default for GraphConfig {
+    /// Returns the default graph analysis configuration.
     fn default() -> Self {
         Self {
             enable_betweenness: true,
@@ -600,15 +432,11 @@ impl Default for GraphConfig {
     }
 }
 
+/// Validation for [`GraphConfig`].
 impl GraphConfig {
     /// Validate graph configuration
     pub fn validate(&self) -> Result<()> {
-        if !(0.0..=1.0).contains(&self.approximation_sample_rate) {
-            return Err(ValknutError::validation(format!(
-                "approximation_sample_rate must be between 0.0 and 1.0, got {}",
-                self.approximation_sample_rate
-            )));
-        }
+        validate_unit_range(self.approximation_sample_rate, "approximation_sample_rate")?;
         Ok(())
     }
 }
@@ -653,7 +481,9 @@ pub struct LshConfig {
     pub apted_max_pairs_per_entity: usize,
 }
 
+/// Default implementation for [`LshConfig`].
 impl Default for LshConfig {
+    /// Returns the default LSH configuration.
     fn default() -> Self {
         Self {
             num_hashes: 128,
@@ -669,6 +499,7 @@ impl Default for LshConfig {
     }
 }
 
+/// Default values and validation for [`LshConfig`].
 impl LshConfig {
     /// Default maximum number of AST nodes considered when building APTED trees
     pub const fn default_apted_max_nodes() -> usize {
@@ -693,12 +524,7 @@ impl LshConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.similarity_threshold) {
-            return Err(ValknutError::validation(format!(
-                "similarity_threshold must be between 0.0 and 1.0, got {}",
-                self.similarity_threshold
-            )));
-        }
+        validate_unit_range(self.similarity_threshold, "similarity_threshold")?;
 
         if self.verify_with_apted && self.apted_max_nodes == 0 {
             return Err(ValknutError::validation(
@@ -710,7 +536,10 @@ impl LshConfig {
         Ok(())
     }
 
-    /// Get the number of hashes per band
+    /// Returns the number of hashes per band (rows per band in LSH parlance).
+    ///
+    /// This affects the granularity of candidate filtering: more hashes per band
+    /// means fewer false positives but potentially more false negatives.
     pub fn hashes_per_band(&self) -> usize {
         self.num_hashes / self.num_bands
     }
@@ -739,6 +568,7 @@ pub struct LanguageConfig {
     pub additional_settings: HashMap<String, serde_json::Value>,
 }
 
+/// Validation for [`LanguageConfig`].
 impl LanguageConfig {
     /// Validate language configuration
     pub fn validate(&self) -> Result<()> {
@@ -782,7 +612,9 @@ pub struct IoConfig {
     pub database_url: Option<String>,
 }
 
+/// Default implementation for [`IoConfig`].
 impl Default for IoConfig {
+    /// Returns the default I/O configuration.
     fn default() -> Self {
         Self {
             cache_dir: None,
@@ -838,7 +670,9 @@ pub struct PerformanceConfig {
     pub batch_size: usize,
 }
 
+/// Default implementation for [`PerformanceConfig`].
 impl Default for PerformanceConfig {
+    /// Returns the default performance configuration.
     fn default() -> Self {
         Self {
             max_threads: None,     // Use system default
@@ -851,6 +685,7 @@ impl Default for PerformanceConfig {
     }
 }
 
+/// Validation for [`PerformanceConfig`].
 impl PerformanceConfig {
     /// Validate performance configuration
     pub fn validate(&self) -> Result<()> {
@@ -901,7 +736,9 @@ pub struct CoverageConfig {
     pub coverage_file: Option<PathBuf>,
 }
 
+/// Default implementation for [`CoverageConfig`].
 impl Default for CoverageConfig {
+    /// Returns the default coverage configuration.
     fn default() -> Self {
         Self {
             auto_discover: true,
@@ -959,6 +796,7 @@ impl Default for CoverageConfig {
     }
 }
 
+/// Validation for [`CoverageConfig`].
 impl CoverageConfig {
     /// Validate coverage configuration
     pub fn validate(&self) -> Result<()> {

@@ -1,3 +1,29 @@
+//! String interning infrastructure for memory-efficient entity handling.
+//!
+//! This module provides thread-safe string interning using the `lasso` crate,
+//! enabling zero-copy string comparisons and significant memory savings when
+//! processing large codebases with many duplicate strings (file paths, entity
+//! names, AST node types).
+//!
+//! # Key Components
+//!
+//! - [`StringInterner`]: Thread-safe interner for storing unique strings
+//! - [`InternedString`]: Lightweight key type for interned strings
+//! - [`global_interner`]: Singleton instance pre-populated with common AST types
+//!
+//! # Usage
+//!
+//! ```ignore
+//! use valknut::core::interning::{intern, resolve};
+//!
+//! // Intern a string and get a lightweight key
+//! let key = intern("function_definition");
+//!
+//! // Resolve the key back to the string (zero-cost lookup)
+//! let name = resolve(key);
+//! assert_eq!(name, "function_definition");
+//! ```
+
 use lasso::{Capacity, Rodeo, Spur, ThreadedRodeo};
 use std::sync::Arc;
 
@@ -10,6 +36,7 @@ pub struct StringInterner {
     inner: Arc<ThreadedRodeo>,
 }
 
+/// Factory, interning, and lookup methods for [`StringInterner`].
 impl StringInterner {
     /// Create a new string interner with default capacity
     pub fn new() -> Self {
@@ -80,13 +107,17 @@ impl StringInterner {
     }
 }
 
+/// Default implementation for [`StringInterner`].
 impl Default for StringInterner {
+    /// Returns a new string interner with default capacity.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// [`Debug`] implementation for [`StringInterner`].
 impl std::fmt::Debug for StringInterner {
+    /// Formats the interner showing length and memory usage.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StringInterner")
             .field("len", &self.len())

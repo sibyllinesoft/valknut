@@ -10,11 +10,12 @@ Valknut is a Rust-native analysis platform that combines structural heuristics, 
 - Live report snapshot: https://valknut.sibylline.dev/report-dev.html
 
 ## At a Glance
-- **Comprehensive analysis pipeline** – structure, complexity, dependency graph, coverage, LSH clone detection, refactoring scoring, and health metrics driven by `AnalysisPipeline`.
-- **Documentation awareness** – the bundled `doc-audit` command finds missing/dated READMEs, TODO clusters, and style regressions using the `crates/doc_audit` crate.
+- **Comprehensive analysis pipeline** – structure, complexity, dependency graph, coverage, LSH clone detection, semantic cohesion, refactoring scoring, and health metrics driven by `AnalysisPipeline`.
+- **Documentation awareness** – the bundled `doc-audit` command finds missing/dated READMEs, TODO clusters, and style regressions with language-specific scanners for Rust, Python, and TypeScript.
 - **AI & MCP integration** – run `valknut mcp-stdio` to expose a Model Context Protocol server or enable the Gemini-powered refactoring oracle with `--oracle`.
 - **High-performance internals** – arena allocation, shared AST caches, SIMD-accelerated similarity, and git-aware file discovery keep large repos manageable.
-- **Battle-tested reports** – export JSONL/JSON/YAML/CVS/Markdown/HTML/Sonar/CI-summary formats plus colorized console summaries.
+- **Modular architecture** – cleanly separated detector modules (LSH, complexity, structure, cohesion) with dedicated submodules for metrics, configuration, and analysis stages.
+- **Battle-tested reports** – export JSONL/JSON/YAML/CSV/Markdown/HTML/Sonar/CI-summary formats plus colorized console summaries.
 
 ## Supported Languages (AST-level)
 | Language | Status | Notes |
@@ -76,13 +77,15 @@ valknut list-languages
 - Clone detection controls live under `--semantic-clones`, `--denoise`, `--min-function-tokens`, etc.
 
 ## Core Capabilities
-**Structure Analysis** – deterministic directory/file re-organization packs (`src/detectors/structure`) surface imbalance, whale files, and recommended splits.
+**Structure Analysis** – deterministic directory/file re-organization packs (`src/detectors/structure/`) surface imbalance, whale files, and recommended splits with dedicated modules for cohesion, imports, and partitioning.
 
-**Complexity Intelligence** – AST-backed cyclomatic/cognitive metrics and severity classification per entity (`src/detectors/complexity`).
+**Complexity Intelligence** – AST-backed cyclomatic/cognitive metrics and severity classification per entity (`src/detectors/complexity/`).
+
+**Semantic Cohesion** – TF-IDF weighted symbol extraction and optional embedding-based analysis for measuring how well related code entities are grouped (`src/detectors/cohesion/`).
 
 **Dependency & Impact Analysis** – `ProjectDependencyAnalysis` builds call graphs, detects cycles, and feeds choke-point scoring plus similarity cliques.
 
-**Clone Detection (opt-in)** – locality-sensitive hashing with optional denoising/simd speedups for semantic clone clusters.
+**Clone Detection (opt-in)** – locality-sensitive hashing with shingle generation, AST-based stop motif filtering, and SIMD-accelerated similarity for semantic clone clusters (`src/detectors/lsh/`).
 
 **Coverage Awareness** – auto-discover or pin coverage files, surface gap summaries, and include them in health metrics.
 
@@ -145,6 +148,15 @@ cargo fmt && cargo clippy
 cargo test
 ./scripts/install_parsers.sh  # install/update tree-sitter grammars
 ```
+
+### Project Structure
+The codebase follows a modular architecture with clear separation of concerns:
+- `src/core/` – pipeline orchestration, AST services, dependency analysis
+- `src/detectors/` – analysis modules (complexity, structure, lsh, cohesion, coverage)
+- `src/oracle/` – AI-powered refactoring guidance (bundle building, Gemini integration)
+- `src/doc_audit/` – documentation gap detection with language-specific scanners
+- `src/bin/cli/` – command handling, quality gates, config building, report generation
+
 Helpful references:
 - `docs/CLI_USAGE.md` – CLI walkthroughs.
 - `docs/ARCHITECTURE_DEEP_DIVE.md` – November 2025 architectural analysis and modernization plan.

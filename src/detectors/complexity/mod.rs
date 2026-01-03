@@ -3,12 +3,14 @@
 //! This module replaces the text-based complexity analysis with proper AST-based
 //! calculation using the central AST service for accurate complexity metrics.
 
+mod extractor;
+mod halstead;
 pub mod types;
 
-use async_trait::async_trait;
-use dashmap::DashMap;
+pub use extractor::AstComplexityExtractor;
+
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -16,9 +18,7 @@ use tracing::{debug, info, warn};
 use crate::core::ast_service::{AstService, ComplexityMetrics as AstComplexityMetrics};
 use crate::core::ast_utils::find_entity_node;
 use crate::core::errors::Result;
-use crate::core::featureset::{
-    CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
-};
+use crate::core::featureset::{CodeEntity, EntityId};
 
 // Re-export types from submodule
 pub use types::{
@@ -37,6 +37,7 @@ pub struct AstComplexityAnalyzer {
 /// Type alias for backwards compatibility
 pub type ComplexityAnalyzer = AstComplexityAnalyzer;
 
+/// Factory, analysis, and metrics calculation methods for [`AstComplexityAnalyzer`].
 impl AstComplexityAnalyzer {
     /// Create new AST-based complexity analyzer
     pub fn new(config: ComplexityConfig, ast_service: Arc<AstService>) -> Self {
@@ -85,77 +86,92 @@ impl AstComplexityAnalyzer {
 
         debug!("Analyzing complexity for file: {}", file_path);
 
-        // Get AST from service
         let cached_tree = self.ast_service.get_ast(file_path, source).await?;
         let context = self.ast_service.create_context(&cached_tree, file_path);
-
-        // Calculate real AST-based complexity
         let ast_metrics = self.ast_service.calculate_complexity(&context)?;
-
-        // Extract entities and calculate per-entity metrics
         let entities = self.extract_entities_from_ast(&context)?;
-        let mut results = Vec::new();
 
+        let mut results = Vec::new();
         for entity in entities {
             let metrics = self.calculate_entity_ast_metrics(&entity, &ast_metrics, &context)?;
-            let issues = self.generate_issues_from_metrics(&entity.id, &metrics);
-
-            // Convert to ComplexityAnalysisResult format
-            let result = ComplexityAnalysisResult {
-                entity_id: entity.id.clone(),
-                entity_name: entity.name.clone(),
-                entity_type: entity.entity_type.clone(),
-                file_path: file_path.to_string(),
-                line_number: entity.line_range.map(|(start, _)| start).unwrap_or(1),
-                start_line: entity.line_range.map(|(start, _)| start).unwrap_or(1),
-                metrics: ComplexityMetrics {
-                    cyclomatic_complexity: metrics.cyclomatic_complexity,
-                    cognitive_complexity: metrics.cognitive_complexity,
-                    max_nesting_depth: metrics.max_nesting_depth,
-                    parameter_count: metrics.parameter_count,
-                    lines_of_code: metrics.lines_of_code,
-                    statement_count: metrics.statement_count,
-                    halstead: metrics.halstead.clone(),
-                    technical_debt_score: metrics.technical_debt_score,
-                    maintainability_index: metrics.maintainability_index,
-                    decision_points: metrics.decision_points.clone(),
-                },
-                severity: self.determine_complexity_severity(&metrics),
-                issues: issues.into_iter().map(|issue| {
-                    let issue_type = match issue.issue_type.as_str() {
-                        "high_cyclomatic_complexity" => crate::detectors::complexity::ComplexityIssueType::HighCyclomaticComplexity,
-                        "high_cognitive_complexity" => crate::detectors::complexity::ComplexityIssueType::HighCognitiveComplexity,
-                        "excessive_nesting" => crate::detectors::complexity::ComplexityIssueType::DeepNesting,
-                        "too_many_parameters" => crate::detectors::complexity::ComplexityIssueType::TooManyParameters,
-                        "large_file" => crate::detectors::complexity::ComplexityIssueType::LongFile,
-                        _ => crate::detectors::complexity::ComplexityIssueType::HighTechnicalDebt,
-                    };
-                    let severity = match issue.severity.as_str() {
-                        "low" => crate::detectors::complexity::ComplexitySeverity::Low,
-                        "medium" => crate::detectors::complexity::ComplexitySeverity::Moderate,
-                        "high" => crate::detectors::complexity::ComplexitySeverity::High,
-                        "critical" => crate::detectors::complexity::ComplexitySeverity::Critical,
-                        _ => crate::detectors::complexity::ComplexitySeverity::Moderate,
-                    };
-
-                    ComplexityIssue {
-                        entity_id: entity.id.clone(),
-                        issue_type: format!("{:?}", issue_type),
-                        description: issue.description,
-                        severity: format!("{:?}", severity),
-                        recommendation: issue.recommendation,
-                        location: format!("{}:{}", file_path, entity.line_range.map(|(start, _)| start).unwrap_or(1)),
-                        metric_value: issue.metric_value,
-                        threshold: issue.threshold,
-                    }
-                }).collect(),
-                recommendations: Vec::new(), // TODO: Generate refactoring recommendations
-            };
-
+            let result = self.build_analysis_result(&entity, file_path, metrics);
             results.push(result);
         }
 
         Ok(results)
+    }
+
+    /// Build a ComplexityAnalysisResult from an entity and its metrics.
+    fn build_analysis_result(
+        &self,
+        entity: &CodeEntity,
+        file_path: &str,
+        metrics: ComplexityMetrics,
+    ) -> ComplexityAnalysisResult {
+        let issues = self.generate_issues_from_metrics(&entity.id, &metrics);
+        let start_line = entity.line_range.map(|(start, _)| start).unwrap_or(1);
+
+        ComplexityAnalysisResult {
+            entity_id: entity.id.clone(),
+            entity_name: entity.name.clone(),
+            entity_type: entity.entity_type.clone(),
+            file_path: file_path.to_string(),
+            line_number: start_line,
+            start_line,
+            metrics: metrics.clone(),
+            severity: self.determine_complexity_severity(&metrics),
+            issues: issues
+                .into_iter()
+                .map(|issue| self.convert_issue(&entity.id, file_path, start_line, issue))
+                .collect(),
+            recommendations: Vec::new(),
+        }
+    }
+
+    /// Convert an internal ComplexityIssue to the output format.
+    fn convert_issue(
+        &self,
+        entity_id: &str,
+        file_path: &str,
+        start_line: usize,
+        issue: ComplexityIssue,
+    ) -> ComplexityIssue {
+        let issue_type = Self::parse_issue_type(&issue.issue_type);
+        let severity = Self::parse_severity(&issue.severity);
+
+        ComplexityIssue {
+            entity_id: entity_id.to_string(),
+            issue_type: format!("{:?}", issue_type),
+            description: issue.description,
+            severity: format!("{:?}", severity),
+            recommendation: issue.recommendation,
+            location: format!("{}:{}", file_path, start_line),
+            metric_value: issue.metric_value,
+            threshold: issue.threshold,
+        }
+    }
+
+    /// Parse issue type string to enum.
+    fn parse_issue_type(type_str: &str) -> ComplexityIssueType {
+        match type_str {
+            "high_cyclomatic_complexity" => ComplexityIssueType::HighCyclomaticComplexity,
+            "high_cognitive_complexity" => ComplexityIssueType::HighCognitiveComplexity,
+            "excessive_nesting" => ComplexityIssueType::DeepNesting,
+            "too_many_parameters" => ComplexityIssueType::TooManyParameters,
+            "large_file" => ComplexityIssueType::LongFile,
+            _ => ComplexityIssueType::HighTechnicalDebt,
+        }
+    }
+
+    /// Parse severity string to enum.
+    fn parse_severity(severity_str: &str) -> ComplexitySeverity {
+        match severity_str {
+            "low" => ComplexitySeverity::Low,
+            "medium" => ComplexitySeverity::Moderate,
+            "high" => ComplexitySeverity::High,
+            "critical" => ComplexitySeverity::Critical,
+            _ => ComplexitySeverity::Moderate,
+        }
     }
 
     /// Determine complexity severity based on metrics
@@ -484,163 +500,10 @@ impl AstComplexityAnalyzer {
             return Ok(HalsteadMetrics::default());
         };
 
-        let mut operator_set: HashSet<String> = HashSet::new();
-        let mut operand_set: HashSet<String> = HashSet::new();
-        let mut operator_total = 0.0;
-        let mut operand_total = 0.0;
-
-        let source_len = context.source.len();
-        let mut stack = vec![root_node];
-        while let Some(node) = stack.pop() {
-            // Skip invalid nodes with malformed byte ranges
-            let start = node.start_byte();
-            let end = node.end_byte();
-            if (start as usize) > source_len || (end as usize) > source_len || start > end {
-                debug!(
-                    "Skipping invalid node {} with range {}-{}",
-                    node.kind(),
-                    start,
-                    end
-                );
-                continue;
-            }
-
-            if node.is_named() {
-                let kind = node.kind();
-
-                if self.is_halstead_operator_node(kind) {
-                    operator_set.insert(kind.to_string());
-                    operator_total += 1.0;
-                } else if self.is_halstead_operand_node(kind) {
-                    let operand = self.operand_representation(&node, context.source);
-                    operand_set.insert(operand);
-                    operand_total += 1.0;
-                }
-            }
-
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                // Also skip invalid children before pushing to stack
-                let child_start = child.start_byte();
-                let child_end = child.end_byte();
-                if (child_start as usize) <= source_len
-                    && (child_end as usize) <= source_len
-                    && child_start <= child_end
-                {
-                    stack.push(child);
-                } else {
-                    debug!(
-                        "Skipping invalid child node {} with range {}-{}",
-                        child.kind(),
-                        child_start,
-                        child_end
-                    );
-                }
-            }
-        }
-
-        let mut metrics = HalsteadMetrics::default();
-        metrics.n1 = operator_set.len() as f64;
-        metrics.n2 = operand_set.len() as f64;
-        metrics.n_1 = operator_total;
-        metrics.n_2 = operand_total;
-        metrics.vocabulary = metrics.n1 + metrics.n2;
-        metrics.length = metrics.n_1 + metrics.n_2;
-        metrics.calculated_length = self.calculate_halstead_length(metrics.n1, metrics.n2);
-        if metrics.vocabulary > 0.0 && metrics.length > 0.0 {
-            metrics.volume = metrics.length * metrics.vocabulary.log2();
-        }
-        if metrics.n2 > 0.0 {
-            metrics.difficulty = (metrics.n1 / 2.0) * (metrics.n_2 / metrics.n2.max(1.0));
-        }
-        metrics.effort = metrics.difficulty * metrics.volume;
-        metrics.time = metrics.effort / 18.0;
-        metrics.bugs = metrics.volume / 3000.0;
-
-        Ok(metrics)
+        Ok(halstead::calculate_halstead_for_node(root_node, context.source))
     }
 
-    fn is_halstead_operator_node(&self, kind: &str) -> bool {
-        kind.contains("operator")
-            || kind.contains("assignment")
-            || kind.ends_with("_expression")
-            || kind.ends_with("_statement")
-            || kind.ends_with("_clause")
-            || matches!(
-                kind,
-                "if_statement"
-                    | "else_clause"
-                    | "elif_clause"
-                    | "for_statement"
-                    | "while_statement"
-                    | "loop_expression"
-                    | "match_expression"
-                    | "switch_statement"
-                    | "case_clause"
-                    | "default_clause"
-                    | "return_statement"
-                    | "break_statement"
-                    | "continue_statement"
-                    | "yield_statement"
-                    | "await_expression"
-                    | "call_expression"
-                    | "lambda_expression"
-            )
-    }
-
-    fn is_halstead_operand_node(&self, kind: &str) -> bool {
-        kind.contains("identifier")
-            || kind.ends_with("_name")
-            || kind.contains("literal")
-            || matches!(
-                kind,
-                "identifier"
-                    | "field_identifier"
-                    | "property_identifier"
-                    | "type_identifier"
-                    | "string"
-                    | "string_literal"
-                    | "number"
-                    | "integer"
-                    | "float"
-                    | "boolean"
-                    | "true"
-                    | "false"
-                    | "null"
-                    | "nil"
-                    | "char_literal"
-            )
-    }
-
-    fn operand_representation(&self, node: &tree_sitter::Node, source: &str) -> String {
-        let start = node.start_byte();
-        let end = node.end_byte();
-
-        // Validate bounds before utf8_text to prevent panic
-        let source_len = source.len();
-        if (start as usize) > source_len || (end as usize) > source_len || start > end {
-            debug!(
-                "Invalid operand node range: start={}, end={}, source_len={}",
-                start, end, source_len
-            );
-            return node.kind().to_string();
-        }
-
-        if let Ok(text) = node.utf8_text(source.as_bytes()) {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return format!("{}:{}", node.kind(), trimmed);
-            }
-        }
-        node.kind().to_string()
-    }
-
-    fn calculate_halstead_length(&self, n1: f64, n2: f64) -> f64 {
-        let part1 = if n1 > 0.0 { n1 * n1.log2() } else { 0.0 };
-        let part2 = if n2 > 0.0 { n2 * n2.log2() } else { 0.0 };
-        part1 + part2
-    }
-
+    /// Locates the parameters node for a function AST node.
     fn locate_parameters_node<'a>(
         &self,
         node: &tree_sitter::Node<'a>,
@@ -674,6 +537,7 @@ impl AstComplexityAnalyzer {
         candidate
     }
 
+    /// Counts parameter entries within a parameters node.
     fn count_parameter_entries(&self, node: &tree_sitter::Node) -> usize {
         if self.is_parameter_entry(node) {
             return 1;
@@ -696,6 +560,7 @@ impl AstComplexityAnalyzer {
         count
     }
 
+    /// Checks if an AST node represents a parameter entry.
     fn is_parameter_entry(&self, node: &tree_sitter::Node) -> bool {
         let kind = node.kind();
         if kind.ends_with("_parameters") {
@@ -721,6 +586,7 @@ impl AstComplexityAnalyzer {
         )
     }
 
+    /// Counts statement nodes within a given line range.
     fn count_statement_nodes(
         &self,
         node: &tree_sitter::Node,
@@ -750,6 +616,7 @@ impl AstComplexityAnalyzer {
         total
     }
 
+    /// Checks if an AST node kind represents a statement.
     fn is_statement_kind(&self, kind: &str) -> bool {
         kind.ends_with("_statement")
             || kind.ends_with("_declaration")
@@ -812,68 +679,64 @@ impl AstComplexityAnalyzer {
     ) -> Vec<ComplexityIssue> {
         let mut issues = Vec::new();
 
-        // Check cyclomatic complexity
-        if metrics.cyclomatic_complexity > self.config.cyclomatic_thresholds.high {
-            issues.push(ComplexityIssue {
-                entity_id: entity_id.clone(),
-                issue_type: "high_cyclomatic_complexity".to_string(),
-                severity: self.determine_severity(
-                    metrics.cyclomatic_complexity,
-                    &self.config.cyclomatic_thresholds,
-                ),
-                description: format!(
-                    "Cyclomatic complexity of {:.1} exceeds threshold",
-                    metrics.cyclomatic_complexity
-                ),
-                recommendation:
-                    "Consider breaking this function into smaller, more focused functions"
-                        .to_string(),
-                location: entity_id.clone(),
-                metric_value: metrics.cyclomatic_complexity,
-                threshold: self.config.cyclomatic_thresholds.high,
-            });
-        }
+        self.check_metric_threshold(
+            &mut issues,
+            entity_id,
+            metrics.cyclomatic_complexity,
+            &self.config.cyclomatic_thresholds,
+            "high_cyclomatic_complexity",
+            "Cyclomatic complexity",
+            "Consider breaking this function into smaller, more focused functions",
+        );
 
-        // Check cognitive complexity
-        if metrics.cognitive_complexity > self.config.cognitive_thresholds.high {
-            issues.push(ComplexityIssue {
-                entity_id: entity_id.clone(),
-                issue_type: "high_cognitive_complexity".to_string(),
-                severity: self.determine_severity(
-                    metrics.cognitive_complexity,
-                    &self.config.cognitive_thresholds,
-                ),
-                description: format!(
-                    "Cognitive complexity of {:.1} exceeds threshold",
-                    metrics.cognitive_complexity
-                ),
-                recommendation: "Reduce nesting levels and simplify conditional logic".to_string(),
-                location: entity_id.clone(),
-                metric_value: metrics.cognitive_complexity,
-                threshold: self.config.cognitive_thresholds.high,
-            });
-        }
+        self.check_metric_threshold(
+            &mut issues,
+            entity_id,
+            metrics.cognitive_complexity,
+            &self.config.cognitive_thresholds,
+            "high_cognitive_complexity",
+            "Cognitive complexity",
+            "Reduce nesting levels and simplify conditional logic",
+        );
 
-        // Check nesting depth
-        if metrics.max_nesting_depth > self.config.nesting_thresholds.high {
-            issues.push(ComplexityIssue {
-                entity_id: entity_id.clone(),
-                issue_type: "excessive_nesting".to_string(),
-                severity: self
-                    .determine_severity(metrics.max_nesting_depth, &self.config.nesting_thresholds),
-                description: format!(
-                    "Maximum nesting depth of {:.1} exceeds threshold",
-                    metrics.max_nesting_depth
-                ),
-                recommendation: "Reduce nesting by using early returns or extracting functions"
-                    .to_string(),
-                location: entity_id.clone(),
-                metric_value: metrics.max_nesting_depth,
-                threshold: self.config.nesting_thresholds.high,
-            });
-        }
+        self.check_metric_threshold(
+            &mut issues,
+            entity_id,
+            metrics.max_nesting_depth,
+            &self.config.nesting_thresholds,
+            "excessive_nesting",
+            "Maximum nesting depth",
+            "Reduce nesting by using early returns or extracting functions",
+        );
 
         issues
+    }
+
+    /// Check a metric against thresholds and add an issue if exceeded.
+    fn check_metric_threshold(
+        &self,
+        issues: &mut Vec<ComplexityIssue>,
+        entity_id: &EntityId,
+        value: f64,
+        thresholds: &ComplexityThresholds,
+        issue_type: &str,
+        metric_name: &str,
+        recommendation: &str,
+    ) {
+        if value <= thresholds.high {
+            return;
+        }
+
+        issues.push(ComplexityIssue {
+            entity_id: entity_id.clone(),
+            issue_type: issue_type.to_string(),
+            severity: self.determine_severity(value, thresholds),
+            description: format!("{} of {:.1} exceeds threshold", metric_name, value),
+            recommendation: recommendation.to_string(),
+            location: entity_id.clone(),
+            metric_value: value,
+            threshold: thresholds.high,
+        });
     }
 
     /// Generate file-level complexity issues
@@ -917,203 +780,6 @@ impl AstComplexityAnalyzer {
         }
     }
 }
-
-/// Feature extractor implementation for AST-based complexity
-pub struct AstComplexityExtractor {
-    analyzer: AstComplexityAnalyzer,
-    feature_definitions: Vec<FeatureDefinition>,
-    analysis_cache: DashMap<String, Arc<Vec<ComplexityAnalysisResult>>>,
-}
-
-impl AstComplexityExtractor {
-    pub fn new(config: ComplexityConfig, ast_service: Arc<AstService>) -> Self {
-        let feature_definitions = vec![
-            FeatureDefinition::new("cyclomatic_complexity", "McCabe cyclomatic complexity")
-                .with_range(1.0, 50.0)
-                .with_default(1.0)
-                .with_polarity(true),
-            FeatureDefinition::new("cognitive_complexity", "Cognitive complexity with nesting")
-                .with_range(0.0, 100.0)
-                .with_default(0.0)
-                .with_polarity(true),
-            FeatureDefinition::new("nesting_depth", "Maximum nesting depth")
-                .with_range(0.0, 10.0)
-                .with_default(0.0)
-                .with_polarity(true),
-            FeatureDefinition::new("parameter_count", "Number of function parameters")
-                .with_range(0.0, 20.0)
-                .with_default(0.0)
-                .with_polarity(true),
-            FeatureDefinition::new("lines_of_code", "Lines of code")
-                .with_range(1.0, 1000.0)
-                .with_default(1.0)
-                .with_polarity(true),
-        ];
-
-        Self {
-            analyzer: AstComplexityAnalyzer::new(config, ast_service),
-            feature_definitions,
-            analysis_cache: DashMap::new(),
-        }
-    }
-
-    async fn file_results(&self, file_path: &str) -> Result<Arc<Vec<ComplexityAnalysisResult>>> {
-        let key = normalize_path(file_path);
-
-        if let Some(entry) = self.analysis_cache.get(&key) {
-            return Ok(entry.clone());
-        }
-
-        let source = match tokio::fs::read_to_string(file_path).await {
-            Ok(contents) => contents,
-            Err(error) => {
-                warn!(
-                    "Complexity extractor failed to read {}: {}",
-                    file_path, error
-                );
-                let empty = Arc::new(Vec::new());
-                self.analysis_cache.insert(key, empty.clone());
-                return Ok(empty);
-            }
-        };
-
-        match self
-            .analyzer
-            .analyze_file_with_results(file_path, &source)
-            .await
-        {
-            Ok(results) => {
-                let arc = Arc::new(results);
-                self.analysis_cache.insert(key, arc.clone());
-                Ok(arc)
-            }
-            Err(error) => {
-                warn!(
-                    "Complexity extractor failed to analyze {}: {}",
-                    file_path, error
-                );
-                let empty = Arc::new(Vec::new());
-                self.analysis_cache.insert(key, empty.clone());
-                Ok(empty)
-            }
-        }
-    }
-
-    fn initialise_feature_map(&self) -> HashMap<String, f64> {
-        let mut map = HashMap::with_capacity(self.feature_definitions.len());
-        for definition in &self.feature_definitions {
-            map.insert(definition.name.clone(), definition.default_value);
-        }
-        map
-    }
-}
-
-#[async_trait]
-impl FeatureExtractor for AstComplexityExtractor {
-    fn name(&self) -> &str {
-        "ast_complexity"
-    }
-
-    fn features(&self) -> &[FeatureDefinition] {
-        &self.feature_definitions
-    }
-
-    async fn extract(
-        &self,
-        entity: &CodeEntity,
-        context: &ExtractionContext,
-    ) -> Result<HashMap<String, f64>> {
-        let mut features = self.initialise_feature_map();
-
-        let results = self.file_results(&entity.file_path).await?;
-
-        let entity_range = entity.line_range.unwrap_or_else(|| {
-            let lines = entity.line_count().max(1);
-            (1, lines)
-        });
-
-        let mut relevant: Vec<&ComplexityAnalysisResult> = results
-            .iter()
-            .filter(|result| {
-                result.entity_id == entity.id
-                    || (result.entity_name == entity.name && result.file_path == entity.file_path)
-                    || ranges_overlap(entity_range, result_line_range(result))
-            })
-            .collect();
-
-        if relevant.is_empty() && !results.is_empty() {
-            if let Some(worst) = results.iter().max_by(|a, b| {
-                a.metrics
-                    .cyclomatic_complexity
-                    .partial_cmp(&b.metrics.cyclomatic_complexity)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }) {
-                relevant.push(worst);
-            }
-        }
-
-        if !relevant.is_empty() {
-            let mut cyclomatic = 0.0_f64;
-            let mut cognitive = 0.0_f64;
-            let mut nesting = 0.0_f64;
-            let mut parameters = 0.0_f64;
-            let mut loc = 0.0_f64;
-
-            for result in relevant {
-                let metrics = &result.metrics;
-                cyclomatic = cyclomatic.max(metrics.cyclomatic_complexity);
-                cognitive = cognitive.max(metrics.cognitive_complexity);
-                nesting = nesting.max(metrics.max_nesting_depth);
-                parameters = parameters.max(metrics.parameter_count);
-                loc = loc.max(metrics.lines_of_code);
-            }
-
-            features.insert("cyclomatic_complexity".to_string(), cyclomatic);
-            features.insert("cognitive_complexity".to_string(), cognitive);
-            features.insert("nesting_depth".to_string(), nesting);
-            features.insert("parameter_count".to_string(), parameters);
-            if loc > 0.0 {
-                features.insert("lines_of_code".to_string(), loc);
-            }
-        }
-
-        // Always provide a LOC value, even when analysis fails
-        features
-            .entry("lines_of_code".to_string())
-            .or_insert_with(|| {
-                entity
-                    .line_range
-                    .map(|(start, end)| {
-                        if end >= start {
-                            (end - start + 1) as f64
-                        } else {
-                            entity.line_count() as f64
-                        }
-                    })
-                    .unwrap_or_else(|| entity.line_count() as f64)
-            });
-
-        Ok(features)
-    }
-}
-
-fn result_line_range(result: &ComplexityAnalysisResult) -> (usize, usize) {
-    let start = result.start_line.max(1);
-    let span = result.metrics.lines_of_code.max(1.0) as usize;
-    let end = start + span.saturating_sub(1);
-    (start, end)
-}
-
-fn ranges_overlap(lhs: (usize, usize), rhs: (usize, usize)) -> bool {
-    let (lhs_start, lhs_end) = lhs;
-    let (rhs_start, rhs_end) = rhs;
-    lhs_start <= rhs_end && rhs_start <= lhs_end
-}
-
-fn normalize_path(path: &str) -> String {
-    Path::new(path).to_string_lossy().into_owned()
-}
-
 
 #[cfg(test)]
 mod tests;

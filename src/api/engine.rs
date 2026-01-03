@@ -21,6 +21,7 @@ pub struct ValknutEngine {
     config: Arc<ValknutConfig>,
 }
 
+/// Factory and analysis methods for [`ValknutEngine`].
 impl ValknutEngine {
     /// Create a new valknut engine with the given configuration
     pub async fn new(config: ApiAnalysisConfig) -> Result<Self> {
@@ -200,78 +201,67 @@ impl ValknutEngine {
         let mut overall_status = true;
 
         // Check configuration validity
-        if let Err(e) = self.config.validate() {
-            checks.push(HealthCheck {
-                name: "Configuration".to_string(),
-                status: HealthCheckStatus::Failed,
-                message: Some(e.to_string()),
-            });
+        let config_check = self.check_configuration();
+        if config_check.status == HealthCheckStatus::Failed {
             overall_status = false;
-        } else {
-            checks.push(HealthCheck {
-                name: "Configuration".to_string(),
-                status: HealthCheckStatus::Passed,
-                message: None,
-            });
         }
+        checks.push(config_check);
 
         // Check pipeline status
-        let pipeline_status = self.pipeline.get_status();
-        if pipeline_status.ready {
-            checks.push(HealthCheck {
-                name: "Pipeline".to_string(),
-                status: HealthCheckStatus::Passed,
-                message: None,
-            });
-        } else {
-            checks.push(HealthCheck {
-                name: "Pipeline".to_string(),
-                status: HealthCheckStatus::Failed,
-                message: Some(pipeline_status.issues.join("; ")),
-            });
+        let pipeline_check = self.check_pipeline();
+        if pipeline_check.status == HealthCheckStatus::Failed {
             overall_status = false;
         }
+        checks.push(pipeline_check);
 
         // Check feature extractors
-        let extractor_count = self
-            .pipeline
-            .extractor_registry()
-            .get_all_extractors()
-            .count();
-        if extractor_count > 0 {
-            checks.push(HealthCheck {
-                name: "Feature Extractors".to_string(),
-                status: HealthCheckStatus::Passed,
-                message: Some(format!("{} extractors available", extractor_count)),
-            });
-        } else {
-            checks.push(HealthCheck {
-                name: "Feature Extractors".to_string(),
-                status: HealthCheckStatus::Warning,
-                message: Some("No feature extractors registered".to_string()),
-            });
-        }
+        checks.push(self.check_feature_extractors());
 
         // Check supported languages
-        let supported_languages = self.get_supported_languages();
-        if supported_languages.is_empty() {
-            checks.push(HealthCheck {
-                name: "Language Support".to_string(),
-                status: HealthCheckStatus::Warning,
-                message: Some("No languages enabled".to_string()),
-            });
-        } else {
-            checks.push(HealthCheck {
-                name: "Language Support".to_string(),
-                status: HealthCheckStatus::Passed,
-                message: Some(format!("Languages: {}", supported_languages.join(", "))),
-            });
-        }
+        checks.push(self.check_language_support());
 
         HealthCheckResult {
             overall_status,
             checks,
             timestamp: chrono::Utc::now(),
+        }
+    }
+
+    /// Check configuration validity.
+    fn check_configuration(&self) -> HealthCheck {
+        match self.config.validate() {
+            Ok(_) => HealthCheck::passed("Configuration"),
+            Err(e) => HealthCheck::failed("Configuration", e.to_string()),
+        }
+    }
+
+    /// Check pipeline status.
+    fn check_pipeline(&self) -> HealthCheck {
+        let status = self.pipeline.get_status();
+        if status.ready {
+            HealthCheck::passed("Pipeline")
+        } else {
+            HealthCheck::failed("Pipeline", status.issues.join("; "))
+        }
+    }
+
+    /// Check feature extractors availability.
+    fn check_feature_extractors(&self) -> HealthCheck {
+        let count = self.pipeline.extractor_registry().get_all_extractors().count();
+        if count > 0 {
+            HealthCheck::passed_with_message("Feature Extractors", format!("{} extractors available", count))
+        } else {
+            HealthCheck::warning("Feature Extractors", "No feature extractors registered")
+        }
+    }
+
+    /// Check language support.
+    fn check_language_support(&self) -> HealthCheck {
+        let languages = self.get_supported_languages();
+        if languages.is_empty() {
+            HealthCheck::warning("Language Support", "No languages enabled")
+        } else {
+            HealthCheck::passed_with_message("Language Support", format!("Languages: {}", languages.join(", ")))
         }
     }
 }
@@ -319,6 +309,45 @@ pub struct HealthCheck {
 
     /// Optional message with details
     pub message: Option<String>,
+}
+
+/// Factory methods for [`HealthCheck`].
+impl HealthCheck {
+    /// Create a passed health check.
+    fn passed(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            status: HealthCheckStatus::Passed,
+            message: None,
+        }
+    }
+
+    /// Create a passed health check with a message.
+    fn passed_with_message(name: &str, message: String) -> Self {
+        Self {
+            name: name.to_string(),
+            status: HealthCheckStatus::Passed,
+            message: Some(message),
+        }
+    }
+
+    /// Create a failed health check.
+    fn failed(name: &str, message: String) -> Self {
+        Self {
+            name: name.to_string(),
+            status: HealthCheckStatus::Failed,
+            message: Some(message),
+        }
+    }
+
+    /// Create a warning health check.
+    fn warning(name: &str, message: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            status: HealthCheckStatus::Warning,
+            message: Some(message.to_string()),
+        }
+    }
 }
 
 /// Health check status

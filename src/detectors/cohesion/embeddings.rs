@@ -24,7 +24,9 @@ struct EmbeddingCache {
     misses: usize,
 }
 
+/// Factory, lookup, and eviction methods for [`EmbeddingCache`].
 impl EmbeddingCache {
+    /// Creates a new cache with the given maximum entry count.
     fn new(max_entries: usize) -> Self {
         Self {
             entries: HashMap::new(),
@@ -34,6 +36,7 @@ impl EmbeddingCache {
         }
     }
 
+    /// Retrieves an embedding from the cache if present.
     fn get(&mut self, hash: u64) -> Option<Vec<f32>> {
         if let Some(vec) = self.entries.get(&hash) {
             self.hits += 1;
@@ -44,6 +47,7 @@ impl EmbeddingCache {
         }
     }
 
+    /// Inserts an embedding into the cache, evicting entries if at capacity.
     fn insert(&mut self, hash: u64, embedding: Vec<f32>) {
         // Simple eviction: if at capacity, clear half the cache
         if self.entries.len() >= self.max_entries {
@@ -60,6 +64,7 @@ impl EmbeddingCache {
         self.entries.insert(hash, embedding);
     }
 
+    /// Computes the cache hit rate.
     fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {
@@ -70,6 +75,7 @@ impl EmbeddingCache {
     }
 }
 
+/// Factory, embedding generation, and caching methods for [`EmbeddingProvider`].
 impl EmbeddingProvider {
     /// Create a new embedding provider with the given configuration.
     pub fn new(config: &EmbeddingConfig) -> Result<Self> {
@@ -220,6 +226,7 @@ impl EmbeddingProvider {
     }
 }
 
+/// Conversion methods for [`EmbeddingModel`].
 impl EmbeddingModel {
     /// Convert to fastembed model enum.
     pub fn to_fastembed_model(&self) -> FastEmbedModel {

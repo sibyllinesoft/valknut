@@ -86,10 +86,10 @@ pub mod core {
     //! Core analysis algorithms and data structures.
 
     pub mod arena_analysis;
-    pub mod ast_service;
-    pub mod ast_utils;
+    pub mod ast;
     pub mod bayesian;
     pub mod config;
+    pub mod coverage_discovery;
     pub mod dependency;
     pub mod errors;
     pub mod partitioning;
@@ -99,7 +99,11 @@ pub mod core {
     pub mod interning;
     pub mod pipeline;
     pub mod scoring;
-    pub mod unified_visitor;
+
+    // Re-export AST types at original paths for backward compatibility
+    pub use ast::service as ast_service;
+    pub use ast::utils as ast_utils;
+    pub use ast::visitor as unified_visitor;
 }
 
 // Specialized detection algorithms
@@ -116,24 +120,8 @@ pub mod detectors {
 }
 
 // Language-specific AST adapters
-pub mod lang {
-    //! Language-specific parsing and AST processing.
-
-    pub mod common;
-    // Tree-sitter adapters
-    pub mod go;
-    pub mod javascript;
-    pub mod python;
-    pub mod registry;
-    pub mod rust_lang;
-    pub mod typescript;
-
-    pub use common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
-    pub use registry::{
-        adapter_for_file, adapter_for_language, extension_is_supported, language_key_for_path,
-        registered_languages, LanguageInfo, LanguageStability,
-    };
-}
+#[path = "lang/mod.rs"]
+pub mod lang;
 
 // I/O, caching, and reporting
 pub mod io {

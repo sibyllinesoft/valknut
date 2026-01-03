@@ -15,16 +15,6 @@ use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Directories to skip during directory analysis
-const SKIP_DIRECTORIES: &[&str] = &[
-    "node_modules", "target", ".git", "__pycache__", "dist", "build", ".next", "vendor", "venv",
-];
-
-/// Code file extensions recognized for analysis
-const CODE_EXTENSIONS: &[&str] = &[
-    "py", "js", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
-];
-
 use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 use crate::lang::registry::adapter_for_file;
@@ -33,19 +23,22 @@ use tracing::warn;
 use super::PrecomputedFileMetrics;
 
 use super::config::{
-    BranchReorgPack, DependencyEdge, DependencyGraph, DirectoryMetrics, DirectoryPartition,
-    FileNode, ImportStatement, StructureConfig,
+    is_code_extension, should_skip_directory, BranchReorgPack, DependencyEdge, DependencyGraph,
+    DirectoryMetrics, DirectoryPartition, FileNode, ImportStatement, StructureConfig,
 };
 
 use partitioning::GraphPartitioner;
 use reorganization::ReorganizationPlanner;
 
+/// Analyzer for directory-level structure metrics and reorganization.
 pub struct DirectoryAnalyzer {
     config: StructureConfig,
     metrics_cache: DashMap<PathBuf, DirectoryMetrics>,
 }
 
+/// Factory and analysis methods for [`DirectoryAnalyzer`].
 impl DirectoryAnalyzer {
+    /// Creates a new directory analyzer with the given configuration.
     pub fn new(config: StructureConfig) -> Self {
         Self {
             config,
@@ -153,19 +146,21 @@ impl DirectoryAnalyzer {
         let mut loc_distribution = Vec::new();
 
         for entry in std::fs::read_dir(dir_path)? {
-            let entry = entry?;
-            let path = entry.path();
+            let path = entry?.path();
 
             if path.is_dir() {
                 subdirs += 1;
-            } else if path.is_file() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    if self.is_code_file(ext) {
-                        files += 1;
-                        let loc = self.count_lines_of_code(&path)?;
-                        loc_distribution.push(loc);
-                    }
-                }
+                continue;
+            }
+
+            let is_code = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map_or(false, |ext| self.is_code_file(ext));
+
+            if is_code {
+                files += 1;
+                loc_distribution.push(self.count_lines_of_code(&path)?);
             }
         }
 
@@ -174,10 +169,10 @@ impl DirectoryAnalyzer {
 
     /// Check if file extension indicates a code file
     fn is_code_file(&self, extension: &str) -> bool {
-        CODE_EXTENSIONS.contains(&extension)
+        is_code_extension(extension)
     }
 
-    /// Count lines of code in a file
+    /// Count lines of code in a file (excludes empty lines and // comments only)
     fn count_lines_of_code(&self, file_path: &Path) -> Result<usize> {
         let content = FileReader::read_to_string(file_path)?;
         Ok(content
@@ -197,24 +192,26 @@ impl DirectoryAnalyzer {
         let mut loc_distribution = Vec::new();
 
         for entry in std::fs::read_dir(dir_path)? {
-            let entry = entry?;
-            let path = entry.path();
+            let path = entry?.path();
 
             if path.is_dir() {
                 subdirs += 1;
-            } else if path.is_file() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    if self.is_code_file(ext) {
-                        files += 1;
-                        // Use pre-computed LOC if available, otherwise fall back to reading
-                        let loc = if let Some(metrics) = metrics_map.get(&path) {
-                            metrics.loc
-                        } else {
-                            self.count_lines_of_code(&path)?
-                        };
-                        loc_distribution.push(loc);
-                    }
-                }
+                continue;
+            }
+
+            let is_code = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map_or(false, |ext| self.is_code_file(ext));
+
+            if is_code {
+                files += 1;
+                // Use pre-computed LOC if available, otherwise fall back to reading
+                let loc = metrics_map
+                    .get(&path)
+                    .map(|m| m.loc)
+                    .map_or_else(|| self.count_lines_of_code(&path), Ok)?;
+                loc_distribution.push(loc);
             }
         }
 
@@ -377,49 +374,79 @@ impl DirectoryAnalyzer {
         // First pass: create nodes for all code files in directory
         for entry in std::fs::read_dir(dir_path)? {
             let entry = entry?;
-            let file_path = entry.path();
-
-            if file_path.is_file() {
-                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                    if self.is_code_file(ext) {
-                        let loc = self.count_lines_of_code(&file_path)?;
-                        let metadata = std::fs::metadata(&file_path)?;
-
-                        let file_node = FileNode {
-                            path: file_path.clone(),
-                            loc,
-                            size_bytes: metadata.len() as usize,
-                        };
-
-                        let node_idx = graph.add_node(file_node);
-                        path_to_node.insert(file_path, node_idx);
-                    }
-                }
+            if let Some((file_path, node)) = self.try_create_file_node(&entry)? {
+                let node_idx = graph.add_node(node);
+                path_to_node.insert(file_path, node_idx);
             }
         }
 
         // Second pass: analyze imports and create edges
         for (file_path, &source_node) in &path_to_node {
-            if let Ok(imports) = self.extract_imports(file_path) {
-                for import in imports {
-                    // Resolve import to file path within the same directory
-                    if let Some(target_path) = self.resolve_import_to_local_file(&import, dir_path)
-                    {
-                        if let Some(&target_node) = path_to_node.get(&target_path) {
-                            // Add edge from source to target with weight based on import frequency
-                            let edge = DependencyEdge {
-                                weight: 1, // Could be enhanced to count import usage frequency
-                                relationship_type: import.import_type,
-                            };
-
-                            graph.add_edge(source_node, target_node, edge);
-                        }
-                    }
-                }
-            }
+            self.add_import_edges(file_path, source_node, dir_path, &path_to_node, &mut graph);
         }
 
         Ok(graph)
+    }
+
+    /// Try to create a FileNode from a directory entry if it's a code file.
+    fn try_create_file_node(
+        &self,
+        entry: &std::fs::DirEntry,
+    ) -> Result<Option<(PathBuf, FileNode)>> {
+        let file_path = entry.path();
+        if !file_path.is_file() {
+            return Ok(None);
+        }
+
+        let ext = match file_path.extension().and_then(|e| e.to_str()) {
+            Some(ext) if self.is_code_file(ext) => ext,
+            _ => return Ok(None),
+        };
+        let _ = ext; // Used in the match guard above
+
+        let loc = self.count_lines_of_code(&file_path)?;
+        let metadata = std::fs::metadata(&file_path)?;
+
+        let node = FileNode {
+            path: file_path.clone(),
+            loc,
+            size_bytes: metadata.len() as usize,
+        };
+
+        Ok(Some((file_path, node)))
+    }
+
+    /// Add dependency edges for imports from a source file.
+    fn add_import_edges(
+        &self,
+        file_path: &Path,
+        source_node: NodeIndex,
+        dir_path: &Path,
+        path_to_node: &HashMap<PathBuf, NodeIndex>,
+        graph: &mut DependencyGraph,
+    ) {
+        let imports = match self.extract_imports(file_path) {
+            Ok(imports) => imports,
+            Err(_) => return,
+        };
+
+        for import in imports {
+            let target_path = match self.resolve_import_to_local_file(&import, dir_path) {
+                Some(path) => path,
+                None => continue,
+            };
+
+            let target_node = match path_to_node.get(&target_path) {
+                Some(&node) => node,
+                None => continue,
+            };
+
+            let edge = DependencyEdge {
+                weight: 1,
+                relationship_type: import.import_type,
+            };
+            graph.add_edge(source_node, target_node, edge);
+        }
     }
 
     /// Extract imports from source file
@@ -494,12 +521,7 @@ impl DirectoryAnalyzer {
 
     /// Check if directory should be skipped from analysis
     fn should_skip_directory(&self, path: &Path) -> bool {
-        let filename = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        // Skip common ignore patterns
-        SKIP_DIRECTORIES.contains(&filename)
+        should_skip_directory(path)
     }
 }
 

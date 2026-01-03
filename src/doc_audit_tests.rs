@@ -1,4 +1,5 @@
 use super::*;
+use git2::Repository;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;

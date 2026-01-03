@@ -40,6 +40,7 @@ pub struct StructureRecommendations {
     pub file_split_packs: Vec<FileSplitPack>,
 }
 
+/// Count and iteration methods for [`StructureRecommendations`].
 impl StructureRecommendations {
     /// Get total number of recommendations
     pub fn len(&self) -> usize {
@@ -52,10 +53,12 @@ impl StructureRecommendations {
     }
 }
 
+/// [`IntoIterator`] implementation for JSON serialization of recommendations.
 impl IntoIterator for StructureRecommendations {
     type Item = serde_json::Value;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
+    /// Converts recommendations into an iterator of JSON values.
     fn into_iter(self) -> Self::IntoIter {
         let mut recommendations = Vec::new();
 
@@ -90,6 +93,7 @@ pub struct PrecomputedFileMetrics {
     pub entities: Vec<CodeEntity>,
 }
 
+/// Factory methods for [`PrecomputedFileMetrics`].
 impl PrecomputedFileMetrics {
     /// Create from an ArenaAnalysisResult
     pub fn from_arena_result(result: &ArenaAnalysisResult) -> Self {
@@ -110,18 +114,23 @@ pub struct StructureExtractor {
     features: Vec<FeatureDefinition>,
 }
 
+/// Default implementation for [`StructureExtractor`].
 impl Default for StructureExtractor {
+    /// Returns a new structure extractor with default configuration.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Analysis methods for [`StructureExtractor`].
 impl StructureExtractor {
+    /// Creates a new structure extractor with default configuration.
     pub fn new() -> Self {
         let config = StructureConfig::default();
         Self::with_config(config)
     }
 
+    /// Creates a structure extractor with custom configuration.
     pub fn with_config(config: StructureConfig) -> Self {
         let directory_analyzer = DirectoryAnalyzer::new(config.clone());
         let file_analyzer = FileAnalyzer::new(config.clone());
@@ -137,6 +146,7 @@ impl StructureExtractor {
         extractor
     }
 
+    /// Initializes the feature definitions for structure analysis.
     fn initialize_features(&mut self) {
         self.features = vec![
             FeatureDefinition::new(
@@ -388,16 +398,20 @@ impl StructureExtractor {
     }
 }
 
+/// [`FeatureExtractor`] implementation for structure analysis features.
 #[async_trait]
 impl FeatureExtractor for StructureExtractor {
+    /// Returns the extractor name ("structure").
     fn name(&self) -> &str {
         "structure"
     }
 
+    /// Returns the feature definitions for this extractor.
     fn features(&self) -> &[FeatureDefinition] {
         &self.features
     }
 
+    /// Extracts directory and file structure features for an entity.
     async fn extract(
         &self,
         entity: &CodeEntity,

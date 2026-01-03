@@ -3,17 +3,28 @@
 use super::{extract_comment_text, is_incomplete_doc, relative_path, DocIssue};
 use std::path::Path;
 
+/// Scans Rust source code for missing or incomplete rustdoc documentation.
+///
+/// Detects undocumented public functions, structs, enums, traits, impl blocks, and modules.
+/// Test functions and test modules are automatically excluded from the audit.
+/// Nested functions (functions defined inside other functions) are also excluded.
 pub fn scan_rust(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
     let lines: Vec<&str> = source.lines().collect();
     let mut issues = Vec::new();
     let mut pending_attrs: Vec<String> = Vec::new();
     let mut index = 0usize;
+    let mut brace_depth = 0isize;
 
     while index < lines.len() {
         let line = lines[index];
         let trimmed = line.trim_start();
 
+        // Track brace depth to detect nested functions
+        let open_braces = line.chars().filter(|&c| c == '{').count() as isize;
+        let close_braces = line.chars().filter(|&c| c == '}').count() as isize;
+
         if trimmed.is_empty() || trimmed.starts_with("///") || trimmed.starts_with("//!") {
+            brace_depth += open_braces - close_braces;
             index += 1;
             continue;
         }
@@ -23,28 +34,38 @@ pub fn scan_rust(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
             let effective_line = handle_attribute_line(trimmed, &mut pending_attrs);
             if let Some(remainder) = effective_line {
                 let has_test_attr = has_test_attribute(&pending_attrs);
-                if let Some(new_index) = process_item_line(
-                    &remainder, &lines, index, has_test_attr, &mut pending_attrs,
-                    &mut issues, path, root,
-                ) {
-                    index = new_index;
-                    continue;
+                // Only check items at top level (brace_depth == 0)
+                if brace_depth == 0 {
+                    if let Some(new_index) = process_item_line(
+                        &remainder, &lines, index, has_test_attr, &mut pending_attrs,
+                        &mut issues, path, root,
+                    ) {
+                        brace_depth += open_braces - close_braces;
+                        index = new_index;
+                        continue;
+                    }
                 }
             }
+            brace_depth += open_braces - close_braces;
             index += 1;
             continue;
         }
 
         let has_test_attr = has_test_attribute(&pending_attrs);
-        if let Some(new_index) = process_item_line(
-            trimmed, &lines, index, has_test_attr, &mut pending_attrs,
-            &mut issues, path, root,
-        ) {
-            index = new_index;
-        } else {
-            pending_attrs.clear();
-            index += 1;
+        // Only check items at top level (brace_depth == 0)
+        if brace_depth == 0 {
+            if let Some(new_index) = process_item_line(
+                trimmed, &lines, index, has_test_attr, &mut pending_attrs,
+                &mut issues, path, root,
+            ) {
+                brace_depth += open_braces - close_braces;
+                index = new_index;
+                continue;
+            }
         }
+        pending_attrs.clear();
+        brace_depth += open_braces - close_braces;
+        index += 1;
     }
 
     issues
@@ -181,6 +202,7 @@ fn check_impl_docs(
     }
 }
 
+/// Skips over a brace-delimited block and returns the ending line index.
 fn skip_block(lines: &[&str], start: usize) -> Option<usize> {
     let mut depth: isize = 0;
     for (idx, line) in lines.iter().enumerate().skip(start) {
@@ -193,6 +215,7 @@ fn skip_block(lines: &[&str], start: usize) -> Option<usize> {
     None
 }
 
+/// Creates and pushes a documentation issue to the issues list.
 fn push_issue(
     issues: &mut Vec<DocIssue>,
     path: &Path,
@@ -211,6 +234,7 @@ fn push_issue(
     });
 }
 
+/// Extracts the function name from a line containing a function definition.
 fn detect_function_name(line: &str) -> Option<String> {
     let fn_pos = find_keyword(line, "fn")?;
     let prefix = line[..fn_pos].trim();
@@ -228,6 +252,7 @@ fn detect_function_name(line: &str) -> Option<String> {
     }
 }
 
+/// Detects struct, enum, or trait definitions and returns the kind and name.
 fn detect_type(line: &str) -> Option<(&'static str, String)> {
     for keyword in ["struct", "enum", "trait"] {
         if let Some(name) = extract_identifier(line, keyword) {
@@ -243,27 +268,73 @@ fn detect_type(line: &str) -> Option<(&'static str, String)> {
     None
 }
 
+/// Detects impl blocks and returns the target type name.
 fn detect_impl(line: &str) -> Option<String> {
     let impl_pos = find_keyword(line, "impl")?;
     let prefix = line[..impl_pos].trim();
     if !prefix.is_empty() && prefix != "unsafe" && prefix != "default" {
         return None;
     }
-    let remainder = line[impl_pos + 4..].trim_start();
+    let mut remainder = line[impl_pos + 4..].trim_start();
+
+    // Skip over generic parameters like <'a, T> or <T: Trait>
+    if remainder.starts_with('<') {
+        if let Some(close_pos) = find_matching_bracket(remainder) {
+            remainder = remainder[close_pos + 1..].trim_start();
+        }
+    }
+
+    // Now extract the type name (handles "TypeName" or "TypeName<...>")
     let target = remainder
         .split(|c: char| c == '{' || c == ' ' || c == '\t' || c == '\n')
         .filter(|segment| !segment.is_empty())
         .next()?;
-    Some(target.trim_matches(|c| c == '<' || c == '>').to_string())
+
+    // Extract just the base type name without generic parameters
+    let base_name = target.split('<').next().unwrap_or(target);
+    if base_name.is_empty() {
+        None
+    } else {
+        Some(base_name.to_string())
+    }
 }
 
+/// Finds the position of the matching closing bracket for an opening '<'.
+fn find_matching_bracket(s: &str) -> Option<usize> {
+    let mut depth = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Extracts an identifier following a keyword (e.g., struct name, mod name).
 fn extract_identifier(line: &str, keyword: &str) -> Option<String> {
-    if !line.starts_with(keyword) && !line.starts_with(&format!("pub {}", keyword)) {
+    // Use find_keyword for proper word boundary checking to avoid matching
+    // "structure:" as "struct" + "ure:" or similar false positives
+    let keyword_pos = find_keyword(line, keyword)?;
+
+    // Check that prefix is empty or a valid visibility modifier
+    let prefix = line[..keyword_pos].trim();
+    if !prefix.is_empty() && !prefix.starts_with("pub") {
         return None;
     }
-    let remainder = line[keyword.len()..].trim_start();
+
+    // Extract remainder after the keyword
+    let remainder = line[keyword_pos + keyword.len()..].trim_start();
+
+    // Get the identifier name (split on delimiters including < for generics)
     let name = remainder
-        .split(|c: char| c == '{' || c == '(' || c.is_whitespace())
+        .split(|c: char| c == '{' || c == '(' || c == '<' || c.is_whitespace())
         .next()?;
     if name.is_empty() {
         None
@@ -272,6 +343,7 @@ fn extract_identifier(line: &str, keyword: &str) -> Option<String> {
     }
 }
 
+/// Finds the position of a keyword as a whole word (not part of an identifier).
 fn find_keyword(line: &str, keyword: &str) -> Option<usize> {
     let mut offset = 0usize;
     while let Some(found) = line[offset..].find(keyword) {
@@ -295,6 +367,7 @@ fn find_keyword(line: &str, keyword: &str) -> Option<usize> {
     None
 }
 
+/// Checks if the prefix before `fn` keyword contains only valid modifiers.
 fn is_valid_fn_prefix(prefix: &str) -> bool {
     if prefix.is_empty() {
         return true;
@@ -313,6 +386,7 @@ fn is_valid_fn_prefix(prefix: &str) -> bool {
     true
 }
 
+/// Checks if documentation is missing before the item at the given line index.
 fn is_doc_missing(lines: &[&str], index: usize) -> bool {
     extract_comment_text(lines, index).is_none()
 }

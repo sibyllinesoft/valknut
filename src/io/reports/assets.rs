@@ -104,15 +104,8 @@ pub(super) fn copy_js_assets_to_output<P: AsRef<Path>>(output_dir: P) -> Result<
 
 pub fn copy_webpage_assets_to_output<P: AsRef<Path>>(output_dir: P) -> Result<(), ReportError> {
     let output_dir = output_dir.as_ref();
-
-    if !output_dir.exists() {
-        fs::create_dir_all(output_dir)?;
-    }
-
-    let webpage_files_dir = output_dir.join("webpage_files");
-    if !webpage_files_dir.exists() {
-        fs::create_dir_all(&webpage_files_dir)?;
-    }
+    ensure_dir_exists(output_dir)?;
+    ensure_dir_exists(&output_dir.join("webpage_files"))?;
 
     let assets = [
         ("webpage_files/valknut-large.webp", "webpage_files"),
@@ -122,32 +115,49 @@ pub fn copy_webpage_assets_to_output<P: AsRef<Path>>(output_dir: P) -> Result<()
     let search_roots = webpage_asset_roots();
 
     for (relative_source, target_dir) in assets {
-        let mut copied = false;
-        for root in &search_roots {
-            let source_path = root.join(relative_source);
-            if source_path.exists() {
-                let destination = output_dir.join(target_dir).join(
-                    Path::new(relative_source)
-                        .file_name()
-                        .unwrap_or_else(|| std::ffi::OsStr::new("asset")),
-                );
-                if let Some(parent) = destination.parent() {
-                    if !parent.exists() {
-                        fs::create_dir_all(parent)?;
-                    }
-                }
-                fs::copy(source_path, destination)?;
-                copied = true;
-                break;
-            }
-        }
-
-        if !copied {
+        if !try_copy_asset(relative_source, target_dir, output_dir, &search_roots)? {
             eprintln!("Warning: asset {} not found", relative_source);
         }
     }
 
     Ok(())
+}
+
+/// Ensure a directory exists, creating it if necessary.
+fn ensure_dir_exists(path: &Path) -> Result<(), ReportError> {
+    if !path.exists() {
+        fs::create_dir_all(path)?;
+    }
+    Ok(())
+}
+
+/// Try to copy an asset from one of the search roots to the output directory.
+/// Returns Ok(true) if the asset was copied, Ok(false) if not found.
+fn try_copy_asset(
+    relative_source: &str,
+    target_dir: &str,
+    output_dir: &Path,
+    search_roots: &[PathBuf],
+) -> Result<bool, ReportError> {
+    for root in search_roots {
+        let source_path = root.join(relative_source);
+        if !source_path.exists() {
+            continue;
+        }
+
+        let filename = Path::new(relative_source)
+            .file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new("asset"));
+        let destination = output_dir.join(target_dir).join(filename);
+
+        if let Some(parent) = destination.parent() {
+            ensure_dir_exists(parent)?;
+        }
+
+        fs::copy(source_path, destination)?;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 #[cfg(test)]

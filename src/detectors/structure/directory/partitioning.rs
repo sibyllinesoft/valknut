@@ -16,7 +16,9 @@ pub struct GraphPartitioner<'a> {
     config: &'a StructureConfig,
 }
 
+/// Partitioning and clustering methods for [`GraphPartitioner`].
 impl<'a> GraphPartitioner<'a> {
+    /// Creates a new graph partitioner with the given configuration.
     pub fn new(config: &'a StructureConfig) -> Self {
         Self { config }
     }
@@ -270,37 +272,69 @@ impl<'a> GraphPartitioner<'a> {
         let mut iteration = 0;
 
         while improved && iteration < max_iterations {
-            improved = false;
-
-            // Try to improve each pair of communities
-            for i in 0..communities.len() {
-                for j in i + 1..communities.len() {
-                    let _initial_cost = self.calculate_partition_cost(graph, &communities);
-
-                    // Try swapping nodes between communities i and j
-                    if let Some((best_swap, cost_improvement)) =
-                        self.find_best_node_swap(graph, &communities[i], &communities[j])
-                    {
-                        if cost_improvement > 0.0 {
-                            // Apply the swap
-                            let (from_comm, _to_comm, node) = best_swap;
-                            if from_comm == i {
-                                communities[i].retain(|&n| n != node);
-                                communities[j].push(node);
-                            } else {
-                                communities[j].retain(|&n| n != node);
-                                communities[i].push(node);
-                            }
-                            improved = true;
-                        }
-                    }
-                }
-            }
-
+            improved = self.try_improve_all_pairs(graph, &mut communities);
             iteration += 1;
         }
 
         Ok(communities)
+    }
+
+    /// Try to improve partition by swapping nodes between all community pairs.
+    fn try_improve_all_pairs(
+        &self,
+        graph: &DependencyGraph,
+        communities: &mut [Vec<NodeIndex>],
+    ) -> bool {
+        let mut improved = false;
+        for i in 0..communities.len() {
+            for j in i + 1..communities.len() {
+                if self.try_swap_between_communities(graph, communities, i, j) {
+                    improved = true;
+                }
+            }
+        }
+        improved
+    }
+
+    /// Try to find and apply a beneficial swap between two communities.
+    fn try_swap_between_communities(
+        &self,
+        graph: &DependencyGraph,
+        communities: &mut [Vec<NodeIndex>],
+        i: usize,
+        j: usize,
+    ) -> bool {
+        let Some((best_swap, cost_improvement)) =
+            self.find_best_node_swap(graph, &communities[i], &communities[j])
+        else {
+            return false;
+        };
+
+        if cost_improvement <= 0.0 {
+            return false;
+        }
+
+        let (from_comm, _to_comm, node) = best_swap;
+        self.apply_node_swap(communities, i, j, from_comm, node);
+        true
+    }
+
+    /// Move a node from one community to another.
+    fn apply_node_swap(
+        &self,
+        communities: &mut [Vec<NodeIndex>],
+        i: usize,
+        j: usize,
+        from_comm: usize,
+        node: NodeIndex,
+    ) {
+        if from_comm == i {
+            communities[i].retain(|&n| n != node);
+            communities[j].push(node);
+        } else {
+            communities[j].retain(|&n| n != node);
+            communities[i].push(node);
+        }
     }
 
     /// Calculate overall cost/cut of partition

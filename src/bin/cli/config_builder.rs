@@ -42,7 +42,7 @@ pub fn apply_performance_profile(config: &mut ValknutConfig, profile: &Performan
             // Thorough mode - more comprehensive analysis
             config.analysis.max_files = 2000; // Allow more files
             config.lsh.num_bands = 20; // Higher LSH precision
-            config.lsh.num_hashes = 150; // More hash functions
+            config.lsh.num_hashes = 160; // More hash functions (must be divisible by num_bands)
             config.denoise.enabled = true; // Enable all denoising
             info!("🔍 Performance profile: Thorough mode - comprehensive analysis");
         }

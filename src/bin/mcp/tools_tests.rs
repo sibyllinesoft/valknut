@@ -1,10 +1,14 @@
 use super::*;
+use crate::mcp::formatters::{
+    create_markdown_report, format_analysis_results_with_temp_path,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tempfile::{tempdir, TempDir};
 use valknut_rs::core::pipeline::{CodeDefinition, CodeDictionary};
+use valknut_rs::core::scoring::Priority;
 
 fn sample_results() -> AnalysisResults {
     let summary = valknut_rs::api::results::AnalysisSummary {

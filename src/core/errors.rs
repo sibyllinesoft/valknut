@@ -170,6 +170,7 @@ pub enum ValknutError {
     },
 }
 
+/// Factory methods and context utilities for [`ValknutError`].
 impl ValknutError {
     /// Create a new I/O error with context
     pub fn io(message: impl Into<String>, source: io::Error) -> Self {
@@ -310,13 +311,18 @@ impl ValknutError {
 }
 
 // Implement From traits for common error types
+
+/// Conversion from [`io::Error`] to [`ValknutError`].
 impl From<io::Error> for ValknutError {
+    /// Converts an I/O error into a [`ValknutError::Io`] variant.
     fn from(err: io::Error) -> Self {
         Self::io("I/O operation failed", err)
     }
 }
 
+/// Conversion from [`serde_json::Error`] to [`ValknutError`].
 impl From<serde_json::Error> for ValknutError {
+    /// Converts a JSON error into a [`ValknutError::Serialization`] variant.
     fn from(err: serde_json::Error) -> Self {
         Self::Serialization {
             message: format!("JSON serialization failed: {err}"),
@@ -326,7 +332,9 @@ impl From<serde_json::Error> for ValknutError {
     }
 }
 
+/// Conversion from [`serde_yaml::Error`] to [`ValknutError`].
 impl From<serde_yaml::Error> for ValknutError {
+    /// Converts a YAML error into a [`ValknutError::Serialization`] variant.
     fn from(err: serde_yaml::Error) -> Self {
         Self::Serialization {
             message: format!("YAML serialization failed: {err}"),
@@ -336,19 +344,25 @@ impl From<serde_yaml::Error> for ValknutError {
     }
 }
 
+/// Conversion from [`ParseIntError`] to [`ValknutError`].
 impl From<ParseIntError> for ValknutError {
+    /// Converts an integer parse error into a [`ValknutError::Validation`] variant.
     fn from(err: ParseIntError) -> Self {
         Self::validation(format!("Invalid integer: {err}"))
     }
 }
 
+/// Conversion from [`ParseFloatError`] to [`ValknutError`].
 impl From<ParseFloatError> for ValknutError {
+    /// Converts a float parse error into a [`ValknutError::Validation`] variant.
     fn from(err: ParseFloatError) -> Self {
         Self::validation(format!("Invalid float: {err}"))
     }
 }
 
+/// Conversion from [`Utf8Error`] to [`ValknutError`].
 impl From<Utf8Error> for ValknutError {
+    /// Converts a UTF-8 error into a [`ValknutError::Parse`] variant.
     fn from(err: Utf8Error) -> Self {
         Self::parse("unknown", format!("UTF-8 encoding error: {err}"))
     }
@@ -376,10 +390,12 @@ pub trait ResultExt<T> {
     fn context(self, msg: &'static str) -> Result<T>;
 }
 
+/// [`ResultExt`] implementation for results with errors convertible to [`ValknutError`].
 impl<T, E> ResultExt<T> for std::result::Result<T, E>
 where
     E: Into<ValknutError>,
 {
+    /// Adds dynamic context to an error result using a closure.
     fn with_context<F>(self, f: F) -> Result<T>
     where
         F: FnOnce() -> String,
@@ -387,12 +403,15 @@ where
         self.map_err(|e| e.into().with_context(f()))
     }
 
+    /// Adds static context to an error result.
     fn context(self, msg: &'static str) -> Result<T> {
         self.map_err(|e| e.into().with_context(msg))
     }
 }
 
-/// Canonical error mapping adapters to reduce duplication
+/// Canonical error mapping adapters for [`ValknutError`].
+///
+/// These methods create closures suitable for use with `Result::map_err`.
 impl ValknutError {
     /// Create error mapping adapter for I/O operations with custom message
     pub fn map_io(message: impl Into<String>) -> impl FnOnce(std::io::Error) -> Self {
@@ -443,19 +462,22 @@ pub trait ValknutResultExt<T> {
     fn map_generic_err(self, operation: impl Into<String>) -> Result<T>;
 }
 
-/// Generic implementation for all error types
+/// [`ValknutResultExt`] implementation for results with displayable errors.
 impl<T, E> ValknutResultExt<T> for std::result::Result<T, E>
 where
     E: std::fmt::Display,
 {
+    /// Maps errors to an internal error with an I/O-style message prefix.
     fn map_io_err(self, message: impl Into<String>) -> Result<T> {
         self.map_err(|e| ValknutError::internal(format!("{}: {}", message.into(), e)))
     }
 
+    /// Maps errors to an internal error with JSON context.
     fn map_json_err(self, context: impl Into<String>) -> Result<T> {
         self.map_err(|e| ValknutError::internal(format!("JSON error in {}: {}", context.into(), e)))
     }
 
+    /// Maps errors to an internal error with operation context.
     fn map_generic_err(self, operation: impl Into<String>) -> Result<T> {
         self.map_err(|e| {
             ValknutError::internal(format!("Failed during {}: {}", operation.into(), e))

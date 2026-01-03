@@ -194,7 +194,7 @@ fn parse_cobertura_like_xml(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
                     current_file = extract_class_path(&tag, current_package.as_deref());
                 }
                 b"line" => {
-                    if let (Some(file), Some(line)) = (current_file.clone(), extract_line_from_tag(&tag)) {
+                    if let Some((file, line)) = current_file.clone().zip(extract_line_from_tag(&tag)) {
                         insert_line(&mut files, file, line);
                     }
                 }
@@ -267,7 +267,7 @@ fn parse_jacoco_xml(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
                     current_file = extract_sourcefile_path(&tag, current_package.as_deref());
                 }
                 b"line" => {
-                    if let (Some(file), Some(line)) = (current_file.clone(), extract_jacoco_line(&tag)) {
+                    if let Some((file, line)) = current_file.clone().zip(extract_jacoco_line(&tag)) {
                         insert_line(&mut files, file, line);
                     }
                 }
@@ -293,6 +293,18 @@ fn parse_jacoco_xml(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
     Ok(finalize_files_map(files))
 }
 
+/// Parse a LCOV DA: line into LineCoverage.
+fn parse_lcov_da_line(rest: &str) -> Option<LineCoverage> {
+    let mut parts = rest.split(',');
+    let line_number = parts.next()?.parse::<usize>().ok()?;
+    let hits = parts.next()?.parse::<usize>().ok()?;
+    Some(LineCoverage {
+        line_number,
+        hits,
+        is_covered: hits > 0,
+    })
+}
+
 fn parse_lcov(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
     let content = String::from_utf8_lossy(bytes);
     let mut current_file: Option<PathBuf> = None;
@@ -308,24 +320,9 @@ fn parse_lcov(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
             continue;
         }
         if let Some(rest) = line.strip_prefix("DA:") {
-            if let Some(file) = current_file.clone() {
-                let mut parts = rest.split(',');
-                if let (Some(line_str), Some(hit_str)) = (parts.next(), parts.next()) {
-                    if let (Ok(line_number), Ok(hits)) =
-                        (line_str.parse::<usize>(), hit_str.parse::<usize>())
-                    {
-                        insert_line(
-                            &mut files,
-                            file,
-                            LineCoverage {
-                                line_number,
-                                hits,
-                                is_covered: hits > 0,
-                            },
-                        );
-                    }
-                }
-            }
+            let Some(file) = current_file.clone() else { continue };
+            let Some(coverage) = parse_lcov_da_line(rest) else { continue };
+            insert_line(&mut files, file, coverage);
         }
     }
 
@@ -414,6 +411,16 @@ fn extract_istanbul_coverage(
     parse_istanbul_statements(statements, statement_hits, path, files)
 }
 
+/// Create LineCoverage from line number and JSON hits value.
+fn line_coverage_from_hits(line_number: usize, hits_value: &Value) -> LineCoverage {
+    let hits = hits_value.as_i64().unwrap_or(0).max(0) as usize;
+    LineCoverage {
+        line_number,
+        hits,
+        is_covered: hits > 0,
+    }
+}
+
 fn parse_istanbul_lines(
     lines_value: &Value,
     path: &PathBuf,
@@ -422,33 +429,13 @@ fn parse_istanbul_lines(
     match lines_value {
         Value::Object(map) => {
             for (line_str, hits_value) in map {
-                if let Ok(line_number) = line_str.parse::<usize>() {
-                    let hits = hits_value.as_i64().unwrap_or(0).max(0) as usize;
-                    insert_line(
-                        files,
-                        path.clone(),
-                        LineCoverage {
-                            line_number,
-                            hits,
-                            is_covered: hits > 0,
-                        },
-                    );
-                }
+                let Some(line_number) = line_str.parse::<usize>().ok() else { continue };
+                insert_line(files, path.clone(), line_coverage_from_hits(line_number, hits_value));
             }
         }
         Value::Array(list) => {
             for (idx, hits_value) in list.iter().enumerate() {
-                let line_number = idx + 1;
-                let hits = hits_value.as_i64().unwrap_or(0).max(0) as usize;
-                insert_line(
-                    files,
-                    path.clone(),
-                    LineCoverage {
-                        line_number,
-                        hits,
-                        is_covered: hits > 0,
-                    },
-                );
+                insert_line(files, path.clone(), line_coverage_from_hits(idx + 1, hits_value));
             }
         }
         _ => {}

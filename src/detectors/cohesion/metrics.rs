@@ -18,6 +18,7 @@ pub struct CohesionCalculator {
     file_weight_fn: WeightFunction,
 }
 
+/// Factory and cohesion calculation methods for [`CohesionCalculator`].
 impl CohesionCalculator {
     /// Create a new calculator from configuration.
     pub fn new(config: &CohesionConfig) -> Self {
@@ -314,6 +315,7 @@ pub struct RollupState {
     pub sum: Vec<f32>,
 }
 
+/// Factory and aggregation methods for [`RollupState`].
 impl RollupState {
     /// Create empty rollup state.
     pub fn new(dimension: usize) -> Self {

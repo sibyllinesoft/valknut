@@ -18,14 +18,19 @@ analysis:
     - "**/target/**"
     - "**/__pycache__/**"
     - "**/*.min.js"
+    - "**/*-bundle*.js"
+    - "**/*bundle*.js"
+    - ".valknut/**"
     - "datasets/**"
-    - "templates/dev/**"
-    - "templates/partials/**"
+    - "templates/**"
     - "vscode-extension/**"
     - "benchmarks/**"
     - "examples/**"
     - "scripts/**"
     - "docs/**"
+    - "**/*_tests.rs"       # Exclude test files from structure analysis
+    - "**/tests.rs"         # Exclude test modules
+    - "**/test_*.rs"        # Exclude test files
   include_patterns:
     - "**/*"
 
@@ -74,20 +79,20 @@ structure:
   
   # Directory analysis settings
   fsdir:
-    max_files_per_dir: 25
-    max_subdirs_per_dir: 10
-    max_dir_loc: 2000
-    min_branch_recommendation_gain: 0.15
-    min_files_for_split: 5
-    target_loc_per_subdir: 1000
-    optimal_files: 7
-    optimal_files_stddev: 2.0
-    optimal_subdirs: 3
-    optimal_subdirs_stddev: 1.5
+    max_files_per_dir: 30     # Rust modules often have more files
+    max_subdirs_per_dir: 12
+    max_dir_loc: 4000         # Increased for larger modules
+    min_branch_recommendation_gain: 0.25  # Higher threshold for recommendations
+    min_files_for_split: 8    # Only suggest splits for larger directories
+    target_loc_per_subdir: 1500
+    optimal_files: 10         # Rust modules typically have 8-12 files
+    optimal_files_stddev: 4.0
+    optimal_subdirs: 4
+    optimal_subdirs_stddev: 2.0
 
   # File analysis settings
   fsfile:
-    huge_loc: 800
+    huge_loc: 800            # 800 LOC threshold helps agents work with files
     huge_bytes: 128000
     min_split_loc: 200
     min_entities_per_split: 3

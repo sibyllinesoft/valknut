@@ -1,5 +1,12 @@
+//! Configuration types for LSH-based clone detection and denoising.
+//!
+//! This module provides configuration structures for the locality-sensitive
+//! hashing (LSH) clone detection system, including parameters for shingle-based
+//! fingerprinting, similarity thresholds, and advanced denoising options.
+
 use serde::{Deserialize, Serialize};
 
+use crate::core::config::validate_unit_range;
 use crate::core::errors::{Result, ValknutError};
 
 /// LSH and similarity detection configuration
@@ -24,7 +31,9 @@ pub struct LshConfig {
     pub use_semantic_similarity: bool,
 }
 
+/// Default implementation for [`LshConfig`].
 impl Default for LshConfig {
+    /// Returns the default LSH configuration.
     fn default() -> Self {
         Self {
             num_hashes: 128,
@@ -37,7 +46,9 @@ impl Default for LshConfig {
     }
 }
 
+/// Conversion from core config [`LshConfig`](crate::core::config::LshConfig).
 impl From<crate::core::config::LshConfig> for LshConfig {
+    /// Converts from the core config LSH settings.
     fn from(value: crate::core::config::LshConfig) -> Self {
         Self {
             num_hashes: value.num_hashes,
@@ -50,6 +61,7 @@ impl From<crate::core::config::LshConfig> for LshConfig {
     }
 }
 
+/// Validation and utility methods for [`LshConfig`].
 impl LshConfig {
     /// Validate LSH configuration
     pub fn validate(&self) -> Result<()> {
@@ -69,17 +81,14 @@ impl LshConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.similarity_threshold) {
-            return Err(ValknutError::validation(format!(
-                "similarity_threshold must be between 0.0 and 1.0, got {}",
-                self.similarity_threshold
-            )));
-        }
+        validate_unit_range(self.similarity_threshold, "similarity_threshold")?;
 
         Ok(())
     }
 
-    /// Get the number of hashes per band
+    /// Returns the number of hashes per band (rows per band in LSH parlance).
+    ///
+    /// Higher values reduce false positives but may miss some similar pairs.
     pub fn hashes_per_band(&self) -> usize {
         self.num_hashes / self.num_bands
     }
@@ -194,7 +203,9 @@ pub struct DenoiseWeights {
     pub emb: f64,
 }
 
+/// Default implementation for [`DenoiseWeights`].
 impl Default for DenoiseWeights {
+    /// Returns the default weight distribution for denoising.
     fn default() -> Self {
         Self {
             ast: 0.35,
@@ -217,7 +228,9 @@ pub struct StopMotifsConfig {
     pub refresh_days: i64,
 }
 
+/// Default implementation for [`StopMotifsConfig`].
 impl Default for StopMotifsConfig {
+    /// Returns the default stop motifs configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -243,7 +256,9 @@ pub struct AutoCalibrationConfig {
     pub max_iterations: usize,
 }
 
+/// Default implementation for [`AutoCalibrationConfig`].
 impl Default for AutoCalibrationConfig {
+    /// Returns the default auto-calibration configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -278,7 +293,9 @@ pub enum RankingBy {
     Frequency,
 }
 
+/// Default implementation for [`RankingConfig`].
 impl Default for RankingConfig {
+    /// Returns the default ranking configuration.
     fn default() -> Self {
         Self {
             by: RankingBy::SavedTokens,
@@ -288,7 +305,9 @@ impl Default for RankingConfig {
     }
 }
 
+/// Default implementation for [`DenoiseConfig`].
 impl Default for DenoiseConfig {
+    /// Returns the default clone denoising configuration.
     fn default() -> Self {
         Self {
             enabled: false, // Changed to opt-in for better default performance
@@ -308,6 +327,7 @@ impl Default for DenoiseConfig {
     }
 }
 
+/// Validation for [`DenoiseConfig`].
 impl DenoiseConfig {
     /// Validate denoise configuration
     pub fn validate(&self) -> Result<()> {
@@ -329,23 +349,9 @@ impl DenoiseConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.similarity) {
-            return Err(ValknutError::validation(
-                "similarity must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.threshold_s) {
-            return Err(ValknutError::validation(
-                "threshold_s must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.io_mismatch_penalty) {
-            return Err(ValknutError::validation(
-                "io_mismatch_penalty must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.similarity, "similarity")?;
+        validate_unit_range(self.threshold_s, "threshold_s")?;
+        validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
 
         let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
         if (weight_sum - 1.0).abs() > 0.1 {
@@ -360,11 +366,7 @@ impl DenoiseConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.stop_motifs.percentile) {
-            return Err(ValknutError::validation(
-                "stop_motifs.percentile must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.stop_motifs.percentile, "stop_motifs.percentile")?;
 
         if self.stop_motifs.refresh_days <= 0 {
             return Err(ValknutError::validation(
@@ -372,11 +374,7 @@ impl DenoiseConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.auto_calibration.quality_target) {
-            return Err(ValknutError::validation(
-                "auto_calibration.quality_target must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.auto_calibration.quality_target, "auto_calibration.quality_target")?;
 
         if self.auto_calibration.sample_size == 0 {
             return Err(ValknutError::validation(
@@ -407,7 +405,9 @@ pub struct DedupeWeights {
     pub emb: f64,
 }
 
+/// Default implementation for [`DedupeWeights`].
 impl Default for DedupeWeights {
+    /// Returns the default weight distribution for dedupe.
     fn default() -> Self {
         Self {
             ast: 0.35,
@@ -474,7 +474,9 @@ pub struct AdaptiveDenoiseConfig {
     pub auto_refresh_cache: bool,
 }
 
+/// Default implementation for [`AdaptiveDenoiseConfig`].
 impl Default for AdaptiveDenoiseConfig {
+    /// Returns the default adaptive denoising configuration.
     fn default() -> Self {
         Self {
             auto_denoise: true,
@@ -494,7 +496,9 @@ impl Default for AdaptiveDenoiseConfig {
     }
 }
 
+/// Default implementation for [`DedupeConfig`].
 impl Default for DedupeConfig {
+    /// Returns the default dedupe configuration.
     fn default() -> Self {
         Self {
             include: vec!["src/**".to_string()],
@@ -530,6 +534,7 @@ impl Default for DedupeConfig {
     }
 }
 
+/// Validation for [`DedupeConfig`].
 impl DedupeConfig {
     /// Validate dedupe configuration
     pub fn validate(&self) -> Result<()> {
@@ -551,27 +556,15 @@ impl DedupeConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.min_match_coverage) {
-            return Err(ValknutError::validation(
-                "min_match_coverage must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.min_match_coverage, "min_match_coverage")?;
 
         if self.shingle_k == 0 {
             return Err(ValknutError::validation("shingle_k must be greater than 0"));
         }
 
-        if !(0.0..=1.0).contains(&self.io_mismatch_penalty) {
-            return Err(ValknutError::validation(
-                "io_mismatch_penalty must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
 
-        if !(0.0..=1.0).contains(&self.threshold_s) {
-            return Err(ValknutError::validation(
-                "threshold_s must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(self.threshold_s, "threshold_s")?;
 
         let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
         if (weight_sum - 1.0).abs() > 0.1 {
@@ -588,23 +581,20 @@ impl DedupeConfig {
             }
         }
 
-        if !(0.0..=1.0).contains(&self.adaptive.stop_motif_percentile) {
-            return Err(ValknutError::validation(
-                "adaptive.stop_motif_percentile must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(
+            self.adaptive.stop_motif_percentile,
+            "adaptive.stop_motif_percentile",
+        )?;
 
-        if !(0.0..=1.0).contains(&self.adaptive.hub_suppression_threshold) {
-            return Err(ValknutError::validation(
-                "adaptive.hub_suppression_threshold must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(
+            self.adaptive.hub_suppression_threshold,
+            "adaptive.hub_suppression_threshold",
+        )?;
 
-        if !(0.0..=1.0).contains(&self.adaptive.quality_gate_percentage) {
-            return Err(ValknutError::validation(
-                "adaptive.quality_gate_percentage must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(
+            self.adaptive.quality_gate_percentage,
+            "adaptive.quality_gate_percentage",
+        )?;
 
         if self.adaptive.tfidf_kgram_size == 0 || self.adaptive.tfidf_kgram_size > 20 {
             return Err(ValknutError::validation(
@@ -624,11 +614,10 @@ impl DedupeConfig {
             ));
         }
 
-        if !(0.0..=1.0).contains(&self.adaptive.external_call_jaccard_threshold) {
-            return Err(ValknutError::validation(
-                "adaptive.external_call_jaccard_threshold must be between 0.0 and 1.0",
-            ));
-        }
+        validate_unit_range(
+            self.adaptive.external_call_jaccard_threshold,
+            "adaptive.external_call_jaccard_threshold",
+        )?;
 
         if self.adaptive.cache_refresh_days <= 0 {
             return Err(ValknutError::validation(

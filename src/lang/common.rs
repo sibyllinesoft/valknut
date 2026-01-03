@@ -19,6 +19,7 @@ pub enum EntityKind {
     Struct,
 }
 
+/// Utility methods for [`EntityKind`].
 impl EntityKind {
     /// Generate a fallback name for an anonymous entity of this kind.
     pub fn fallback_name(self, counter: usize) -> String {
@@ -94,6 +95,7 @@ pub struct ParseIndex {
     pub dependencies: std::collections::HashMap<String, Vec<String>>,
 }
 
+/// Factory, query, and mutation methods for [`ParseIndex`].
 impl ParseIndex {
     /// Create a new empty parse index
     pub fn new() -> Self {
@@ -165,45 +167,37 @@ impl ParseIndex {
 
     /// Get all function calls from the parsed entities
     pub fn get_function_calls(&self) -> Vec<String> {
-        let mut calls = Vec::new();
-
-        // Extract function calls from metadata where available
-        for entity in self.entities.values() {
-            if let Some(call_metadata) = entity.metadata.get("function_calls") {
-                if let Some(call_array) = call_metadata.as_array() {
-                    for call in call_array {
-                        if let Some(call_str) = call.as_str() {
-                            calls.push(call_str.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        calls
+        self.entities
+            .values()
+            .flat_map(|entity| {
+                entity
+                    .metadata
+                    .get("function_calls")
+                    .and_then(|m| m.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|call| call.as_str().map(String::from))
+            })
+            .collect()
     }
 
     /// Check if the parsed code contains boilerplate patterns
     pub fn contains_boilerplate_patterns(&self, patterns: &[String]) -> Vec<String> {
-        let mut found_patterns = Vec::new();
-
-        // Check entity names and metadata for patterns
-        for entity in self.entities.values() {
-            for pattern in patterns {
-                if entity.name.contains(pattern) {
-                    found_patterns.push(pattern.clone());
-                }
-
-                // Check in metadata
-                if let Some(source_text) = entity.metadata.get("source_text") {
-                    if let Some(text) = source_text.as_str() {
-                        if text.contains(pattern) {
-                            found_patterns.push(pattern.clone());
-                        }
-                    }
-                }
-            }
-        }
+        let mut found_patterns: Vec<String> = self
+            .entities
+            .values()
+            .flat_map(|entity| {
+                patterns.iter().filter(move |pattern| {
+                    entity.name.contains(pattern.as_str())
+                        || entity
+                            .metadata
+                            .get("source_text")
+                            .and_then(|v| v.as_str())
+                            .map_or(false, |text| text.contains(pattern.as_str()))
+                })
+            })
+            .cloned()
+            .collect();
 
         found_patterns.sort();
         found_patterns.dedup();
@@ -212,22 +206,21 @@ impl ParseIndex {
 
     /// Extract identifiers from all entities
     pub fn extract_identifiers(&self) -> Vec<String> {
-        let mut identifiers = Vec::new();
+        let mut identifiers: Vec<String> = self
+            .entities
+            .values()
+            .flat_map(|entity| {
+                let metadata_ids = entity
+                    .metadata
+                    .get("identifiers")
+                    .and_then(|m| m.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|id| id.as_str().map(String::from));
 
-        for entity in self.entities.values() {
-            identifiers.push(entity.name.clone());
-
-            // Extract identifiers from metadata
-            if let Some(identifiers_metadata) = entity.metadata.get("identifiers") {
-                if let Some(id_array) = identifiers_metadata.as_array() {
-                    for id in id_array {
-                        if let Some(id_str) = id.as_str() {
-                            identifiers.push(id_str.to_string());
-                        }
-                    }
-                }
-            }
-        }
+                std::iter::once(entity.name.clone()).chain(metadata_ids)
+            })
+            .collect();
 
         identifiers.sort();
         identifiers.dedup();
@@ -293,6 +286,17 @@ pub trait LanguageAdapter: Send + Sync {
             })
             .collect())
     }
+}
+
+/// Normalize a raw module literal by removing trailing semicolons and surrounding quotes.
+///
+/// Shared utility for JavaScript and TypeScript import extraction.
+pub fn normalize_module_literal(raw: &str) -> String {
+    raw.trim()
+        .trim_end_matches(';')
+        .trim_matches(['"', '\'', '`'])
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]

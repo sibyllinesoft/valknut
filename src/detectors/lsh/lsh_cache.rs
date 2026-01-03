@@ -40,6 +40,7 @@ pub struct CacheStatistics {
     pub evictions: usize,
 }
 
+/// Hit rate calculation methods for [`CacheStatistics`].
 impl CacheStatistics {
     /// Calculate token cache hit rate
     pub fn token_hit_rate(&self) -> f64 {
@@ -73,6 +74,7 @@ impl CacheStatistics {
     }
 }
 
+/// Factory, caching, lookup, and eviction methods for [`LshCache`].
 impl LshCache {
     /// Create a new LSH cache with default settings
     pub fn new() -> Self {
@@ -216,7 +218,7 @@ impl LshCache {
         (token_size, signature_size)
     }
 
-    /// Hash source code for cache key generation
+    /// Computes a hash of the source code for cache key generation.
     fn hash_source(&self, source_code: &str) -> u64 {
         let mut hasher = AHasher::default();
         source_code.hash(&mut hasher);
@@ -253,7 +255,7 @@ impl LshCache {
         }
     }
 
-    /// Evict entries from signature cache when it gets too large
+    /// Evicts entries from the signature cache when it exceeds capacity.
     fn evict_signatures(&self, cache: &mut HashMap<(u64, usize, usize), Vec<u64>>) {
         let target_size = (self.max_cache_size * 3) / 4; // Remove 25%
         let current_size = cache.len();
@@ -283,7 +285,9 @@ impl LshCache {
     }
 }
 
+/// Default implementation for [`LshCache`].
 impl Default for LshCache {
+    /// Returns a new LSH cache with default settings.
     fn default() -> Self {
         Self::new()
     }

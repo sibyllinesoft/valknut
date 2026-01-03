@@ -31,7 +31,9 @@ pub struct AnalysisConfig {
     pub max_file_size_bytes: u64,
 }
 
+/// Default implementation for [`AnalysisConfig`].
 impl Default for AnalysisConfig {
+    /// Returns the default analysis configuration.
     fn default() -> Self {
         Self {
             enable_structure_analysis: true,
@@ -64,7 +66,9 @@ impl Default for AnalysisConfig {
     }
 }
 
+/// [`From`] implementation for converting [`ValknutConfig`] to [`AnalysisConfig`].
 impl From<ValknutConfig> for AnalysisConfig {
+    /// Converts a ValknutConfig into an AnalysisConfig.
     fn from(config: ValknutConfig) -> Self {
         // Convert exclude patterns to directories - extract directory names from patterns
         let exclude_directories: Vec<String> = config
@@ -157,7 +161,9 @@ pub struct QualityGateConfig {
     pub max_high_priority_issues: usize,
 }
 
+/// Default implementation for [`QualityGateConfig`].
 impl Default for QualityGateConfig {
+    /// Returns the default quality gate configuration.
     fn default() -> Self {
         Self {
             enabled: false,

@@ -5,6 +5,31 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+/// Code file extensions recognized for structure analysis
+pub const CODE_EXTENSIONS: &[&str] = &[
+    "py", "pyi", "js", "mjs", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
+];
+
+/// Check if an extension is a recognized code file extension
+#[inline]
+pub fn is_code_extension(extension: &str) -> bool {
+    CODE_EXTENSIONS.contains(&extension)
+}
+
+/// Directories to skip during structure analysis
+pub const SKIP_DIRECTORIES: &[&str] = &[
+    "node_modules", "target", ".git", "__pycache__", "dist", "build", ".next", "vendor", "venv",
+];
+
+/// Check if a path should be skipped during analysis.
+///
+/// Returns true if the path contains any of the skip directory names.
+#[inline]
+pub fn should_skip_directory(path: &std::path::Path) -> bool {
+    let path_str = path.to_string_lossy();
+    SKIP_DIRECTORIES.iter().any(|d| path_str.contains(d))
+}
+
 /// Configuration for structure analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructureConfig {
@@ -24,6 +49,7 @@ pub struct StructureConfig {
     pub entity_health: EntityHealthConfig,
 }
 
+/// Feature toggles for structure analysis outputs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructureToggles {
     /// Enable branch reorganization packs
@@ -34,6 +60,7 @@ pub struct StructureToggles {
     pub top_packs: usize,
 }
 
+/// Configuration for directory-level structure analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsDirectoryConfig {
     /// Maximum files per directory before pressure
@@ -58,6 +85,7 @@ pub struct FsDirectoryConfig {
     pub optimal_subdirs_stddev: f64,
 }
 
+/// Configuration for file-level structure analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsFileConfig {
     /// Lines of code threshold for huge files
@@ -100,7 +128,9 @@ pub struct EntitySizeParams {
     pub penalty_steepness: f64,
 }
 
+/// Default implementation for [`EntityHealthConfig`].
 impl Default for EntityHealthConfig {
+    /// Returns entity health configuration with balanced defaults.
     fn default() -> Self {
         Self {
             function_size: EntitySizeParams {
@@ -128,6 +158,7 @@ impl Default for EntityHealthConfig {
     }
 }
 
+/// Configuration for directory partitioning algorithms.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartitioningConfig {
     /// Balance tolerance for partitioning (0.25 = ±25%)
@@ -140,7 +171,9 @@ pub struct PartitioningConfig {
     pub naming_fallbacks: Vec<String>,
 }
 
+/// Default implementation for [`StructureConfig`].
 impl Default for StructureConfig {
+    /// Returns structure analysis configuration with balanced defaults.
     fn default() -> Self {
         Self {
             enable_branch_packs: true,

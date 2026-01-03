@@ -79,35 +79,55 @@ pub struct IslandConfig {
 }
 
 // Default value functions
+
+/// Returns the default language setting ("auto").
 fn default_language() -> String {
     "auto".to_string()
 }
+
+/// Returns the default input glob pattern ("stacks/*.txt").
 fn default_input_glob() -> String {
     "stacks/*.txt".to_string()
 }
+
+/// Returns the default output directory (".valknut/live/out").
 fn default_out_dir() -> String {
     ".valknut/live/out".to_string()
 }
+
+/// Returns the default analysis window in days (30).
 fn default_since_days() -> u32 {
     30
 }
+
+/// Returns the default services list (["api"]).
 fn default_services() -> Vec<String> {
     vec!["api".to_string()]
 }
+
+/// Returns the default static edge weight (0.1).
 fn default_weight_static() -> f64 {
     0.1
 }
+
+/// Returns the default minimum community size (5).
 fn default_min_size() -> usize {
     5
 }
+
+/// Returns the default minimum score threshold (0.6).
 fn default_min_score() -> f64 {
     0.6
 }
+
+/// Returns the default Louvain resolution parameter (0.8).
 fn default_resolution() -> f64 {
     0.8
 }
 
+/// Default implementation for [`LiveReachConfig`].
 impl Default for LiveReachConfig {
+    /// Returns the default live reachability configuration.
     fn default() -> Self {
         Self {
             ingest: IngestConfig::default(),
@@ -116,7 +136,9 @@ impl Default for LiveReachConfig {
     }
 }
 
+/// Default implementation for [`IngestConfig`].
 impl Default for IngestConfig {
+    /// Returns the default ingestion configuration.
     fn default() -> Self {
         Self {
             ns_allow: vec!["myco.".to_string(), "github.com/myco/".to_string()],
@@ -128,7 +150,9 @@ impl Default for IngestConfig {
     }
 }
 
+/// Default implementation for [`BuildConfig`].
 impl Default for BuildConfig {
+    /// Returns the default build configuration.
     fn default() -> Self {
         Self {
             since_days: default_since_days(),
@@ -139,7 +163,9 @@ impl Default for BuildConfig {
     }
 }
 
+/// Default implementation for [`IslandConfig`].
 impl Default for IslandConfig {
+    /// Returns the default island detection configuration.
     fn default() -> Self {
         Self {
             min_size: default_min_size(),
@@ -152,6 +178,7 @@ impl Default for IslandConfig {
 /// Valid language identifiers for live reachability analysis.
 const VALID_LANGUAGES: &[&str] = &["auto", "jvm", "py", "go", "node", "native"];
 
+/// Validation methods for [`LiveReachConfig`].
 impl LiveReachConfig {
     /// Validate the live reachability configuration
     pub fn validate(&self) -> Result<()> {

@@ -1,7 +1,14 @@
 //! Refactoring analysis detector for identifying code improvement opportunities.
 
-use async_trait::async_trait;
-use dashmap::DashMap;
+mod detection_rules;
+mod extractor;
+
+pub use detection_rules::{
+    COMPLEX_CONDITIONAL_THRESHOLD, DUPLICATE_MIN_LINE_COUNT, DUPLICATE_MIN_TOKEN_COUNT,
+    LARGE_CLASS_LINE_THRESHOLD, LARGE_CLASS_MEMBER_THRESHOLD, LONG_METHOD_LINE_THRESHOLD,
+};
+pub use extractor::RefactoringExtractor;
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -12,7 +19,7 @@ use tracing::{debug, info, warn};
 use crate::core::ast_service::AstService;
 use crate::core::ast_utils::{find_entity_node, node_text};
 use crate::core::errors::Result;
-use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureDefinition, FeatureExtractor};
+use crate::core::featureset::CodeEntity;
 use crate::core::file_utils::FileReader;
 use crate::detectors::complexity::{
     AstComplexityAnalyzer, ComplexityAnalysisResult, ComplexityConfig,
@@ -20,18 +27,7 @@ use crate::detectors::complexity::{
 };
 use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
 
-/// Minimum tokens required before we consider a block a meaningful duplication target
-const DUPLICATE_MIN_TOKEN_COUNT: usize = 10;
-/// Minimum lines required to consider a block large enough for duplication checks
-const DUPLICATE_MIN_LINE_COUNT: usize = 4;
-/// Threshold for marking a function as long
-const LONG_METHOD_LINE_THRESHOLD: usize = 50;
-/// Threshold for marking a class as too large
-const LARGE_CLASS_LINE_THRESHOLD: usize = 200;
-/// Threshold for number of member entities in a class before recommending extraction
-const LARGE_CLASS_MEMBER_THRESHOLD: usize = 12;
-/// Logical operator count that suggests a complex conditional
-const COMPLEX_CONDITIONAL_THRESHOLD: usize = 4;
+// Detection thresholds are now defined in detection_rules module
 
 const PROP_DUPLICATE_FINGERPRINT: &str = "duplicate_fingerprint";
 const PROP_FINGERPRINT_TOKENS: &str = "duplicate_token_count";
@@ -47,7 +43,9 @@ pub struct RefactoringConfig {
     pub min_impact_threshold: f64,
 }
 
+/// Default implementation for [`RefactoringConfig`].
 impl Default for RefactoringConfig {
+    /// Returns the default refactoring analysis configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -104,6 +102,7 @@ pub struct RefactoringAnalyzer {
     complexity_analyzer: AstComplexityAnalyzer,
 }
 
+/// Analysis and detection methods for [`RefactoringAnalyzer`].
 impl RefactoringAnalyzer {
     /// Create new refactoring analyzer
     pub fn new(config: RefactoringConfig, ast_service: Arc<AstService>) -> Self {
@@ -291,10 +290,11 @@ impl RefactoringAnalyzer {
             if let Some(tokens) = complexity_score {
                 code_entity.add_property(PROP_FINGERPRINT_TOKENS, json!(tokens));
             }
-            if let Some(metrics) = self.lookup_complexity_metrics(entity, start_line, complexity) {
-                if let Ok(value) = serde_json::to_value(&metrics) {
-                    code_entity.add_property(PROP_COMPLEXITY_METRICS, value);
-                }
+            if let Some(value) = self
+                .lookup_complexity_metrics(entity, start_line, complexity)
+                .and_then(|m| serde_json::to_value(&m).ok())
+            {
+                code_entity.add_property(PROP_COMPLEXITY_METRICS, value);
             }
             if let Some(count) = child_function_counts.get(&entity.id) {
                 code_entity.add_property(PROP_MEMBER_COUNT, json!(count));
@@ -311,23 +311,29 @@ impl RefactoringAnalyzer {
         let mut counts: HashMap<String, usize> = HashMap::new();
 
         for entity in index.entities.values() {
-            for child_id in &entity.children {
-                if let Some(child) = index.entities.get(child_id) {
-                    if matches!(child.kind, EntityKind::Function | EntityKind::Method) {
-                        *counts.entry(entity.id.clone()).or_insert(0) += 1;
-                    }
-                }
+            let function_children = entity.children.iter().filter(|child_id| {
+                index
+                    .entities
+                    .get(*child_id)
+                    .map(|c| matches!(c.kind, EntityKind::Function | EntityKind::Method))
+                    .unwrap_or(false)
+            });
+            let count = function_children.count();
+            if count > 0 {
+                counts.insert(entity.id.clone(), count);
             }
         }
 
         counts
     }
 
+    /// Checks if an entity represents a function or method.
     fn is_function_entity(entity: &CodeEntity) -> bool {
         let kind = entity.entity_type.as_str();
         kind.eq_ignore_ascii_case("function") || kind.eq_ignore_ascii_case("method")
     }
 
+    /// Checks if an entity represents a type (class, struct, interface, enum).
     fn is_type_entity(entity: &CodeEntity) -> bool {
         let kind = entity.entity_type.as_str();
         kind.eq_ignore_ascii_case("class")
@@ -336,6 +342,7 @@ impl RefactoringAnalyzer {
             || kind.eq_ignore_ascii_case("enum")
     }
 
+    /// Extracts complexity metrics from an entity's properties.
     fn entity_complexity(entity: &CodeEntity) -> Option<AnalyzerComplexityMetrics> {
         entity
             .properties
@@ -343,6 +350,7 @@ impl RefactoringAnalyzer {
             .and_then(|value| serde_json::from_value(value.clone()).ok())
     }
 
+    /// Extracts duplicate detection signature (hash, token count) from an entity.
     fn duplicate_signature(entity: &CodeEntity) -> Option<(u64, usize)> {
         let hash = entity
             .properties
@@ -356,6 +364,7 @@ impl RefactoringAnalyzer {
         Some((hash, tokens))
     }
 
+    /// Gets the member count from an entity's properties.
     fn member_count_from_entity(entity: &CodeEntity) -> usize {
         entity
             .properties
@@ -365,6 +374,7 @@ impl RefactoringAnalyzer {
             .unwrap_or(0)
     }
 
+    /// Gets the line range (start, end) for an entity.
     fn entity_location(entity: &CodeEntity) -> (usize, usize) {
         entity
             .line_range
@@ -372,6 +382,7 @@ impl RefactoringAnalyzer {
             .unwrap_or((1, entity.line_count()))
     }
 
+    /// Computes a fingerprint hash and token count for duplicate detection.
     fn compute_duplicate_fingerprint_for_entity(
         &self,
         entity: &CodeEntity,
@@ -444,6 +455,7 @@ impl RefactoringAnalyzer {
             })
     }
 
+    /// Recursively collects normalized tokens from an AST node for fingerprinting.
     fn collect_fingerprint_tokens(
         &self,
         node: tree_sitter::Node<'_>,
@@ -462,10 +474,11 @@ impl RefactoringAnalyzer {
         }
 
         if matches!(kind, "binary_expression" | "assignment_expression" | "logical_expression") {
-            if let Some(operator) = node.child_by_field_name("operator") {
-                if let Some(text) = node_text(operator, source) {
-                    tokens.push(format!("OP:{}", text.trim()));
-                }
+            if let Some(op_text) = node
+                .child_by_field_name("operator")
+                .and_then(|op| node_text(op, source))
+            {
+                tokens.push(format!("OP:{}", op_text.trim()));
             }
         }
 
@@ -479,6 +492,7 @@ impl RefactoringAnalyzer {
         }
     }
 
+    /// Looks up complexity metrics for an entity by ID or name/line match.
     fn lookup_complexity_metrics(
         &self,
         entity: &ParsedEntity,
@@ -495,177 +509,43 @@ impl RefactoringAnalyzer {
             .map(|result| result.metrics.clone())
     }
 
+    /// Detects methods exceeding the line count threshold.
     fn detect_long_methods(&self, functions: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
-        let mut recommendations = Vec::new();
-
-        for function in functions {
-            let complexity = Self::entity_complexity(function);
-            let loc = complexity
-                .as_ref()
-                .map(|metrics| metrics.lines_of_code.max(function.line_count() as f64))
-                .unwrap_or(function.line_count() as f64);
-
-            if loc < LONG_METHOD_LINE_THRESHOLD as f64 {
-                continue;
-            }
-
-            let cyclomatic = complexity
-                .as_ref()
-                .map(|metrics| metrics.cyclomatic_complexity)
-                .unwrap_or(0.0);
-
-            let impact = ((loc / 8.0) + (cyclomatic / 2.0)).min(10.0);
-            let effort = 4.0 + (loc / 70.0).min(4.0);
-            let priority = (impact / effort).max(0.1);
-            let loc_display = loc.round() as usize;
-            let complexity_note = if cyclomatic > 0.0 {
-                format!(" with cyclomatic {:.1}", cyclomatic)
-            } else {
-                String::new()
-            };
-
-            recommendations.push(RefactoringRecommendation {
-                refactoring_type: RefactoringType::ExtractMethod,
-                description: format!(
-                    "Function `{}` spans {} lines{}. Extract helper functions to improve cohesion.",
-                    function.name, loc_display, complexity_note
-                ),
-                estimated_impact: impact,
-                estimated_effort: effort,
-                priority_score: priority,
-                location: Self::entity_location(function),
-            });
-        }
-
-        recommendations
+        detection_rules::detect_long_methods(
+            functions,
+            Self::entity_complexity,
+            Self::entity_location,
+        )
     }
 
+    /// Detects functions with overly complex conditional logic.
     fn detect_complex_conditionals(
         &self,
         functions: &[CodeEntity],
     ) -> Vec<RefactoringRecommendation> {
-        let mut recommendations = Vec::new();
-
-        for function in functions {
-            let operator_complexity = estimate_logical_operator_complexity(&function.source_code);
-            let complexity = Self::entity_complexity(function);
-            let (logical_complexity, cognitive_complexity) = match &complexity {
-                Some(metrics) => {
-                    let combined = metrics.decision_points.len().max(operator_complexity);
-                    let cognitive = if metrics.cognitive_complexity > 0.0 {
-                        metrics.cognitive_complexity
-                    } else {
-                        combined as f64
-                    };
-                    (combined, cognitive)
-                }
-                None => (operator_complexity, operator_complexity as f64),
-            };
-
-            if logical_complexity < COMPLEX_CONDITIONAL_THRESHOLD {
-                continue;
-            }
-
-            let impact = (cognitive_complexity * 1.5).min(10.0).max(5.0);
-            let effort = 3.5;
-            let priority = (impact / effort).max(0.1);
-
-            recommendations.push(RefactoringRecommendation {
-                refactoring_type: RefactoringType::SimplifyConditionals,
-                description: format!(
-                    "Function `{}` contains {} decision points (cognitive {:.1}). Consider guard clauses or breaking the logic into smaller helpers.",
-                    function.name, logical_complexity, cognitive_complexity
-                ),
-                estimated_impact: impact,
-                estimated_effort: effort,
-                priority_score: priority,
-                location: Self::entity_location(function),
-            });
-        }
-
-        recommendations
+        detection_rules::detect_complex_conditionals(
+            functions,
+            Self::entity_complexity,
+            Self::entity_location,
+        )
     }
 
+    /// Detects duplicate code blocks based on fingerprint matching.
     fn detect_duplicate_code(&self, functions: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
-        let mut buckets: HashMap<u64, Vec<&CodeEntity>> = HashMap::new();
-
-        for function in functions {
-            if function.line_count() < DUPLICATE_MIN_LINE_COUNT {
-                continue;
-            }
-
-            if let Some((fingerprint, complexity)) = Self::duplicate_signature(function) {
-                if complexity >= DUPLICATE_MIN_TOKEN_COUNT {
-                    buckets.entry(fingerprint).or_default().push(function);
-                }
-            }
-        }
-
-        let mut recommendations = Vec::new();
-
-        for duplicates in buckets.values() {
-            if duplicates.len() < 2 {
-                continue;
-            }
-
-            let names: Vec<String> = duplicates.iter().map(|f| f.name.clone()).collect();
-            let names_display = names.join(", ");
-
-            for function in duplicates {
-                let impact = (function.line_count() as f64 / 8.0).min(10.0).max(6.0);
-                let effort = 5.5;
-                let priority = (impact / effort).max(0.1);
-
-                recommendations.push(RefactoringRecommendation {
-                    refactoring_type: RefactoringType::EliminateDuplication,
-                    description: format!(
-                        "Function `{}` shares near-identical implementation with [{}]. Consolidate shared logic into a reusable helper.",
-                        function.name, names_display
-                    ),
-                    estimated_impact: impact,
-                    estimated_effort: effort,
-                    priority_score: priority,
-                    location: Self::entity_location(function),
-                });
-            }
-        }
-
-        recommendations
+        detection_rules::detect_duplicate_code(
+            functions,
+            Self::duplicate_signature,
+            Self::entity_location,
+        )
     }
 
+    /// Detects types exceeding member count or line thresholds.
     fn detect_large_types(&self, types: &[CodeEntity]) -> Vec<RefactoringRecommendation> {
-        let mut recommendations = Vec::new();
-
-        for entity in types {
-            let line_count = entity.line_count();
-            let member_count = Self::member_count_from_entity(entity);
-
-            if line_count < LARGE_CLASS_LINE_THRESHOLD
-                && member_count < LARGE_CLASS_MEMBER_THRESHOLD
-            {
-                continue;
-            }
-
-            let impact = ((line_count as f64 / 20.0) + member_count as f64 * 0.5)
-                .min(10.0)
-                .max(5.0);
-            let effort = 7.5;
-            let priority = (impact / effort).max(0.1);
-
-            recommendations.push(RefactoringRecommendation {
-                refactoring_type: RefactoringType::ExtractClass,
-                description: format!(
-                    "Type `{}` spans {} lines with {} members. Split responsibilities into focused components.",
-                    entity.name, line_count, member_count
-                ),
-                estimated_impact: impact,
-                estimated_effort: effort,
-                priority_score: priority,
-                location: Self::entity_location(entity),
-            });
-        }
-
-        recommendations
+        detection_rules::detect_large_types(
+            types,
+            Self::member_count_from_entity,
+            Self::entity_location,
+        )
     }
 
     /// Calculate overall refactoring score for the file
@@ -687,243 +567,7 @@ impl RefactoringAnalyzer {
     }
 }
 
-pub struct RefactoringExtractor {
-    analyzer: Arc<RefactoringAnalyzer>,
-    feature_definitions: Vec<FeatureDefinition>,
-    file_cache: DashMap<String, Arc<RefactoringAnalysisResult>>,
-}
-
-impl RefactoringExtractor {
-    /// Create a refactoring extractor backed by the provided analyzer
-    pub fn new(analyzer: RefactoringAnalyzer) -> Self {
-        let feature_definitions = vec![
-            FeatureDefinition::new(
-                "refactoring_recommendation_count",
-                "Number of refactoring opportunities detected for this entity",
-            )
-            .with_range(0.0, 50.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_total_impact",
-                "Sum of estimated impact values for matching refactoring recommendations",
-            )
-            .with_range(0.0, 200.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_avg_impact",
-                "Average estimated impact for matching refactoring recommendations",
-            )
-            .with_range(0.0, 10.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_avg_priority",
-                "Average priority score for matching refactoring recommendations",
-            )
-            .with_range(0.0, 10.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_max_priority",
-                "Highest priority score among matching refactoring recommendations",
-            )
-            .with_range(0.0, 10.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_file_score",
-                "Overall refactoring score for the containing file",
-            )
-            .with_range(0.0, 100.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_extract_method_count",
-                "Occurrences of extract-method opportunities",
-            )
-            .with_range(0.0, 50.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_extract_class_count",
-                "Occurrences of extract-class opportunities",
-            )
-            .with_range(0.0, 50.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_duplicate_code_count",
-                "Occurrences of duplicate-code elimination opportunities",
-            )
-            .with_range(0.0, 50.0)
-            .with_default(0.0),
-            FeatureDefinition::new(
-                "refactoring_simplify_conditionals_count",
-                "Occurrences of complex conditional simplification opportunities",
-            )
-            .with_range(0.0, 50.0)
-            .with_default(0.0),
-        ];
-
-        Self {
-            analyzer: Arc::new(analyzer),
-            feature_definitions,
-            file_cache: DashMap::new(),
-        }
-    }
-
-    /// Construct an extractor with explicit configuration and AST service
-    pub fn with_config(config: RefactoringConfig, ast_service: Arc<AstService>) -> Self {
-        Self::new(RefactoringAnalyzer::new(config, ast_service))
-    }
-
-    /// Fetch (and cache) the refactoring analysis for a file
-    async fn file_analysis(&self, file_path: &str) -> Result<Arc<RefactoringAnalysisResult>> {
-        let key = normalize_path(file_path);
-
-        if let Some(entry) = self.file_cache.get(&key) {
-            return Ok(entry.clone());
-        }
-
-        let path = PathBuf::from(file_path);
-        match self.analyzer.analyze_file(&path).await {
-            Ok(result) => {
-                let arc = Arc::new(result);
-                self.file_cache.insert(key, arc.clone());
-                Ok(arc)
-            }
-            Err(error) => {
-                warn!(
-                    "Refactoring extractor failed to analyze {}: {}",
-                    file_path, error
-                );
-                let placeholder = Arc::new(RefactoringAnalysisResult {
-                    file_path: file_path.to_string(),
-                    recommendations: Vec::new(),
-                    refactoring_score: 0.0,
-                });
-                self.file_cache.insert(key, placeholder.clone());
-                Ok(placeholder)
-            }
-        }
-    }
-
-    /// Initialise the feature vector with configured defaults
-    fn initialise_feature_map(&self) -> HashMap<String, f64> {
-        let mut map = HashMap::with_capacity(self.feature_definitions.len());
-        for definition in &self.feature_definitions {
-            map.insert(definition.name.clone(), definition.default_value);
-        }
-        map
-    }
-}
-
-impl Default for RefactoringExtractor {
-    fn default() -> Self {
-        Self::new(RefactoringAnalyzer::default())
-    }
-}
-
-#[async_trait]
-impl FeatureExtractor for RefactoringExtractor {
-    fn name(&self) -> &str {
-        "refactoring"
-    }
-    fn features(&self) -> &[FeatureDefinition] {
-        &self.feature_definitions
-    }
-    async fn extract(
-        &self,
-        entity: &CodeEntity,
-        _context: &ExtractionContext,
-    ) -> Result<HashMap<String, f64>> {
-        let mut features = self.initialise_feature_map();
-
-        // Attempt to load analysis for the containing file
-        let analysis = self.file_analysis(&entity.file_path).await?;
-
-        let entity_range = entity.line_range.unwrap_or_else(|| {
-            let lines = entity.line_count().max(1);
-            (1, lines)
-        });
-
-        let mut total_impact = 0.0_f64;
-        let mut total_priority = 0.0_f64;
-        let mut recommendations_considered = 0.0_f64;
-        let mut max_priority = 0.0_f64;
-        let mut extract_method = 0.0_f64;
-        let mut extract_class = 0.0_f64;
-        let mut eliminate_duplication = 0.0_f64;
-        let mut simplify_conditionals = 0.0_f64;
-
-        for recommendation in &analysis.recommendations {
-            let location = recommendation.location;
-            if !ranges_overlap(entity_range, location) {
-                continue;
-            }
-
-            recommendations_considered += 1.0;
-            total_impact += recommendation.estimated_impact;
-            total_priority += recommendation.priority_score;
-            max_priority = max_priority.max(recommendation.priority_score);
-
-            match recommendation.refactoring_type {
-                RefactoringType::ExtractMethod => extract_method += 1.0,
-                RefactoringType::ExtractClass => extract_class += 1.0,
-                RefactoringType::EliminateDuplication => {
-                    eliminate_duplication += 1.0;
-                }
-                RefactoringType::SimplifyConditionals => simplify_conditionals += 1.0,
-                RefactoringType::ReduceComplexity
-                | RefactoringType::ImproveNaming
-                | RefactoringType::RemoveDeadCode => {
-                    // Keep hook for future detailed features
-                }
-            }
-        }
-
-        if recommendations_considered > 0.0 {
-            let avg_impact = total_impact / recommendations_considered;
-            let avg_priority = total_priority / recommendations_considered;
-
-            features.insert(
-                "refactoring_recommendation_count".to_string(),
-                recommendations_considered,
-            );
-            features.insert("refactoring_total_impact".to_string(), total_impact);
-            features.insert("refactoring_avg_impact".to_string(), avg_impact);
-            features.insert("refactoring_avg_priority".to_string(), avg_priority);
-            features.insert("refactoring_max_priority".to_string(), max_priority);
-            features.insert(
-                "refactoring_extract_method_count".to_string(),
-                extract_method,
-            );
-            features.insert("refactoring_extract_class_count".to_string(), extract_class);
-            features.insert(
-                "refactoring_duplicate_code_count".to_string(),
-                eliminate_duplication,
-            );
-            features.insert(
-                "refactoring_simplify_conditionals_count".to_string(),
-                simplify_conditionals,
-            );
-        }
-
-        // Propagate the file-level refactoring score regardless of overlap results
-        features.insert(
-            "refactoring_file_score".to_string(),
-            analysis.refactoring_score,
-        );
-
-        Ok(features)
-    }
-}
-
-fn ranges_overlap(lhs: (usize, usize), rhs: (usize, usize)) -> bool {
-    let (lhs_start, lhs_end) = lhs;
-    let (rhs_start, rhs_end) = rhs;
-
-    lhs_start <= rhs_end && rhs_start <= lhs_end
-}
-
-fn normalize_path(path: &str) -> String {
-    Path::new(path).to_string_lossy().into_owned()
-}
-
+/// Extracts a range of lines from a slice, joining them with newlines.
 fn extract_lines(lines: &[&str], start_line: usize, end_line: usize) -> String {
     let start_idx = start_line.saturating_sub(1);
     let end_idx = end_line
@@ -936,26 +580,7 @@ fn extract_lines(lines: &[&str], start_line: usize, end_line: usize) -> String {
 
     lines[start_idx..=end_idx].join("\n")
 }
-fn estimate_logical_operator_complexity(snippet: &str) -> usize {
-    let mut count = 0;
-
-    for line in snippet.lines() {
-        let trimmed = line.trim();
-
-        if trimmed.starts_with("//") || trimmed.starts_with('#') {
-            continue;
-        }
-
-        count += trimmed.matches("&&").count();
-        count += trimmed.matches("||").count();
-    }
-
-    count
-        + snippet
-            .split(|c: char| !c.is_alphabetic())
-            .filter(|token| matches!(token.to_ascii_lowercase().as_str(), "and" | "or"))
-            .count()
-}
+// estimate_logical_operator_complexity is now in detection_rules module
 
 #[cfg(test)]
 mod tests;

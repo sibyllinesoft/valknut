@@ -157,6 +157,7 @@ pub fn extension_is_supported(ext: &str) -> bool {
     find_language_by_extension(&normalized).is_some()
 }
 
+/// Finds the language info for a given file extension.
 fn find_language_by_extension(ext: &str) -> Option<&'static LanguageInfo> {
     let target = ext.trim_start_matches('.').to_ascii_lowercase();
     registered_languages().iter().find(|info| {
@@ -166,6 +167,7 @@ fn find_language_by_extension(ext: &str) -> Option<&'static LanguageInfo> {
     })
 }
 
+/// Normalizes a language identifier to its canonical key.
 fn normalize_language_key(language: &str) -> Option<&'static str> {
     match language.to_ascii_lowercase().as_str() {
         "py" | "pyw" | "python" => Some("py"),

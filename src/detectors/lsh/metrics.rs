@@ -21,6 +21,7 @@ pub struct LshPerformanceMetrics {
     pub cache_misses: usize,
 }
 
+/// Factory and logging methods for [`LshPerformanceMetrics`].
 impl LshPerformanceMetrics {
     /// Create new performance metrics
     pub fn new() -> Self {

@@ -7,10 +7,9 @@ use valknut_rs::core::config::ReportFormat;
 use valknut_rs::io::reports::assets::copy_webpage_assets_to_output;
 use valknut_rs::io::reports::ReportGenerator;
 
-use super::reports::{
-    generate_ci_summary_report, generate_csv_report, generate_html_report,
-    generate_markdown_report, generate_sonar_report,
-};
+use super::csv_export::{generate_ci_summary_report, generate_csv_report};
+use super::reports::{generate_html_report, generate_markdown_report};
+use super::sonar::generate_sonar_report;
 
 /// Build a report generator, optionally loading templates from a directory.
 pub fn build_report_generator() -> anyhow::Result<ReportGenerator> {

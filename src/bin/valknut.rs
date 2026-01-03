@@ -12,6 +12,7 @@ mod mcp;
 
 use cli::{Cli, Commands};
 
+/// Entry point for the valknut CLI.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -32,6 +33,7 @@ fn init_logging(verbose: bool) {
         .try_init();
 }
 
+/// Runs the CLI with the parsed command and options.
 async fn run_cli(cli: Cli) -> anyhow::Result<()> {
     init_logging(cli.verbose);
 

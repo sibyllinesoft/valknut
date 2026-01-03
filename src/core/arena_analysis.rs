@@ -66,6 +66,7 @@ pub struct ArenaFileAnalyzer {
     ast_service: Arc<AstService>,
 }
 
+/// Factory, configuration, and analysis methods for [`ArenaFileAnalyzer`].
 impl ArenaFileAnalyzer {
     /// Create a new arena-based file analyzer
     pub fn new() -> Self {
@@ -221,7 +222,9 @@ impl ArenaFileAnalyzer {
     }
 }
 
+/// Default implementation for [`ArenaFileAnalyzer`].
 impl Default for ArenaFileAnalyzer {
+    /// Returns a new arena file analyzer with default settings.
     fn default() -> Self {
         Self::new()
     }
@@ -241,6 +244,7 @@ struct ArenaAnalysisWorkspace<'arena> {
     arena: &'arena Bump,
 }
 
+/// Factory and mutation methods for [`ArenaAnalysisWorkspace`].
 impl<'arena> ArenaAnalysisWorkspace<'arena> {
     /// Create a new workspace in the given arena
     fn new(expected_entities: usize, arena: &'arena Bump) -> Self {
@@ -283,7 +287,9 @@ struct AnalysisMetadata<'arena> {
     _phantom: std::marker::PhantomData<&'arena ()>,
 }
 
+/// Factory methods for [`AnalysisMetadata`].
 impl<'arena> AnalysisMetadata<'arena> {
+    /// Creates new analysis metadata with default scores.
     #[allow(dead_code)]
     fn new() -> Self {
         Self {
@@ -318,6 +324,7 @@ pub struct ArenaAnalysisResult {
     pub source_code: String,
 }
 
+/// Accessor and metric methods for [`ArenaAnalysisResult`].
 impl ArenaAnalysisResult {
     /// Get file path as string (zero-cost lookup)
     pub fn file_path_str(&self) -> &str {
@@ -368,6 +375,7 @@ pub struct ArenaBatchAnalyzer {
     file_analyzer: ArenaFileAnalyzer,
 }
 
+/// Factory and batch analysis methods for [`ArenaBatchAnalyzer`].
 impl ArenaBatchAnalyzer {
     /// Create a new batch analyzer
     pub fn new() -> Self {
@@ -431,7 +439,9 @@ impl ArenaBatchAnalyzer {
     }
 }
 
+/// Default implementation for [`ArenaBatchAnalyzer`].
 impl Default for ArenaBatchAnalyzer {
+    /// Returns a new batch analyzer with default settings.
     fn default() -> Self {
         Self::new()
     }
@@ -456,6 +466,7 @@ pub struct ArenaBatchResult {
     pub arena_efficiency_score: f64,
 }
 
+/// Metric and calculation methods for [`ArenaBatchResult`].
 impl ArenaBatchResult {
     /// Calculate overall entities processed per second
     pub fn entities_per_second(&self) -> f64 {

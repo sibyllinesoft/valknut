@@ -3,9 +3,14 @@
 //! This module contains all output formatting functions, report generation for
 //! various formats (HTML, Markdown, CSV, Sonar), and display utilities.
 
+mod csv_export;
 mod display;
 mod helpers;
+mod html_report;
+mod markdown_report;
+mod report_helpers;
 mod reports;
+mod sonar;
 mod writers;
 
 use std::path::Path;
@@ -23,10 +28,10 @@ pub use display::{
     display_top_structure_issues, print_comprehensive_results_pretty, print_human_readable_results,
 };
 pub use helpers::format_to_string;
-pub use reports::{
-    generate_ci_summary_report, generate_csv_report, generate_html_report,
-    generate_markdown_report, generate_sonar_report,
-};
+pub use csv_export::{generate_ci_summary_report, generate_csv_report};
+pub use html_report::generate_html_report;
+pub use markdown_report::generate_markdown_report;
+pub use sonar::generate_sonar_report;
 pub use writers::{
     build_report_generator, write_ci_summary, write_csv, write_html, write_json, write_jsonl,
     write_markdown, write_sonar, write_yaml,

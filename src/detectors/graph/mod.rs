@@ -36,6 +36,7 @@ pub struct GraphExtractor {
     features: Vec<FeatureDefinition>,
 }
 
+/// Factory and initialization methods for [`GraphExtractor`].
 impl GraphExtractor {
     /// Create a new graph extractor instance.
     pub fn new() -> Self {
@@ -46,6 +47,7 @@ impl GraphExtractor {
         extractor
     }
 
+    /// Initializes the feature definitions for graph-based analysis.
     fn initialize_features(&mut self) {
         self.features = vec![
             FeatureDefinition::new("betweenness_approx", "Approximate betweenness centrality")
@@ -73,22 +75,28 @@ impl GraphExtractor {
     }
 }
 
+/// Default implementation for [`GraphExtractor`].
 impl Default for GraphExtractor {
+    /// Returns a new graph extractor with default configuration.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// [`FeatureExtractor`] implementation for graph-based dependency features.
 #[async_trait]
 impl FeatureExtractor for GraphExtractor {
+    /// Returns the extractor name ("graph").
     fn name(&self) -> &str {
         "graph"
     }
 
+    /// Returns the feature definitions for this extractor.
     fn features(&self) -> &[FeatureDefinition] {
         &self.features
     }
 
+    /// Extracts dependency graph features for an entity.
     async fn extract(
         &self,
         entity: &CodeEntity,
@@ -111,6 +119,7 @@ impl FeatureExtractor for GraphExtractor {
         Ok(features)
     }
 
+    /// Checks if this extractor supports the given entity type.
     fn supports_entity(&self, entity: &CodeEntity) -> bool {
         matches!(
             entity.entity_type.as_str(),
@@ -150,6 +159,7 @@ fn lookup_metrics(entity: &CodeEntity) -> Result<Option<DepMetrics>> {
     Ok(analysis.metrics_for(&key).cloned())
 }
 
+/// Gets cached analysis or builds and caches a new one for the given path.
 fn get_or_build_analysis(path: &Path) -> Result<Arc<ProjectDependencyAnalysis>> {
     if let Some(entry) = FILE_ANALYSIS_CACHE.get(path) {
         return Ok(entry.value().clone());
@@ -170,6 +180,7 @@ pub struct DependencyGraph {
 
 use petgraph::graph::NodeIndex;
 
+/// Graph construction and analysis methods for [`DependencyGraph`].
 impl DependencyGraph {
     /// Create a new, empty dependency graph.
     pub fn new() -> Self {
@@ -186,6 +197,7 @@ impl DependencyGraph {
         self.graph.add_edge(from_index, to_index, ());
     }
 
+    /// Gets an existing node index or adds a new node for the given ID.
     fn get_or_add_node(&mut self, id: &str) -> NodeIndex {
         if let Some(index) = self.node_indices.get(id) {
             *index
@@ -225,22 +237,18 @@ impl DependencyGraph {
         kosaraju_scc(&self.graph)
             .into_iter()
             .filter_map(|component| {
+                // Multi-node SCC is always a cycle
                 if component.len() > 1 {
-                    Some(
-                        component
-                            .into_iter()
-                            .filter_map(|index| self.graph.node_weight(index))
-                            .cloned()
-                            .collect::<Vec<String>>(),
-                    )
-                } else {
-                    let index = component[0];
-                    if self.graph.find_edge(index, index).is_some() {
-                        self.graph.node_weight(index).map(|id| vec![id.clone()])
-                    } else {
-                        None
-                    }
+                    let cycle: Vec<String> = component
+                        .into_iter()
+                        .filter_map(|index| self.graph.node_weight(index).cloned())
+                        .collect();
+                    return Some(cycle);
                 }
+                // Single-node SCC is a cycle only if it has a self-loop
+                let index = component[0];
+                let has_self_loop = self.graph.find_edge(index, index).is_some();
+                has_self_loop.then(|| self.graph.node_weight(index).map(|id| vec![id.clone()]))?
             })
             .collect()
     }

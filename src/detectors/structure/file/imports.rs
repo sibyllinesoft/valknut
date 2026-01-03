@@ -9,17 +9,9 @@ use crate::core::file_utils::FileReader;
 use crate::lang::common::{EntityKind, ParsedEntity};
 use crate::lang::registry::adapter_for_file;
 
-use crate::detectors::structure::config::ImportStatement;
-
-/// Directories to skip during file analysis
-const SKIP_DIRECTORIES: &[&str] = &[
-    "node_modules", "__pycache__", "target", ".git", "build", "dist",
-];
-
-/// Code file extensions recognized for analysis
-const CODE_EXTENSIONS: &[&str] = &[
-    "py", "pyi", "js", "mjs", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
-];
+use crate::detectors::structure::config::{
+    is_code_extension, should_skip_directory, ImportStatement, CODE_EXTENSIONS,
+};
 
 /// Snapshot of project imports for dependency analysis
 #[derive(Default, Debug)]
@@ -48,7 +40,9 @@ pub struct ImportResolver {
     project_import_cache: Arc<RwLock<HashMap<PathBuf, Arc<ProjectImportSnapshot>>>>,
 }
 
+/// Factory, caching, and resolution methods for [`ImportResolver`].
 impl ImportResolver {
+    /// Creates a new import resolver with an empty cache.
     pub fn new() -> Self {
         Self {
             project_import_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -57,7 +51,7 @@ impl ImportResolver {
 
     /// Check if file extension indicates a code file
     pub fn is_code_file(&self, extension: &str) -> bool {
-        CODE_EXTENSIONS.contains(&extension)
+        is_code_extension(extension)
     }
 
     /// Collect dependency metrics for a file
@@ -157,6 +151,7 @@ impl ImportResolver {
         }
     }
 
+    /// Check if a line has an export keyword (JS/TS).
     fn line_has_export_keyword(&self, content: &str, start_line: usize) -> bool {
         self.line_has_keyword(content, start_line, "export")
     }
@@ -217,6 +212,7 @@ impl ImportResolver {
         Ok(snapshot)
     }
 
+    /// Build a fresh project import snapshot by scanning all code files.
     fn build_project_import_snapshot(&self, project_root: &Path) -> Result<ProjectImportSnapshot> {
         let mut snapshot = ProjectImportSnapshot::default();
         for file in self.collect_project_code_files(project_root)? {
@@ -252,6 +248,7 @@ impl ImportResolver {
         Ok(files)
     }
 
+    /// Recursively collect code files from a directory.
     fn collect_project_code_files_recursive(
         &self,
         path: &Path,
@@ -262,17 +259,20 @@ impl ImportResolver {
         }
 
         for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let child_path = entry.path();
+            let child_path = entry?.path();
 
             if child_path.is_dir() {
                 self.collect_project_code_files_recursive(&child_path, files)?;
-            } else if child_path.is_file() {
-                if let Some(ext) = child_path.extension().and_then(|e| e.to_str()) {
-                    if self.is_code_file(ext) {
-                        files.push(child_path);
-                    }
-                }
+                continue;
+            }
+
+            let is_code = child_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map_or(false, |ext| self.is_code_file(ext));
+
+            if is_code {
+                files.push(child_path);
             }
         }
 
@@ -331,6 +331,7 @@ impl ImportResolver {
         None
     }
 
+    /// Resolve Python relative import (dot notation) to candidate paths.
     fn resolve_python_relative_module(
         &self,
         current_dir: &Path,
@@ -404,10 +405,7 @@ impl ImportResolver {
 
     /// Supported file extensions for import resolution
     pub fn supported_extensions() -> &'static [&'static str] {
-        &[
-            "py", "pyi", "js", "mjs", "jsx", "ts", "tsx", "rs", "go", "java", "cpp", "c", "h",
-            "hpp",
-        ]
+        CODE_EXTENSIONS
     }
 
     /// Canonicalize a path for consistent comparison
@@ -453,12 +451,13 @@ impl ImportResolver {
 
     /// Check if directory should be skipped during analysis
     pub fn should_skip_directory(&self, path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
-        SKIP_DIRECTORIES.iter().any(|d| path_str.contains(d))
+        should_skip_directory(path)
     }
 }
 
+/// Default implementation for [`ImportResolver`].
 impl Default for ImportResolver {
+    /// Returns a new import resolver with default settings.
     fn default() -> Self {
         Self::new()
     }

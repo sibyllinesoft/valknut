@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::errors::{Result, ValknutError};
 
 use super::validation::{
-    validate_non_negative, validate_positive_f64, validate_positive_i64, validate_positive_usize,
-    validate_unit_range,
+    validate_bounded_usize, validate_non_negative, validate_positive_f64, validate_positive_i64,
+    validate_positive_usize, validate_unit_range, validate_weights_sum,
 };
 
 /// Enhanced duplicate detection configuration with adaptive features
@@ -148,7 +148,9 @@ pub struct DenoiseWeights {
     pub emb: f64,
 }
 
+/// Default implementation for [`DenoiseWeights`].
 impl Default for DenoiseWeights {
+    /// Returns the default weight distribution.
     fn default() -> Self {
         Self {
             ast: 0.35,
@@ -174,7 +176,9 @@ pub struct StopMotifsConfig {
     pub refresh_days: i64,
 }
 
+/// Default implementation for [`StopMotifsConfig`].
 impl Default for StopMotifsConfig {
+    /// Returns the default stop motifs configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -204,7 +208,9 @@ pub struct AutoCalibrationConfig {
     pub max_iterations: usize,
 }
 
+/// Default implementation for [`AutoCalibrationConfig`].
 impl Default for AutoCalibrationConfig {
+    /// Returns the default auto-calibration configuration.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -247,7 +253,9 @@ pub enum RankingBy {
     Frequency,
 }
 
+/// Default implementation for [`RankingConfig`].
 impl Default for RankingConfig {
+    /// Returns the default ranking configuration.
     fn default() -> Self {
         Self {
             by: RankingBy::SavedTokens,
@@ -258,7 +266,9 @@ impl Default for RankingConfig {
     }
 }
 
+/// Default implementation for [`DenoiseConfig`].
 impl Default for DenoiseConfig {
+    /// Returns the default clone denoising configuration.
     fn default() -> Self {
         Self {
             enabled: false,          // Changed to opt-in for better default performance
@@ -278,6 +288,7 @@ impl Default for DenoiseConfig {
     }
 }
 
+/// Validation for [`DenoiseConfig`].
 impl DenoiseConfig {
     /// Validate denoise configuration
     pub fn validate(&self) -> Result<()> {
@@ -412,7 +423,9 @@ pub struct AdaptiveDenoiseConfig {
     pub auto_refresh_cache: bool,
 }
 
+/// Default implementation for [`AdaptiveDenoiseConfig`].
 impl Default for AdaptiveDenoiseConfig {
+    /// Returns the default adaptive denoising configuration.
     fn default() -> Self {
         Self {
             auto_denoise: true,
@@ -433,7 +446,9 @@ impl Default for AdaptiveDenoiseConfig {
     }
 }
 
+/// Default implementation for [`DedupeConfig`].
 impl Default for DedupeConfig {
+    /// Returns the default dedupe configuration.
     fn default() -> Self {
         Self {
             include: vec!["src/**".to_string()],
@@ -469,7 +484,9 @@ impl Default for DedupeConfig {
     }
 }
 
+/// Default implementation for [`DedupeWeights`].
 impl Default for DedupeWeights {
+    /// Returns the default weight distribution.
     fn default() -> Self {
         Self {
             ast: 0.35,
@@ -479,115 +496,77 @@ impl Default for DedupeWeights {
     }
 }
 
-impl DedupeConfig {
-    /// Validate dedupe configuration
+/// Validation for [`DedupeWeights`].
+impl DedupeWeights {
+    /// Validate weights configuration.
     pub fn validate(&self) -> Result<()> {
-        if self.min_function_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_function_tokens must be greater than 0",
-            ));
-        }
+        validate_non_negative(self.ast, "weights.ast")?;
+        validate_non_negative(self.pdg, "weights.pdg")?;
+        validate_non_negative(self.emb, "weights.emb")?;
+        validate_weights_sum(&[self.ast, self.pdg, self.emb], 0.1, "weights")?;
+        Ok(())
+    }
+}
 
-        if self.min_ast_nodes == 0 {
-            return Err(ValknutError::validation(
-                "min_ast_nodes must be greater than 0",
-            ));
-        }
+/// Validation for [`AdaptiveDenoiseConfig`].
+impl AdaptiveDenoiseConfig {
+    /// Validate adaptive denoising configuration.
+    pub fn validate(&self) -> Result<()> {
+        validate_unit_range(self.stop_motif_percentile, "adaptive.stop_motif_percentile")?;
+        validate_unit_range(
+            self.hub_suppression_threshold,
+            "adaptive.hub_suppression_threshold",
+        )?;
+        validate_unit_range(
+            self.quality_gate_percentage,
+            "adaptive.quality_gate_percentage",
+        )?;
+        validate_bounded_usize(self.tfidf_kgram_size, 1, 20, "adaptive.tfidf_kgram_size")?;
+        validate_bounded_usize(self.wl_iterations, 1, 10, "adaptive.wl_iterations")?;
+        validate_positive_f64(self.min_rarity_gain, "adaptive.min_rarity_gain")?;
+        validate_unit_range(
+            self.external_call_jaccard_threshold,
+            "adaptive.external_call_jaccard_threshold",
+        )?;
+        validate_positive_i64(self.cache_refresh_days, "adaptive.cache_refresh_days")?;
+        Ok(())
+    }
+}
 
-        if self.min_match_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_match_tokens must be greater than 0",
-            ));
-        }
+/// Validation for [`DedupeConfig`].
+impl DedupeConfig {
+    /// Validate dedupe configuration.
+    pub fn validate(&self) -> Result<()> {
+        // Core size thresholds
+        validate_positive_usize(self.min_function_tokens, "min_function_tokens")?;
+        validate_positive_usize(self.min_ast_nodes, "min_ast_nodes")?;
+        validate_positive_usize(self.min_match_tokens, "min_match_tokens")?;
+        validate_positive_usize(self.shingle_k, "shingle_k")?;
 
-        if !(0.0..=1.0).contains(&self.min_match_coverage) {
-            return Err(ValknutError::validation(
-                "min_match_coverage must be between 0.0 and 1.0",
-            ));
-        }
+        // Unit range validations
+        validate_unit_range(self.min_match_coverage, "min_match_coverage")?;
+        validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
+        validate_unit_range(self.threshold_s, "threshold_s")?;
 
-        if self.shingle_k == 0 {
-            return Err(ValknutError::validation("shingle_k must be greater than 0"));
-        }
+        // Weights validation
+        self.weights.validate()?;
 
-        if !(0.0..=1.0).contains(&self.io_mismatch_penalty) {
-            return Err(ValknutError::validation(
-                "io_mismatch_penalty must be between 0.0 and 1.0",
-            ));
-        }
+        // Stop phrases validation
+        self.validate_stop_phrases()?;
 
-        if !(0.0..=1.0).contains(&self.threshold_s) {
-            return Err(ValknutError::validation(
-                "threshold_s must be between 0.0 and 1.0",
-            ));
-        }
+        // Adaptive config validation
+        self.adaptive.validate()?;
 
-        // Validate weights sum to reasonable values
-        let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
-        if (weight_sum - 1.0).abs() > 0.1 {
-            return Err(ValknutError::validation(
-                "weights should sum to approximately 1.0",
-            ));
-        }
+        Ok(())
+    }
 
-        // Validate patterns (simplified - no regex validation)
+    /// Validate stop phrases are non-empty.
+    fn validate_stop_phrases(&self) -> Result<()> {
         for pattern in &self.stop_phrases {
             if pattern.is_empty() {
-                return Err(ValknutError::validation(
-                    "Empty pattern in stop_phrases".to_string(),
-                ));
+                return Err(ValknutError::validation("Empty pattern in stop_phrases"));
             }
         }
-
-        // Validate adaptive denoising configuration
-        if !(0.0..=1.0).contains(&self.adaptive.stop_motif_percentile) {
-            return Err(ValknutError::validation(
-                "adaptive.stop_motif_percentile must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.adaptive.hub_suppression_threshold) {
-            return Err(ValknutError::validation(
-                "adaptive.hub_suppression_threshold must be between 0.0 and 1.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.adaptive.quality_gate_percentage) {
-            return Err(ValknutError::validation(
-                "adaptive.quality_gate_percentage must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.adaptive.tfidf_kgram_size == 0 || self.adaptive.tfidf_kgram_size > 20 {
-            return Err(ValknutError::validation(
-                "adaptive.tfidf_kgram_size must be between 1 and 20",
-            ));
-        }
-
-        if self.adaptive.wl_iterations == 0 || self.adaptive.wl_iterations > 10 {
-            return Err(ValknutError::validation(
-                "adaptive.wl_iterations must be between 1 and 10",
-            ));
-        }
-
-        if self.adaptive.min_rarity_gain <= 0.0 {
-            return Err(ValknutError::validation(
-                "adaptive.min_rarity_gain must be greater than 0.0",
-            ));
-        }
-
-        if !(0.0..=1.0).contains(&self.adaptive.external_call_jaccard_threshold) {
-            return Err(ValknutError::validation(
-                "adaptive.external_call_jaccard_threshold must be between 0.0 and 1.0",
-            ));
-        }
-
-        if self.adaptive.cache_refresh_days <= 0 {
-            return Err(ValknutError::validation(
-                "adaptive.cache_refresh_days must be greater than 0",
-            ));
-        }
-
         Ok(())
     }
 }

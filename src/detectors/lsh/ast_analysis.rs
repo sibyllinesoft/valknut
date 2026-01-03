@@ -16,7 +16,7 @@ use crate::core::featureset::CodeEntity;
 use crate::lang::common::{EntityKind, ParseIndex};
 
 use super::config::DedupeConfig;
-use super::shingles::count_tokens;
+use super::signatures::shingles::count_tokens;
 
 /// AST statistics for an entity used in fragment threshold checks.
 #[derive(Debug, Clone)]
@@ -30,11 +30,13 @@ pub struct EntityAstStats {
 }
 
 /// AST analyzer for computing entity statistics and detecting stop motifs.
+#[derive(Debug)]
 pub struct AstAnalyzer {
     /// Shared AST service for structural analysis
     ast_service: Arc<AstService>,
 }
 
+/// Factory and AST analysis methods for [`AstAnalyzer`].
 impl AstAnalyzer {
     /// Create a new AST analyzer with a shared AST service.
     pub fn new(ast_service: Arc<AstService>) -> Self {
@@ -187,11 +189,6 @@ fn matches_all(text: &str, patterns: &[&str]) -> bool {
     patterns.iter().all(|p| text.contains(p))
 }
 
-/// Detect programming language from file path.
-pub fn detect_language_from_path(file_path: &str) -> String {
-    crate::lang::registry::detect_language_from_path(file_path)
-}
-
 /// Count AST nodes from language adapter index (heuristic).
 pub fn count_ast_nodes_from_index(index: &ParseIndex) -> usize {
     index.entities.len() * 10 // Simple heuristic - each entity has ~10 nodes
@@ -240,12 +237,5 @@ mod tests {
     fn test_matches_all() {
         assert!(matches_all("if __name__ == '__main__':", &["__name__", "__main__"]));
         assert!(!matches_all("if __name__:", &["__name__", "__main__"]));
-    }
-
-    #[test]
-    fn test_detect_language_from_path() {
-        assert_eq!(detect_language_from_path("test.rs"), "rs");
-        assert_eq!(detect_language_from_path("test.py"), "py");
-        assert_eq!(detect_language_from_path("test.js"), "js");
     }
 }

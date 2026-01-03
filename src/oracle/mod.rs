@@ -11,6 +11,7 @@
 //! - Configurable models for different slice sizes
 
 pub mod bundle;
+pub mod condense;
 pub mod gemini;
 pub mod helpers;
 pub mod slicing;
@@ -41,9 +42,14 @@ pub use helpers::{
 
 // Re-export bundle functions and constants
 pub use bundle::{
-    condense_analysis_results, condense_analysis_results_with_budget, create_slice_bundle,
-    get_json_schema_instructions, BundleBuilder, ORACLE_CODEBOOK, SKIP_DIRS, SOURCE_EXTENSIONS,
+    create_slice_bundle, BundleBuilder, SKIP_DIRS, SOURCE_EXTENSIONS,
     VALKNUT_OUTPUT_TOKEN_BUDGET,
+};
+
+// Re-export condense functions
+pub use condense::{
+    condense_analysis_results, condense_analysis_results_with_budget,
+    get_json_schema_instructions, ORACLE_CODEBOOK,
 };
 
 // Re-export slicing functions
@@ -55,6 +61,7 @@ pub struct RefactoringOracle {
     client: reqwest::Client,
 }
 
+/// Factory, configuration, and AI interaction methods for [`RefactoringOracle`].
 impl RefactoringOracle {
     /// Create a new refactoring oracle with the given configuration
     pub fn new(config: OracleConfig) -> Self {

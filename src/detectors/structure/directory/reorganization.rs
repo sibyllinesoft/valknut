@@ -18,7 +18,9 @@ pub struct ReorganizationPlanner<'a> {
     config: &'a StructureConfig,
 }
 
+/// Reorganization planning methods for [`ReorganizationPlanner`].
 impl<'a> ReorganizationPlanner<'a> {
+    /// Creates a new reorganization planner with the given configuration.
     pub fn new(config: &'a StructureConfig) -> Self {
         Self { config }
     }
@@ -130,23 +132,26 @@ impl<'a> ReorganizationPlanner<'a> {
         let mut _total_internal_edges = 0;
 
         for edge_idx in dependency_graph.edge_indices() {
-            if let Some((source, target)) = dependency_graph.edge_endpoints(edge_idx) {
-                if let (Some(source_node), Some(target_node)) = (
-                    dependency_graph.node_weight(source),
-                    dependency_graph.node_weight(target),
-                ) {
-                    _total_internal_edges += 1;
+            let Some((source, target)) = dependency_graph.edge_endpoints(edge_idx) else {
+                continue;
+            };
+            let (Some(source_node), Some(target_node)) = (
+                dependency_graph.node_weight(source),
+                dependency_graph.node_weight(target),
+            ) else {
+                continue;
+            };
+            _total_internal_edges += 1;
 
-                    // Check if this edge would cross partition boundaries
-                    if let (Some(&source_partition), Some(&target_partition)) = (
-                        file_to_partition.get(&source_node.path),
-                        file_to_partition.get(&target_node.path),
-                    ) {
-                        if source_partition != target_partition {
-                            cross_edges += 1;
-                        }
-                    }
-                }
+            // Check if this edge would cross partition boundaries
+            let Some(&source_partition) = file_to_partition.get(&source_node.path) else {
+                continue;
+            };
+            let Some(&target_partition) = file_to_partition.get(&target_node.path) else {
+                continue;
+            };
+            if source_partition != target_partition {
+                cross_edges += 1;
             }
         }
 

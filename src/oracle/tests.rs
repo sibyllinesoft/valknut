@@ -9,6 +9,8 @@
 
     static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
     use crate::core::pipeline::*;
+    // Use the 3-field MemoryStats from result_types (for AnalysisStatistics)
+    use crate::core::pipeline::results::result_types::MemoryStats;
     use crate::core::scoring::Priority;
 
     fn oracle_config_fixture(max_tokens: usize) -> OracleConfig {

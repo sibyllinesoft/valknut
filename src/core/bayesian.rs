@@ -31,6 +31,7 @@ pub enum VarianceConfidence {
     Insufficient,
 }
 
+/// Score and classification methods for [`VarianceConfidence`].
 impl VarianceConfidence {
     /// Get the numeric confidence score (0.0-1.0)
     pub fn score(self) -> f64 {
@@ -84,6 +85,7 @@ pub struct FeaturePrior {
     pub typical_distribution: String,
 }
 
+/// Factory and builder methods for [`FeaturePrior`].
 impl FeaturePrior {
     /// Create a new feature prior with reasonable defaults
     pub fn new(name: impl Into<String>) -> Self {
@@ -170,6 +172,7 @@ pub struct FeatureStatistics {
     pub posterior_variance: f64,
 }
 
+/// Factory methods for [`FeatureStatistics`].
 impl FeatureStatistics {
     /// Create new statistics from raw values
     pub fn from_values(values: &[f64]) -> Self {
@@ -230,6 +233,7 @@ pub struct BayesianNormalizer {
     variance_confidence: HashMap<String, VarianceConfidence>,
 }
 
+/// Factory, fitting, and normalization methods for [`BayesianNormalizer`].
 impl BayesianNormalizer {
     /// Create a new Bayesian normalizer
     pub fn new(scheme: impl Into<String>) -> Self {
@@ -473,39 +477,41 @@ impl BayesianNormalizer {
             return Ok(0.0);
         }
 
-        let normalized = match self.scheme.as_str() {
-            "z_score" | "zscore" => {
-                if stats.posterior_variance < f64::EPSILON {
-                    0.0 // Zero variance case
-                } else {
-                    (value - stats.posterior_mean) / stats.posterior_variance.sqrt()
-                }
-            }
-            "min_max" | "minmax" => {
-                let range = stats.max - stats.min;
-                if range < f64::EPSILON {
-                    0.5 // Zero range case - use middle value
-                } else {
-                    (value - stats.min) / range
-                }
-            }
-            "robust" => {
-                // Use median and MAD (median absolute deviation) for robustness
-                self.robust_normalize(value, stats)
-            }
-            scheme if scheme.ends_with("_bayesian") => {
-                // Use Bayesian posterior parameters for normalization
-                self.bayesian_normalize(value, stats)
-            }
-            _ => {
-                return Err(ValknutError::config(format!(
-                    "Unknown normalization scheme: {}",
-                    self.scheme
-                )));
-            }
-        };
+        let normalized = self.apply_normalization_scheme(value, stats)?;
+        Ok(normalized.clamp(-10.0, 10.0))
+    }
 
-        Ok(normalized.clamp(-10.0, 10.0)) // Prevent extreme outliers
+    /// Apply the configured normalization scheme to a value.
+    fn apply_normalization_scheme(&self, value: f64, stats: &FeatureStatistics) -> Result<f64> {
+        match self.scheme.as_str() {
+            "z_score" | "zscore" => Ok(self.z_score_normalize(value, stats)),
+            "min_max" | "minmax" => Ok(self.min_max_normalize(value, stats)),
+            "robust" => Ok(self.robust_normalize(value, stats)),
+            scheme if scheme.ends_with("_bayesian") => Ok(self.bayesian_normalize(value, stats)),
+            _ => Err(ValknutError::config(format!(
+                "Unknown normalization scheme: {}",
+                self.scheme
+            ))),
+        }
+    }
+
+    /// Z-score normalization using posterior statistics.
+    fn z_score_normalize(&self, value: f64, stats: &FeatureStatistics) -> f64 {
+        if stats.posterior_variance < f64::EPSILON {
+            0.0
+        } else {
+            (value - stats.posterior_mean) / stats.posterior_variance.sqrt()
+        }
+    }
+
+    /// Min-max normalization to [0, 1] range.
+    fn min_max_normalize(&self, value: f64, stats: &FeatureStatistics) -> f64 {
+        let range = stats.max - stats.min;
+        if range < f64::EPSILON {
+            0.5
+        } else {
+            (value - stats.min) / range
+        }
     }
 
     /// Robust normalization using median and MAD
@@ -621,44 +627,42 @@ impl BayesianNormalizer {
 
     /// Generate diagnostic information about the normalization
     pub fn get_diagnostics(&self) -> HashMap<String, serde_json::Value> {
-        let mut diagnostics = HashMap::new();
-
-        diagnostics.insert(
-            "confidence_distribution".to_string(),
-            self.confidence_distribution_value(),
-        );
-
         let feature_count = self.statistics.len();
-        diagnostics.insert(
-            "total_features".to_string(),
-            serde_json::json!(feature_count),
-        );
 
-        let avg_prior_weight = self.average_prior_weight(feature_count);
-        diagnostics.insert(
-            "average_prior_weight".to_string(),
-            serde_json::Number::from_f64(avg_prior_weight)
-                .map(serde_json::Value::Number)
-                .unwrap_or_else(|| serde_json::json!(0)),
-        );
-
-        diagnostics
+        HashMap::from([
+            ("confidence_distribution".to_string(), self.confidence_distribution_value()),
+            ("total_features".to_string(), serde_json::json!(feature_count)),
+            ("average_prior_weight".to_string(), self.average_prior_weight_value(feature_count)),
+        ])
     }
 
+    /// Calculate confidence distribution as a JSON value.
     fn confidence_distribution_value(&self) -> serde_json::Value {
-        let confidence_counts: HashMap<String, usize> =
-            self.variance_confidence
-                .values()
-                .fold(HashMap::new(), |mut acc, &conf| {
-                    *acc.entry(format!("{:?}", conf)).or_insert(0) += 1;
-                    acc
-                });
-
-        serde_json::to_value(confidence_counts).unwrap_or_else(|e| {
+        let counts = self.count_confidence_levels();
+        serde_json::to_value(counts).unwrap_or_else(|e| {
             serde_json::Value::String(format!("Serialization error: {}", e))
         })
     }
 
+    /// Count occurrences of each confidence level.
+    fn count_confidence_levels(&self) -> HashMap<String, usize> {
+        self.variance_confidence
+            .values()
+            .fold(HashMap::new(), |mut acc, &conf| {
+                *acc.entry(format!("{:?}", conf)).or_insert(0) += 1;
+                acc
+            })
+    }
+
+    /// Calculate average prior weight as a JSON value.
+    fn average_prior_weight_value(&self, feature_count: usize) -> serde_json::Value {
+        let avg = self.average_prior_weight(feature_count);
+        serde_json::Number::from_f64(avg)
+            .map(serde_json::Value::Number)
+            .unwrap_or_else(|| serde_json::json!(0))
+    }
+
+    /// Calculate the average prior weight across all features.
     fn average_prior_weight(&self, feature_count: usize) -> f64 {
         if feature_count == 0 {
             return 0.0;

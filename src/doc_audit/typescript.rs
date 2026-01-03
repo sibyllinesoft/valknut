@@ -3,6 +3,9 @@
 use super::{extract_comment_text, is_incomplete_doc, relative_path, DocIssue};
 use std::path::Path;
 
+/// Scans TypeScript/JavaScript source code for missing or incomplete JSDoc comments.
+///
+/// Detects undocumented functions, classes, and arrow function exports.
 pub fn scan_typescript(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
     let lines: Vec<&str> = source.lines().collect();
     let mut issues = Vec::new();
@@ -53,6 +56,7 @@ pub fn scan_typescript(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> 
     issues
 }
 
+/// Checks for documentation and pushes an issue if missing or incomplete.
 fn push_issue_if_needed(
     lines: &[&str],
     index: usize,
@@ -85,6 +89,7 @@ fn push_issue_if_needed(
     }
 }
 
+/// Creates a documentation issue with the given details.
 fn build_issue(
     path: &Path,
     root: &Path,
@@ -102,6 +107,7 @@ fn build_issue(
     }
 }
 
+/// Detects a function declaration and returns the function name.
 fn detect_function(line: &str) -> Option<String> {
     if !line.contains("function") {
         return None;
@@ -117,6 +123,7 @@ fn detect_function(line: &str) -> Option<String> {
     None
 }
 
+/// Detects a class declaration and returns the class name.
 fn detect_class(line: &str) -> Option<String> {
     if !line.contains("class ") {
         return None;
@@ -127,6 +134,7 @@ fn detect_class(line: &str) -> Option<String> {
         .map(|name| name.trim_end_matches(|c| c == '{' || c == '(').to_string())
 }
 
+/// Detects an arrow function assignment and returns the variable name.
 fn detect_arrow_function(line: &str) -> Option<String> {
     if !(line.starts_with("const ") || line.starts_with("let ") || line.starts_with("var ")) {
         return None;

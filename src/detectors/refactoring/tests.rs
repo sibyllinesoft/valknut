@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use crate::core::config::ValknutConfig;
-use crate::core::featureset::{CodeEntity, ExtractionContext};
+use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureExtractor};
 
 fn analyzer() -> RefactoringAnalyzer {
     RefactoringAnalyzer::new(RefactoringConfig::default(), Arc::new(AstService::new()))
@@ -179,7 +179,7 @@ async fn test_detects_large_class() {
 #[tokio::test]
 async fn test_refactoring_extractor_produces_features() {
     use crate::core::config::ValknutConfig;
-    use crate::core::featureset::{CodeEntity, ExtractionContext};
+    use crate::core::featureset::{CodeEntity, ExtractionContext, FeatureExtractor};
 
     let dir = TempDir::new().unwrap();
     let file_path = dir.path().join("long_refactor.py");

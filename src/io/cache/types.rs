@@ -62,6 +62,7 @@ pub struct AstPatternExtractor {
     pub config: AstExtractionConfig,
 }
 
+/// Factory and frequency analysis methods for [`AstPatternExtractor`].
 impl AstPatternExtractor {
     /// Create a new AST pattern extractor
     pub fn new(config: AstExtractionConfig) -> Self {
@@ -135,7 +136,9 @@ pub struct AstExtractionConfig {
     pub enabled_languages: HashSet<String>,
 }
 
+/// Default implementation for [`AstExtractionConfig`].
 impl Default for AstExtractionConfig {
+    /// Returns the default extraction configuration.
     fn default() -> Self {
         Self {
             min_support: 3,
@@ -165,7 +168,9 @@ pub struct PatternThresholds {
     pub min_idf_score: f64,
 }
 
+/// Default implementation for [`PatternThresholds`].
 impl Default for PatternThresholds {
+    /// Returns the default pattern thresholds.
     fn default() -> Self {
         Self {
             node_type_percentile: 0.95,

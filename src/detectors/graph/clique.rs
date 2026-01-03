@@ -28,12 +28,15 @@ pub struct SimilarityCliquePartitioner {
     max_group_size: usize,
 }
 
+/// Default implementation for [`SimilarityCliquePartitioner`].
 impl Default for SimilarityCliquePartitioner {
+    /// Returns a partitioner with tuned default settings.
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Factory, partitioning, and token extraction methods for [`SimilarityCliquePartitioner`].
 impl SimilarityCliquePartitioner {
     /// Common language keywords that are too generic to help with grouping.
     const STOPWORDS: &'static [&'static str] = &[
@@ -307,6 +310,7 @@ impl SimilarityCliquePartitioner {
         }
     }
 
+    /// Extracts identifier tokens from source code as hashed values.
     fn extract_tokens(&self, source: &str) -> HashSet<u64> {
         if source.trim().is_empty() {
             return HashSet::new();
@@ -338,6 +342,7 @@ impl SimilarityCliquePartitioner {
         tokens
     }
 
+    /// Attempts to store a token hash if it meets length and stopword criteria.
     fn try_store_token(&self, tokens: &mut HashSet<u64>, token: &str) {
         if token.len() < self.min_token_length {
             return;
@@ -367,6 +372,7 @@ impl SimilarityCliquePartitioner {
         tokens.insert(hash);
     }
 
+    /// Registers a group of entity IDs as belonging to the same clique.
     fn register_group(&self, group: &[String], partitions: &mut CliquePartitions) {
         for (idx, entity_id) in group.iter().enumerate() {
             let mut others = Vec::with_capacity(group.len().saturating_sub(1));

@@ -16,7 +16,9 @@ pub struct SplitAnalyzer<'a> {
     config: &'a StructureConfig,
 }
 
+/// File splitting analysis methods for [`SplitAnalyzer`].
 impl<'a> SplitAnalyzer<'a> {
+    /// Creates a new split analyzer with the given configuration.
     pub fn new(config: &'a StructureConfig) -> Self {
         Self { config }
     }

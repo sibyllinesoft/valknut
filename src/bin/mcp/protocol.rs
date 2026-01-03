@@ -78,6 +78,7 @@ pub struct ContentItem {
     pub text: String,
 }
 
+/// Factory methods for [`JsonRpcResponse`].
 impl JsonRpcResponse {
     /// Create a successful response
     pub fn success(id: Option<serde_json::Value>, result: serde_json::Value) -> Self {

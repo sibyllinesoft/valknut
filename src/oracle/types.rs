@@ -25,6 +25,7 @@ pub struct OracleConfig {
     pub slicing_threshold: usize,
 }
 
+/// Factory and builder methods for [`OracleConfig`].
 impl OracleConfig {
     /// Create configuration from environment variables
     pub fn from_env() -> Result<Self> {
@@ -44,21 +45,25 @@ impl OracleConfig {
         })
     }
 
+    /// Sets the maximum token limit for codebase analysis.
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
         self.max_tokens = max_tokens;
         self
     }
 
+    /// Sets the token budget for each analysis slice.
     pub fn with_slice_budget(mut self, budget: usize) -> Self {
         self.slice_token_budget = budget;
         self
     }
 
+    /// Sets the model to use for slice analysis.
     pub fn with_slice_model(mut self, model: String) -> Self {
         self.slice_model = model;
         self
     }
 
+    /// Enables or disables sliced analysis for large codebases.
     pub fn with_slicing(mut self, enabled: bool) -> Self {
         self.enable_slicing = enabled;
         self
@@ -78,6 +83,7 @@ pub struct RefactoringOracleResponse {
     pub refactoring_roadmap: Option<RefactoringRoadmap>,
 }
 
+/// Accessor methods for [`RefactoringOracleResponse`].
 impl RefactoringOracleResponse {
     /// Get all tasks, whether from new `tasks` field or legacy `refactoring_roadmap`
     pub fn all_tasks(&self) -> &[RefactoringTask] {
@@ -91,6 +97,7 @@ impl RefactoringOracleResponse {
     }
 }
 
+/// Assessment of overall codebase quality from the oracle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodebaseAssessment {
     /// Brief summary of code quality (new schema)
@@ -110,6 +117,7 @@ pub struct CodebaseAssessment {
     pub issues: Vec<String>,
 }
 
+/// Accessor methods for [`CodebaseAssessment`].
 impl CodebaseAssessment {
     /// Get summary text, preferring new field, falling back to legacy
     pub fn get_summary(&self) -> &str {
@@ -120,6 +128,7 @@ impl CodebaseAssessment {
     }
 }
 
+/// Legacy container for refactoring tasks in execution order.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RefactoringRoadmap {
     /// Flat list of tasks in safe execution order
@@ -127,6 +136,7 @@ pub struct RefactoringRoadmap {
     pub tasks: Vec<RefactoringTask>,
 }
 
+/// A single refactoring task recommended by the oracle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefactoringTask {
     /// Task ID (e.g., "T1", "T2")
@@ -162,6 +172,7 @@ pub struct RefactoringTask {
     pub benefits: Vec<String>,
 }
 
+/// Accessor methods for [`RefactoringTask`].
 impl RefactoringTask {
     /// Get risk level, checking both new and legacy field names
     pub fn get_risk(&self) -> Option<&str> {

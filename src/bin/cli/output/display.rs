@@ -347,187 +347,210 @@ pub fn print_comprehensive_results_pretty(results: &serde_json::Value) {
 /// Display refactoring suggestions prominently
 #[allow(dead_code)]
 pub fn display_refactoring_suggestions(results: &serde_json::Value) {
-    // Check if refactoring analysis was enabled and has results
-    if let Some(refactoring) = results.get("refactoring") {
-        if let Some(enabled) = refactoring.get("enabled").and_then(|v| v.as_bool()) {
-            if !enabled {
-                return;
-            }
+    let Some(refactoring) = results.get("refactoring") else {
+        return;
+    };
+
+    if !is_analysis_enabled(refactoring) {
+        return;
+    }
+
+    let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) else {
+        return;
+    };
+
+    if detailed_results.is_empty() {
+        return;
+    }
+
+    print_refactoring_header(refactoring);
+
+    let file_count = display_file_recommendations(detailed_results);
+
+    print_refactoring_footer(file_count, detailed_results.len());
+}
+
+/// Check if an analysis section is enabled.
+fn is_analysis_enabled(section: &serde_json::Value) -> bool {
+    section
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+/// Print the refactoring suggestions header.
+fn print_refactoring_header(refactoring: &serde_json::Value) {
+    println!();
+    println!("{}", "🔧 Refactoring Opportunities".bright_magenta().bold());
+    println!("{}", "=============================".dimmed());
+    println!();
+
+    let opportunities_count = refactoring
+        .get("opportunities_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    if opportunities_count > 0 {
+        println!(
+            "{} {}",
+            "🎯 Total opportunities found:".bold(),
+            opportunities_count.to_string().bright_yellow()
+        );
+        println!();
+    }
+}
+
+/// Display recommendations for each file, returning the count of files displayed.
+fn display_file_recommendations(detailed_results: &[serde_json::Value]) -> usize {
+    let mut file_count = 0;
+
+    for file_result in detailed_results.iter().take(10) {
+        if display_single_file_recommendations(file_result) {
+            file_count += 1;
         }
+    }
 
-        if let Some(detailed_results) = refactoring
-            .get("detailed_results")
-            .and_then(|v| v.as_array())
-        {
-            if detailed_results.is_empty() {
-                return;
-            }
+    file_count
+}
 
-            println!();
-            println!("{}", "🔧 Refactoring Opportunities".bright_magenta().bold());
-            println!("{}", "=============================".dimmed());
-            println!();
+/// Display recommendations for a single file. Returns true if any were displayed.
+fn display_single_file_recommendations(file_result: &serde_json::Value) -> bool {
+    let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) else {
+        return false;
+    };
 
-            let opportunities_count = refactoring
-                .get("opportunities_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            if opportunities_count > 0 {
-                println!(
-                    "{} {}",
-                    "🎯 Total opportunities found:".bold(),
-                    opportunities_count.to_string().bright_yellow()
-                );
-                println!();
-            }
+    let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) else {
+        return false;
+    };
 
-            let mut _file_count = 0;
-            for file_result in detailed_results.iter().take(10) {
-                if let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) {
-                    if let Some(recommendations) = file_result
-                        .get("recommendations")
-                        .and_then(|v| v.as_array())
-                    {
-                        if recommendations.is_empty() {
-                            continue;
-                        }
+    if recommendations.is_empty() {
+        return false;
+    }
 
-                        _file_count += 1;
-                        println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
+    println!("{}", format!("📄 {}", file_path).bright_cyan().bold());
 
-                        let mut sorted_recommendations: Vec<_> = recommendations.iter().collect();
-                        sorted_recommendations.sort_by(|a, b| {
-                            let priority_a = a
-                                .get("priority_score")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-                            let priority_b = b
-                                .get("priority_score")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-                            priority_b
-                                .partial_cmp(&priority_a)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        });
+    let sorted = sort_recommendations_by_priority(recommendations);
+    for (i, recommendation) in sorted.iter().take(3).enumerate() {
+        display_single_recommendation(i + 1, recommendation);
+    }
+    println!();
 
-                        for (i, recommendation) in sorted_recommendations.iter().take(3).enumerate()
-                        {
-                            if let (
-                                Some(description),
-                                Some(refactoring_type),
-                                Some(impact),
-                                Some(effort),
-                            ) = (
-                                recommendation.get("description").and_then(|v| v.as_str()),
-                                recommendation
-                                    .get("refactoring_type")
-                                    .and_then(|v| v.as_str()),
-                                recommendation
-                                    .get("estimated_impact")
-                                    .and_then(|v| v.as_f64()),
-                                recommendation
-                                    .get("estimated_effort")
-                                    .and_then(|v| v.as_f64()),
-                            ) {
-                                let priority_score = recommendation
-                                    .get("priority_score")
-                                    .and_then(|v| v.as_f64())
-                                    .unwrap_or(0.0);
+    true
+}
 
-                                let type_emoji = refactoring_type_emoji(refactoring_type);
-                                let display_type = format_refactoring_type(refactoring_type);
-                                let location_str = format_location(recommendation);
+/// Sort recommendations by priority score descending.
+fn sort_recommendations_by_priority(recommendations: &[serde_json::Value]) -> Vec<&serde_json::Value> {
+    let mut sorted: Vec<_> = recommendations.iter().collect();
+    sorted.sort_by(|a, b| {
+        let priority_a = a.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let priority_b = b.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        priority_b.partial_cmp(&priority_a).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    sorted
+}
 
-                                println!(
-                                    "   {}. {} {} {}",
-                                    i + 1,
-                                    type_emoji,
-                                    format!("{}: {}", display_type, description).yellow(),
-                                    location_str.dimmed()
-                                );
+/// Display a single recommendation.
+fn display_single_recommendation(index: usize, recommendation: &serde_json::Value) {
+    let description = recommendation.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let refactoring_type = recommendation.get("refactoring_type").and_then(|v| v.as_str()).unwrap_or("");
+    let impact = recommendation.get("estimated_impact").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let effort = recommendation.get("estimated_effort").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let priority_score = recommendation.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-                                println!(
-                                    "      {} Impact: {:.1}/10 | Effort: {:.1}/10 | Priority: {:.2}",
-                                    "📊".dimmed(),
-                                    impact,
-                                    effort,
-                                    priority_score
-                                );
-                            }
-                        }
-                        println!();
-                    }
-                }
-            }
+    if description.is_empty() || refactoring_type.is_empty() {
+        return;
+    }
 
-            if _file_count == 0 {
-                println!(
-                    "{}",
-                    "✅ No refactoring opportunities found - code quality looks good!"
-                        .bright_green()
-                );
-            } else if detailed_results.len() > 10 {
-                println!(
-                    "{}",
-                    format!(
-                        "📋 Showing top 10 files with opportunities ({} more files have suggestions)",
-                        detailed_results.len() - 10
-                    )
-                    .dimmed()
-                );
-            }
-        }
+    let type_emoji = refactoring_type_emoji(refactoring_type);
+    let display_type = format_refactoring_type(refactoring_type);
+    let location_str = format_location(recommendation);
+
+    println!(
+        "   {}. {} {} {}",
+        index,
+        type_emoji,
+        format!("{}: {}", display_type, description).yellow(),
+        location_str.dimmed()
+    );
+
+    println!(
+        "      {} Impact: {:.1}/10 | Effort: {:.1}/10 | Priority: {:.2}",
+        "📊".dimmed(),
+        impact,
+        effort,
+        priority_score
+    );
+}
+
+/// Print the refactoring suggestions footer.
+fn print_refactoring_footer(file_count: usize, total_files: usize) {
+    if file_count == 0 {
+        println!(
+            "{}",
+            "✅ No refactoring opportunities found - code quality looks good!".bright_green()
+        );
+    } else if total_files > 10 {
+        println!(
+            "{}",
+            format!(
+                "📋 Showing top 10 files with opportunities ({} more files have suggestions)",
+                total_files - 10
+            )
+            .dimmed()
+        );
     }
 }
 
 /// Display complexity-based recommendations
 #[allow(dead_code)]
 pub fn display_complexity_recommendations(results: &serde_json::Value) {
-    if let Some(complexity) = results.get("complexity") {
-        if let Some(enabled) = complexity.get("enabled").and_then(|v| v.as_bool()) {
-            if !enabled {
-                return;
-            }
-        }
+    let Some(complexity) = results.get("complexity") else {
+        return;
+    };
 
-        if let Some(detailed_results) = complexity
-            .get("detailed_results")
-            .and_then(|v| v.as_array())
-        {
-            let files_with_recommendations: Vec<_> = detailed_results
-                .iter()
-                .filter(|file_result| {
-                    file_result
-                        .get("recommendations")
-                        .and_then(|rec| rec.as_array())
-                        .map(|arr| !arr.is_empty())
-                        .unwrap_or(false)
-                })
-                .collect();
-
-            if files_with_recommendations.is_empty() {
-                return;
-            }
-
-            println!();
-            println!("{}", "🏗️  Complexity Recommendations".bright_red().bold());
-            println!("{}", "===============================".dimmed());
-            println!();
-
-            for file_result in files_with_recommendations.iter().take(8) {
-                display_file_complexity_recommendations(file_result);
-            }
-
-            if files_with_recommendations.len() > 8 {
-                println!(
-                    "{}",
-                    format!(
-                        "📋 Showing top 8 files with recommendations ({} more files have suggestions)",
-                        files_with_recommendations.len() - 8
-                    )
-                    .dimmed()
-                );
-            }
-        }
+    if !is_analysis_enabled(complexity) {
+        return;
     }
+
+    let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) else {
+        return;
+    };
+
+    let files_with_recommendations: Vec<_> = detailed_results
+        .iter()
+        .filter(|f| has_recommendations(f))
+        .collect();
+
+    if files_with_recommendations.is_empty() {
+        return;
+    }
+
+    println!();
+    println!("{}", "🏗️  Complexity Recommendations".bright_red().bold());
+    println!("{}", "===============================".dimmed());
+    println!();
+
+    for file_result in files_with_recommendations.iter().take(8) {
+        display_file_complexity_recommendations(file_result);
+    }
+
+    if files_with_recommendations.len() > 8 {
+        println!(
+            "{}",
+            format!(
+                "📋 Showing top 8 files with recommendations ({} more files have suggestions)",
+                files_with_recommendations.len() - 8
+            )
+            .dimmed()
+        );
+    }
+}
+
+/// Check if a file result has non-empty recommendations.
+fn has_recommendations(file_result: &serde_json::Value) -> bool {
+    file_result
+        .get("recommendations")
+        .and_then(|rec| rec.as_array())
+        .map(|arr| !arr.is_empty())
+        .unwrap_or(false)
 }
