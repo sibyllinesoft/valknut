@@ -17,118 +17,12 @@ pub fn build_unified_hierarchy(
     tree: &DirectoryHealthTree,
     file_groups: &[FileRefactoringGroup],
 ) -> Vec<serde_json::Value> {
-    // Map directories for lookup
-    let mut dir_map: HashMap<String, &DirectoryHealthScore> = HashMap::new();
-    for (path_buf, dir) in &tree.directories {
-        dir_map.insert(path_buf.to_string_lossy().to_string(), dir);
-    }
-
-    // Group files by directory
-    let mut files_by_dir: BTreeMap<String, Vec<&FileRefactoringGroup>> = BTreeMap::new();
-    for group in file_groups {
-        let dir = Path::new(&group.file_path)
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| ".".to_string());
-        files_by_dir.entry(dir).or_default().push(group);
-    }
-
-    // Recursively build nodes
-    fn build_dir_node(
-        path: &str,
-        dir: &DirectoryHealthScore,
-        dir_map: &HashMap<String, &DirectoryHealthScore>,
-        files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
-    ) -> serde_json::Value {
-        let mut children = Vec::new();
-
-        // Child directories
-        for (child_path, child_dir) in dir_map.iter() {
-            if let Some(parent) = &child_dir.parent {
-                if parent.to_string_lossy() == path {
-                    children.push(build_dir_node(child_path, child_dir, dir_map, files_by_dir));
-                }
-            }
-        }
-
-        // File children
-        if let Some(files) = files_by_dir.get(path) {
-            for file_group in files {
-                let total_issues: usize =
-                    file_group.entities.iter().map(|e| e.issues.len()).sum();
-                let entity_count = file_group.entities.len().max(1);
-                let file_health =
-                    (1.0 - (total_issues as f64 / entity_count as f64)).clamp(0.0, 1.0);
-
-                let entities: Vec<serde_json::Value> = file_group
-                    .entities
-                    .iter()
-                    .map(|entity| {
-                        let mut v = serde_json::to_value(entity).unwrap_or_default();
-                        v["type"] = serde_json::Value::String("entity".to_string());
-                        // Ensure a stable id for tree rendering
-                        if v.get("id").is_none() {
-                            let id = if !entity.entity_id.is_empty() {
-                                entity.entity_id.clone()
-                            } else {
-                                entity.name.clone()
-                            };
-                            v["id"] = serde_json::Value::String(format!(
-                                "entity_{}",
-                                id.replace('/', "_").replace(':', "_")
-                            ));
-                        }
-                        v
-                    })
-                    .collect();
-
-                children.push(serde_json::json!({
-                    "id": format!("file_{}", file_group.file_path.replace('/', "_")),
-                    "type": "file",
-                    "path": file_group.file_path,
-                    "name": file_group.file_name,
-                    "entity_count": file_group.entity_count,
-                    "avg_score": ((file_group.avg_score * 10.0).round() / 10.0),
-                    "priority": file_group.highest_priority,
-                    "health_score": file_health,
-                    "total_issues": total_issues,
-                    "children": entities
-                }));
-            }
-        }
-
-        children.sort_by(|a, b| {
-            let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            name_a.cmp(name_b)
-        });
-
-        let display_name = Path::new(path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string());
-
-        serde_json::json!({
-            "id": format!("directory_{}", path.replace('/', "_")),
-                    "type": "folder",
-            "path": path,
-            "name": display_name,
-            "health_score": dir.health_score,
-            "entity_count": dir.entity_count,
-            "file_count": dir.file_count,
-            "refactoring_needed": dir.refactoring_needed,
-            "children": children
-        })
-    }
+    let dir_map = build_directory_map(tree);
+    let files_by_dir = group_files_by_directory(file_groups);
 
     let mut roots = Vec::new();
     for (path, dir) in dir_map.iter() {
-        let is_root = dir
-            .parent
-            .as_ref()
-            .map(|p| !dir_map.contains_key(&p.to_string_lossy().to_string()))
-            .unwrap_or(true);
-        if is_root {
+        if is_root_directory(dir, &dir_map) {
             roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir));
         }
     }
@@ -140,6 +34,134 @@ pub fn build_unified_hierarchy(
     }
 
     roots
+}
+
+/// Build a lookup map of directory paths to health scores.
+fn build_directory_map(tree: &DirectoryHealthTree) -> HashMap<String, &DirectoryHealthScore> {
+    tree.directories.iter()
+        .map(|(path_buf, dir)| (path_buf.to_string_lossy().to_string(), dir))
+        .collect()
+}
+
+/// Group file refactoring groups by their parent directory.
+fn group_files_by_directory(file_groups: &[FileRefactoringGroup]) -> BTreeMap<String, Vec<&FileRefactoringGroup>> {
+    let mut files_by_dir: BTreeMap<String, Vec<&FileRefactoringGroup>> = BTreeMap::new();
+    for group in file_groups {
+        let dir = Path::new(&group.file_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        files_by_dir.entry(dir).or_default().push(group);
+    }
+    files_by_dir
+}
+
+/// Check if a directory is a root (no parent in the map).
+fn is_root_directory(dir: &DirectoryHealthScore, dir_map: &HashMap<String, &DirectoryHealthScore>) -> bool {
+    dir.parent.as_ref()
+        .map(|p| !dir_map.contains_key(&p.to_string_lossy().to_string()))
+        .unwrap_or(true)
+}
+
+/// Recursively build a directory node with children.
+fn build_dir_node(
+    path: &str,
+    dir: &DirectoryHealthScore,
+    dir_map: &HashMap<String, &DirectoryHealthScore>,
+    files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+) -> serde_json::Value {
+    let mut children = collect_child_directories(path, dir_map, files_by_dir);
+    children.extend(collect_file_children(path, files_by_dir));
+    children.sort_by(|a, b| {
+        let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        name_a.cmp(name_b)
+    });
+
+    let display_name = Path::new(path).file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string());
+
+    serde_json::json!({
+        "id": format!("directory_{}", path.replace('/', "_")),
+        "type": "folder",
+        "path": path,
+        "name": display_name,
+        "health_score": dir.health_score,
+        "entity_count": dir.entity_count,
+        "file_count": dir.file_count,
+        "refactoring_needed": dir.refactoring_needed,
+        "children": children
+    })
+}
+
+/// Collect child directory nodes for a given path.
+fn collect_child_directories(
+    path: &str,
+    dir_map: &HashMap<String, &DirectoryHealthScore>,
+    files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+) -> Vec<serde_json::Value> {
+    dir_map.iter()
+        .filter(|(_, child_dir)| {
+            child_dir.parent.as_ref()
+                .map(|p| p.to_string_lossy() == path)
+                .unwrap_or(false)
+        })
+        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir))
+        .collect()
+}
+
+/// Collect file nodes for a given directory path.
+fn collect_file_children(
+    path: &str,
+    files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+) -> Vec<serde_json::Value> {
+    files_by_dir.get(path)
+        .map(|files| files.iter().map(|fg| build_unified_file_node(fg)).collect())
+        .unwrap_or_default()
+}
+
+/// Build a file node for the unified hierarchy.
+fn build_unified_file_node(file_group: &FileRefactoringGroup) -> serde_json::Value {
+    let total_issues: usize = file_group.entities.iter().map(|e| e.issues.len()).sum();
+    let entity_count = file_group.entities.len().max(1);
+    let file_health = (1.0 - (total_issues as f64 / entity_count as f64)).clamp(0.0, 1.0);
+
+    let entities: Vec<serde_json::Value> = file_group.entities.iter()
+        .map(build_unified_entity_value)
+        .collect();
+
+    serde_json::json!({
+        "id": format!("file_{}", file_group.file_path.replace('/', "_")),
+        "type": "file",
+        "path": file_group.file_path,
+        "name": file_group.file_name,
+        "entity_count": file_group.entity_count,
+        "avg_score": ((file_group.avg_score * 10.0).round() / 10.0),
+        "priority": file_group.highest_priority,
+        "health_score": file_health,
+        "total_issues": total_issues,
+        "children": entities
+    })
+}
+
+/// Build an entity value for the unified hierarchy.
+fn build_unified_entity_value(entity: &RefactoringCandidate) -> serde_json::Value {
+    let mut v = serde_json::to_value(entity).unwrap_or_default();
+    v["type"] = serde_json::Value::String("entity".to_string());
+
+    if v.get("id").is_none() {
+        let id = if !entity.entity_id.is_empty() {
+            entity.entity_id.clone()
+        } else {
+            entity.name.clone()
+        };
+        v["id"] = serde_json::Value::String(format!(
+            "entity_{}",
+            id.replace('/', "_").replace(':', "_")
+        ));
+    }
+    v
 }
 
 /// Create real file groups from individual refactoring candidates
@@ -248,149 +270,173 @@ fn add_files_to_node(
     candidate_lookup: &HashMap<String, RefactoringCandidate>,
 ) -> serde_json::Value {
     let mut new_node = node.clone();
+    let node_path = extract_node_path(node);
 
-    // Get the path from the node
-    let node_path = if let Some(path) = node.get("path").and_then(|p| p.as_str()) {
-        path.to_string()
-    } else if let Some(id) = node.get("id").and_then(|id| id.as_str()) {
-        // Extract path from ID like "directory_src_detectors" -> "src/detectors"
-        if id.starts_with("directory_") {
-            id.strip_prefix("directory_")
-                .unwrap_or(id)
-                .replace("_", "/")
-                .replace("root", ".")
-        } else {
-            ".".to_string()
-        }
-    } else {
-        ".".to_string()
-    };
-
-    // Get existing children or create empty array
     let existing_children = node
         .get("children")
         .and_then(|c| c.as_array())
         .cloned()
         .unwrap_or_default();
 
-    // Recursively process existing children (directories)
     let mut new_children: Vec<serde_json::Value> = existing_children
         .iter()
         .map(|child| add_files_to_node(child, files_by_dir, code_dictionary, candidate_lookup))
         .collect();
 
-    // Add files that belong to this directory
     if let Some(file_groups) = files_by_dir.get(&node_path) {
         for file_group in file_groups {
-            let file_name = Path::new(&file_group.file_path)
-                .file_name()
-                .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
-                .to_string_lossy()
-                .to_string();
-
-            // Create file node with entity children
-            let mut file_children = Vec::new();
-
-            for entity in &file_group.entities {
-                // Extract entity name for better readability
-                let display_name = entity
-                    .name
-                    .split(':')
-                    .last()
-                    .map(|part| part.to_string())
-                    .unwrap_or_else(|| entity.name.clone());
-
-                // Create children for issues and suggestions
-                let mut entity_children = Vec::new();
-
-                if let Some(candidate) = candidate_lookup.get(&entity.entity_id) {
-                    for (i, issue) in candidate.issues.iter().enumerate() {
-                        let issue_meta = code_dictionary.issues.get(&issue.code);
-                        let issue_title = issue_meta
-                            .map(|def| def.title.clone())
-                            .unwrap_or_else(|| issue.category.clone());
-                        let issue_summary = issue_meta
-                            .map(|def| def.summary.clone())
-                            .unwrap_or_else(|| {
-                                format!("{} signals detected by analyzer.", issue.category)
-                            });
-                        let severity = (issue.severity * 10.0).round() / 10.0;
-
-                        entity_children.push(serde_json::json!({
-                            "id": format!("{}:issue:{}", entity.entity_id, i),
-                            "type": "issue",
-                            "code": issue.code,
-                            "name": format!("{} – {}", issue.code, issue_title),
-                            "title": issue_title,
-                            "category": issue.category,
-                            "summary": issue_summary,
-                            "severity": severity,
-                            "contributing_features": issue.contributing_features,
-                            "children": []
-                        }));
-                    }
-
-                    for (i, suggestion) in candidate.suggestions.iter().enumerate() {
-                        let suggestion_meta = code_dictionary.suggestions.get(&suggestion.code);
-                        let suggestion_title = suggestion_meta
-                            .map(|def| def.title.clone())
-                            .unwrap_or_else(|| suggestion.refactoring_type.clone());
-                        let suggestion_summary = suggestion_meta
-                            .map(|def| def.summary.clone())
-                            .unwrap_or_else(|| suggestion.refactoring_type.replace('_', " "));
-
-                        entity_children.push(serde_json::json!({
-                            "id": format!("{}:suggestion:{}", entity.entity_id, i),
-                            "type": "suggestion",
-                            "code": suggestion.code,
-                            "name": format!("{} – {}", suggestion.code, suggestion_title),
-                            "title": suggestion_title,
-                            "summary": suggestion_summary,
-                            "priority": ((suggestion.priority * 10.0).round() / 10.0),
-                            "effort": ((suggestion.effort * 10.0).round() / 10.0),
-                            "impact": ((suggestion.impact * 10.0).round() / 10.0),
-                            "refactoring_type": suggestion.refactoring_type.clone(),
-                            "children": []
-                        }));
-                    }
-                }
-
-                let entity_node = serde_json::json!({
-                    "id": entity.entity_id.clone(),
-                    "type": "entity",
-                    "name": display_name,
-                    "score": ((entity.score * 10.0).round() / 10.0),
-                    "priority": format!("{:?}", entity.priority),
-                    "issue_count": entity.issue_count,
-                    "suggestion_count": entity.suggestion_count,
-                    "children": entity_children
-                });
-                file_children.push(entity_node);
-            }
-
-            let file_node = serde_json::json!({
-                "id": format!("file_{}", file_group.file_path.replace("/", "_").replace(".", "root")),
-                "type": "file",
-                "name": file_name,
-                "path": file_group.file_path,
-                "entity_count": file_group.entity_count,
-                "avg_score": ((file_group.avg_score * 10.0).round() / 10.0),
-                "highest_priority": format!("{:?}", file_group.highest_priority),
-                "total_issues": file_group.total_issues,
-                "children": file_children
-            });
-
-            new_children.push(file_node);
+            new_children.push(build_file_node(file_group, code_dictionary, candidate_lookup));
         }
     }
 
-    // Update the node with new children
     if let serde_json::Value::Object(ref mut obj) = new_node {
-        obj.insert(
-            "children".to_string(),
-            serde_json::Value::Array(new_children),
-        );
+        obj.insert("children".to_string(), serde_json::Value::Array(new_children));
     }
 
     new_node
+}
+
+/// Extract directory path from a hierarchy node.
+fn extract_node_path(node: &serde_json::Value) -> String {
+    if let Some(path) = node.get("path").and_then(|p| p.as_str()) {
+        return path.to_string();
+    }
+    if let Some(id) = node.get("id").and_then(|id| id.as_str()) {
+        if id.starts_with("directory_") {
+            return id.strip_prefix("directory_")
+                .unwrap_or(id)
+                .replace("_", "/")
+                .replace("root", ".");
+        }
+    }
+    ".".to_string()
+}
+
+/// Build a file node with entity children.
+fn build_file_node(
+    file_group: &FileRefactoringGroup,
+    code_dictionary: &CodeDictionary,
+    candidate_lookup: &HashMap<String, RefactoringCandidate>,
+) -> serde_json::Value {
+    let file_name = Path::new(&file_group.file_path)
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+        .to_string_lossy()
+        .to_string();
+
+    let file_children: Vec<serde_json::Value> = file_group.entities
+        .iter()
+        .map(|entity| build_entity_node(entity, code_dictionary, candidate_lookup))
+        .collect();
+
+    serde_json::json!({
+        "id": format!("file_{}", file_group.file_path.replace("/", "_").replace(".", "root")),
+        "type": "file",
+        "name": file_name,
+        "path": file_group.file_path,
+        "entity_count": file_group.entity_count,
+        "avg_score": ((file_group.avg_score * 10.0).round() / 10.0),
+        "highest_priority": format!("{:?}", file_group.highest_priority),
+        "total_issues": file_group.total_issues,
+        "children": file_children
+    })
+}
+
+/// Build an entity node with issue and suggestion children.
+fn build_entity_node(
+    entity: &RefactoringCandidate,
+    code_dictionary: &CodeDictionary,
+    candidate_lookup: &HashMap<String, RefactoringCandidate>,
+) -> serde_json::Value {
+    let display_name = entity.name.split(':').last()
+        .map(|part| part.to_string())
+        .unwrap_or_else(|| entity.name.clone());
+
+    let entity_children = candidate_lookup.get(&entity.entity_id)
+        .map(|candidate| build_entity_children(candidate, &entity.entity_id, code_dictionary))
+        .unwrap_or_default();
+
+    serde_json::json!({
+        "id": entity.entity_id.clone(),
+        "type": "entity",
+        "name": display_name,
+        "score": ((entity.score * 10.0).round() / 10.0),
+        "priority": format!("{:?}", entity.priority),
+        "issue_count": entity.issue_count,
+        "suggestion_count": entity.suggestion_count,
+        "children": entity_children
+    })
+}
+
+/// Build children nodes (issues and suggestions) for an entity.
+fn build_entity_children(
+    candidate: &RefactoringCandidate,
+    entity_id: &str,
+    code_dictionary: &CodeDictionary,
+) -> Vec<serde_json::Value> {
+    let mut children = Vec::new();
+
+    for (i, issue) in candidate.issues.iter().enumerate() {
+        children.push(build_issue_node(issue, entity_id, i, code_dictionary));
+    }
+    for (i, suggestion) in candidate.suggestions.iter().enumerate() {
+        children.push(build_suggestion_node(suggestion, entity_id, i, code_dictionary));
+    }
+
+    children
+}
+
+/// Build an issue node.
+fn build_issue_node(
+    issue: &crate::core::pipeline::RefactoringIssue,
+    entity_id: &str,
+    index: usize,
+    code_dictionary: &CodeDictionary,
+) -> serde_json::Value {
+    let issue_meta = code_dictionary.issues.get(&issue.code);
+    let issue_title = issue_meta.map(|def| def.title.clone())
+        .unwrap_or_else(|| issue.category.clone());
+    let issue_summary = issue_meta.map(|def| def.summary.clone())
+        .unwrap_or_else(|| format!("{} signals detected by analyzer.", issue.category));
+
+    serde_json::json!({
+        "id": format!("{}:issue:{}", entity_id, index),
+        "type": "issue",
+        "code": issue.code,
+        "name": format!("{} – {}", issue.code, issue_title),
+        "title": issue_title,
+        "category": issue.category,
+        "summary": issue_summary,
+        "severity": (issue.severity * 10.0).round() / 10.0,
+        "contributing_features": issue.contributing_features,
+        "children": []
+    })
+}
+
+/// Build a suggestion node.
+fn build_suggestion_node(
+    suggestion: &crate::core::pipeline::RefactoringSuggestion,
+    entity_id: &str,
+    index: usize,
+    code_dictionary: &CodeDictionary,
+) -> serde_json::Value {
+    let suggestion_meta = code_dictionary.suggestions.get(&suggestion.code);
+    let suggestion_title = suggestion_meta.map(|def| def.title.clone())
+        .unwrap_or_else(|| suggestion.refactoring_type.clone());
+    let suggestion_summary = suggestion_meta.map(|def| def.summary.clone())
+        .unwrap_or_else(|| suggestion.refactoring_type.replace('_', " "));
+
+    serde_json::json!({
+        "id": format!("{}:suggestion:{}", entity_id, index),
+        "type": "suggestion",
+        "code": suggestion.code,
+        "name": format!("{} – {}", suggestion.code, suggestion_title),
+        "title": suggestion_title,
+        "summary": suggestion_summary,
+        "priority": ((suggestion.priority * 10.0).round() / 10.0),
+        "effort": ((suggestion.effort * 10.0).round() / 10.0),
+        "impact": ((suggestion.impact * 10.0).round() / 10.0),
+        "refactoring_type": suggestion.refactoring_type.clone(),
+        "children": []
+    })
 }

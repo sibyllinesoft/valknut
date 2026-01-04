@@ -37,120 +37,178 @@ pub fn compute_doc_health(
     let audit_cfg = DocAuditConfig::new(root);
     let result = run_audit(&audit_cfg).ok()?;
 
-    // Per-file issue counts
+    let file_gaps = count_file_gaps(&result);
+    let aggregation = aggregate_file_stats(&file_gaps, &audit_cfg, cfg);
+    let readme_penalties = result.missing_readmes.len() + result.stale_readmes.len();
+    let (dir_scores, dir_score_map, dir_issue_map) =
+        compute_directory_scores(&aggregation, cfg);
+    let file_health_map = compute_file_health_scores(
+        &file_gaps,
+        analyzed_files,
+        &audit_cfg,
+    );
+    let overall_score = compute_overall_score(
+        &dir_scores,
+        aggregation.eligible_files + readme_penalties,
+        aggregation.files_with_gaps + readme_penalties,
+    );
+
+    Some(DocHealthResult {
+        score: overall_score,
+        issue_count: aggregation.files_with_gaps + readme_penalties,
+        file_issues: aggregation.file_issue_out,
+        dir_scores: dir_score_map,
+        dir_issues: dir_issue_map,
+        file_health: file_health_map,
+    })
+}
+
+/// Count documentation issues per file.
+fn count_file_gaps(result: &crate::doc_audit::AuditResult) -> HashMap<PathBuf, usize> {
     let mut file_gaps: HashMap<PathBuf, usize> = HashMap::new();
     for issue in result.documentation_issues.iter() {
         *file_gaps.entry(issue.path.clone()).or_insert(0) += 1;
     }
+    file_gaps
+}
 
-    let mut file_issue_out: HashMap<String, usize> = HashMap::new();
+/// Aggregated statistics from file analysis.
+struct FileAggregation {
+    eligible_files: usize,
+    files_with_gaps: usize,
+    file_issue_out: HashMap<String, usize>,
+    dir_eligible: HashMap<PathBuf, usize>,
+    dir_gaps: HashMap<PathBuf, usize>,
+}
 
-    // Aggregate per-file eligibility and scores
-    let mut eligible_files = 0usize;
-    let mut files_with_gaps = 0usize;
-
-    // Directory aggregation buckets
-    let mut dir_eligible: HashMap<PathBuf, usize> = HashMap::new();
-    let mut dir_gaps: HashMap<PathBuf, usize> = HashMap::new();
+/// Aggregate file statistics for eligibility and directory grouping.
+fn aggregate_file_stats(
+    file_gaps: &HashMap<PathBuf, usize>,
+    audit_cfg: &DocAuditConfig,
+    cfg: &DocHealthConfig,
+) -> FileAggregation {
+    let mut agg = FileAggregation {
+        eligible_files: 0,
+        files_with_gaps: 0,
+        file_issue_out: HashMap::new(),
+        dir_eligible: HashMap::new(),
+        dir_gaps: HashMap::new(),
+    };
 
     for (path, gaps) in file_gaps.iter() {
-        // Paths from doc_audit are relative to audit root, so join them
-        let full_path = if path.is_absolute() {
-            path.clone()
-        } else {
-            audit_cfg.root.join(path)
-        };
+        let full_path = resolve_full_path(path, &audit_cfg.root);
         let loc = std::fs::read_to_string(&full_path)
             .map(|c| c.lines().count())
             .unwrap_or(0);
         if loc < cfg.min_file_nodes {
             continue;
         }
-        eligible_files += 1;
-        if *gaps > 0 {
-            files_with_gaps += 1;
-        }
 
-        file_issue_out.insert(path.display().to_string(), *gaps);
+        agg.eligible_files += 1;
+        if *gaps > 0 {
+            agg.files_with_gaps += 1;
+        }
+        agg.file_issue_out.insert(path.display().to_string(), *gaps);
 
         let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        *dir_eligible.entry(dir.clone()).or_insert(0) += 1;
+        *agg.dir_eligible.entry(dir.clone()).or_insert(0) += 1;
         if *gaps > 0 {
-            *dir_gaps.entry(dir.clone()).or_insert(0) += 1;
+            *agg.dir_gaps.entry(dir).or_insert(0) += 1;
         }
     }
 
-    // README gaps counted as project-level penalties
-    let readme_gap_files = result.missing_readmes.len() + result.stale_readmes.len();
-    eligible_files += readme_gap_files;
-    files_with_gaps += readme_gap_files;
-    let total_doc_issues = files_with_gaps;
+    agg
+}
 
-    // Directory-level doc health (only if enough files)
+/// Resolve a path to its full form, joining with root if relative.
+fn resolve_full_path(path: &Path, root: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
+}
+
+/// Compute directory-level health scores.
+fn compute_directory_scores(
+    agg: &FileAggregation,
+    cfg: &DocHealthConfig,
+) -> (Vec<f64>, HashMap<String, f64>, HashMap<String, usize>) {
     let mut dir_scores = Vec::new();
     let mut dir_score_map: HashMap<String, f64> = HashMap::new();
     let mut dir_issue_map: HashMap<String, usize> = HashMap::new();
-    let mut file_health_map: HashMap<String, f64> = HashMap::new();
 
-    for (dir, eligible) in dir_eligible.iter() {
+    for (dir, eligible) in agg.dir_eligible.iter() {
+        let dir_key = dir.display().to_string();
         if *eligible < cfg.min_files_per_dir {
             dir_scores.push(100.0);
-            dir_score_map.insert(dir.display().to_string(), 100.0);
-            dir_issue_map.insert(dir.display().to_string(), 0);
+            dir_score_map.insert(dir_key.clone(), 100.0);
+            dir_issue_map.insert(dir_key, 0);
             continue;
         }
-        let gaps = *dir_gaps.get(dir).unwrap_or(&0);
+        let gaps = *agg.dir_gaps.get(dir).unwrap_or(&0);
         let coverage = 1.0 - (gaps as f64 / *eligible as f64);
         let score = (coverage * 100.0).clamp(0.0, 100.0);
         dir_scores.push(score);
-        dir_score_map.insert(dir.display().to_string(), score);
-        dir_issue_map.insert(dir.display().to_string(), gaps);
+        dir_score_map.insert(dir_key.clone(), score);
+        dir_issue_map.insert(dir_key, gaps);
     }
 
-    // File-level doc health: files with issues get scaled score, files without issues get 100
-    // Use logarithmic scaling so files with many issues don't all collapse to 0
-    // Formula: health = 100 * (1 - log10(gaps + 1) / log10(max_gaps + 1))
-    // This gives a gentler curve: 1 issue ~= 85, 10 issues ~= 50, 100 issues ~= 15
+    (dir_scores, dir_score_map, dir_issue_map)
+}
+
+/// Compute file-level health scores using logarithmic scaling.
+fn compute_file_health_scores(
+    file_gaps: &HashMap<PathBuf, usize>,
+    analyzed_files: &[PathBuf],
+    audit_cfg: &DocAuditConfig,
+) -> HashMap<String, f64> {
+    let mut file_health_map: HashMap<String, f64> = HashMap::new();
     let max_gaps = file_gaps.values().copied().max().unwrap_or(1).max(1) as f64;
     let log_max = (max_gaps + 1.0).log10();
 
+    // Score files with issues
     for (path, gaps) in file_gaps.iter() {
-        let score = if *gaps == 0 {
-            100.0
-        } else {
-            let log_gaps = (*gaps as f64 + 1.0).log10();
-            let scaled = 1.0 - (log_gaps / log_max);
-            (scaled * 100.0).clamp(0.0, 100.0)
-        };
-        insert_path_variants(&mut file_health_map, path, score, &audit_cfg);
+        let score = compute_log_scaled_score(*gaps, log_max);
+        insert_path_variants(&mut file_health_map, path, score, audit_cfg);
     }
 
-    // Then add all analyzed source files that don't have issues (score = 100.0)
-    // We need to normalize paths before comparing since file_gaps paths may differ
-    // file_gaps paths are relative to audit_cfg.root, so we need to join them
-    let file_gaps_canonical: HashSet<PathBuf> = file_gaps
-        .keys()
-        .filter_map(|p| {
-            let full_path = if p.is_absolute() {
-                p.clone()
-            } else {
-                audit_cfg.root.join(p)
-            };
-            full_path.canonicalize().ok()
-        })
-        .collect();
-
-    for path in analyzed_files.iter() {
-        if path.is_file() {
-            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
-            if !file_gaps_canonical.contains(&canonical) {
-                insert_path_variants(&mut file_health_map, path, 100.0, &audit_cfg);
-            }
+    // Add analyzed files without issues (score = 100.0)
+    let file_gaps_canonical = canonicalize_paths(file_gaps.keys(), &audit_cfg.root);
+    for path in analyzed_files.iter().filter(|p| p.is_file()) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if !file_gaps_canonical.contains(&canonical) {
+            insert_path_variants(&mut file_health_map, path, 100.0, audit_cfg);
         }
     }
 
-    // Project score preference: directory weighted average if any eligible dirs; else file coverage; else 100.
-    let overall_score = if !dir_scores.is_empty() {
+    file_health_map
+}
+
+/// Compute health score using logarithmic scaling.
+fn compute_log_scaled_score(gaps: usize, log_max: f64) -> f64 {
+    if gaps == 0 {
+        100.0
+    } else {
+        let log_gaps = (gaps as f64 + 1.0).log10();
+        let scaled = 1.0 - (log_gaps / log_max);
+        (scaled * 100.0).clamp(0.0, 100.0)
+    }
+}
+
+/// Canonicalize a collection of paths.
+fn canonicalize_paths<'a>(
+    paths: impl Iterator<Item = &'a PathBuf>,
+    root: &Path,
+) -> HashSet<PathBuf> {
+    paths
+        .filter_map(|p| resolve_full_path(p, root).canonicalize().ok())
+        .collect()
+}
+
+/// Compute overall documentation health score.
+fn compute_overall_score(dir_scores: &[f64], eligible_files: usize, files_with_gaps: usize) -> f64 {
+    if !dir_scores.is_empty() {
         let avg = dir_scores.iter().sum::<f64>() / dir_scores.len() as f64;
         avg.clamp(0.0, 100.0)
     } else if eligible_files == 0 {
@@ -158,16 +216,7 @@ pub fn compute_doc_health(
     } else {
         let coverage = 1.0 - (files_with_gaps as f64 / eligible_files as f64);
         (coverage * 100.0).clamp(0.0, 100.0)
-    };
-
-    Some(DocHealthResult {
-        score: overall_score,
-        issue_count: total_doc_issues,
-        file_issues: file_issue_out,
-        dir_scores: dir_score_map,
-        dir_issues: dir_issue_map,
-        file_health: file_health_map,
-    })
+    }
 }
 
 /// Insert multiple path variants into the file health map for robust lookup.
