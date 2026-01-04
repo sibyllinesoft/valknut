@@ -414,26 +414,13 @@ impl BayesianNormalizer {
         match self.scheme.as_str() {
             "z_score" | "zscore" => {
                 if stats.posterior_variance < f64::EPSILON {
-                    // Zero variance - set all to zero
                     values.fill(0.0);
                 } else {
-                    let mean_vec = f64x4::splat(stats.posterior_mean);
-                    let inv_std_vec = f64x4::splat(1.0 / stats.posterior_variance.sqrt());
-
-                    // Process chunks of 4
-                    let (chunks, remainder) =
-                        values.split_at_mut(values.len() - (values.len() % 4));
-                    for chunk in chunks.chunks_exact_mut(4) {
-                        let vals = f64x4::from([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                        let normalized = (vals - mean_vec) * inv_std_vec;
-                        chunk.copy_from_slice(&normalized.to_array());
-                    }
-
-                    // Handle remainder
-                    let inv_std = 1.0 / stats.posterior_variance.sqrt();
-                    for val in remainder {
-                        *val = (*val - stats.posterior_mean) * inv_std;
-                    }
+                    Self::apply_linear_transform_simd(
+                        values,
+                        stats.posterior_mean,
+                        1.0 / stats.posterior_variance.sqrt(),
+                    );
                 }
             }
             "min_max" | "minmax" => {
@@ -441,27 +428,10 @@ impl BayesianNormalizer {
                 if range < f64::EPSILON {
                     values.fill(0.5);
                 } else {
-                    let min_vec = f64x4::splat(stats.min);
-                    let inv_range_vec = f64x4::splat(1.0 / range);
-
-                    // Process chunks of 4
-                    let (chunks, remainder) =
-                        values.split_at_mut(values.len() - (values.len() % 4));
-                    for chunk in chunks.chunks_exact_mut(4) {
-                        let vals = f64x4::from([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                        let normalized = (vals - min_vec) * inv_range_vec;
-                        chunk.copy_from_slice(&normalized.to_array());
-                    }
-
-                    // Handle remainder
-                    let inv_range = 1.0 / range;
-                    for val in remainder {
-                        *val = (*val - stats.min) * inv_range;
-                    }
+                    Self::apply_linear_transform_simd(values, stats.min, 1.0 / range);
                 }
             }
             _ => {
-                // Fallback to scalar implementation
                 for val in values {
                     *val = self.normalize_value(*val, stats)?;
                 }
@@ -469,6 +439,24 @@ impl BayesianNormalizer {
         }
 
         Ok(())
+    }
+
+    /// Apply a linear transform `(value - offset) * scale` using SIMD acceleration.
+    #[cfg(feature = "simd")]
+    fn apply_linear_transform_simd(values: &mut [f64], offset: f64, scale: f64) {
+        let offset_vec = f64x4::splat(offset);
+        let scale_vec = f64x4::splat(scale);
+
+        let (chunks, remainder) = values.split_at_mut(values.len() - (values.len() % 4));
+        for chunk in chunks.chunks_exact_mut(4) {
+            let vals = f64x4::from([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            let normalized = (vals - offset_vec) * scale_vec;
+            chunk.copy_from_slice(&normalized.to_array());
+        }
+
+        for val in remainder {
+            *val = (*val - offset) * scale;
+        }
     }
 
     /// Normalize a single value using the given statistics

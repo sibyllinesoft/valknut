@@ -206,6 +206,16 @@ impl Default for StopMotifsConfig {
     }
 }
 
+/// Validation for [`StopMotifsConfig`].
+impl StopMotifsConfig {
+    /// Validate stop motifs configuration.
+    pub fn validate(&self) -> Result<()> {
+        validate_unit_range(self.percentile, "stop_motifs.percentile")?;
+        validate_positive_i64(self.refresh_days, "stop_motifs.refresh_days")?;
+        Ok(())
+    }
+}
+
 /// Auto-calibration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoCalibrationConfig {
@@ -236,6 +246,17 @@ impl Default for AutoCalibrationConfig {
             sample_size: 200,    // Top 200 candidates for calibration
             max_iterations: 50,  // Binary search limit
         }
+    }
+}
+
+/// Validation for [`AutoCalibrationConfig`].
+impl AutoCalibrationConfig {
+    /// Validate auto-calibration configuration.
+    pub fn validate(&self) -> Result<()> {
+        validate_unit_range(self.quality_target, "auto_calibration.quality_target")?;
+        validate_positive_usize(self.sample_size, "auto_calibration.sample_size")?;
+        validate_positive_usize(self.max_iterations, "auto_calibration.max_iterations")?;
+        Ok(())
     }
 }
 
@@ -284,6 +305,16 @@ impl Default for RankingConfig {
     }
 }
 
+/// Validation for [`RankingConfig`].
+impl RankingConfig {
+    /// Validate ranking configuration.
+    pub fn validate(&self) -> Result<()> {
+        validate_positive_usize(self.min_saved_tokens, "ranking.min_saved_tokens")?;
+        validate_positive_f64(self.min_rarity_gain, "ranking.min_rarity_gain")?;
+        Ok(())
+    }
+}
+
 /// Default implementation for [`DenoiseConfig`].
 impl Default for DenoiseConfig {
     /// Returns the default clone denoising configuration.
@@ -314,6 +345,7 @@ impl DenoiseConfig {
             return Ok(());
         }
 
+        // Core threshold validations
         validate_positive_usize(self.min_function_tokens, "min_function_tokens")?;
         validate_positive_usize(self.min_match_tokens, "min_match_tokens")?;
         validate_positive_usize(self.require_blocks, "require_blocks")?;
@@ -321,30 +353,11 @@ impl DenoiseConfig {
         validate_unit_range(self.threshold_s, "threshold_s")?;
         validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
 
-        // Validate weights sum to approximately 1.0
-        let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
-        if (weight_sum - 1.0).abs() > 0.1 {
-            return Err(ValknutError::validation(
-                "denoise weights should sum to approximately 1.0",
-            ));
-        }
-
-        validate_non_negative(self.weights.ast, "weights.ast")?;
-        validate_non_negative(self.weights.pdg, "weights.pdg")?;
-        validate_non_negative(self.weights.emb, "weights.emb")?;
-        validate_unit_range(self.stop_motifs.percentile, "stop_motifs.percentile")?;
-        validate_positive_i64(self.stop_motifs.refresh_days, "stop_motifs.refresh_days")?;
-        validate_unit_range(
-            self.auto_calibration.quality_target,
-            "auto_calibration.quality_target",
-        )?;
-        validate_positive_usize(self.auto_calibration.sample_size, "auto_calibration.sample_size")?;
-        validate_positive_usize(
-            self.auto_calibration.max_iterations,
-            "auto_calibration.max_iterations",
-        )?;
-        validate_positive_usize(self.ranking.min_saved_tokens, "ranking.min_saved_tokens")?;
-        validate_positive_f64(self.ranking.min_rarity_gain, "ranking.min_rarity_gain")?;
+        // Delegate to nested config validators
+        self.weights.validate()?;
+        self.stop_motifs.validate()?;
+        self.auto_calibration.validate()?;
+        self.ranking.validate()?;
 
         Ok(())
     }

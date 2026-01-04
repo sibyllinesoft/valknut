@@ -40,23 +40,18 @@ pub use signatures::{
 };
 
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use rayon::prelude::*;
 use tracing::{debug, info};
-use xxhash_rust::xxh3::Xxh3;
-
-#[cfg(feature = "simd")]
-use wide::u64x4;
 
 use crate::core::ast_service::AstService;
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{
     CodeEntity, EntityId, ExtractionContext, FeatureDefinition, FeatureExtractor,
 };
-use crate::core::interning::{intern, resolve, InternedString};
+use crate::core::interning::InternedString;
 
 /// LSH-based similarity feature extractor with O(n) candidate search
 #[derive(Debug)]
@@ -613,128 +608,6 @@ impl FeatureExtractor for LshExtractor {
 
 /// Signature generation and comparison helpers for [`LshExtractor`].
 impl LshExtractor {
-    /// Generate MinHash signature for source code with performance tracking and caching
-    fn generate_minhash_signature_internal(&self, source_code: &str) -> Vec<u64> {
-        let start_time = std::time::Instant::now();
-
-        // Check cache first
-        if let Some(cached_signature) =
-            self.cache
-                .get_signature(source_code, self.num_hashes, self.shingle_size)
-        {
-            let elapsed = start_time.elapsed();
-            debug!("Signature cache hit, returned in {:?}", elapsed);
-            return cached_signature;
-        }
-
-        // Create shingles from the source code (with caching)
-        let shingles = self.create_shingles_cached(source_code);
-
-        // Generate MinHash signature using memory pool
-        let mut signature = self.memory_pools.get_signature_vec();
-        // Ensure correct size (pool pre-fills with u64::MAX)
-        signature.resize(self.num_hashes, u64::MAX);
-
-        for shingle in shingles {
-            for i in 0..self.num_hashes {
-                let hash = self.hash_with_seed(&shingle, i as u64);
-                if hash < signature[i] {
-                    signature[i] = hash;
-                }
-            }
-        }
-
-        // Cache the generated signature (clone before returning to pool)
-        let signature_clone = signature.clone();
-        self.cache.cache_signature(
-            source_code,
-            self.num_hashes,
-            self.shingle_size,
-            signature_clone.clone(),
-        );
-
-        // Return signature vector to memory pool for reuse
-        self.memory_pools.return_signature_vec(signature);
-
-        let elapsed = start_time.elapsed();
-        debug!("MinHash signature generation took: {:?}", elapsed);
-
-        signature_clone
-    }
-
-    /// Generate MinHash signature with caching to avoid redundant computation
-    /// Note: Caching will be implemented at the pipeline level for thread safety
-    fn generate_minhash_signature_cached(&self, source_code: &str, entity_id: &str) -> Vec<u64> {
-        // For now, just generate without caching - will be optimized in pipeline
-        debug!(
-            "Generating signature for: {} (caching disabled for thread safety)",
-            entity_id
-        );
-        self.generate_minhash_signature_internal(source_code)
-    }
-
-    /// SIMD-accelerated MinHash signature generation
-    #[cfg(feature = "simd")]
-    fn generate_minhash_signature_simd(&self, source_code: &str) -> Vec<u64> {
-        let shingles = self.create_shingles(source_code);
-        let mut signature = vec![u64::MAX; self.num_hashes];
-
-        // Process hashes in chunks of 4 for SIMD
-        let chunks = self.num_hashes / 4;
-        let remainder = self.num_hashes % 4;
-
-        for shingle in shingles {
-            // Process 4 hashes at a time with SIMD - vectorized hashing
-            for chunk_idx in 0..chunks {
-                let base_idx = chunk_idx * 4;
-
-                // Vectorized hash computation using SIMD
-                let hashes = self.hash_with_seeds_simd(&shingle, base_idx);
-
-                // Load current signatures into SIMD vector
-                let current_sigs = u64x4::from([
-                    signature[base_idx],
-                    signature[base_idx + 1],
-                    signature[base_idx + 2],
-                    signature[base_idx + 3],
-                ]);
-
-                // Element-wise minimum using comparison masks
-                let comparison_mask = hashes.cmp_lt(current_sigs);
-                let min_vec = comparison_mask.blend(hashes, current_sigs);
-
-                // Store results back to signature
-                let min_array = min_vec.to_array();
-                signature[base_idx] = min_array[0];
-                signature[base_idx + 1] = min_array[1];
-                signature[base_idx + 2] = min_array[2];
-                signature[base_idx + 3] = min_array[3];
-            }
-
-            // Handle remainder
-            for i in (chunks * 4)..(chunks * 4 + remainder) {
-                let hash = self.hash_with_seed(&shingle, i as u64);
-                if hash < signature[i] {
-                    signature[i] = hash;
-                }
-            }
-        }
-
-        signature
-    }
-
-    /// SIMD-accelerated hash computation for 4 seeds at once
-    #[cfg(feature = "simd")]
-    fn hash_with_seeds_simd(&self, data: &str, base_seed: usize) -> u64x4 {
-        signatures::generator::hash_with_seeds_simd(data, base_seed)
-    }
-
-    /// Fast hash implementation optimized for SIMD batch processing
-    #[cfg(feature = "simd")]
-    fn hash_with_seed_fast(&self, data: &str, seed: u64) -> u64 {
-        signatures::generator::hash_with_seed_fast(data, seed)
-    }
-
     /// Parallel MinHash signature generation for multiple entities
     #[cfg(feature = "parallel")]
     pub fn generate_signatures_parallel(&self, entities: &[CodeEntity]) -> Vec<Vec<u64>> {
@@ -743,151 +616,14 @@ impl LshExtractor {
             .map(|entity| {
                 #[cfg(feature = "simd")]
                 {
-                    self.generate_minhash_signature_simd(&entity.source_code)
+                    signatures::generator::generate_minhash_signature_simd(self, &entity.source_code)
                 }
                 #[cfg(not(feature = "simd"))]
                 {
-                    self.generate_minhash_signature(&entity.source_code)
+                    signatures::generator::generate_minhash_signature(self, &entity.source_code)
                 }
             })
             .collect()
-    }
-
-    /// Create shingles from source code (internal)
-    fn create_shingles_internal(&self, source_code: &str) -> Vec<String> {
-        // Normalize the source code (remove comments, normalize whitespace)
-        let normalized = self.normalize_code(source_code);
-
-        // Split into tokens
-        let tokens: Vec<&str> = normalized
-            .split_whitespace()
-            .filter(|token| !token.is_empty())
-            .collect();
-
-        // Create shingles using memory pool
-        let mut shingles = self.memory_pools.get_string_vec();
-        if tokens.len() >= self.shingle_size {
-            for i in 0..=tokens.len() - self.shingle_size {
-                let shingle = tokens[i..i + self.shingle_size].join(" ");
-                shingles.push(shingle);
-            }
-        }
-
-        shingles
-    }
-
-    /// Create interned shingles from source code - ZERO STRING ALLOCATIONS!
-    /// This is the high-performance version that eliminates all string allocation overhead
-    fn create_shingles_interned_internal(&self, source_code: &str) -> Vec<InternedString> {
-        // Normalize the source code (remove comments, normalize whitespace)
-        let normalized = self.normalize_code(source_code);
-
-        // Split into tokens and intern them immediately
-        let tokens: Vec<InternedString> = normalized
-            .split_whitespace()
-            .filter(|token| !token.is_empty())
-            .map(|token| intern(token))  // ZERO allocations - intern directly from &str
-            .collect();
-
-        // Create shingles by combining interned tokens
-        let mut shingles = Vec::new();
-        if tokens.len() >= self.shingle_size {
-            for i in 0..=tokens.len() - self.shingle_size {
-                // Build shingle by resolving tokens and joining - only one allocation per shingle
-                let shingle_parts: Vec<&str> = tokens[i..i + self.shingle_size]
-                    .iter()
-                    .map(|&interned_token| resolve(interned_token))
-                    .collect();
-                let shingle_str = shingle_parts.join(" ");
-                let interned_shingle = intern(shingle_str);
-                shingles.push(interned_shingle);
-            }
-        }
-
-        shingles
-    }
-
-    /// Generate optimized MinHash signature using interned strings - ELIMINATES memcmp OVERHEAD!
-    /// This is the highest-performance version that uses interned string comparisons
-    fn generate_minhash_signature_interned_internal(&self, source_code: &str) -> Vec<u64> {
-        let start_time = std::time::Instant::now();
-
-        // Create interned shingles (minimal allocations)
-        let shingles = self.create_shingles_interned_internal(source_code);
-
-        // Generate MinHash signature using memory pool
-        let mut signature = self.memory_pools.get_signature_vec();
-        // Ensure correct size (pool pre-fills with u64::MAX)
-        signature.resize(self.num_hashes, u64::MAX);
-
-        // Hash interned strings directly - this is much faster than String hashing
-        for shingle in shingles {
-            let shingle_str = resolve(shingle); // Zero-cost lookup to original string
-            for i in 0..self.num_hashes {
-                let hash = self.hash_with_seed(shingle_str, i as u64);
-                if hash < signature[i] {
-                    signature[i] = hash;
-                }
-            }
-        }
-
-        // Clone before returning to pool (cache if needed)
-        let signature_clone = signature.clone();
-
-        // Return signature vector to memory pool for reuse
-        self.memory_pools.return_signature_vec(signature);
-
-        let elapsed = start_time.elapsed();
-        debug!("Interned MinHash signature generation took: {:?}", elapsed);
-
-        signature_clone
-    }
-
-    /// Create shingles with token caching to avoid redundant tokenization
-    fn create_shingles_cached(&self, source_code: &str) -> Vec<String> {
-        // Check token cache first
-        if let Some(cached_tokens) = self.cache.get_tokens(source_code) {
-            debug!("Token cache hit for source code");
-            return self.tokens_to_shingles(cached_tokens);
-        }
-
-        // Generate tokens and shingles using memory pool
-        let normalized = self.normalize_code(source_code);
-        let mut tokens = self.memory_pools.get_string_vec();
-        tokens.extend(
-            normalized
-                .split_whitespace()
-                .filter(|token| !token.is_empty())
-                .map(|s| s.to_string()),
-        );
-
-        // Cache the tokens for future use
-        self.cache.cache_tokens(source_code, tokens.clone());
-
-        // Convert tokens to shingles (returns tokens to pool internally)
-        let shingles = self.tokens_to_shingles(tokens);
-        shingles
-    }
-
-    /// Convert tokens to shingles
-    fn tokens_to_shingles(&self, tokens: Vec<String>) -> Vec<String> {
-        let mut shingles = self.memory_pools.get_string_vec();
-        if tokens.len() >= self.shingle_size {
-            for i in 0..=tokens.len() - self.shingle_size {
-                let shingle = tokens[i..i + self.shingle_size].join(" ");
-                shingles.push(shingle);
-            }
-        }
-
-        // Return tokens vector to pool for reuse
-        self.memory_pools.return_string_vec(tokens);
-
-        shingles
-    }
-
-    /// Normalize source code for comparison using basic text processing
-    fn normalize_code(&self, source_code: &str) -> String {
-        signatures::generator::normalize_code(source_code)
     }
 
     /// Check if entity meets fragment analysis thresholds using structural data
@@ -897,11 +633,6 @@ impl LshExtractor {
         config: &DedupeConfig,
     ) -> Result<bool> {
         self.ast_analyzer.meets_fragment_thresholds(entity, config).await
-    }
-
-    /// Hash a string with a seed
-    fn hash_with_seed(&self, data: &str, seed: u64) -> u64 {
-        signatures::generator::hash_with_seed(data, seed)
     }
 
     /// Build LSH index for all entities in the context for O(n) candidate search
@@ -916,7 +647,8 @@ impl LshExtractor {
 
         // Add all entities to the LSH index using optimized interned version
         for (entity_id, entity) in &context.entity_index {
-            let signature = self.generate_minhash_signature_interned_internal(&entity.source_code);
+            let signature =
+                signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
             let minhash_sig = MinHashSignature::new(signature, self.num_hashes, self.shingle_size);
             lsh_index.add_entity(entity_id.clone(), minhash_sig);
         }
@@ -948,7 +680,8 @@ impl LshExtractor {
 
         // Build index and store signatures using optimized interned version
         for entity in entities {
-            let signature = self.generate_minhash_signature_interned_internal(&entity.source_code);
+            let signature =
+                signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
             let minhash_sig =
                 MinHashSignature::new(signature.clone(), self.num_hashes, self.shingle_size);
             lsh_index.add_entity(entity.id.clone(), minhash_sig);
@@ -1147,7 +880,9 @@ impl LshExtractor {
             candidate_filter,
             max_candidates,
             self.lsh_config.similarity_threshold,
-            |source_code, entity_id| self.generate_minhash_signature_cached(source_code, entity_id),
+            |source_code, entity_id| {
+                signatures::generator::generate_minhash_signature_cached(self, source_code, entity_id)
+            },
         )
     }
 
