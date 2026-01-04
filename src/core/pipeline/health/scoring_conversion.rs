@@ -65,7 +65,7 @@ pub fn convert_to_scoring_results(results: &ComprehensiveAnalysisResult) -> Vec<
 
         let metrics = &complexity_result.metrics;
 
-        // Normalise metrics against reasonable thresholds
+        // Normalise metrics against reasonable thresholds for functions
         let cyclomatic_score = clamp_score((metrics.cyclomatic() / 10.0) * 40.0);
         let cognitive_score = clamp_score((metrics.cognitive() / 15.0) * 30.0);
         let nesting_score = clamp_score(metrics.max_nesting_depth * 6.0);
@@ -305,7 +305,7 @@ pub fn create_feature_vectors_from_results(results: &ComprehensiveAnalysisResult
         feature_vector.add_feature("technical_debt_score", metrics.technical_debt_score);
         feature_vector.add_feature("maintainability_index", metrics.maintainability_index);
 
-        // Add normalized versions (simple normalization for now)
+        // Add normalized versions for functions
         feature_vector.normalized_features.insert(
             "cyclomatic_complexity".to_string(),
             (metrics.cyclomatic() / 10.0).min(1.0),

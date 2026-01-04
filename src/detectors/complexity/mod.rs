@@ -254,25 +254,18 @@ impl AstComplexityAnalyzer {
         entities: &mut Vec<CodeEntity>,
         depth: usize,
     ) -> Result<()> {
-        // Extract functions, methods, classes - supporting multiple languages
+        // Extract functions and methods only - complexity is measured per-function.
+        // Class/impl size concerns are handled separately by member count thresholds.
         match node.kind() {
             // Python function patterns
-            "function_definition" 
+            "function_definition"
             // JavaScript/TypeScript function patterns
             | "function_declaration" | "function_expression" | "arrow_function" | "method_definition"
-            // Rust function patterns  
-            | "function_item" 
+            // Rust function patterns
+            | "function_item"
             // Go function patterns
             | "method_declaration" => {
                 if let Some(entity) = self.extract_function_entity(node, context, depth)? {
-                    entities.push(entity);
-                }
-            }
-            // Python/JavaScript class patterns
-            "class_definition" | "class_declaration"
-            // Rust struct/impl patterns 
-            | "struct_item" | "impl_item" => {
-                if let Some(entity) = self.extract_class_entity(node, context, depth)? {
                     entities.push(entity);
                 }
             }
@@ -313,42 +306,6 @@ impl AstComplexityAnalyzer {
                 node.start_position().row
             ),
             "function",
-            name,
-            context.file_path,
-        )
-        .with_line_range(node.start_position().row + 1, node.end_position().row + 1)
-        .with_source_code(body_text);
-
-        entity.add_property("start_byte", json!(node.start_byte()));
-        entity.add_property("end_byte", json!(node.end_byte()));
-        entity.add_property("ast_kind", json!(node.kind()));
-
-        Ok(Some(entity))
-    }
-
-    /// Extract class entity from AST node
-    fn extract_class_entity(
-        &self,
-        node: &tree_sitter::Node,
-        context: &crate::core::ast_service::AstContext<'_>,
-        depth: usize,
-    ) -> Result<Option<CodeEntity>> {
-        let name = if let Some(name_node) = node.child_by_field_name("name") {
-            self.get_node_text(name_node, context.source)
-        } else {
-            format!("anonymous_class_{}", node.start_position().row)
-        };
-
-        let body_text = self.get_node_text(*node, context.source);
-
-        let mut entity = CodeEntity::new(
-            format!(
-                "{}:{}:{}",
-                context.file_path,
-                name,
-                node.start_position().row
-            ),
-            "class",
             name,
             context.file_path,
         )
