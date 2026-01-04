@@ -261,8 +261,15 @@ impl ValknutConfig {
         self.graph.validate()?;
         self.lsh.validate()?;
         self.performance.validate()?;
+        self.validate_languages()?;
+        self.dedupe.validate()?;
+        self.denoise.validate()?;
+        self.coverage.validate()?;
+        Ok(())
+    }
 
-        // Validate language configurations
+    /// Validate all language configurations.
+    fn validate_languages(&self) -> Result<()> {
         for (lang, config) in &self.languages {
             config.validate().map_err(|e| {
                 ValknutError::config_field(
@@ -271,16 +278,6 @@ impl ValknutConfig {
                 )
             })?;
         }
-
-        // Validate dedupe configuration
-        self.dedupe.validate()?;
-
-        // Validate denoise configuration
-        self.denoise.validate()?;
-
-        // Validate coverage configuration
-        self.coverage.validate()?;
-
         Ok(())
     }
 }

@@ -309,63 +309,64 @@ impl Default for DenoiseConfig {
 impl DenoiseConfig {
     /// Validate denoise configuration
     pub fn validate(&self) -> Result<()> {
-        if self.min_function_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_function_tokens must be greater than 0",
-            ));
-        }
+        self.validate_basic_params()?;
+        self.validate_thresholds()?;
+        validate_denoise_weights(&self.weights)?;
+        self.stop_motifs.validate()?;
+        self.auto_calibration.validate()?;
+        Ok(())
+    }
 
-        if self.min_match_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_match_tokens must be greater than 0",
-            ));
-        }
+    fn validate_basic_params(&self) -> Result<()> {
+        validate_positive(self.min_function_tokens, "min_function_tokens")?;
+        validate_positive(self.min_match_tokens, "min_match_tokens")?;
+        validate_positive(self.require_blocks, "require_blocks")?;
+        Ok(())
+    }
 
-        if self.require_blocks == 0 {
-            return Err(ValknutError::validation(
-                "require_blocks must be greater than 0",
-            ));
-        }
-
+    fn validate_thresholds(&self) -> Result<()> {
         validate_unit_range(self.similarity, "similarity")?;
         validate_unit_range(self.threshold_s, "threshold_s")?;
         validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
+        Ok(())
+    }
+}
 
-        let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
-        if (weight_sum - 1.0).abs() > 0.1 {
-            return Err(ValknutError::validation(
-                "denoise weights should sum to approximately 1.0",
-            ));
-        }
+/// Validate that denoise weights sum to approximately 1.0 and are non-negative.
+fn validate_denoise_weights(weights: &DenoiseWeights) -> Result<()> {
+    let weight_sum = weights.ast + weights.pdg + weights.emb;
+    if (weight_sum - 1.0).abs() > 0.1 {
+        return Err(ValknutError::validation(
+            "denoise weights should sum to approximately 1.0",
+        ));
+    }
+    if weights.ast < 0.0 || weights.pdg < 0.0 || weights.emb < 0.0 {
+        return Err(ValknutError::validation(
+            "denoise weights must be non-negative",
+        ));
+    }
+    Ok(())
+}
 
-        if self.weights.ast < 0.0 || self.weights.pdg < 0.0 || self.weights.emb < 0.0 {
-            return Err(ValknutError::validation(
-                "denoise weights must be non-negative",
-            ));
-        }
-
-        validate_unit_range(self.stop_motifs.percentile, "stop_motifs.percentile")?;
-
-        if self.stop_motifs.refresh_days <= 0 {
+/// Validation for [`StopMotifsConfig`].
+impl StopMotifsConfig {
+    fn validate(&self) -> Result<()> {
+        validate_unit_range(self.percentile, "stop_motifs.percentile")?;
+        if self.refresh_days <= 0 {
             return Err(ValknutError::validation(
                 "stop_motifs.refresh_days must be greater than 0",
             ));
         }
+        Ok(())
+    }
+}
 
-        validate_unit_range(self.auto_calibration.quality_target, "auto_calibration.quality_target")?;
-
-        if self.auto_calibration.sample_size == 0 {
-            return Err(ValknutError::validation(
-                "auto_calibration.sample_size must be greater than 0",
-            ));
-        }
-
-        if self.auto_calibration.max_iterations == 0 {
-            return Err(ValknutError::validation(
-                "auto_calibration.max_iterations must be greater than 0",
-            ));
-        }
-
+/// Validation for [`AutoCalibrationConfig`].
+impl AutoCalibrationConfig {
+    fn validate(&self) -> Result<()> {
+        validate_unit_range(self.quality_target, "auto_calibration.quality_target")?;
+        validate_positive(self.sample_size, "auto_calibration.sample_size")?;
+        validate_positive(self.max_iterations, "auto_calibration.max_iterations")?;
         Ok(())
     }
 }
@@ -491,93 +492,93 @@ impl Default for DedupeConfig {
 impl DedupeConfig {
     /// Validate dedupe configuration
     pub fn validate(&self) -> Result<()> {
-        if self.min_function_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_function_tokens must be greater than 0",
-            ));
-        }
+        self.validate_basic_params()?;
+        self.validate_thresholds()?;
+        validate_dedupe_weights(&self.weights)?;
+        self.validate_stop_phrases()?;
+        self.adaptive.validate()?;
+        Ok(())
+    }
 
-        if self.min_ast_nodes == 0 {
-            return Err(ValknutError::validation(
-                "min_ast_nodes must be greater than 0",
-            ));
-        }
+    fn validate_basic_params(&self) -> Result<()> {
+        validate_positive(self.min_function_tokens, "min_function_tokens")?;
+        validate_positive(self.min_ast_nodes, "min_ast_nodes")?;
+        validate_positive(self.min_match_tokens, "min_match_tokens")?;
+        validate_positive(self.shingle_k, "shingle_k")?;
+        Ok(())
+    }
 
-        if self.min_match_tokens == 0 {
-            return Err(ValknutError::validation(
-                "min_match_tokens must be greater than 0",
-            ));
-        }
-
+    fn validate_thresholds(&self) -> Result<()> {
         validate_unit_range(self.min_match_coverage, "min_match_coverage")?;
-
-        if self.shingle_k == 0 {
-            return Err(ValknutError::validation("shingle_k must be greater than 0"));
-        }
-
         validate_unit_range(self.io_mismatch_penalty, "io_mismatch_penalty")?;
-
         validate_unit_range(self.threshold_s, "threshold_s")?;
+        Ok(())
+    }
 
-        let weight_sum = self.weights.ast + self.weights.pdg + self.weights.emb;
-        if (weight_sum - 1.0).abs() > 0.1 {
-            return Err(ValknutError::validation(
-                "weights should sum to approximately 1.0",
-            ));
-        }
-
+    fn validate_stop_phrases(&self) -> Result<()> {
         for pattern in &self.stop_phrases {
             if pattern.is_empty() {
-                return Err(ValknutError::validation(
-                    "Empty pattern in stop_phrases".to_string(),
-                ));
+                return Err(ValknutError::validation("Empty pattern in stop_phrases"));
             }
         }
+        Ok(())
+    }
+}
 
-        validate_unit_range(
-            self.adaptive.stop_motif_percentile,
-            "adaptive.stop_motif_percentile",
-        )?;
+/// Validate that dedupe weights sum to approximately 1.0.
+fn validate_dedupe_weights(weights: &DedupeWeights) -> Result<()> {
+    let weight_sum = weights.ast + weights.pdg + weights.emb;
+    if (weight_sum - 1.0).abs() > 0.1 {
+        return Err(ValknutError::validation(
+            "weights should sum to approximately 1.0",
+        ));
+    }
+    Ok(())
+}
 
-        validate_unit_range(
-            self.adaptive.hub_suppression_threshold,
-            "adaptive.hub_suppression_threshold",
-        )?;
+/// Validate that a value is positive (greater than 0).
+fn validate_positive(value: usize, name: &str) -> Result<()> {
+    if value == 0 {
+        return Err(ValknutError::validation(format!(
+            "{} must be greater than 0",
+            name
+        )));
+    }
+    Ok(())
+}
 
-        validate_unit_range(
-            self.adaptive.quality_gate_percentage,
-            "adaptive.quality_gate_percentage",
-        )?;
+/// Validation for [`AdaptiveDenoiseConfig`].
+impl AdaptiveDenoiseConfig {
+    fn validate(&self) -> Result<()> {
+        validate_unit_range(self.stop_motif_percentile, "adaptive.stop_motif_percentile")?;
+        validate_unit_range(self.hub_suppression_threshold, "adaptive.hub_suppression_threshold")?;
+        validate_unit_range(self.quality_gate_percentage, "adaptive.quality_gate_percentage")?;
+        validate_unit_range(self.external_call_jaccard_threshold, "adaptive.external_call_jaccard_threshold")?;
+        self.validate_bounded_params()?;
+        Ok(())
+    }
 
-        if self.adaptive.tfidf_kgram_size == 0 || self.adaptive.tfidf_kgram_size > 20 {
+    fn validate_bounded_params(&self) -> Result<()> {
+        if self.tfidf_kgram_size == 0 || self.tfidf_kgram_size > 20 {
             return Err(ValknutError::validation(
                 "adaptive.tfidf_kgram_size must be between 1 and 20",
             ));
         }
-
-        if self.adaptive.wl_iterations == 0 || self.adaptive.wl_iterations > 10 {
+        if self.wl_iterations == 0 || self.wl_iterations > 10 {
             return Err(ValknutError::validation(
                 "adaptive.wl_iterations must be between 1 and 10",
             ));
         }
-
-        if self.adaptive.min_rarity_gain <= 0.0 {
+        if self.min_rarity_gain <= 0.0 {
             return Err(ValknutError::validation(
                 "adaptive.min_rarity_gain must be greater than 0.0",
             ));
         }
-
-        validate_unit_range(
-            self.adaptive.external_call_jaccard_threshold,
-            "adaptive.external_call_jaccard_threshold",
-        )?;
-
-        if self.adaptive.cache_refresh_days <= 0 {
+        if self.cache_refresh_days <= 0 {
             return Err(ValknutError::validation(
                 "adaptive.cache_refresh_days must be greater than 0",
             ));
         }
-
         Ok(())
     }
 }
