@@ -21,7 +21,7 @@ use crate::detectors::structure::StructureConfig;
 // Re-export types from submodules
 pub use dedupe::{
     AdaptiveDenoiseConfig, AutoCalibrationConfig, DedupeConfig, DedupeWeights, DenoiseConfig,
-    DenoiseWeights, RankingBy, RankingConfig, RankingCriteria, StopMotifsConfig,
+    DenoiseWeights, RankingBy, RankingConfig, RankingCriteria, SimilarityWeights, StopMotifsConfig,
 };
 pub use live_reach::{BuildConfig, IngestConfig, IslandConfig, LiveReachConfig};
 pub use scoring::{NormalizationScheme, ScoringConfig, StatisticalParams, WeightsConfig};

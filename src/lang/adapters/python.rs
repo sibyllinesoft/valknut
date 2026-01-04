@@ -6,7 +6,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
-use super::super::common::{EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation};
+use super::super::common::{
+    create_base_metadata, extract_identifiers_by_kinds, extract_node_text, find_boilerplate_patterns,
+    generate_entity_id, sort_and_dedup, EntityExtractor, EntityKind, LanguageAdapter, ParseIndex,
+    ParsedEntity, SourceLocation,
+};
 use super::super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::{CodeEntity, EntityId};
@@ -72,7 +76,7 @@ impl PythonAdapter {
         let mut code_entities = Vec::new();
 
         for entity in parse_index.entities.values() {
-            let code_entity = self.convert_to_code_entity(entity, source_code)?;
+            let code_entity = entity.to_code_entity(source_code);
             code_entities.push(code_entity);
         }
 
@@ -123,57 +127,6 @@ impl PythonAdapter {
         Ok(code_entities)
     }
 
-    /// Recursively extract entities from the AST
-    fn extract_entities_recursive(
-        &self,
-        node: Node,
-        source_code: &str,
-        file_path: &str,
-        parent_id: Option<String>,
-        index: &mut ParseIndex,
-        entity_id_counter: &mut usize,
-    ) -> Result<()> {
-        // Check if this node represents an entity we care about
-        if let Some(entity) = self.node_to_entity(
-            node,
-            source_code,
-            file_path,
-            parent_id.clone(),
-            entity_id_counter,
-        )? {
-            let entity_id = entity.id.clone();
-            index.add_entity(entity);
-            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
-        } else {
-            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
-        }
-        Ok(())
-    }
-
-    /// Traverse and process all child nodes recursively.
-    fn traverse_children(
-        &self,
-        node: Node,
-        source_code: &str,
-        file_path: &str,
-        parent_id: Option<String>,
-        index: &mut ParseIndex,
-        entity_id_counter: &mut usize,
-    ) -> Result<()> {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.extract_entities_recursive(
-                child,
-                source_code,
-                file_path,
-                parent_id.clone(),
-                index,
-                entity_id_counter,
-            )?;
-        }
-        Ok(())
-    }
-
     /// Check if a name represents a constant (all uppercase with underscores).
     fn is_constant_name(name: &str) -> bool {
         name.chars().all(|c| c.is_uppercase() || c == '_')
@@ -194,92 +147,14 @@ impl PythonAdapter {
         })
     }
 
-    /// Convert a tree-sitter node to a ParsedEntity if it represents an entity
-    fn node_to_entity(
-        &self,
-        node: Node,
-        source_code: &str,
-        file_path: &str,
-        parent_id: Option<String>,
-        entity_id_counter: &mut usize,
-    ) -> Result<Option<ParsedEntity>> {
-        let entity_kind = match self.determine_entity_kind(&node, source_code)? {
-            Some(kind) => kind,
-            None => return Ok(None),
-        };
-
-        let name = self.extract_name(&node, source_code)?
-            .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
-
-        *entity_id_counter += 1;
-        let entity_id = format!("{}:{}:{}", file_path, entity_kind as u8, *entity_id_counter);
-
-        let location = SourceLocation {
-            file_path: file_path.to_string(),
-            start_line: node.start_position().row + 1,
-            end_line: node.end_position().row + 1,
-            start_column: node.start_position().column + 1,
-            end_column: node.end_position().column + 1,
-        };
-
-        let mut metadata = HashMap::new();
-
-        // Add Python-specific metadata
-        metadata.insert(
-            "node_kind".to_string(),
-            serde_json::Value::String(node.kind().to_string()),
-        );
-        metadata.insert(
-            "byte_range".to_string(),
-            serde_json::json!([node.start_byte(), node.end_byte()]),
-        );
-
-        // Extract additional metadata based on entity type
-        match entity_kind {
-            EntityKind::Function => {
-                self.extract_function_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Class => {
-                self.extract_class_metadata(&node, source_code, &mut metadata)?;
-            }
-            _ => {}
-        }
-
-        let entity = ParsedEntity {
-            id: entity_id,
-            kind: entity_kind,
-            name,
-            parent: parent_id,
-            children: Vec::new(), // Will be populated later
-            location,
-            metadata,
-        };
-
-        Ok(Some(entity))
-    }
-
-    /// Extract text from a node, trying field name first, then falling back to child search.
-    fn extract_node_text(node: &Node, source_code: &str, field: &str, fallback_kinds: &[&str]) -> Result<Option<String>> {
-        if let Some(name_node) = node.child_by_field_name(field) {
-            return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
-        }
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if fallback_kinds.contains(&child.kind()) {
-                return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
-            }
-        }
-        Ok(None)
-    }
-
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         match node.kind() {
             "function_definition" | "class_definition" => {
-                Self::extract_node_text(node, source_code, "name", &["identifier"])
+                extract_node_text(node, source_code, "name", &["identifier"])
             }
             "assignment" => {
-                Self::extract_node_text(node, source_code, "", &["identifier"])
+                extract_node_text(node, source_code, "", &["identifier"])
             }
             _ => Ok(None),
         }
@@ -391,38 +266,6 @@ impl PythonAdapter {
         );
 
         Ok(())
-    }
-
-    /// Convert ParsedEntity to CodeEntity format
-    fn convert_to_code_entity(
-        &self,
-        entity: &ParsedEntity,
-        source_code: &str,
-    ) -> Result<CodeEntity> {
-        let source_lines: Vec<&str> = source_code.lines().collect();
-        let entity_source = if entity.location.start_line <= source_lines.len()
-            && entity.location.end_line <= source_lines.len()
-        {
-            source_lines[(entity.location.start_line - 1)..entity.location.end_line].join("\n")
-        } else {
-            String::new()
-        };
-
-        let mut code_entity = CodeEntity::new(
-            entity.id.clone(),
-            format!("{:?}", entity.kind),
-            entity.name.clone(),
-            entity.location.file_path.clone(),
-        )
-        .with_line_range(entity.location.start_line, entity.location.end_line)
-        .with_source_code(entity_source);
-
-        // Add metadata from parsed entity
-        for (key, value) in &entity.metadata {
-            code_entity.add_property(key.clone(), value.clone());
-        }
-
-        Ok(code_entity)
     }
 
     /// OPTIMIZED: Recursively extract entities using interned strings - ZERO STRING ALLOCATIONS!
@@ -688,43 +531,6 @@ impl PythonAdapter {
         Ok(())
     }
 
-    /// Extract identifiers recursively from AST
-    fn extract_identifiers_recursive(
-        &self,
-        node: Node,
-        source: &str,
-        identifiers: &mut Vec<String>,
-    ) -> Result<()> {
-        match node.kind() {
-            "identifier" => {
-                if let Ok(identifier) = node.utf8_text(source.as_bytes()) {
-                    identifiers.push(identifier.to_string());
-                }
-            }
-            _ => {}
-        }
-
-        // Process children
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.extract_identifiers_recursive(child, source, identifiers)?;
-        }
-
-        Ok(())
-    }
-
-    /// Count AST nodes recursively
-    fn count_nodes_recursive(&self, node: Node) -> usize {
-        let mut count = 1; // Count this node
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            count += self.count_nodes_recursive(child);
-        }
-
-        count
-    }
-
     /// Count distinct code blocks recursively
     fn count_blocks_recursive(&self, node: Node, block_count: &mut usize) {
         match node.kind() {
@@ -807,6 +613,13 @@ impl Default for PythonAdapter {
 /// [`LanguageAdapter`] implementation for Python source code.
 #[async_trait]
 impl LanguageAdapter for PythonAdapter {
+    /// Parses source code into a tree-sitter AST.
+    fn parse_tree(&mut self, source: &str) -> Result<Tree> {
+        self.parser
+            .parse(source, None)
+            .ok_or_else(|| ValknutError::parse("python", "Failed to parse Python source"))
+    }
+
     /// Parses Python source code and returns a parse index.
     fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex> {
         // Use existing implementation
@@ -815,15 +628,12 @@ impl LanguageAdapter for PythonAdapter {
 
     /// Extracts all function call targets from the source.
     fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse("python", "Failed to parse Python source for function calls")
-        })?;
+        let tree = self.parse_tree(source)?;
 
         let mut calls = Vec::new();
         self.extract_function_calls_recursive(tree.root_node(), source, &mut calls)?;
 
-        calls.sort();
-        calls.dedup();
+        sort_and_dedup(&mut calls);
         Ok(calls)
     }
 
@@ -833,12 +643,7 @@ impl LanguageAdapter for PythonAdapter {
         source: &str,
         patterns: &[String],
     ) -> Result<Vec<String>> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse(
-                "python",
-                "Failed to parse Python source for boilerplate analysis",
-            )
-        })?;
+        let tree = self.parse_tree(source)?;
 
         let mut found_patterns = Vec::new();
 
@@ -850,39 +655,24 @@ impl LanguageAdapter for PythonAdapter {
             &mut found_patterns,
         )?;
 
-        found_patterns.sort();
-        found_patterns.dedup();
+        sort_and_dedup(&mut found_patterns);
         Ok(found_patterns)
     }
 
     /// Extracts all identifier tokens from the source.
     fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse("python", "Failed to parse Python source for identifiers")
-        })?;
+        let tree = self.parse_tree(source)?;
 
-        let mut identifiers = Vec::new();
-        self.extract_identifiers_recursive(tree.root_node(), source, &mut identifiers)?;
-
-        identifiers.sort();
-        identifiers.dedup();
-        Ok(identifiers)
-    }
-
-    /// Counts the total number of AST nodes.
-    fn count_ast_nodes(&mut self, source: &str) -> Result<usize> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse("python", "Failed to parse Python source for AST counting")
-        })?;
-
-        Ok(self.count_nodes_recursive(tree.root_node()))
+        Ok(extract_identifiers_by_kinds(
+            tree.root_node(),
+            source,
+            &["identifier"],
+        ))
     }
 
     /// Counts distinct code blocks in the source.
     fn count_distinct_blocks(&mut self, source: &str) -> Result<usize> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse("python", "Failed to parse Python source for block counting")
-        })?;
+        let tree = self.parse_tree(source)?;
 
         let mut block_count = 0;
         self.count_blocks_recursive(tree.root_node(), &mut block_count);
@@ -891,10 +681,9 @@ impl LanguageAdapter for PythonAdapter {
     }
 
     /// Normalizes source to a structured representation.
+    /// Overrides default to use Python-specific AST normalization.
     fn normalize_source(&mut self, source: &str) -> Result<String> {
-        let tree = self.parser.parse(source, None).ok_or_else(|| {
-            ValknutError::parse("python", "Failed to parse Python source for normalization")
-        })?;
+        let tree = self.parse_tree(source)?;
 
         let mut normalized_parts = Vec::new();
         self.normalize_ast_recursive(tree.root_node(), source, &mut normalized_parts)?;
@@ -941,6 +730,59 @@ impl LanguageAdapter for PythonAdapter {
         file_path: &str,
     ) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
         PythonAdapter::extract_code_entities_interned(self, source, file_path)
+    }
+}
+
+/// [`EntityExtractor`] implementation providing the language-specific node conversion.
+impl EntityExtractor for PythonAdapter {
+    fn node_to_entity(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        entity_id_counter: &mut usize,
+    ) -> Result<Option<ParsedEntity>> {
+        let entity_kind = match self.determine_entity_kind(&node, source_code)? {
+            Some(kind) => kind,
+            None => return Ok(None),
+        };
+
+        let name = self.extract_name(&node, source_code)?
+            .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
+
+        *entity_id_counter += 1;
+        let entity_id = generate_entity_id(file_path, entity_kind, *entity_id_counter);
+
+        let location = SourceLocation::from_positions(
+            file_path,
+            node.start_position().row,
+            node.start_position().column,
+            node.end_position().row,
+            node.end_position().column,
+        );
+
+        let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
+
+        match entity_kind {
+            EntityKind::Function => {
+                self.extract_function_metadata(&node, source_code, &mut metadata)?;
+            }
+            EntityKind::Class => {
+                self.extract_class_metadata(&node, source_code, &mut metadata)?;
+            }
+            _ => {}
+        }
+
+        Ok(Some(ParsedEntity {
+            id: entity_id,
+            kind: entity_kind,
+            name,
+            parent: parent_id,
+            children: Vec::new(),
+            location,
+            metadata,
+        }))
     }
 }
 

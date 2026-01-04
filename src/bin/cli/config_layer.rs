@@ -145,22 +145,40 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         self.coverage.merge_with(other.coverage);
         self.denoise.merge_with(other.denoise);
 
-        // Analysis module toggles (other wins)
-        self.analysis.enable_scoring = other.analysis.enable_scoring;
-        self.analysis.enable_graph_analysis = other.analysis.enable_graph_analysis;
-        self.analysis.enable_lsh_analysis = other.analysis.enable_lsh_analysis;
-        self.analysis.enable_refactoring_analysis = other.analysis.enable_refactoring_analysis;
-        self.analysis.enable_coverage_analysis = other.analysis.enable_coverage_analysis;
-        self.analysis.enable_structure_analysis = other.analysis.enable_structure_analysis;
-        self.analysis.enable_names_analysis = other.analysis.enable_names_analysis;
-        self.analysis.confidence_threshold = other.analysis.confidence_threshold;
+        // Analysis module toggles - only override when explicitly changed from defaults.
+        // This prevents ValknutConfig::from_cli_args (which starts with defaults) from
+        // clobbering values correctly set via API config layer.
+        let default_analysis = valknut_rs::core::config::AnalysisConfig::default();
+        if other.analysis.enable_scoring != default_analysis.enable_scoring {
+            self.analysis.enable_scoring = other.analysis.enable_scoring;
+        }
+        if other.analysis.enable_graph_analysis != default_analysis.enable_graph_analysis {
+            self.analysis.enable_graph_analysis = other.analysis.enable_graph_analysis;
+        }
+        if other.analysis.enable_lsh_analysis != default_analysis.enable_lsh_analysis {
+            self.analysis.enable_lsh_analysis = other.analysis.enable_lsh_analysis;
+        }
+        if other.analysis.enable_refactoring_analysis != default_analysis.enable_refactoring_analysis {
+            self.analysis.enable_refactoring_analysis = other.analysis.enable_refactoring_analysis;
+        }
+        if other.analysis.enable_coverage_analysis != default_analysis.enable_coverage_analysis {
+            self.analysis.enable_coverage_analysis = other.analysis.enable_coverage_analysis;
+        }
+        if other.analysis.enable_structure_analysis != default_analysis.enable_structure_analysis {
+            self.analysis.enable_structure_analysis = other.analysis.enable_structure_analysis;
+        }
+        if other.analysis.enable_names_analysis != default_analysis.enable_names_analysis {
+            self.analysis.enable_names_analysis = other.analysis.enable_names_analysis;
+        }
+        if other.analysis.confidence_threshold != default_analysis.confidence_threshold {
+            self.analysis.confidence_threshold = other.analysis.confidence_threshold;
+        }
 
         if other.analysis.max_files != 0 {
             self.analysis.max_files = other.analysis.max_files;
         }
 
         // Replace include/exclude/ignore patterns only when explicitly changed from defaults
-        let default_analysis = valknut_rs::core::config::AnalysisConfig::default();
         if other.analysis.include_patterns != default_analysis.include_patterns {
             self.analysis.include_patterns = other.analysis.include_patterns.clone();
         }

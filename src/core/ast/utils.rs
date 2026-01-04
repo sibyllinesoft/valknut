@@ -138,6 +138,13 @@ pub fn count_named_nodes(node: &Node) -> usize {
     count
 }
 
+/// Count all AST nodes (named and anonymous) beneath the supplied node.
+pub fn count_all_nodes(node: &Node) -> usize {
+    let mut count = 0usize;
+    walk_tree(*node, &mut |_| count += 1);
+    count
+}
+
 /// Count distinct control-flow blocks inside the supplied node.
 ///
 /// This counts constructs that typically delimit logical blocks (functions,
@@ -219,4 +226,87 @@ where
     for child in node.children(&mut cursor) {
         walk_tree(child, callback);
     }
+}
+
+/// Find an immediate child node of the given kind.
+///
+/// Returns the first child whose kind matches the provided string.
+pub fn find_child_by_kind<'a>(node: &Node<'a>, kind: &str) -> Option<Node<'a>> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == kind {
+            return Some(child);
+        }
+    }
+    None
+}
+
+/// Find an immediate child node matching any of the given kinds and return its text.
+///
+/// Returns the text of the first child whose kind matches any of the provided kinds.
+pub fn find_child_text(
+    node: &Node,
+    source_code: &str,
+    kinds: &[&str],
+) -> crate::core::errors::Result<Option<String>> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if kinds.contains(&child.kind()) {
+            return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+/// Extract name from a variable_declarator child node.
+///
+/// This is used by JavaScript and TypeScript adapters to extract variable names
+/// from variable declarations.
+pub fn extract_variable_declarator_name(
+    node: &Node,
+    source_code: &str,
+) -> crate::core::errors::Result<Option<String>> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "variable_declarator" {
+            return find_child_text(&child, source_code, &["identifier"]);
+        }
+    }
+    Ok(None)
+}
+
+/// Extract parameter names from a formal_parameters node.
+///
+/// This is used by JavaScript and TypeScript adapters to extract function
+/// parameter names.
+pub fn extract_parameter_names<'a>(params_node: &Node, source_code: &'a str) -> Vec<&'a str> {
+    let mut cursor = params_node.walk();
+    params_node
+        .children(&mut cursor)
+        .filter(|child| child.kind() == "identifier")
+        .filter_map(|child| child.utf8_text(source_code.as_bytes()).ok())
+        .collect()
+}
+
+/// Check if a declaration node is a const declaration.
+///
+/// This is used by JavaScript and TypeScript adapters to determine if a
+/// variable declaration uses the `const` keyword.
+pub fn is_const_declaration(
+    node: &Node,
+    source_code: &str,
+) -> crate::core::errors::Result<bool> {
+    let mut cursor = node.walk();
+
+    // Look for 'const' keyword
+    for child in node.children(&mut cursor) {
+        if child.kind() == "const"
+            || (child.kind() == "identifier"
+                && child.utf8_text(source_code.as_bytes())? == "const")
+        {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }

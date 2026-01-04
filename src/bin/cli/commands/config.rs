@@ -12,6 +12,7 @@ use tabled::{settings::Style as TableStyle, Table, Tabled};
 
 use crate::cli::analysis_display::display_config_summary;
 use crate::cli::args::{InitConfigArgs, ValidateConfigArgs};
+use crate::cli::config_builder::load_configuration;
 use valknut_rs::detectors::structure::StructureConfig;
 
 /// Print default configuration in YAML format
@@ -181,21 +182,4 @@ pub async fn validate_config(args: ValidateConfigArgs) -> anyhow::Result<()> {
     println!("   ✅ Configuration looks optimal!");
 
     Ok(())
-}
-
-/// Load configuration from file or use defaults
-pub async fn load_configuration(config_path: Option<&Path>) -> anyhow::Result<StructureConfig> {
-    let config = match config_path {
-        Some(path) => {
-            let content = tokio::fs::read_to_string(path).await?;
-            match path.extension().and_then(|ext| ext.to_str()) {
-                Some("yaml" | "yml") => serde_yaml::from_str(&content)?,
-                Some("json") => serde_json::from_str(&content)?,
-                _ => serde_yaml::from_str(&content)?,
-            }
-        }
-        None => StructureConfig::default(),
-    };
-
-    Ok(config)
 }

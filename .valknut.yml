@@ -5,7 +5,7 @@
 analysis:
   enable_scoring: true
   enable_graph_analysis: false
-  enable_lsh_analysis: false
+  enable_lsh_analysis: true
   enable_refactoring_analysis: false
   enable_structure_analysis: true
   enable_names_analysis: false

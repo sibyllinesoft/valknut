@@ -17,7 +17,8 @@ pub mod oracle;
 pub use analyze::*;
 
 // Re-export config command items
-pub use config::{init_config, load_configuration, print_default_config, validate_config};
+pub use config::{init_config, print_default_config, validate_config};
+pub use super::config_builder::load_configuration;
 
 // Re-export doc_audit command
 pub use doc_audit::doc_audit_command;

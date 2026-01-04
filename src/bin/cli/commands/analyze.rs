@@ -473,7 +473,8 @@ fn combine_analysis_results(results: Vec<AnalysisResults>) -> anyhow::Result<Ana
 
 
 // Re-export config commands for backward compatibility
-pub use super::config::{init_config, load_configuration, print_default_config, validate_config};
+pub use super::config::{init_config, print_default_config, validate_config};
+pub use crate::cli::config_builder::load_configuration;
 
 // Re-export MCP commands from the dedicated module for backward compatibility
 pub use super::mcp::{mcp_manifest_command, mcp_stdio_command};

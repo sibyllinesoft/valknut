@@ -1,9 +1,12 @@
 //! Common AST and parsing abstractions.
 
+use crate::core::ast_utils::{count_all_nodes, node_text_normalized, walk_tree};
 use crate::core::errors::Result;
+use crate::core::featureset::CodeEntity;
 use crate::detectors::structure::config::ImportStatement;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tree_sitter::{Node, Tree};
 
 /// Common entity types across all languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,6 +66,37 @@ pub struct ParsedEntity {
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
+impl ParsedEntity {
+    /// Convert this ParsedEntity to a CodeEntity.
+    ///
+    /// Extracts the source code for this entity from the provided source.
+    pub fn to_code_entity(&self, source_code: &str) -> CodeEntity {
+        let source_lines: Vec<&str> = source_code.lines().collect();
+        let entity_source = if self.location.start_line <= source_lines.len()
+            && self.location.end_line <= source_lines.len()
+        {
+            source_lines[(self.location.start_line - 1)..self.location.end_line].join("\n")
+        } else {
+            String::new()
+        };
+
+        let mut code_entity = CodeEntity::new(
+            self.id.clone(),
+            format!("{:?}", self.kind),
+            self.name.clone(),
+            self.location.file_path.clone(),
+        )
+        .with_line_range(self.location.start_line, self.location.end_line)
+        .with_source_code(entity_source);
+
+        for (key, value) in &self.metadata {
+            code_entity.add_property(key.clone(), value.clone());
+        }
+
+        code_entity
+    }
+}
+
 /// Source location information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceLocation {
@@ -80,6 +114,27 @@ pub struct SourceLocation {
 
     /// End column (1-based)
     pub end_column: usize,
+}
+
+impl SourceLocation {
+    /// Create a SourceLocation from 0-based row/column positions (tree-sitter format).
+    ///
+    /// Converts to 1-based line/column values.
+    pub fn from_positions(
+        file_path: &str,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+    ) -> Self {
+        Self {
+            file_path: file_path.to_string(),
+            start_line: start_row + 1,
+            end_line: end_row + 1,
+            start_column: start_col + 1,
+            end_column: end_col + 1,
+        }
+    }
 }
 
 /// Parse index containing all entities from a parsing session
@@ -199,8 +254,7 @@ impl ParseIndex {
             .cloned()
             .collect();
 
-        found_patterns.sort();
-        found_patterns.dedup();
+        sort_and_dedup(&mut found_patterns);
         found_patterns
     }
 
@@ -222,8 +276,7 @@ impl ParseIndex {
             })
             .collect();
 
-        identifiers.sort();
-        identifiers.dedup();
+        sort_and_dedup(&mut identifiers);
         identifiers
     }
 }
@@ -231,30 +284,46 @@ impl ParseIndex {
 /// Language adapter trait for AST parsing and analysis
 #[async_trait]
 pub trait LanguageAdapter: Send + Sync {
+    /// Parse source code into a tree-sitter AST.
+    /// This is the foundation for other tree-based operations.
+    fn parse_tree(&mut self, source: &str) -> Result<Tree>;
+
     /// Parse source code and return a parse index
     fn parse_source(&mut self, source: &str, file_path: &str) -> Result<ParseIndex>;
 
     /// Extract function calls from source code using tree-sitter
     fn extract_function_calls(&mut self, source: &str) -> Result<Vec<String>>;
 
-    /// Check if source contains boilerplate patterns using AST analysis
+    /// Check if source contains boilerplate patterns.
+    /// Default implementation uses text-based pattern matching.
+    /// Adapters can override this with AST-based detection.
     fn contains_boilerplate_patterns(
         &mut self,
         source: &str,
         patterns: &[String],
-    ) -> Result<Vec<String>>;
+    ) -> Result<Vec<String>> {
+        Ok(find_boilerplate_patterns(source, patterns))
+    }
 
     /// Extract identifiers from source using tree-sitter
     fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>>;
 
-    /// Count AST nodes in the source
-    fn count_ast_nodes(&mut self, source: &str) -> Result<usize>;
+    /// Count AST nodes in the source.
+    /// Default implementation uses the parse_tree method.
+    fn count_ast_nodes(&mut self, source: &str) -> Result<usize> {
+        let tree = self.parse_tree(source)?;
+        Ok(count_all_nodes(&tree.root_node()))
+    }
 
     /// Count distinct code blocks (functions, classes, control structures)
     fn count_distinct_blocks(&mut self, source: &str) -> Result<usize>;
 
-    /// Normalize source code for comparison (AST-based)
-    fn normalize_source(&mut self, source: &str) -> Result<String>;
+    /// Normalize source code for comparison (AST-based).
+    /// Default implementation returns the S-expression of the AST.
+    fn normalize_source(&mut self, source: &str) -> Result<String> {
+        let tree = self.parse_tree(source)?;
+        Ok(tree.root_node().to_sexp())
+    }
 
     /// Get language name
     fn language_name(&self) -> &str;
@@ -297,6 +366,215 @@ pub fn normalize_module_literal(raw: &str) -> String {
         .trim_matches(['"', '\'', '`'])
         .trim()
         .to_string()
+}
+
+/// Sort and deduplicate a vector in place.
+///
+/// Utility to reduce duplicate `vec.sort(); vec.dedup();` patterns across adapters.
+pub fn sort_and_dedup<T: Ord>(vec: &mut Vec<T>) {
+    vec.sort();
+    vec.dedup();
+}
+
+/// Generate a unique entity ID from file path, entity kind, and counter.
+///
+/// Format: `{file_path}:{kind_as_u8}:{counter}`
+pub fn generate_entity_id(file_path: &str, kind: EntityKind, counter: usize) -> String {
+    format!("{}:{}:{}", file_path, kind as u8, counter)
+}
+
+/// Create base metadata for a parsed entity with common fields.
+///
+/// Initializes a HashMap with `node_kind` and `byte_range` fields.
+pub fn create_base_metadata(
+    node_kind: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> std::collections::HashMap<String, serde_json::Value> {
+    let mut metadata = std::collections::HashMap::new();
+    metadata.insert(
+        "node_kind".to_string(),
+        serde_json::Value::String(node_kind.to_string()),
+    );
+    metadata.insert(
+        "byte_range".to_string(),
+        serde_json::json!([start_byte, end_byte]),
+    );
+    metadata
+}
+
+/// Find boilerplate patterns in source code using simple string matching.
+///
+/// Returns a sorted, deduplicated list of patterns found in the source.
+/// This is a shared implementation used by multiple language adapters.
+pub fn find_boilerplate_patterns(source: &str, patterns: &[String]) -> Vec<String> {
+    let mut found: Vec<String> = patterns
+        .iter()
+        .filter(|pattern| !pattern.is_empty() && source.contains(pattern.as_str()))
+        .cloned()
+        .collect();
+
+    sort_and_dedup(&mut found);
+    found
+}
+
+/// Parse a CommonJS require() import statement.
+///
+/// This is used by JavaScript and TypeScript adapters to parse require() calls.
+/// Returns None if the input doesn't match the expected format.
+pub fn parse_require_import(require_part: &str, line_number: usize) -> Option<ImportStatement> {
+    let eq_pos = require_part.find('=')?;
+    let rhs = require_part[eq_pos + 1..].trim();
+    let module_part = rhs
+        .strip_prefix("require(")
+        .and_then(|s| s.strip_suffix(");"))?;
+
+    Some(ImportStatement {
+        module: normalize_module_literal(module_part),
+        imports: None,
+        import_type: "require".to_string(),
+        line_number,
+    })
+}
+
+/// Extract function and constructor call targets from a JavaScript/TypeScript AST.
+///
+/// This is used by JavaScript and TypeScript adapters to extract function calls
+/// from call_expression and new_expression nodes.
+pub fn extract_js_function_calls(root: Node, source: &str) -> Vec<String> {
+    let mut calls = Vec::new();
+
+    walk_tree(root, &mut |node| {
+        let callee = match node.kind() {
+            "call_expression" => node.child_by_field_name("function"),
+            "new_expression" => node.child_by_field_name("constructor"),
+            _ => return,
+        };
+
+        if let Some(target) = callee.or_else(|| node.child(0)) {
+            if let Ok(text) = node_text_normalized(&target, source) {
+                let cleaned = text.trim();
+                if !cleaned.is_empty() {
+                    calls.push(cleaned.to_string());
+                }
+            }
+        }
+    });
+
+    sort_and_dedup(&mut calls);
+    calls
+}
+
+/// Extract identifier tokens from an AST tree, matching specified node kinds.
+///
+/// This is a parameterized helper used by language adapters to extract identifiers.
+/// Each language can specify which AST node kinds represent identifiers in their grammar.
+pub fn extract_identifiers_by_kinds(root: Node, source: &str, kinds: &[&str]) -> Vec<String> {
+    let mut identifiers = Vec::new();
+
+    walk_tree(root, &mut |node| {
+        if kinds.contains(&node.kind()) {
+            if let Ok(text) = node_text_normalized(&node, source) {
+                let cleaned = text.trim();
+                if !cleaned.is_empty() {
+                    identifiers.push(cleaned.to_string());
+                }
+            }
+        }
+    });
+
+    sort_and_dedup(&mut identifiers);
+    identifiers
+}
+
+/// Extract text from a node, trying field name first, then falling back to child search.
+///
+/// This is a common utility used by Go and Python adapters for extracting names
+/// from AST nodes.
+pub fn extract_node_text(node: &Node, source_code: &str, field: &str, fallback_kinds: &[&str]) -> Result<Option<String>> {
+    if let Some(name_node) = node.child_by_field_name(field) {
+        return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if fallback_kinds.contains(&child.kind()) {
+            return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+/// Trait for language adapters that extract entities from AST nodes.
+///
+/// Provides default implementations for recursive AST traversal.
+/// Implementors only need to define the language-specific `node_to_entity` method.
+pub trait EntityExtractor {
+    /// Convert a tree-sitter node to a ParsedEntity if it represents an entity.
+    ///
+    /// This is the language-specific method that each adapter must implement.
+    /// Returns Ok(None) for nodes that don't represent entities.
+    fn node_to_entity(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        entity_id_counter: &mut usize,
+    ) -> Result<Option<ParsedEntity>>;
+
+    /// Recursively extract entities from the AST.
+    ///
+    /// Default implementation that handles the common traversal pattern.
+    fn extract_entities_recursive(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        if let Some(entity) = self.node_to_entity(
+            node,
+            source_code,
+            file_path,
+            parent_id.clone(),
+            entity_id_counter,
+        )? {
+            let entity_id = entity.id.clone();
+            index.add_entity(entity);
+            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
+        } else {
+            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
+        }
+        Ok(())
+    }
+
+    /// Traverse and process all child nodes recursively.
+    ///
+    /// Default implementation that iterates over children and calls extract_entities_recursive.
+    fn traverse_children(
+        &self,
+        node: Node,
+        source_code: &str,
+        file_path: &str,
+        parent_id: Option<String>,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.extract_entities_recursive(
+                child,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                index,
+                entity_id_counter,
+            )?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -579,6 +857,13 @@ mod tests {
 
     #[async_trait]
     impl LanguageAdapter for DummyAdapter {
+        fn parse_tree(&mut self, _source: &str) -> Result<Tree> {
+            Err(crate::core::errors::ValknutError::parse(
+                "dummy",
+                "DummyAdapter does not support parse_tree",
+            ))
+        }
+
         fn parse_source(&mut self, _source: &str, _file_path: &str) -> Result<ParseIndex> {
             Ok(ParseIndex::new())
         }

@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use crate::core::config::validate_unit_range;
 use crate::core::errors::{Result, ValknutError};
 
+// Re-export shared types from core config
+pub use crate::core::config::{DedupeWeights, DenoiseWeights, SimilarityWeights};
+
 /// LSH and similarity detection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LshConfig {
@@ -190,31 +193,6 @@ pub struct DenoiseConfig {
     pub dry_run: bool,
 }
 
-/// Feature weights for denoising multi-dimensional similarity
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DenoiseWeights {
-    /// AST similarity weight
-    pub ast: f64,
-
-    /// Program dependence graph weight
-    pub pdg: f64,
-
-    /// Embedding similarity weight
-    pub emb: f64,
-}
-
-/// Default implementation for [`DenoiseWeights`].
-impl Default for DenoiseWeights {
-    /// Returns the default weight distribution for denoising.
-    fn default() -> Self {
-        Self {
-            ast: 0.35,
-            pdg: 0.45,
-            emb: 0.20,
-        }
-    }
-}
-
 /// Stop motifs configuration for AST-based boilerplate filtering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopMotifsConfig {
@@ -389,31 +367,6 @@ impl DenoiseConfig {
         }
 
         Ok(())
-    }
-}
-
-/// Feature weights for dedupe multi-dimensional similarity
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DedupeWeights {
-    /// AST similarity weight
-    pub ast: f64,
-
-    /// Program dependence graph weight
-    pub pdg: f64,
-
-    /// Embedding similarity weight
-    pub emb: f64,
-}
-
-/// Default implementation for [`DedupeWeights`].
-impl Default for DedupeWeights {
-    /// Returns the default weight distribution for dedupe.
-    fn default() -> Self {
-        Self {
-            ast: 0.35,
-            pdg: 0.45,
-            emb: 0.20,
-        }
     }
 }
 

@@ -135,9 +135,10 @@ pub struct DenoiseConfig {
     pub dry_run: bool,
 }
 
-/// Feature weights for denoising multi-dimensional similarity
+/// Feature weights for multi-dimensional similarity scoring.
+/// Used by both denoising and dedupe configurations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DenoiseWeights {
+pub struct SimilarityWeights {
     /// AST similarity weight
     pub ast: f64,
 
@@ -148,8 +149,8 @@ pub struct DenoiseWeights {
     pub emb: f64,
 }
 
-/// Default implementation for [`DenoiseWeights`].
-impl Default for DenoiseWeights {
+/// Default implementation for [`SimilarityWeights`].
+impl Default for SimilarityWeights {
     /// Returns the default weight distribution.
     fn default() -> Self {
         Self {
@@ -159,6 +160,23 @@ impl Default for DenoiseWeights {
         }
     }
 }
+
+/// Validation for [`SimilarityWeights`].
+impl SimilarityWeights {
+    /// Validate weights configuration.
+    pub fn validate(&self) -> Result<()> {
+        validate_non_negative(self.ast, "weights.ast")?;
+        validate_non_negative(self.pdg, "weights.pdg")?;
+        validate_non_negative(self.emb, "weights.emb")?;
+        validate_weights_sum(&[self.ast, self.pdg, self.emb], 0.1, "weights")?;
+        Ok(())
+    }
+}
+
+/// Type alias for backward compatibility.
+pub type DenoiseWeights = SimilarityWeights;
+/// Type alias for backward compatibility.
+pub type DedupeWeights = SimilarityWeights;
 
 /// Stop motifs configuration for AST-based boilerplate filtering
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,21 +350,6 @@ impl DenoiseConfig {
     }
 }
 
-/// Feature weights for multi-dimensional duplicate detection
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DedupeWeights {
-    /// AST similarity weight
-    #[serde(default)]
-    pub ast: f64,
-
-    /// Program dependence graph weight
-    #[serde(default)]
-    pub pdg: f64,
-
-    /// Embedding similarity weight
-    #[serde(default)]
-    pub emb: f64,
-}
 
 /// Ranking criteria for duplicates
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -481,30 +484,6 @@ impl Default for DedupeConfig {
             keep_top_per_file: 3,
             adaptive: AdaptiveDenoiseConfig::default(),
         }
-    }
-}
-
-/// Default implementation for [`DedupeWeights`].
-impl Default for DedupeWeights {
-    /// Returns the default weight distribution.
-    fn default() -> Self {
-        Self {
-            ast: 0.35,
-            pdg: 0.45,
-            emb: 0.20,
-        }
-    }
-}
-
-/// Validation for [`DedupeWeights`].
-impl DedupeWeights {
-    /// Validate weights configuration.
-    pub fn validate(&self) -> Result<()> {
-        validate_non_negative(self.ast, "weights.ast")?;
-        validate_non_negative(self.pdg, "weights.pdg")?;
-        validate_non_negative(self.emb, "weights.emb")?;
-        validate_weights_sum(&[self.ast, self.pdg, self.emb], 0.1, "weights")?;
-        Ok(())
     }
 }
 

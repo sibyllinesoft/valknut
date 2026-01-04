@@ -117,7 +117,6 @@ fn test_extract_entity_name() {
 
 #[test]
 fn test_convert_to_code_entity() {
-    let adapter = PythonAdapter::new().unwrap();
     let entity = ParsedEntity {
         id: "test-id".to_string(),
         name: "test_func".to_string(),
@@ -135,10 +134,7 @@ fn test_convert_to_code_entity() {
     };
 
     let source = "def test_func(): pass";
-    let result = adapter.convert_to_code_entity(&entity, source);
-    assert!(result.is_ok(), "Should convert to CodeEntity successfully");
-
-    let code_entity = result.unwrap();
+    let code_entity = entity.to_code_entity(source);
     assert_eq!(code_entity.name, "test_func");
     assert_eq!(code_entity.file_path, "test.py");
 }
