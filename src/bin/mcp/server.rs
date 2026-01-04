@@ -98,46 +98,40 @@ impl McpServer {
         &self,
         params: AnalyzeCodeParams,
     ) -> Result<ToolResult, (i32, String)> {
-        info!(
-            "Executing analyze_code tool with caching for path: {}",
-            params.path
-        );
+        info!("Executing analyze_code tool with caching for path: {}", params.path);
 
-        // Validate path exists
-        let path = std::path::Path::new(&params.path);
-        if !path.exists() {
-            return Err((
-                error_codes::INVALID_PARAMS,
-                format!("Path does not exist: {}", params.path),
-            ));
-        }
-
-        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let (path, canonical_path) = Self::validate_and_canonicalize_path(&params.path)?;
 
         // Check cache first
         if let Some(cached_results) = self.get_cached_analysis(&canonical_path).await {
-            // Format cached results according to requested format
-            let formatted_output =
-                match self.format_analysis_results(&cached_results, &params.format) {
-                    Ok(output) => output,
-                    Err(e) => {
-                        error!("Failed to format cached results: {}", e);
-                        return Err((
-                            error_codes::INTERNAL_ERROR,
-                            format!("Failed to format cached results: {}", e),
-                        ));
-                    }
-                };
-
-            return Ok(ToolResult {
-                content: vec![ContentItem {
-                    content_type: "text".to_string(),
-                    text: formatted_output,
-                }],
-            });
+            return self.format_to_tool_result(&cached_results, &params.format);
         }
 
         // Cache miss - run fresh analysis
+        let results = Self::run_fresh_analysis(&path).await?;
+        let tool_result = self.format_to_tool_result(&results, &params.format)?;
+
+        // Cache the results after successful formatting
+        self.cache_analysis(canonical_path, results).await;
+
+        Ok(tool_result)
+    }
+
+    /// Validate path exists and return both the path and its canonical form.
+    fn validate_and_canonicalize_path(path_str: &str) -> Result<(PathBuf, PathBuf), (i32, String)> {
+        let path = PathBuf::from(path_str);
+        if !path.exists() {
+            return Err((
+                error_codes::INVALID_PARAMS,
+                format!("Path does not exist: {}", path_str),
+            ));
+        }
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        Ok((path, canonical))
+    }
+
+    /// Run a fresh analysis on the given path.
+    async fn run_fresh_analysis(path: &PathBuf) -> Result<AnalysisResults, (i32, String)> {
         let analysis_config = valknut_rs::api::config_types::AnalysisConfig::default()
             .with_confidence_threshold(0.75)
             .with_max_files(5000)
@@ -148,42 +142,29 @@ impl McpServer {
                 "rust".to_string(),
             ]);
 
-        let mut engine = match valknut_rs::api::engine::ValknutEngine::new(analysis_config).await {
-            Ok(engine) => engine,
-            Err(e) => {
+        let mut engine = valknut_rs::api::engine::ValknutEngine::new(analysis_config)
+            .await
+            .map_err(|e| {
                 error!("Failed to create analysis engine: {}", e);
-                return Err((
-                    error_codes::ANALYSIS_ERROR,
-                    format!("Failed to create analysis engine: {}", e),
-                ));
-            }
-        };
+                (error_codes::ANALYSIS_ERROR, format!("Failed to create analysis engine: {}", e))
+            })?;
 
-        let results = match engine.analyze_directory(path).await {
-            Ok(results) => results,
-            Err(e) => {
-                error!("Analysis failed: {}", e);
-                return Err((
-                    error_codes::ANALYSIS_ERROR,
-                    format!("Analysis failed: {}", e),
-                ));
-            }
-        };
+        engine.analyze_directory(path).await.map_err(|e| {
+            error!("Analysis failed: {}", e);
+            (error_codes::ANALYSIS_ERROR, format!("Analysis failed: {}", e))
+        })
+    }
 
-        // Cache the results and format the output
-        let formatted_output = match self.format_analysis_results(&results, &params.format) {
-            Ok(output) => output,
-            Err(e) => {
-                error!("Failed to format results: {}", e);
-                return Err((
-                    error_codes::INTERNAL_ERROR,
-                    format!("Failed to format results: {}", e),
-                ));
-            }
-        };
-
-        // Cache the results after successful formatting
-        self.cache_analysis(canonical_path, results).await;
+    /// Format analysis results into a ToolResult.
+    fn format_to_tool_result(
+        &self,
+        results: &AnalysisResults,
+        format: &str,
+    ) -> Result<ToolResult, (i32, String)> {
+        let formatted_output = self.format_analysis_results(results, format).map_err(|e| {
+            error!("Failed to format results: {}", e);
+            (error_codes::INTERNAL_ERROR, format!("Failed to format results: {}", e))
+        })?;
 
         Ok(ToolResult {
             content: vec![ContentItem {

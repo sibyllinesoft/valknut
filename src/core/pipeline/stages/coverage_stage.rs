@@ -33,24 +33,56 @@ impl<'a> CoverageStage<'a> {
     ) -> Result<CoverageAnalysisResults> {
         debug!("Running coverage analysis with auto-discovery");
 
-        // Discover coverage files
         let discovered_files =
             CoverageDiscovery::discover_coverage_files(root_path, coverage_config)?;
 
         if discovered_files.is_empty() {
             info!("No coverage files found - analysis disabled");
-            return Ok(CoverageAnalysisResults {
-                enabled: false,
-                coverage_files_used: Vec::new(),
-                coverage_gaps: Vec::new(),
-                gaps_count: 0,
-                overall_coverage_percentage: None,
-                analysis_method: "no_coverage_files_found".to_string(),
-            });
+            return Ok(Self::empty_results());
         }
 
-        // Convert discovered files to info structs
-        let coverage_files_info: Vec<CoverageFileInfo> = discovered_files
+        Self::log_discovered_files(&discovered_files);
+
+        let gaps_count = self.analyze_coverage_gaps(&discovered_files).await?;
+        let coverage_packs = self.build_all_coverage_packs(&discovered_files).await?;
+        let overall_coverage_percentage = self.calculate_overall_coverage(&discovered_files).await?;
+
+        Ok(CoverageAnalysisResults {
+            enabled: true,
+            coverage_files_used: Self::to_file_info_list(&discovered_files),
+            coverage_gaps: Self::packs_to_json(&coverage_packs),
+            gaps_count,
+            overall_coverage_percentage,
+            analysis_method: Self::determine_analysis_method(&discovered_files),
+        })
+    }
+
+    /// Returns empty/disabled coverage results.
+    fn empty_results() -> CoverageAnalysisResults {
+        CoverageAnalysisResults {
+            enabled: false,
+            coverage_files_used: Vec::new(),
+            coverage_gaps: Vec::new(),
+            gaps_count: 0,
+            overall_coverage_percentage: None,
+            analysis_method: "no_coverage_files_found".to_string(),
+        }
+    }
+
+    /// Log which coverage files are being used.
+    fn log_discovered_files(files: &[CoverageFile]) {
+        for file in files {
+            info!(
+                "Using coverage file: {} (format: {:?})",
+                file.path.display(),
+                file.format
+            );
+        }
+    }
+
+    /// Convert discovered files to info structs.
+    fn to_file_info_list(files: &[CoverageFile]) -> Vec<CoverageFileInfo> {
+        files
             .iter()
             .map(|file| CoverageFileInfo {
                 path: file.path.display().to_string(),
@@ -58,57 +90,40 @@ impl<'a> CoverageStage<'a> {
                 size: file.size,
                 modified: format!("{:?}", file.modified),
             })
-            .collect();
+            .collect()
+    }
 
-        // Log which files are being used
-        for file in &discovered_files {
-            info!(
-                "Using coverage file: {} (format: {:?})",
-                file.path.display(),
-                file.format
-            );
-        }
-
-        // Run comprehensive coverage analysis using CoverageExtractor
-        let gaps_count = self.analyze_coverage_gaps(&discovered_files).await?;
-
-        // Build actual coverage packs for detailed analysis
-        let mut all_coverage_packs = Vec::new();
-        for file in &discovered_files {
+    /// Build coverage packs from all discovered files.
+    async fn build_all_coverage_packs(
+        &self,
+        files: &[CoverageFile],
+    ) -> Result<Vec<crate::detectors::coverage::CoveragePack>> {
+        let mut all_packs = Vec::new();
+        for file in files {
             let packs = self
                 .coverage_extractor
                 .build_coverage_packs(vec![file.path.clone()])
                 .await?;
-            all_coverage_packs.extend(packs);
+            all_packs.extend(packs);
         }
+        Ok(all_packs)
+    }
 
-        // Calculate overall coverage percentage from LCOV data
-        let overall_coverage_percentage = if !discovered_files.is_empty() {
-            self.calculate_overall_coverage(&discovered_files).await?
-        } else {
-            None
-        };
-
-        let analysis_method = if discovered_files.len() == 1 {
-            format!("single_file_{:?}", discovered_files[0].format)
-        } else {
-            format!("multi_file_{}_sources", discovered_files.len())
-        };
-
-        // Convert CoveragePacks to JSON for storage in coverage_gaps
-        let coverage_gaps: Vec<serde_json::Value> = all_coverage_packs
+    /// Convert coverage packs to JSON values.
+    fn packs_to_json(packs: &[crate::detectors::coverage::CoveragePack]) -> Vec<serde_json::Value> {
+        packs
             .iter()
             .map(|pack| serde_json::to_value(pack).unwrap_or(serde_json::Value::Null))
-            .collect();
+            .collect()
+    }
 
-        Ok(CoverageAnalysisResults {
-            enabled: true,
-            coverage_files_used: coverage_files_info,
-            coverage_gaps,
-            gaps_count,
-            overall_coverage_percentage,
-            analysis_method,
-        })
+    /// Determine analysis method string based on file count.
+    fn determine_analysis_method(files: &[CoverageFile]) -> String {
+        if files.len() == 1 {
+            format!("single_file_{:?}", files[0].format)
+        } else {
+            format!("multi_file_{}_sources", files.len())
+        }
     }
 
     /// Analyze coverage gaps from discovered coverage files.

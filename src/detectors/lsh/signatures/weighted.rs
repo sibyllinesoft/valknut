@@ -245,29 +245,38 @@ impl WeightedShingleAnalyzer {
             return Ok(WeightedMinHashSignature::empty());
         }
 
-        // Create weighted bag: {gram -> weight=idf[gram]}
+        let weighted_bag = self.build_weighted_bag(kgrams);
+        let signature = self.compute_minhash_signature(&weighted_bag);
+
+        Ok(WeightedMinHashSignature::new(signature))
+    }
+
+    /// Build weighted bag from k-grams using IDF weights.
+    fn build_weighted_bag(&self, kgrams: Vec<String>) -> HashMap<String, f64> {
         let mut weighted_bag: HashMap<String, f64> = HashMap::new();
         for kgram in kgrams {
             let weight = self.idf_weights.get(&kgram).copied().unwrap_or(1.0);
             *weighted_bag.entry(kgram).or_insert(0.0) += weight;
         }
+        weighted_bag
+    }
 
-        // Compute 128-dimension Weighted MinHash signature
+    /// Compute 128-dimension MinHash signature from weighted bag.
+    fn compute_minhash_signature(&self, weighted_bag: &HashMap<String, f64>) -> Vec<f64> {
         const NUM_HASHES: usize = 128;
         let mut signature = vec![f64::MAX; NUM_HASHES];
 
         for (kgram, weight) in weighted_bag {
             for i in 0..NUM_HASHES {
-                let hash = self.hash_with_seed(&kgram, i as u64) as f64;
-                let weighted_hash = hash / weight.max(1e-8); // Avoid division by zero
+                let hash = self.hash_with_seed(kgram, i as u64) as f64;
+                let weighted_hash = hash / weight.max(1e-8);
 
                 if weighted_hash < signature[i] {
                     signature[i] = weighted_hash;
                 }
             }
         }
-
-        Ok(WeightedMinHashSignature::new(signature))
+        signature
     }
 
     /// Hash a string with a seed
@@ -365,25 +374,7 @@ impl WeightedShingleAnalyzer {
     pub fn statistics(&self) -> WeightedShingleStats {
         let unique_grams = self.document_frequencies.len();
         let total_grams: usize = self.document_frequencies.values().copied().sum();
-
-        let top1pct_threshold = (unique_grams as f64 * 0.01).ceil() as usize;
-        let mut kgram_freqs: Vec<_> = self.document_frequencies.iter().collect();
-        kgram_freqs.sort_by(|a, b| b.1.cmp(a.1));
-
-        let top1pct_contribution = if !kgram_freqs.is_empty() && top1pct_threshold > 0 {
-            let top1pct_count: usize = kgram_freqs
-                .iter()
-                .take(top1pct_threshold.min(kgram_freqs.len()))
-                .map(|(_, freq)| **freq)
-                .sum();
-            if total_grams > 0 {
-                (top1pct_count as f64 / total_grams as f64) * 100.0
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        };
+        let top1pct_contribution = self.calculate_top1pct_contribution(unique_grams, total_grams);
 
         WeightedShingleStats {
             total_documents: self.total_documents,
@@ -391,6 +382,25 @@ impl WeightedShingleAnalyzer {
             unique_grams,
             top1pct_contribution,
         }
+    }
+
+    /// Calculate the contribution percentage of the top 1% most frequent k-grams.
+    fn calculate_top1pct_contribution(&self, unique_grams: usize, total_grams: usize) -> f64 {
+        if unique_grams == 0 || total_grams == 0 {
+            return 0.0;
+        }
+
+        let top1pct_threshold = (unique_grams as f64 * 0.01).ceil() as usize;
+        let mut kgram_freqs: Vec<_> = self.document_frequencies.values().collect();
+        kgram_freqs.sort_by(|a, b| b.cmp(a));
+
+        let top1pct_count: usize = kgram_freqs
+            .iter()
+            .take(top1pct_threshold)
+            .map(|freq| **freq)
+            .sum();
+
+        (top1pct_count as f64 / total_grams as f64) * 100.0
     }
 }
 

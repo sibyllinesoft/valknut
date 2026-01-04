@@ -11,7 +11,6 @@ analysis:
   enable_names_analysis: false
   enable_coverage_analysis: false
   confidence_threshold: 0.7
-  max_files: 50
   exclude_patterns:
     - "**/node_modules/**"
     - "**/venv/**"
