@@ -17,68 +17,81 @@ pub fn calculate_halstead_for_node(
     root_node: tree_sitter::Node<'_>,
     source: &str,
 ) -> HalsteadMetrics {
-    let mut operator_set: HashSet<String> = HashSet::new();
-    let mut operand_set: HashSet<String> = HashSet::new();
-    let mut operator_total = 0.0;
-    let mut operand_total = 0.0;
-
+    let mut counts = HalsteadCounts::default();
     let source_len = source.len();
     let mut stack = vec![root_node];
 
     while let Some(node) = stack.pop() {
-        // Skip invalid nodes with malformed byte ranges
-        let start = node.start_byte();
-        let end = node.end_byte();
-        if (start as usize) > source_len || (end as usize) > source_len || start > end {
-            debug!(
-                "Skipping invalid node {} with range {}-{}",
-                node.kind(),
-                start,
-                end
-            );
+        if !is_valid_node_range(&node, source_len) {
             continue;
         }
 
-        if node.is_named() {
-            let kind = node.kind();
+        counts.process_node(&node, source);
+        push_valid_children(&node, source_len, &mut stack);
+    }
 
-            if is_halstead_operator_node(kind) {
-                operator_set.insert(kind.to_string());
-                operator_total += 1.0;
-            } else if is_halstead_operand_node(kind) {
-                let operand = operand_representation(&node, source);
-                operand_set.insert(operand);
-                operand_total += 1.0;
-            }
+    counts.into_metrics()
+}
+
+/// Accumulated counts for Halstead calculation.
+#[derive(Default)]
+struct HalsteadCounts {
+    operator_set: HashSet<String>,
+    operand_set: HashSet<String>,
+    operator_total: f64,
+    operand_total: f64,
+}
+
+impl HalsteadCounts {
+    fn process_node(&mut self, node: &tree_sitter::Node<'_>, source: &str) {
+        if !node.is_named() {
+            return;
         }
 
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            // Also skip invalid children before pushing to stack
-            let child_start = child.start_byte();
-            let child_end = child.end_byte();
-            if (child_start as usize) <= source_len
-                && (child_end as usize) <= source_len
-                && child_start <= child_end
-            {
-                stack.push(child);
-            } else {
-                debug!(
-                    "Skipping invalid child node {} with range {}-{}",
-                    child.kind(),
-                    child_start,
-                    child_end
-                );
-            }
+        let kind = node.kind();
+        if is_halstead_operator_node(kind) {
+            self.operator_set.insert(kind.to_string());
+            self.operator_total += 1.0;
+        } else if is_halstead_operand_node(kind) {
+            self.operand_set.insert(operand_representation(node, source));
+            self.operand_total += 1.0;
         }
     }
 
-    compute_halstead_from_counts(
-        operator_set.len() as f64,
-        operand_set.len() as f64,
-        operator_total,
-        operand_total,
-    )
+    fn into_metrics(self) -> HalsteadMetrics {
+        compute_halstead_from_counts(
+            self.operator_set.len() as f64,
+            self.operand_set.len() as f64,
+            self.operator_total,
+            self.operand_total,
+        )
+    }
+}
+
+/// Check if a node has valid byte range within source.
+fn is_valid_node_range(node: &tree_sitter::Node<'_>, source_len: usize) -> bool {
+    let start = node.start_byte() as usize;
+    let end = node.end_byte() as usize;
+    if start <= source_len && end <= source_len && start <= end {
+        true
+    } else {
+        debug!("Skipping invalid node {} with range {}-{}", node.kind(), start, end);
+        false
+    }
+}
+
+/// Push valid children onto the processing stack.
+fn push_valid_children<'a>(
+    node: &tree_sitter::Node<'a>,
+    source_len: usize,
+    stack: &mut Vec<tree_sitter::Node<'a>>,
+) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if is_valid_node_range(&child, source_len) {
+            stack.push(child);
+        }
+    }
 }
 
 /// Compute Halstead metrics from operator/operand counts.

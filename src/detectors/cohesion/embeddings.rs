@@ -24,6 +24,13 @@ struct EmbeddingCache {
     misses: usize,
 }
 
+/// Tracks texts that need embedding generation (cache misses).
+#[derive(Default)]
+struct UncachedTexts {
+    indices: Vec<usize>,
+    texts: Vec<String>,
+}
+
 /// Factory, lookup, and eviction methods for [`EmbeddingCache`].
 impl EmbeddingCache {
     /// Creates a new cache with the given maximum entry count.
@@ -153,55 +160,70 @@ impl EmbeddingProvider {
             return Ok(Vec::new());
         }
 
-        // Separate cached and uncached
+        let (mut results, uncached) = self.partition_cached(texts)?;
+
+        if !uncached.indices.is_empty() {
+            self.generate_and_cache_uncached(texts, &uncached, &mut results)?;
+        }
+
+        Self::unwrap_results(results)
+    }
+
+    /// Partition texts into cached hits and uncached misses.
+    fn partition_cached(&self, texts: &[String]) -> Result<(Vec<Option<Vec<f32>>>, UncachedTexts)> {
         let mut results: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
-        let mut uncached_indices: Vec<usize> = Vec::new();
-        let mut uncached_texts: Vec<String> = Vec::new();
+        let mut uncached = UncachedTexts::default();
 
-        {
-            let mut cache = self.cache.write().map_err(|e| {
-                ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
+        let mut cache = self.cache.write().map_err(|e| {
+            ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
+        })?;
+
+        for (i, text) in texts.iter().enumerate() {
+            let hash = Self::hash_text(text);
+            if let Some(embedding) = cache.get(hash) {
+                results[i] = Some(embedding);
+            } else {
+                uncached.indices.push(i);
+                uncached.texts.push(text.clone());
+            }
+        }
+
+        Ok((results, uncached))
+    }
+
+    /// Generate embeddings for uncached texts and store in cache.
+    fn generate_and_cache_uncached(
+        &self,
+        original_texts: &[String],
+        uncached: &UncachedTexts,
+        results: &mut [Option<Vec<f32>>],
+    ) -> Result<()> {
+        let text_refs: Vec<&str> = uncached.texts.iter().map(|s| s.as_str()).collect();
+
+        let new_embeddings = {
+            let mut model = self.model.write().map_err(|e| {
+                ValknutError::internal(format!("Failed to acquire model lock: {}", e))
             })?;
+            model
+                .embed(text_refs, None)
+                .map_err(|e| ValknutError::internal(format!("Batch embedding failed: {}", e)))?
+        };
 
-            for (i, text) in texts.iter().enumerate() {
-                let hash = Self::hash_text(text);
-                if let Some(embedding) = cache.get(hash) {
-                    results[i] = Some(embedding);
-                } else {
-                    uncached_indices.push(i);
-                    uncached_texts.push(text.clone());
-                }
-            }
+        let mut cache = self.cache.write().map_err(|e| {
+            ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
+        })?;
+
+        for (i, embedding) in uncached.indices.iter().zip(new_embeddings.into_iter()) {
+            let hash = Self::hash_text(&original_texts[*i]);
+            cache.insert(hash, embedding.clone());
+            results[*i] = Some(embedding);
         }
 
-        // Generate embeddings for uncached texts
-        if !uncached_texts.is_empty() {
-            let text_refs: Vec<&str> = uncached_texts.iter().map(|s| s.as_str()).collect();
-            let new_embeddings = {
-                let mut model = self.model.write().map_err(|e| {
-                    ValknutError::internal(format!("Failed to acquire model lock: {}", e))
-                })?;
-                model
-                    .embed(text_refs, None)
-                    .map_err(|e| ValknutError::internal(format!("Batch embedding failed: {}", e)))?
-            };
+        Ok(())
+    }
 
-            // Cache and store results
-            {
-                let mut cache = self.cache.write().map_err(|e| {
-                    ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
-                })?;
-
-                for (i, embedding) in uncached_indices.into_iter().zip(new_embeddings.into_iter())
-                {
-                    let hash = Self::hash_text(&texts[i]);
-                    cache.insert(hash, embedding.clone());
-                    results[i] = Some(embedding);
-                }
-            }
-        }
-
-        // Unwrap all results
+    /// Unwrap all results, returning error if any are missing.
+    fn unwrap_results(results: Vec<Option<Vec<f32>>>) -> Result<Vec<Vec<f32>>> {
         results
             .into_iter()
             .enumerate()
