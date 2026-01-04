@@ -796,23 +796,35 @@ impl Default for CoverageConfig {
     }
 }
 
+/// Validate coverage auto-discovery configuration fields.
+///
+/// This shared function is used by both `core::config::CoverageConfig` and
+/// `detectors::coverage::CoverageConfig` to avoid code duplication.
+pub fn validate_coverage_discovery(
+    auto_discover: bool,
+    file_patterns: &[String],
+    search_paths: &[String],
+) -> Result<()> {
+    if file_patterns.is_empty() && auto_discover {
+        return Err(ValknutError::validation(
+            "file_patterns cannot be empty when auto_discover is enabled",
+        ));
+    }
+
+    if search_paths.is_empty() && auto_discover {
+        return Err(ValknutError::validation(
+            "search_paths cannot be empty when auto_discover is enabled",
+        ));
+    }
+
+    Ok(())
+}
+
 /// Validation for [`CoverageConfig`].
 impl CoverageConfig {
     /// Validate coverage configuration
     pub fn validate(&self) -> Result<()> {
-        if self.file_patterns.is_empty() && self.auto_discover {
-            return Err(ValknutError::validation(
-                "file_patterns cannot be empty when auto_discover is enabled",
-            ));
-        }
-
-        if self.search_paths.is_empty() && self.auto_discover {
-            return Err(ValknutError::validation(
-                "search_paths cannot be empty when auto_discover is enabled",
-            ));
-        }
-
-        Ok(())
+        validate_coverage_discovery(self.auto_discover, &self.file_patterns, &self.search_paths)
     }
 }
 

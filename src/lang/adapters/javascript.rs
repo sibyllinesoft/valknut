@@ -220,20 +220,7 @@ impl LanguageAdapter for JavaScriptAdapter {
 
     /// Extracts import and require statements from JavaScript source.
     fn extract_imports(&mut self, source: &str) -> Result<Vec<ImportStatement>> {
-        let mut imports = Vec::new();
-
-        for (line_number, line) in source.lines().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
-                continue;
-            }
-
-            if let Some(stmt) = Self::parse_js_import_line(trimmed, line_number + 1) {
-                imports.push(stmt);
-            }
-        }
-
-        Ok(imports)
+        Ok(crate::lang::common::extract_imports_common(source, "default as "))
     }
 
     /// Extracts code entities from JavaScript source code.
@@ -296,67 +283,6 @@ impl EntityExtractor for JavaScriptAdapter {
             location,
             metadata,
         }))
-    }
-}
-
-/// Import parsing helper methods for JavaScriptAdapter.
-impl JavaScriptAdapter {
-    /// Parse a JavaScript import line.
-    fn parse_js_import_line(trimmed: &str, line_number: usize) -> Option<ImportStatement> {
-        if let Some(import_part) = trimmed.strip_prefix("import ") {
-            return Self::parse_es_import(import_part, line_number);
-        }
-
-        if let Some(require_part) = trimmed.strip_prefix("const ") {
-            return parse_require_import(require_part, line_number);
-        }
-
-        None
-    }
-
-    /// Parse an ES6 import statement.
-    fn parse_es_import(import_part: &str, line_number: usize) -> Option<ImportStatement> {
-        if let Some(from_pos) = import_part.find(" from ") {
-            let import_spec = import_part[..from_pos].trim();
-            let module_part = normalize_module_literal(&import_part[from_pos + 6..]);
-            let (imports_list, import_type) = Self::parse_import_spec(import_spec);
-
-            return Some(ImportStatement {
-                module: module_part,
-                imports: imports_list,
-                import_type,
-                line_number,
-            });
-        }
-
-        // Handle module-only imports like import("module")
-        import_part
-            .strip_prefix('{')
-            .and_then(|_| import_part.split(')').last())
-            .map(|module_part| ImportStatement {
-                module: normalize_module_literal(module_part),
-                imports: None,
-                import_type: "module".to_string(),
-                line_number,
-            })
-    }
-
-    /// Parse the import specifier (what's being imported).
-    fn parse_import_spec(spec: &str) -> (Option<Vec<String>>, String) {
-        if spec.starts_with('*') {
-            return (None, "star".to_string());
-        }
-
-        if spec.starts_with('{') {
-            let cleaned = spec.trim_matches(|c| c == '{' || c == '}');
-            let items = cleaned
-                .split(',')
-                .map(|s| s.trim().trim_start_matches("default as ").to_string())
-                .collect();
-            return (Some(items), "named".to_string());
-        }
-
-        (Some(vec![spec.to_string()]), "default".to_string())
     }
 }
 

@@ -1,5 +1,6 @@
     use super::*;
     use crate::core::config::ValknutConfig;
+    use crate::core::interning::resolve;
     use std::collections::HashMap;
     use std::fs;
     use std::sync::Arc;

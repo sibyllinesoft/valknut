@@ -1619,7 +1619,8 @@ export function accumulate(values: number[]): number {
     fn apply_performance_profile_adjusts_configuration() {
         let mut config = ValknutConfig::default();
         apply_performance_profile(&mut config, &PerformanceProfile::Fast);
-        assert_eq!(config.analysis.max_files, 500);
+        assert_eq!(config.lsh.num_bands, 10);
+        assert_eq!(config.lsh.num_hashes, 50);
         apply_performance_profile(&mut config, &PerformanceProfile::Balanced);
         apply_performance_profile(&mut config, &PerformanceProfile::Thorough);
         assert!(config.denoise.enabled);

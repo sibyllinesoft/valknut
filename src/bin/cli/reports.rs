@@ -164,17 +164,5 @@ pub async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> a
     generate_reports_with_oracle(result, &None, args).await
 }
 
-/// Convert an `OutputFormat` to the lowercase string used in reports.
-pub fn format_to_string(format: &OutputFormat) -> &str {
-    match format {
-        OutputFormat::Jsonl => "jsonl",
-        OutputFormat::Json => "json",
-        OutputFormat::Yaml => "yaml",
-        OutputFormat::Markdown => "markdown",
-        OutputFormat::Html => "html",
-        OutputFormat::Sonar => "sonar",
-        OutputFormat::Csv => "csv",
-        OutputFormat::CiSummary => "ci-summary",
-        OutputFormat::Pretty => "pretty",
-    }
-}
+// Re-export format_to_string from output module for backwards compatibility
+pub use super::output::format_to_string;

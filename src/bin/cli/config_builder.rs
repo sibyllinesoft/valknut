@@ -28,10 +28,9 @@ pub async fn build_valknut_config(args: &AnalyzeArgs) -> anyhow::Result<ValknutC
 pub fn apply_performance_profile(config: &mut ValknutConfig, profile: &PerformanceProfile) {
     match profile {
         PerformanceProfile::Fast => {
-            // Fast mode - minimal analysis, optimized for speed
-            config.analysis.max_files = 500; // Limit file count
-            config.lsh.num_bands = 10; // Reduce LSH precision for speed
-            config.lsh.num_hashes = 50; // Fewer hash functions
+            // Fast mode - reduced LSH precision for speed
+            config.lsh.num_bands = 10;
+            config.lsh.num_hashes = 50;
             info!("🚀 Performance profile: Fast mode - optimized for speed");
         }
         PerformanceProfile::Balanced => {
@@ -39,18 +38,16 @@ pub fn apply_performance_profile(config: &mut ValknutConfig, profile: &Performan
             info!("⚖️  Performance profile: Balanced mode - default settings");
         }
         PerformanceProfile::Thorough => {
-            // Thorough mode - more comprehensive analysis
-            config.analysis.max_files = 2000; // Allow more files
-            config.lsh.num_bands = 20; // Higher LSH precision
-            config.lsh.num_hashes = 160; // More hash functions (must be divisible by num_bands)
-            config.denoise.enabled = true; // Enable all denoising
+            // Thorough mode - higher LSH precision
+            config.lsh.num_bands = 20;
+            config.lsh.num_hashes = 160; // Must be divisible by num_bands
+            config.denoise.enabled = true;
             info!("🔍 Performance profile: Thorough mode - comprehensive analysis");
         }
         PerformanceProfile::Extreme => {
-            // Extreme mode - maximum analysis depth
-            config.analysis.max_files = 5000; // Maximum files
-            config.lsh.num_bands = 50; // Highest LSH precision
-            config.lsh.num_hashes = 200; // Maximum hash functions
+            // Extreme mode - maximum LSH precision
+            config.lsh.num_bands = 50;
+            config.lsh.num_hashes = 200;
             config.denoise.enabled = true;
             info!("🔥 Performance profile: Extreme mode - maximum analysis depth");
         }
@@ -86,9 +83,6 @@ pub async fn build_analysis_config(args: &AnalyzeArgs) -> anyhow::Result<Valknut
     let mut config = ValknutConfig::default();
     config.analysis.enable_lsh_analysis = true;
     config.analysis.enable_coverage_analysis = true;
-    if config.analysis.max_files == 0 {
-        config.analysis.max_files = 5000;
-    }
 
     // Configure APTED verification
     apply_apted_config(&mut config, &args.advanced_clone);

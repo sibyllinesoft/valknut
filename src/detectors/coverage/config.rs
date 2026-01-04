@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::errors::{Result, ValknutError};
+use crate::core::config::validate_coverage_discovery;
+use crate::core::errors::Result;
 use crate::detectors::coverage::types::ScoringWeights;
 
 /// Configuration for coverage analysis and automatic file discovery
@@ -133,19 +134,7 @@ impl Default for CoverageConfig {
 impl CoverageConfig {
     /// Validate coverage configuration
     pub fn validate(&self) -> Result<()> {
-        if self.file_patterns.is_empty() && self.auto_discover {
-            return Err(ValknutError::validation(
-                "file_patterns cannot be empty when auto_discover is enabled",
-            ));
-        }
-
-        if self.search_paths.is_empty() && self.auto_discover {
-            return Err(ValknutError::validation(
-                "search_paths cannot be empty when auto_discover is enabled",
-            ));
-        }
-
-        Ok(())
+        validate_coverage_discovery(self.auto_discover, &self.file_patterns, &self.search_paths)
     }
 }
 

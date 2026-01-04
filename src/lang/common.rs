@@ -437,6 +437,94 @@ pub fn parse_require_import(require_part: &str, line_number: usize) -> Option<Im
     })
 }
 
+/// Extract ES6/CommonJS imports from source code.
+///
+/// Shared implementation for JavaScript and TypeScript adapters.
+/// The `strip_prefix` parameter specifies a prefix to strip from named imports
+/// (e.g., "default as " for JS, "type " for TS).
+pub fn extract_imports_common(
+    source: &str,
+    strip_prefix: &str,
+) -> Vec<ImportStatement> {
+    let mut imports = Vec::new();
+
+    for (line_number, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            continue;
+        }
+
+        if let Some(stmt) = parse_es_import_line(trimmed, line_number + 1, strip_prefix) {
+            imports.push(stmt);
+        }
+    }
+
+    imports
+}
+
+/// Parse an ES6 or CommonJS import line.
+///
+/// Shared implementation for JavaScript and TypeScript adapters.
+pub fn parse_es_import_line(
+    trimmed: &str,
+    line_number: usize,
+    strip_prefix: &str,
+) -> Option<ImportStatement> {
+    if let Some(import_part) = trimmed.strip_prefix("import ") {
+        return parse_es_import(import_part, line_number, strip_prefix);
+    }
+
+    if let Some(require_part) = trimmed.strip_prefix("const ") {
+        return parse_require_import(require_part, line_number);
+    }
+
+    None
+}
+
+/// Parse an ES6 import statement.
+///
+/// Shared implementation for JavaScript and TypeScript adapters.
+pub fn parse_es_import(
+    import_part: &str,
+    line_number: usize,
+    strip_prefix: &str,
+) -> Option<ImportStatement> {
+    let from_pos = import_part.find(" from ")?;
+    let import_spec = import_part[..from_pos].trim();
+    let module_part = normalize_module_literal(&import_part[from_pos + 6..]);
+
+    let (imports_list, import_type) = parse_import_spec(import_spec, strip_prefix);
+
+    Some(ImportStatement {
+        module: module_part,
+        imports: imports_list,
+        import_type,
+        line_number,
+    })
+}
+
+/// Parse the import specifier (what's being imported).
+///
+/// Shared implementation for JavaScript and TypeScript adapters.
+/// The `strip_prefix` parameter specifies a prefix to strip from named imports
+/// (e.g., "default as " for JS, "type " for TS).
+pub fn parse_import_spec(spec: &str, strip_prefix: &str) -> (Option<Vec<String>>, String) {
+    if spec.starts_with('*') {
+        return (None, "star".to_string());
+    }
+
+    if spec.starts_with('{') {
+        let cleaned = spec.trim_matches(|c| c == '{' || c == '}');
+        let items = cleaned
+            .split(',')
+            .map(|s| s.trim().trim_start_matches(strip_prefix).to_string())
+            .collect();
+        return (Some(items), "named".to_string());
+    }
+
+    (Some(vec![spec.to_string()]), "default".to_string())
+}
+
 /// Extract function and constructor call targets from a JavaScript/TypeScript AST.
 ///
 /// This is used by JavaScript and TypeScript adapters to extract function calls

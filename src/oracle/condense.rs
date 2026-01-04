@@ -90,47 +90,16 @@ pub fn condense_analysis_results_with_budget(
         token_budget
     );
 
-    // Collect which issue/suggestion codes are actually used
-    let mut used_issue_codes: HashSet<String> = HashSet::new();
-    let mut used_suggestion_codes: HashSet<String> = HashSet::new();
-
-    for candidate in results
+    let top_candidates: Vec<_> = results
         .refactoring_candidates
         .iter()
         .filter(|c| !matches!(c.priority, Priority::None))
         .take(15)
-    {
-        for issue in &candidate.issues {
-            used_issue_codes.insert(issue.code.clone());
-        }
-        for suggestion in candidate.suggestions.iter().take(2) {
-            used_suggestion_codes.insert(suggestion.code.clone());
-        }
-    }
+        .collect();
 
-    // Build codebook section with only used codes
-    let mut codebook = String::from("## Codebook\n");
+    let (used_issue_codes, used_suggestion_codes) = collect_used_codes(&top_candidates);
+    let codebook = build_codebook(results, &used_issue_codes, &used_suggestion_codes);
 
-    if !used_issue_codes.is_empty() {
-        codebook.push_str("ISS:\n");
-        for code in &used_issue_codes {
-            if let Some(def) = results.code_dictionary.issues.get(code) {
-                codebook.push_str(&format!("  {}: {}\n", code, def.title));
-            }
-        }
-    }
-
-    if !used_suggestion_codes.is_empty() {
-        codebook.push_str("SUG:\n");
-        for code in &used_suggestion_codes {
-            if let Some(def) = results.code_dictionary.suggestions.get(code) {
-                codebook.push_str(&format!("  {}: {}\n", code, def.title));
-            }
-        }
-    }
-    codebook.push('\n');
-
-    // Start with codebook + essential summary (compact format)
     let mut condensed = format!(
         "{}\
         ## Metrics\n\
@@ -147,54 +116,14 @@ pub fn condense_analysis_results_with_budget(
 
     let mut current_tokens = condensed.len() / 4;
 
-    // Add top refactoring candidates in compact format
-    if !results.refactoring_candidates.is_empty() {
+    if !top_candidates.is_empty() {
         condensed.push_str("## Candidates\n");
         current_tokens += 15;
 
-        for (i, candidate) in results
-            .refactoring_candidates
-            .iter()
-            .filter(|c| !matches!(c.priority, Priority::None))
-            .take(15)
-            .enumerate()
-        {
-            // Compact format: entity|file|score|priority|issues|suggestions
-            let issues_compact: String = candidate
-                .issues
-                .iter()
-                .map(|issue| format!("{}@{:.0}", issue.code, issue.severity * 100.0))
-                .collect::<Vec<_>>()
-                .join(",");
-
-            let suggestions_compact: String = candidate
-                .suggestions
-                .iter()
-                .take(2)
-                .map(|s| s.code.clone())
-                .collect::<Vec<_>>()
-                .join(",");
-
-            let priority_code = match candidate.priority {
-                Priority::Critical => "CRIT",
-                Priority::High => "HIGH",
-                Priority::Medium => "MED",
-                Priority::Low => "LOW",
-                Priority::None => "NONE",
-            };
-
-            let candidate_text = format!(
-                "{}. {}|{}|{:.0}|{}|[{}]|[{}]\n",
-                i + 1,
-                candidate.name.split(':').last().unwrap_or(&candidate.name),
-                candidate.file_path,
-                candidate.score,
-                priority_code,
-                issues_compact,
-                suggestions_compact
-            );
-
+        for (i, candidate) in top_candidates.iter().enumerate() {
+            let candidate_text = format_candidate_compact(i + 1, candidate);
             let candidate_tokens = candidate_text.len() / 4;
+
             if current_tokens + candidate_tokens > token_budget {
                 println!("   ⏭️  Stopping at candidate {} due to token budget", i + 1);
                 break;
@@ -219,6 +148,100 @@ pub fn condense_analysis_results_with_budget(
     }
 
     Ok(condensed)
+}
+
+/// Collect issue and suggestion codes used by the given candidates.
+fn collect_used_codes(
+    candidates: &[&crate::core::pipeline::RefactoringCandidate],
+) -> (HashSet<String>, HashSet<String>) {
+    let mut issue_codes = HashSet::new();
+    let mut suggestion_codes = HashSet::new();
+
+    for candidate in candidates {
+        for issue in &candidate.issues {
+            issue_codes.insert(issue.code.clone());
+        }
+        for suggestion in candidate.suggestions.iter().take(2) {
+            suggestion_codes.insert(suggestion.code.clone());
+        }
+    }
+
+    (issue_codes, suggestion_codes)
+}
+
+/// Build the codebook section with definitions for used codes.
+fn build_codebook(
+    results: &AnalysisResults,
+    issue_codes: &HashSet<String>,
+    suggestion_codes: &HashSet<String>,
+) -> String {
+    let mut codebook = String::from("## Codebook\n");
+
+    if !issue_codes.is_empty() {
+        codebook.push_str("ISS:\n");
+        for code in issue_codes {
+            if let Some(def) = results.code_dictionary.issues.get(code) {
+                codebook.push_str(&format!("  {}: {}\n", code, def.title));
+            }
+        }
+    }
+
+    if !suggestion_codes.is_empty() {
+        codebook.push_str("SUG:\n");
+        for code in suggestion_codes {
+            if let Some(def) = results.code_dictionary.suggestions.get(code) {
+                codebook.push_str(&format!("  {}: {}\n", code, def.title));
+            }
+        }
+    }
+
+    codebook.push('\n');
+    codebook
+}
+
+/// Format a candidate in compact form: index. name|file|score|priority|[issues]|[suggestions]
+fn format_candidate_compact(
+    index: usize,
+    candidate: &crate::core::pipeline::RefactoringCandidate,
+) -> String {
+    let issues_compact: String = candidate
+        .issues
+        .iter()
+        .map(|issue| format!("{}@{:.0}", issue.code, issue.severity * 100.0))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let suggestions_compact: String = candidate
+        .suggestions
+        .iter()
+        .take(2)
+        .map(|s| s.code.clone())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let priority_code = priority_to_code(&candidate.priority);
+
+    format!(
+        "{}. {}|{}|{:.0}|{}|[{}]|[{}]\n",
+        index,
+        candidate.name.split(':').last().unwrap_or(&candidate.name),
+        candidate.file_path,
+        candidate.score,
+        priority_code,
+        issues_compact,
+        suggestions_compact
+    )
+}
+
+/// Convert priority to compact code string.
+fn priority_to_code(priority: &Priority) -> &'static str {
+    match priority {
+        Priority::Critical => "CRIT",
+        Priority::High => "HIGH",
+        Priority::Medium => "MED",
+        Priority::Low => "LOW",
+        Priority::None => "NONE",
+    }
 }
 
 /// Get the JSON schema instructions (shared between bundle types).
