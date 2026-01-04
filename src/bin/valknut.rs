@@ -36,35 +36,29 @@ fn init_logging(verbose: bool) {
 /// Runs the CLI with the parsed command and options.
 async fn run_cli(cli: Cli) -> anyhow::Result<()> {
     init_logging(cli.verbose);
+    let Cli { command, survey, survey_verbosity, verbose } = cli;
 
-    match cli.command {
+    match command {
+        // Analysis commands
         Commands::Analyze(args) => {
-            cli::analyze_command(*args, cli.survey, cli.survey_verbosity, cli.verbose).await?;
+            cli::analyze_command(*args, survey, survey_verbosity, verbose).await
         }
-        Commands::PrintDefaultConfig => {
-            cli::print_default_config().await?;
-        }
-        Commands::InitConfig(args) => {
-            cli::init_config(args).await?;
-        }
-        Commands::ValidateConfig(args) => {
-            cli::validate_config(args).await?;
-        }
-        Commands::McpStdio(args) => {
-            cli::mcp_stdio_command(args, cli.survey, cli.survey_verbosity).await?;
-        }
-        Commands::McpManifest(args) => {
-            cli::mcp_manifest_command(args).await?;
-        }
-        Commands::ListLanguages => {
-            cli::list_languages().await?;
-        }
-        Commands::DocAudit(args) => {
-            cli::doc_audit_command(args)?;
-        }
-    }
+        Commands::DocAudit(args) => cli::doc_audit_command(args),
 
-    Ok(())
+        // Configuration commands
+        Commands::PrintDefaultConfig => cli::print_default_config().await,
+        Commands::InitConfig(args) => cli::init_config(args).await,
+        Commands::ValidateConfig(args) => cli::validate_config(args).await,
+
+        // MCP commands
+        Commands::McpStdio(args) => {
+            cli::mcp_stdio_command(args, survey, survey_verbosity).await
+        }
+        Commands::McpManifest(args) => cli::mcp_manifest_command(args).await,
+
+        // Info commands
+        Commands::ListLanguages => cli::list_languages().await,
+    }
 }
 
 #[cfg(test)]

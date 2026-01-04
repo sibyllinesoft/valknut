@@ -76,34 +76,71 @@ pub async fn generate_outputs(
 ) -> anyhow::Result<()> {
     tokio::fs::create_dir_all(out_path).await?;
 
+    match output_format {
+        OutputFormat::Json | OutputFormat::Jsonl | OutputFormat::Yaml => {
+            write_data_format(result, out_path, output_format).await
+        }
+        OutputFormat::Markdown | OutputFormat::Html => {
+            write_rich_report(result, out_path, output_format).await
+        }
+        OutputFormat::Sonar | OutputFormat::Csv | OutputFormat::CiSummary => {
+            write_integration_format(result, out_path, output_format).await
+        }
+        OutputFormat::Pretty => {
+            print_comprehensive_results_pretty(result);
+            Ok(())
+        }
+    }
+}
+
+/// Write structured data formats (JSON, JSONL, YAML).
+async fn write_data_format(
+    result: &serde_json::Value,
+    out_path: &Path,
+    format: &OutputFormat,
+) -> anyhow::Result<()> {
     let analysis_results = serde_json::from_value::<AnalysisResults>(result.clone()).ok();
     let generator = build_report_generator()?;
 
-    match output_format {
-        OutputFormat::Jsonl => write_jsonl(result, out_path).await?,
-        OutputFormat::Json => {
-            write_json(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::Yaml => {
-            write_yaml(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::Markdown => {
-            write_markdown(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::Html => {
-            write_html(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::Sonar => {
-            write_sonar(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::Csv => {
-            write_csv(&generator, analysis_results.as_ref(), result, out_path).await?
-        }
-        OutputFormat::CiSummary => write_ci_summary(result, out_path).await?,
-        OutputFormat::Pretty => print_comprehensive_results_pretty(result),
+    match format {
+        OutputFormat::Jsonl => write_jsonl(result, out_path).await,
+        OutputFormat::Json => write_json(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Yaml => write_yaml(&generator, analysis_results.as_ref(), result, out_path).await,
+        _ => unreachable!(),
     }
+}
 
-    Ok(())
+/// Write rich document reports (Markdown, HTML).
+async fn write_rich_report(
+    result: &serde_json::Value,
+    out_path: &Path,
+    format: &OutputFormat,
+) -> anyhow::Result<()> {
+    let analysis_results = serde_json::from_value::<AnalysisResults>(result.clone()).ok();
+    let generator = build_report_generator()?;
+
+    match format {
+        OutputFormat::Markdown => write_markdown(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Html => write_html(&generator, analysis_results.as_ref(), result, out_path).await,
+        _ => unreachable!(),
+    }
+}
+
+/// Write CI/integration formats (Sonar, CSV, CI Summary).
+async fn write_integration_format(
+    result: &serde_json::Value,
+    out_path: &Path,
+    format: &OutputFormat,
+) -> anyhow::Result<()> {
+    let analysis_results = serde_json::from_value::<AnalysisResults>(result.clone()).ok();
+    let generator = build_report_generator()?;
+
+    match format {
+        OutputFormat::Sonar => write_sonar(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Csv => write_csv(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::CiSummary => write_ci_summary(result, out_path).await,
+        _ => unreachable!(),
+    }
 }
 
 #[cfg(test)]
