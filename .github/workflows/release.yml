@@ -74,7 +74,7 @@ jobs:
             cross: false
             features: ""
           - target: x86_64-apple-darwin
-            os: macos-12  # Intel runner for x86_64
+            os: macos-latest  # Cross-compile x86_64 on ARM64 runner
             name: valknut-x86_64-macos
             cross: false
             features: "vendored-openssl"
