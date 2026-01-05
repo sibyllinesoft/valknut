@@ -140,6 +140,8 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          CROSS_DEBUG: "1"
         run: |
           FEATURES="${{ matrix.features }}"
           FEATURE_FLAGS=""
@@ -148,7 +150,7 @@ jobs:
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
+            cross build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS -v
           else
             cargo build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
           fi
