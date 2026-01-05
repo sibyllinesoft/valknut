@@ -11,6 +11,7 @@ pub use stats::{
 };
 
 use dashmap::DashMap;
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -33,6 +34,8 @@ use reorganization::ReorganizationPlanner;
 /// Analyzer for directory-level structure metrics and reorganization.
 pub struct DirectoryAnalyzer {
     config: StructureConfig,
+    /// Pre-compiled exclude patterns for efficient matching
+    exclude_globset: Option<GlobSet>,
     metrics_cache: DashMap<PathBuf, DirectoryMetrics>,
 }
 
@@ -40,10 +43,31 @@ pub struct DirectoryAnalyzer {
 impl DirectoryAnalyzer {
     /// Creates a new directory analyzer with the given configuration.
     pub fn new(config: StructureConfig) -> Self {
+        let exclude_globset = Self::compile_exclude_patterns(&config.exclude_patterns);
         Self {
             config,
+            exclude_globset,
             metrics_cache: DashMap::new(),
         }
+    }
+
+    /// Compile exclude patterns into an optimized GlobSet.
+    fn compile_exclude_patterns(patterns: &[String]) -> Option<GlobSet> {
+        if patterns.is_empty() {
+            return None;
+        }
+
+        let mut builder = GlobSetBuilder::new();
+        for pattern in patterns {
+            if let Ok(glob) = GlobBuilder::new(pattern)
+                .literal_separator(false)
+                .build()
+            {
+                builder.add(glob);
+            }
+        }
+
+        builder.build().ok()
     }
 
     /// Calculate directory metrics
@@ -495,7 +519,7 @@ impl DirectoryAnalyzer {
     /// Discover directories recursively for analysis
     pub async fn discover_directories(&self, root_path: &Path) -> Result<Vec<PathBuf>> {
         let mut directories = Vec::new();
-        self.collect_directories_recursive(root_path, &mut directories)?;
+        self.collect_directories_recursive(root_path, root_path, &mut directories)?;
         Ok(directories)
     }
 
@@ -503,6 +527,7 @@ impl DirectoryAnalyzer {
     fn collect_directories_recursive(
         &self,
         path: &Path,
+        root_path: &Path,
         directories: &mut Vec<PathBuf>,
     ) -> Result<()> {
         for entry in std::fs::read_dir(path)? {
@@ -510,9 +535,9 @@ impl DirectoryAnalyzer {
             let entry_path = entry.path();
 
             if entry_path.is_dir() {
-                if !self.should_skip_directory(&entry_path) {
+                if !self.should_skip_directory(&entry_path, root_path) {
                     directories.push(entry_path.clone());
-                    self.collect_directories_recursive(&entry_path, directories)?;
+                    self.collect_directories_recursive(&entry_path, root_path, directories)?;
                 }
             }
         }
@@ -520,8 +545,22 @@ impl DirectoryAnalyzer {
     }
 
     /// Check if directory should be skipped from analysis
-    fn should_skip_directory(&self, path: &Path) -> bool {
-        should_skip_directory(path)
+    fn should_skip_directory(&self, path: &Path, root_path: &Path) -> bool {
+        // Check hardcoded skip directories first (node_modules, .git, etc.)
+        if should_skip_directory(path) {
+            return true;
+        }
+
+        // Check config exclude patterns using compiled globset
+        // Use relative path for pattern matching (same as file discovery)
+        if let Some(ref globset) = self.exclude_globset {
+            let relative = path.strip_prefix(root_path).unwrap_or(path);
+            if globset.is_match(relative) {
+                return true;
+            }
+        }
+
+        false
     }
 }
 

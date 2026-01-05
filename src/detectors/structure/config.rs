@@ -47,6 +47,9 @@ pub struct StructureConfig {
     pub partitioning: PartitioningConfig,
     /// Entity health scoring settings
     pub entity_health: EntityHealthConfig,
+    /// Directory patterns to exclude from structure analysis
+    #[serde(default)]
+    pub exclude_patterns: Vec<String>,
 }
 
 /// Feature toggles for structure analysis outputs.
@@ -211,6 +214,7 @@ impl Default for StructureConfig {
                 ],
             },
             entity_health: EntityHealthConfig::default(),
+            exclude_patterns: Vec::new(),
         }
     }
 }

@@ -49,6 +49,7 @@
                 ],
             },
             entity_health: EntityHealthConfig::default(),
+            exclude_patterns: Vec::new(),
         }
     }
 

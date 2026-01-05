@@ -97,7 +97,11 @@ impl AnalysisPipeline {
         let ast_service = Arc::new(AstService::new());
         let config_arc = Arc::new(valknut_config.clone());
 
-        let structure_config = valknut_config.structure.clone();
+        let mut structure_config = valknut_config.structure.clone();
+        // Wire analysis exclude_patterns to structure analyzer
+        if structure_config.exclude_patterns.is_empty() {
+            structure_config.exclude_patterns = valknut_config.analysis.exclude_patterns.clone();
+        }
         let coverage_detector_config = detector_coverage_config(
             &valknut_config.coverage,
             valknut_config.analysis.enable_coverage_analysis,
