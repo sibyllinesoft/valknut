@@ -84,7 +84,7 @@ jobs:
             name: valknut-aarch64-linux-musl
             cross: true
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13  # Use Intel runner for x86_64 builds
             name: valknut-x86_64-macos
             cross: false
           - target: aarch64-apple-darwin
