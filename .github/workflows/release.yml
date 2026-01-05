@@ -88,22 +88,22 @@ jobs:
             name: valknut-x86_64-windows.exe
             cross: false
             features: ""
-          # Cross-compiled Linux builds
+          # Cross-compiled Linux builds (use vendored OpenSSL since host libssl-dev won't work)
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             name: valknut-x86_64-linux-musl
             cross: true
-            features: ""
+            features: "vendored-openssl"
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             name: valknut-aarch64-linux-gnu
             cross: true
-            features: ""
+            features: "vendored-openssl"
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             name: valknut-aarch64-linux-musl
             cross: true
-            features: ""
+            features: "vendored-openssl"
 
     runs-on: ${{ matrix.os }}
 
@@ -132,6 +132,8 @@ jobs:
       - name: Setup cross-compilation
         if: matrix.cross
         run: |
+          # Install dependencies for vendored OpenSSL
+          sudo apt-get update && sudo apt-get install -y perl make
           pip3 install ziglang
           cargo install cargo-zigbuild
 
