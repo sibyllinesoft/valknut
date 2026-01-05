@@ -101,8 +101,8 @@ glob = "0.3"
 globset = "0.4"
 git2 = "0.18"
 
-# Vendored OpenSSL for cross-platform builds (required by git2, fastembed)
-openssl = { version = "0.10", features = ["vendored"] }
+# OpenSSL wrapper (use vendored feature for static linking on some platforms)
+openssl = { version = "0.10", optional = true }
 ignore = "0.4"
 walkdir = "2.4"
 
@@ -173,6 +173,9 @@ default = ["mimalloc", "simd", "parallel"]
 benchmarks = ["criterion"]
 property-testing = ["proptest"]
 jemalloc = ["jemallocator"]
+
+# Vendored OpenSSL for platforms without system OpenSSL
+vendored-openssl = ["openssl/vendored"]
 
 # Performance optimization features
 simd = []
