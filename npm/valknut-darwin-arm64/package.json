@@ -1,0 +1,14 @@
+{
+  "name": "@sibyllinesoft/valknut-darwin-arm64",
+  "version": "0.0.0",
+  "description": "valknut binary for darwin-arm64 (macOS Apple Silicon)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanRiceDev/valknut.git"
+  },
+  "license": "MIT",
+  "preferUnplugged": true,
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["valknut"]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@sibyllinesoft/valknut",
+  "version": "0.0.0",
+  "description": "High-performance Rust-native code analysis platform for refactorability scoring",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanRiceDev/valknut.git"
+  },
+  "homepage": "https://github.com/NathanRiceDev/valknut",
+  "license": "MIT",
+  "author": "Nathan Rice <nathan@sibylline.dev>",
+  "keywords": [
+    "code-analysis",
+    "static-analysis",
+    "complexity",
+    "refactoring",
+    "ast",
+    "metrics"
+  ],
+  "bin": {
+    "valknut": "bin/valknut"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "optionalDependencies": {
+    "@sibyllinesoft/valknut-linux-x64-gnu": "0.0.0",
+    "@sibyllinesoft/valknut-linux-x64-musl": "0.0.0",
+    "@sibyllinesoft/valknut-linux-arm64-gnu": "0.0.0",
+    "@sibyllinesoft/valknut-linux-arm64-musl": "0.0.0",
+    "@sibyllinesoft/valknut-darwin-x64": "0.0.0",
+    "@sibyllinesoft/valknut-darwin-arm64": "0.0.0",
+    "@sibyllinesoft/valknut-win32-x64": "0.0.0"
+  }
+}

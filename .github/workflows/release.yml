@@ -586,6 +586,13 @@ jobs:
           echo "| macOS | ARM64 (Apple Silicon) | \`valknut-aarch64-macos\` |" >> release-notes.md
           echo "| Windows | x86_64 | \`valknut-x86_64-windows.exe\` |" >> release-notes.md
           echo "" >> release-notes.md
+          echo "### npm Installation" >> release-notes.md
+          echo "\`\`\`bash" >> release-notes.md
+          echo "npm install -g @sibyllinesoft/valknut" >> release-notes.md
+          echo "# or use npx" >> release-notes.md
+          echo "npx @sibyllinesoft/valknut analyze ." >> release-notes.md
+          echo "\`\`\`" >> release-notes.md
+          echo "" >> release-notes.md
           echo "### Cargo Installation" >> release-notes.md
           echo "\`\`\`bash" >> release-notes.md
           echo "cargo install --git https://github.com/${{ github.repository }} --tag ${{ needs.validate-release.outputs.tag }}" >> release-notes.md
@@ -673,6 +680,134 @@ jobs:
         run: |
           echo "⚠️ CARGO_REGISTRY_TOKEN not configured, skipping crates.io publish"
           echo "To enable automatic publishing, add CARGO_REGISTRY_TOKEN to repository secrets"
+
+  # Publish to npm
+  publish-npm:
+    name: Publish to npm
+    needs: [validate-release, build-release]
+    if: needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la artifacts/
+
+      - name: Prepare npm packages
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          # Map of rust targets to npm package directories
+          declare -A TARGET_MAP=(
+            ["x86_64-unknown-linux-gnu"]="linux-x64-gnu"
+            ["x86_64-unknown-linux-musl"]="linux-x64-musl"
+            ["aarch64-unknown-linux-gnu"]="linux-arm64-gnu"
+            ["aarch64-unknown-linux-musl"]="linux-arm64-musl"
+            ["x86_64-apple-darwin"]="darwin-x64"
+            ["aarch64-apple-darwin"]="darwin-arm64"
+            ["x86_64-pc-windows-msvc"]="win32-x64"
+          )
+
+          # Map of artifact names to targets
+          declare -A ARTIFACT_MAP=(
+            ["valknut-x86_64-linux-gnu"]="x86_64-unknown-linux-gnu"
+            ["valknut-x86_64-linux-musl"]="x86_64-unknown-linux-musl"
+            ["valknut-aarch64-linux-gnu"]="aarch64-unknown-linux-gnu"
+            ["valknut-aarch64-linux-musl"]="aarch64-unknown-linux-musl"
+            ["valknut-x86_64-macos"]="x86_64-apple-darwin"
+            ["valknut-aarch64-macos"]="aarch64-apple-darwin"
+            ["valknut-x86_64-windows.exe"]="x86_64-pc-windows-msvc"
+          )
+
+          # Copy binaries to npm package directories
+          for artifact in "${!ARTIFACT_MAP[@]}"; do
+            target="${ARTIFACT_MAP[$artifact]}"
+            npm_dir="${TARGET_MAP[$target]}"
+
+            if [ -f "artifacts/$artifact" ]; then
+              if [[ "$artifact" == *.exe ]]; then
+                cp "artifacts/$artifact" "npm/valknut-$npm_dir/valknut.exe"
+              else
+                cp "artifacts/$artifact" "npm/valknut-$npm_dir/valknut"
+                chmod +x "npm/valknut-$npm_dir/valknut"
+              fi
+              echo "Copied $artifact to npm/valknut-$npm_dir/"
+            else
+              echo "Warning: artifact $artifact not found"
+            fi
+          done
+
+          # Update versions in all package.json files
+          for pkg_dir in npm/valknut-*/; do
+            jq --arg v "$VERSION" '.version = $v' "$pkg_dir/package.json" > "$pkg_dir/package.json.tmp"
+            mv "$pkg_dir/package.json.tmp" "$pkg_dir/package.json"
+            echo "Updated version in $pkg_dir/package.json to $VERSION"
+          done
+
+          # Update main package version and optionalDependencies versions
+          jq --arg v "$VERSION" '
+            .version = $v |
+            .optionalDependencies = (.optionalDependencies | to_entries | map(.value = $v) | from_entries)
+          ' npm/valknut/package.json > npm/valknut/package.json.tmp
+          mv npm/valknut/package.json.tmp npm/valknut/package.json
+          echo "Updated main package version and dependencies to $VERSION"
+
+      - name: Verify packages
+        run: |
+          echo "Package contents:"
+          for pkg_dir in npm/*/; do
+            echo "=== $pkg_dir ==="
+            ls -la "$pkg_dir"
+            cat "$pkg_dir/package.json"
+            echo ""
+          done
+
+      - name: Publish platform packages
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg_dir in npm/valknut-*/; do
+            pkg_name=$(jq -r '.name' "$pkg_dir/package.json")
+            echo "Publishing $pkg_name..."
+            cd "$pkg_dir"
+            npm publish --access public || echo "Failed to publish $pkg_name (may already exist)"
+            cd - > /dev/null
+          done
+
+      - name: Publish main package
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/valknut
+          npm publish --access public
+          echo "Published @sibyllinesoft/valknut"
+
+      - name: Skip npm publish
+        if: env.NPM_TOKEN == ''
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "⚠️ NPM_TOKEN not configured, skipping npm publish"
+          echo "To enable automatic publishing, add NPM_TOKEN to repository secrets"
 
   # Update Homebrew formula
   update-homebrew:
@@ -784,7 +919,7 @@ jobs:
   # Comprehensive notification system
   notify-release:
     name: Release Notifications
-    needs: [validate-release, create-release, publish-crates, update-homebrew]
+    needs: [validate-release, create-release, publish-crates, publish-npm, update-homebrew]
     if: always() && needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     
@@ -805,7 +940,12 @@ jobs:
             SUCCESS="false"
             FAILURES="$FAILURES Crates.io,"
           fi
-          
+
+          if [ "${{ needs.publish-npm.result }}" == "failure" ]; then
+            SUCCESS="false"
+            FAILURES="$FAILURES npm,"
+          fi
+
           if [ "${{ needs.update-homebrew.result }}" == "failure" ]; then
             SUCCESS="false"
             FAILURES="$FAILURES Homebrew,"
@@ -839,6 +979,7 @@ jobs:
           echo "- 📋 SBOM generation" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 GitHub release creation" >> $GITHUB_STEP_SUMMARY
           echo "- 📢 Crates.io publication" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 npm package publication" >> $GITHUB_STEP_SUMMARY
           echo "- 🍺 Homebrew formula update" >> $GITHUB_STEP_SUMMARY
 
       - name: Failure notification

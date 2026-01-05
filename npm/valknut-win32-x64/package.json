@@ -1,0 +1,14 @@
+{
+  "name": "@sibyllinesoft/valknut-win32-x64",
+  "version": "0.0.0",
+  "description": "valknut binary for win32-x64 (Windows)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanRiceDev/valknut.git"
+  },
+  "license": "MIT",
+  "preferUnplugged": true,
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["valknut.exe"]
+}

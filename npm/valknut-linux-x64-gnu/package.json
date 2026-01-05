@@ -1,0 +1,15 @@
+{
+  "name": "@sibyllinesoft/valknut-linux-x64-gnu",
+  "version": "0.0.0",
+  "description": "valknut binary for linux-x64-gnu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanRiceDev/valknut.git"
+  },
+  "license": "MIT",
+  "preferUnplugged": true,
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["glibc"],
+  "files": ["valknut"]
+}
