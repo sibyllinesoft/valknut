@@ -281,61 +281,57 @@ impl UnifiedVisitor {
             return Ok(HashMap::new());
         }
 
-        debug!(
-            "Starting unified AST traversal for entity {} with {} detectors",
-            entity.id,
-            self.detectors.len()
-        );
+        debug!("Starting unified AST traversal for entity {} with {} detectors", entity.id, self.detectors.len());
 
-        // Initialize all detectors
+        self.initialize_detectors(entity, context).await?;
+
+        let file_content = Self::load_entity_content(entity).await;
+        let cached_tree = self.ast_service.get_ast(&entity.file_path, &file_content).await?;
+        let ast_context = self.ast_service.create_context(&cached_tree, &entity.file_path);
+
+        let mut combined_features = HashMap::new();
+        self.visit_tree_iterative(cached_tree.tree.root_node(), &ast_context, entity, context, &mut combined_features).await?;
+
+        self.finalize_detectors(entity, context, &mut combined_features).await?;
+        self.log_traversal_complete(entity, start_time.elapsed());
+
+        Ok(combined_features)
+    }
+
+    /// Initialize all registered detectors for entity processing.
+    async fn initialize_detectors(&mut self, entity: &CodeEntity, context: &ExtractionContext) -> Result<()> {
         for detector in &mut self.detectors {
             detector.begin_entity(entity, context).await?;
         }
+        Ok(())
+    }
 
-        // Get the AST for this entity
-        let file_content = match tokio::fs::read_to_string(&entity.file_path).await {
-            Ok(content) => content,
-            Err(_) => {
-                // Fall back to entity source code if file read fails
-                entity.source_code.clone()
-            }
-        };
+    /// Load file content, falling back to entity source code if file read fails.
+    async fn load_entity_content(entity: &CodeEntity) -> String {
+        tokio::fs::read_to_string(&entity.file_path).await
+            .unwrap_or_else(|_| entity.source_code.clone())
+    }
 
-        let cached_tree = self
-            .ast_service
-            .get_ast(&entity.file_path, &file_content)
-            .await?;
-        let ast_context = self
-            .ast_service
-            .create_context(&cached_tree, &entity.file_path);
-
-        // Find the specific entity node in the AST (if possible)
-        let root_node = cached_tree.tree.root_node();
-
-        // Perform unified traversal using iterative approach to avoid async recursion
-        let mut combined_features = HashMap::new();
-        self.visit_tree_iterative(
-            root_node,
-            &ast_context,
-            entity,
-            context,
-            &mut combined_features,
-        )
-        .await?;
-
-        // Finalize all detectors and collect results
+    /// Finalize all detectors and collect their features.
+    async fn finalize_detectors(
+        &mut self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+        combined_features: &mut HashMap<String, f64>,
+    ) -> Result<()> {
         for detector in &mut self.detectors {
             let final_features = detector.end_entity(entity, context).await?;
             combined_features.extend(final_features);
         }
+        Ok(())
+    }
 
-        let elapsed = start_time.elapsed();
+    /// Log traversal completion with timing info.
+    fn log_traversal_complete(&self, entity: &CodeEntity, elapsed: std::time::Duration) {
         info!(
             "Unified AST traversal completed for {} in {:?}: {} nodes visited by {} detectors ({}x speedup over separate traversals)",
             entity.id, elapsed, self.nodes_visited, self.detectors.len(), self.detectors.len()
         );
-
-        Ok(combined_features)
     }
 
     /// Iterative tree traversal to avoid async recursion issues

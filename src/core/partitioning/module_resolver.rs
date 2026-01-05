@@ -15,72 +15,95 @@ pub(crate) fn build_module_map(nodes: &HashMap<PathBuf, FileNode>) -> HashMap<St
 
     for path in nodes.keys() {
         let path_str = path.to_string_lossy();
-
-        // Get the path without extension
         let without_ext = strip_extension(&path_str);
 
-        // For Rust: handle mod.rs specially
-        // e.g., "src/core/pipeline/mod.rs" -> "core::pipeline" and "core.pipeline"
-        if path_str.ends_with("mod.rs") {
-            if let Some(parent) = path.parent() {
-                let parent_str = parent.to_string_lossy();
-                let rust_module = path_to_rust_module(&parent_str);
-                let dot_module = rust_module.replace("::", ".");
-                map.insert(rust_module.clone(), path.clone());
-                map.insert(dot_module.clone(), path.clone());
-                // Also add crate:: prefixed version
-                map.insert(format!("crate::{}", rust_module), path.clone());
-                map.insert(format!("crate.{}", dot_module), path.clone());
-            }
-        }
-
-        // Standard module path: "src/core/config.rs" -> "core::config", "core.config", "config"
-        let rust_module = path_to_rust_module(&without_ext);
-        let dot_module = rust_module.replace("::", ".");
-        map.insert(rust_module.clone(), path.clone());
-        map.insert(dot_module.clone(), path.clone());
-
-        // Add crate:: prefixed version
-        map.insert(format!("crate::{}", rust_module), path.clone());
-        map.insert(format!("crate.{}", dot_module), path.clone());
-
-        // Add just the file stem for simple resolution
-        if let Some(stem) = path.file_stem() {
-            let stem_str = stem.to_string_lossy().to_string();
-            if stem_str != "mod" && stem_str != "lib" && stem_str != "main" {
-                map.insert(stem_str, path.clone());
-            }
-        }
-
-        // For TypeScript/JavaScript: handle relative paths
-        // e.g., "./foo" or "../bar"
-        if path_str.ends_with(".ts")
-            || path_str.ends_with(".tsx")
-            || path_str.ends_with(".js")
-            || path_str.ends_with(".jsx")
-        {
-            // Add the path without src prefix
-            let no_src = without_ext.strip_prefix("src/").unwrap_or(&without_ext);
-            map.insert(format!("./{}", no_src), path.clone());
-        }
-
-        // For Python: handle dot-separated module paths
-        if path_str.ends_with(".py") {
-            let py_module = without_ext.replace('/', ".").replace('\\', ".");
-            map.insert(py_module, path.clone());
-        }
-
-        // For Go: the import path is typically the full package path
-        if path_str.ends_with(".go") {
-            // Just use the directory as the package
-            if let Some(parent) = path.parent() {
-                let parent_str = parent.to_string_lossy().to_string();
-                map.insert(parent_str, path.clone());
-            }
-        }
+        add_rust_module_keys(&mut map, path, &path_str, &without_ext);
+        add_file_stem_key(&mut map, path);
+        add_typescript_keys(&mut map, path, &path_str, &without_ext);
+        add_python_keys(&mut map, path, &path_str, &without_ext);
+        add_go_keys(&mut map, path, &path_str);
     }
 
     map
+}
+
+/// Add Rust-specific module keys (both standard and mod.rs handling).
+fn add_rust_module_keys(
+    map: &mut HashMap<String, PathBuf>,
+    path: &Path,
+    path_str: &str,
+    without_ext: &str,
+) {
+    // Handle mod.rs specially
+    if path_str.ends_with("mod.rs") {
+        if let Some(parent) = path.parent() {
+            insert_rust_module_variants(map, path, &parent.to_string_lossy());
+        }
+    }
+
+    // Standard module path
+    insert_rust_module_variants(map, path, without_ext);
+}
+
+/// Insert all Rust module path variants (::, ., and crate:: prefixed).
+fn insert_rust_module_variants(map: &mut HashMap<String, PathBuf>, path: &Path, module_path: &str) {
+    let rust_module = path_to_rust_module(module_path);
+    let dot_module = rust_module.replace("::", ".");
+
+    map.insert(rust_module.clone(), path.to_path_buf());
+    map.insert(dot_module.clone(), path.to_path_buf());
+    map.insert(format!("crate::{}", rust_module), path.to_path_buf());
+    map.insert(format!("crate.{}", dot_module), path.to_path_buf());
+}
+
+/// Add file stem as a simple resolution key.
+fn add_file_stem_key(map: &mut HashMap<String, PathBuf>, path: &Path) {
+    if let Some(stem) = path.file_stem() {
+        let stem_str = stem.to_string_lossy().to_string();
+        if !matches!(stem_str.as_str(), "mod" | "lib" | "main") {
+            map.insert(stem_str, path.to_path_buf());
+        }
+    }
+}
+
+/// Add TypeScript/JavaScript relative path keys.
+fn add_typescript_keys(
+    map: &mut HashMap<String, PathBuf>,
+    path: &Path,
+    path_str: &str,
+    without_ext: &str,
+) {
+    let is_ts_js = path_str.ends_with(".ts")
+        || path_str.ends_with(".tsx")
+        || path_str.ends_with(".js")
+        || path_str.ends_with(".jsx");
+
+    if is_ts_js {
+        let no_src = without_ext.strip_prefix("src/").unwrap_or(without_ext);
+        map.insert(format!("./{}", no_src), path.to_path_buf());
+    }
+}
+
+/// Add Python dot-separated module path keys.
+fn add_python_keys(
+    map: &mut HashMap<String, PathBuf>,
+    path: &Path,
+    path_str: &str,
+    without_ext: &str,
+) {
+    if path_str.ends_with(".py") {
+        let py_module = without_ext.replace('/', ".").replace('\\', ".");
+        map.insert(py_module, path.to_path_buf());
+    }
+}
+
+/// Add Go package path keys.
+fn add_go_keys(map: &mut HashMap<String, PathBuf>, path: &Path, path_str: &str) {
+    if path_str.ends_with(".go") {
+        if let Some(parent) = path.parent() {
+            map.insert(parent.to_string_lossy().to_string(), path.to_path_buf());
+        }
+    }
 }
 
 /// Strip file extension from a path string.

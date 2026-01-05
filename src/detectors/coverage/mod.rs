@@ -194,72 +194,95 @@ impl CoverageExtractor {
         let content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(err) => {
-                warn!(
-                    "Skipping coverage gaps for missing source file {}: {}",
-                    path.display(),
-                    err
-                );
+                warn!("Skipping coverage gaps for missing source file {}: {}", path.display(), err);
                 return Ok(Vec::new());
             }
         };
 
-        let cached_tree = if content.trim().is_empty() {
-            None
-        } else {
-            Some(
-                self.ast_service
-                    .get_ast(&path.to_string_lossy(), &content)
-                    .await?,
-            )
-        };
+        let cached_tree = self.get_cached_ast(path, &content).await?;
+        let file_loc = content.lines().count();
 
         let mut gaps = Vec::new();
         for span in chunked {
-            if span.end < span.start {
-                continue;
+            if let Some(gap) = self.try_create_gap(path, &span, language, file_loc, &content, cached_tree.as_ref())? {
+                gaps.push(gap);
             }
-            if (span.end - span.start + 1) < self.config.min_gap_loc {
-                continue;
-            }
-
-            let mut gap = CoverageGap {
-                path: path.clone(),
-                span: span.clone(),
-                file_loc: content.lines().count(),
-                language: language.to_string(),
-                score: 0.0,
-                features: GapFeatures {
-                    gap_loc: span.end - span.start + 1,
-                    cyclomatic_in_gap: 0.0,
-                    cognitive_in_gap: 0.0,
-                    fan_in_gap: 0,
-                    exports_touched: false,
-                    dependency_centrality_file: 0.0,
-                    interface_surface: 0,
-                    docstring_or_comment_present: false,
-                    exception_density_in_gap: 0.0,
-                },
-                symbols: Vec::new(),
-                preview: SnippetPreview {
-                    language: language.to_string(),
-                    pre: Vec::new(),
-                    head: Vec::new(),
-                    tail: Vec::new(),
-                    post: Vec::new(),
-                    markers: GapMarkers {
-                        start_line: span.start,
-                        end_line: span.end,
-                    },
-                    imports: Vec::new(),
-                },
-            };
-
-            self.generate_preview(&content, &mut gap)?;
-            self.analyze_gap_code(&content, cached_tree.as_ref(), &mut gap)?;
-            gaps.push(gap);
         }
 
         Ok(gaps)
+    }
+
+    /// Get cached AST for a file, returning None for empty content.
+    async fn get_cached_ast(
+        &self,
+        path: &PathBuf,
+        content: &str,
+    ) -> Result<Option<std::sync::Arc<crate::core::ast::CachedTree>>> {
+        if content.trim().is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(self.ast_service.get_ast(&path.to_string_lossy(), content).await?))
+    }
+
+    /// Try to create a coverage gap from a span, returning None if span is invalid.
+    fn try_create_gap(
+        &self,
+        path: &PathBuf,
+        span: &UncoveredSpan,
+        language: &str,
+        file_loc: usize,
+        content: &str,
+        cached_tree: Option<&std::sync::Arc<crate::core::ast::CachedTree>>,
+    ) -> Result<Option<CoverageGap>> {
+        if span.end < span.start || (span.end - span.start + 1) < self.config.min_gap_loc {
+            return Ok(None);
+        }
+
+        let mut gap = self.create_gap_skeleton(path, span, language, file_loc);
+        self.generate_preview(content, &mut gap)?;
+        self.analyze_gap_code(content, cached_tree, &mut gap)?;
+        Ok(Some(gap))
+    }
+
+    /// Create a gap with default/skeleton values.
+    fn create_gap_skeleton(
+        &self,
+        path: &PathBuf,
+        span: &UncoveredSpan,
+        language: &str,
+        file_loc: usize,
+    ) -> CoverageGap {
+        CoverageGap {
+            path: path.clone(),
+            span: span.clone(),
+            file_loc,
+            language: language.to_string(),
+            score: 0.0,
+            features: GapFeatures {
+                gap_loc: span.end - span.start + 1,
+                cyclomatic_in_gap: 0.0,
+                cognitive_in_gap: 0.0,
+                fan_in_gap: 0,
+                exports_touched: false,
+                dependency_centrality_file: 0.0,
+                interface_surface: 0,
+                docstring_or_comment_present: false,
+                exception_density_in_gap: 0.0,
+            },
+            symbols: Vec::new(),
+            preview: SnippetPreview {
+                language: language.to_string(),
+                pre: Vec::new(),
+                head: Vec::new(),
+                tail: Vec::new(),
+                post: Vec::new(),
+                markers: GapMarkers {
+                    start_line: span.start,
+                    end_line: span.end,
+                },
+                imports: Vec::new(),
+            },
+        }
     }
 
     fn read_file_loc(&self, path: &PathBuf) -> usize {

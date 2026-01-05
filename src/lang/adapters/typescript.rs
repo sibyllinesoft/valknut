@@ -392,32 +392,10 @@ impl EntityExtractor for TypeScriptAdapter {
 
         *entity_id_counter += 1;
         let entity_id = generate_entity_id(file_path, entity_kind, *entity_id_counter);
-
-        let location = SourceLocation::from_positions(
-            file_path,
-            node.start_position().row,
-            node.start_position().column,
-            node.end_position().row,
-            node.end_position().column,
-        );
-
+        let location = create_source_location(file_path, &node);
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
-        match entity_kind {
-            EntityKind::Function | EntityKind::Method => {
-                self.extract_function_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Class => {
-                self.extract_class_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Interface => {
-                self.extract_interface_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Enum => {
-                self.extract_enum_metadata(&node, source_code, &mut metadata)?;
-            }
-            _ => {}
-        }
+        self.extract_entity_metadata(entity_kind, &node, source_code, &mut metadata)?;
 
         Ok(Some(ParsedEntity {
             id: entity_id,
@@ -428,6 +406,45 @@ impl EntityExtractor for TypeScriptAdapter {
             location,
             metadata,
         }))
+    }
+}
+
+/// Create source location from a tree-sitter node.
+fn create_source_location(file_path: &str, node: &Node) -> SourceLocation {
+    SourceLocation::from_positions(
+        file_path,
+        node.start_position().row,
+        node.start_position().column,
+        node.end_position().row,
+        node.end_position().column,
+    )
+}
+
+/// Entity metadata extraction dispatch for TypeScriptAdapter.
+impl TypeScriptAdapter {
+    fn extract_entity_metadata(
+        &self,
+        kind: EntityKind,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        match kind {
+            EntityKind::Function | EntityKind::Method => {
+                self.extract_function_metadata(node, source_code, metadata)?;
+            }
+            EntityKind::Class => {
+                self.extract_class_metadata(node, source_code, metadata)?;
+            }
+            EntityKind::Interface => {
+                self.extract_interface_metadata(node, source_code, metadata)?;
+            }
+            EntityKind::Enum => {
+                self.extract_enum_metadata(node, source_code, metadata)?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 
