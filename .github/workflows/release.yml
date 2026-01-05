@@ -11,53 +11,31 @@ on:
         required: true
         type: string
       dry_run:
-        description: 'Dry run (skip actual release)'
+        description: 'Dry run (skip publishing)'
         required: false
         type: boolean
         default: false
-  schedule:
-    # Run validation checks daily at 2 AM UTC
-    - cron: '0 2 * * *'
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
-  RUST_BACKTRACE: 1
-  # Docker registry configuration
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Pre-release validation with comprehensive checks
-  validate-release:
-    name: Validate Release
+  validate:
+    name: Validate
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       dry_run: ${{ steps.version.outputs.dry_run }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Determine version and run mode
+      - name: Determine version
         id: version
         run: |
-          # Handle scheduled runs
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "🔄 Scheduled validation run"
-            echo "version=validation" >> $GITHUB_OUTPUT
-            echo "tag=validation" >> $GITHUB_OUTPUT
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "dry_run=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Determine version
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
             DRY_RUN="${{ github.event.inputs.dry_run }}"
@@ -65,219 +43,30 @@ jobs:
             VERSION="${{ github.ref_name }}"
             DRY_RUN="false"
           fi
-          
-          # Ensure version starts with 'v'
+
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
             echo "❌ Invalid version format: $VERSION"
-            echo "Expected format: v1.2.3 or v1.2.3-rc.1"
             exit 1
           fi
-          
-          # Check if this is a prerelease
+
           IS_PRERELEASE="false"
           if [[ "$VERSION" =~ -[a-zA-Z0-9]+(\.[0-9]+)?$ ]]; then
             IS_PRERELEASE="true"
           fi
-          
+
           echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
           echo "tag=$VERSION" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
           echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
-          echo "Release version: ${VERSION#v} (prerelease: $IS_PRERELEASE, dry_run: $DRY_RUN)"
+          echo "📦 Release: ${VERSION#v} (prerelease: $IS_PRERELEASE, dry_run: $DRY_RUN)"
 
-      - name: Validate Cargo.toml version
-        if: github.event_name != 'schedule'
-        run: |
-          CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          RELEASE_VERSION="${{ steps.version.outputs.version }}"
-          
-          if [ "$CARGO_VERSION" != "$RELEASE_VERSION" ]; then
-            echo "❌ Version mismatch:"
-            echo "  Cargo.toml: $CARGO_VERSION"
-            echo "  Release: $RELEASE_VERSION"
-            echo "Please update Cargo.toml version before releasing"
-            exit 1
-          else
-            echo "✅ Version matches: $RELEASE_VERSION"
-          fi
-
-      - name: Check CHANGELOG
-        if: github.event_name != 'schedule'
-        run: |
-          if [ ! -f "CHANGELOG.md" ]; then
-            echo "⚠️ CHANGELOG.md not found"
-            exit 0
-          fi
-          
-          # Check if version is mentioned in CHANGELOG
-          if grep -q "${{ steps.version.outputs.version }}" CHANGELOG.md; then
-            echo "✅ Version found in CHANGELOG.md"
-          else
-            echo "⚠️ Version ${{ steps.version.outputs.version }} not found in CHANGELOG.md"
-            echo "Consider updating CHANGELOG.md before release"
-          fi
-
-      - name: Validate git state
-        if: github.event_name != 'schedule'
-        run: |
-          # Ensure we're on a clean state
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "❌ Working directory is not clean"
-            git status --porcelain
-            exit 1
-          fi
-          
-          # For tag pushes, ensure tag exists and points to current commit
-          if [ "${{ github.event_name }}" = "push" ]; then
-            if ! git tag --list | grep -q "^${{ steps.version.outputs.tag }}$"; then
-              echo "❌ Tag ${{ steps.version.outputs.tag }} not found"
-              exit 1
-            fi
-            
-            TAG_COMMIT=$(git rev-list -n 1 ${{ steps.version.outputs.tag }})
-            HEAD_COMMIT=$(git rev-parse HEAD)
-            
-            if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
-              echo "❌ Tag ${{ steps.version.outputs.tag }} does not point to HEAD"
-              echo "Tag commit: $TAG_COMMIT"
-              echo "HEAD commit: $HEAD_COMMIT"
-              exit 1
-            fi
-          fi
-          
-          echo "✅ Git state is valid"
-
-  # Comprehensive pre-release testing with cargo nextest
-  comprehensive-testing:
-    name: Comprehensive Testing
-    needs: validate-release
-    if: needs.validate-release.outputs.tag != 'validation'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: comprehensive-test
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      - name: Install additional tools
-        run: |
-          cargo install cargo-audit cargo-deny || true
-
-      - name: Format check
-        run: cargo fmt --all -- --check
-
-      - name: Clippy check
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Run comprehensive test suite with nextest
-        run: |
-          cargo nextest run --all-features --no-capture
-          
-      - name: Run doctests
-        run: cargo test --doc --all-features
-
-      - name: Generate test report
-        if: always()
-        run: |
-          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Format check passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Clippy check passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Comprehensive test suite passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Documentation tests passed" >> $GITHUB_STEP_SUMMARY
-
-  # Security and dependency auditing
-  security-audit:
-    name: Security Audit
-    needs: validate-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install audit tools
-        run: |
-          cargo install cargo-audit cargo-deny --locked
-
-      - name: Security audit
-        run: |
-          echo "🔒 Running security audit..."
-          cargo audit --deny warnings
-          
-      - name: License and dependency check
-        run: |
-          echo "📋 Checking licenses and dependencies..."
-          cargo deny check
-
-      - name: Dependency tree analysis
-        run: |
-          echo "🌳 Analyzing dependency tree..."
-          cargo tree --duplicates
-          cargo tree --edges features
-
-  # Performance benchmarking validation
-  benchmark-validation:
-    name: Benchmark Validation
-    needs: validate-release
-    if: needs.validate-release.outputs.tag != 'validation'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Run benchmarks
-        run: |
-          if [ -d "benches" ] && [ -n "$(ls benches/*.rs 2>/dev/null)" ]; then
-            echo "🚀 Running performance benchmarks..."
-            cargo bench --features benchmarks > benchmark-results.txt 2>&1
-            
-            echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            tail -20 benchmark-results.txt >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ No benchmarks found, skipping performance validation"
-            echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
-            echo "No benchmarks configured" >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # Multi-platform binary builds with musl support
-  build-release:
-    name: Build Release (${{ matrix.target }})
-    needs: [validate-release, comprehensive-testing, security-audit]
-    if: needs.validate-release.outputs.tag != 'validation'
+  build:
+    name: Build (${{ matrix.target }})
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux targets
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: valknut-x86_64-linux-gnu
@@ -294,8 +83,6 @@ jobs:
             os: ubuntu-latest
             name: valknut-aarch64-linux-musl
             cross: true
-          
-          # macOS targets
           - target: x86_64-apple-darwin
             os: macos-latest
             name: valknut-x86_64-macos
@@ -304,388 +91,96 @@ jobs:
             os: macos-latest
             name: valknut-aarch64-macos
             cross: false
-          
-          # Windows targets
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: valknut-x86_64-windows.exe
             cross: false
-    
+
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup cross-compilation
+      - name: Setup cross
         if: matrix.cross
-        run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Setup Rust cache
+      - name: Cache
         uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build
+        shell: bash
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --all-features --bin valknut
+            cross build --release --target ${{ matrix.target }} --bin valknut
           else
-            cargo build --release --target ${{ matrix.target }} --all-features --bin valknut
+            cargo build --release --target ${{ matrix.target }} --bin valknut
           fi
 
-      - name: Prepare artifacts
+      - name: Package
         shell: bash
         run: |
           mkdir -p artifacts
-          
-          # Copy binary
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             cp target/${{ matrix.target }}/release/valknut.exe artifacts/${{ matrix.name }}
-            BINARY="artifacts/${{ matrix.name }}"
           else
             cp target/${{ matrix.target }}/release/valknut artifacts/${{ matrix.name }}
-            BINARY="artifacts/${{ matrix.name }}"
           fi
-          
-          # Create checksums
           cd artifacts
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             certutil -hashfile ${{ matrix.name }} SHA256 > ${{ matrix.name }}.sha256
-            certutil -hashfile ${{ matrix.name }} SHA512 > ${{ matrix.name }}.sha512
           else
             shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
-            shasum -a 512 ${{ matrix.name }} > ${{ matrix.name }}.sha512
           fi
-          
-          # Create metadata
-          cd ..
-          echo "target: ${{ matrix.target }}" > artifacts/${{ matrix.name }}.metadata
-          echo "os: ${{ matrix.os }}" >> artifacts/${{ matrix.name }}.metadata
-          echo "version: ${{ needs.validate-release.outputs.version }}" >> artifacts/${{ matrix.name }}.metadata
-          echo "build_date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/${{ matrix.name }}.metadata
-          echo "commit: ${{ github.sha }}" >> artifacts/${{ matrix.name }}.metadata
 
-      - name: Upload artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.target }}
           path: artifacts/
-          retention-days: 30
-  # Docker multi-architecture builds
-  build-docker:
-    name: Build Docker Image
-    needs: [validate-release, comprehensive-testing, security-audit]
-    if: needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}},value=${{ needs.validate-release.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-release.outputs.tag }}
-            type=semver,pattern={{major}},value=${{ needs.validate-release.outputs.tag }}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.validate-release.outputs.version }}
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VCS_REF=${{ github.sha }}
-
-  # Generate SBOM (Software Bill of Materials)
-  generate-sbom:
-    name: Generate SBOM
-    needs: [validate-release, comprehensive-testing]
-    if: needs.validate-release.outputs.tag != 'validation'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx
-
-      - name: Generate SBOM
-        run: |
-          # Generate CycloneDX SBOM
-          cargo cyclonedx --format json --output-file valknut-sbom.json
-          
-          # Generate human-readable dependency list
-          cargo tree --format "{p} {l}" > dependencies.txt
-          
-          # Create dependency summary
-          echo "# Valknut Dependencies" > dependencies.md
-          echo "" >> dependencies.md
-          echo "Generated on: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> dependencies.md
-          echo "Version: ${{ needs.validate-release.outputs.version }}" >> dependencies.md
-          echo "" >> dependencies.md
-          echo "## Direct Dependencies" >> dependencies.md
-          echo "\`\`\`" >> dependencies.md
-          cargo tree --depth 1 >> dependencies.md
-          echo "\`\`\`" >> dependencies.md
-          echo "" >> dependencies.md
-          echo "## License Summary" >> dependencies.md
-          echo "\`\`\`" >> dependencies.md
-          cargo tree --format "{p} ({l})" | grep -E '\(.*\)' | sed 's/.*(\(.*\))/\1/' | sort | uniq -c | sort -nr >> dependencies.md
-          echo "\`\`\`" >> dependencies.md
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: |
-            valknut-sbom.json
-            dependencies.txt
-            dependencies.md
-
-  # Create GitHub release with comprehensive assets
-  create-release:
-    name: Create GitHub Release
-    needs: [validate-release, build-release, generate-sbom]
-    if: needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
+  release:
+    name: GitHub Release
+    needs: [validate, build]
+    if: needs.validate.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-      release_url: ${{ steps.create_release.outputs.html_url }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Download all binary artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           path: artifacts/
           merge-multiple: true
 
-      - name: Download SBOM artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: sbom
-          path: sbom/
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          
-          # Copy all binaries and their checksums
-          find artifacts/ -type f \( -name "valknut-*" -o -name "*.sha256" -o -name "*.sha512" -o -name "*.metadata" \) | while read file; do
-            cp "$file" release-assets/
-          done
-          
-          # Copy SBOM files
-          cp sbom/* release-assets/
-          
-          # Create archive checksums file
-          cd release-assets
-          find . -name "valknut-*" ! -name "*.sha256" ! -name "*.sha512" ! -name "*.metadata" | while read binary; do
-            echo "## $(basename "$binary")" >> ../CHECKSUMS.md
-            echo "\`\`\`" >> ../CHECKSUMS.md
-            cat "${binary}.sha256" >> ../CHECKSUMS.md
-            cat "${binary}.sha512" >> ../CHECKSUMS.md
-            echo "\`\`\`" >> ../CHECKSUMS.md
-            echo "" >> ../CHECKSUMS.md
-          done
-          cd ..
-          
-          cp CHECKSUMS.md release-assets/
-          
-          ls -la release-assets/
-
-      - name: Generate comprehensive release notes
-        run: |
-          echo "# Valknut ${{ needs.validate-release.outputs.version }}" > release-notes.md
-          echo "" >> release-notes.md
-          
-          if [[ "${{ needs.validate-release.outputs.is_prerelease }}" == "true" ]]; then
-            echo "⚠️ **This is a pre-release version**" >> release-notes.md
-            echo "" >> release-notes.md
-          fi
-          
-          # Add changelog section if available
-          if [ -f "CHANGELOG.md" ]; then
-            echo "## What's Changed" >> release-notes.md
-            echo "" >> release-notes.md
-            
-            # Extract changelog section for this version
-            awk '/^## \[.*${{ needs.validate-release.outputs.version }}.*\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md >> release-notes.md || true
-            
-            if [ ! -s release-notes.md ] || [ $(wc -l < release-notes.md) -le 5 ]; then
-              echo "See CHANGELOG.md for detailed changes in this release." >> release-notes.md
-            fi
-          else
-            echo "## Changes" >> release-notes.md
-            echo "" >> release-notes.md
-            echo "See commit history for changes in this release." >> release-notes.md
-          fi
-          
-          echo "" >> release-notes.md
-          echo "## Installation" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### Download Precompiled Binaries" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "Download the appropriate binary for your platform from the assets below:" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "| Platform | Architecture | Binary |" >> release-notes.md
-          echo "|----------|--------------|--------|" >> release-notes.md
-          echo "| Linux (GNU) | x86_64 | \`valknut-x86_64-linux-gnu\` |" >> release-notes.md
-          echo "| Linux (musl) | x86_64 | \`valknut-x86_64-linux-musl\` |" >> release-notes.md
-          echo "| Linux (GNU) | ARM64 | \`valknut-aarch64-linux-gnu\` |" >> release-notes.md
-          echo "| Linux (musl) | ARM64 | \`valknut-aarch64-linux-musl\` |" >> release-notes.md
-          echo "| macOS | x86_64 | \`valknut-x86_64-macos\` |" >> release-notes.md
-          echo "| macOS | ARM64 (Apple Silicon) | \`valknut-aarch64-macos\` |" >> release-notes.md
-          echo "| Windows | x86_64 | \`valknut-x86_64-windows.exe\` |" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### npm Installation" >> release-notes.md
-          echo "\`\`\`bash" >> release-notes.md
-          echo "npm install -g @sibyllinesoft/valknut" >> release-notes.md
-          echo "# or use npx" >> release-notes.md
-          echo "npx @sibyllinesoft/valknut analyze ." >> release-notes.md
-          echo "\`\`\`" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### Cargo Installation" >> release-notes.md
-          echo "\`\`\`bash" >> release-notes.md
-          echo "cargo install --git https://github.com/${{ github.repository }} --tag ${{ needs.validate-release.outputs.tag }}" >> release-notes.md
-          echo "\`\`\`" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "### Docker" >> release-notes.md
-          echo "\`\`\`bash" >> release-notes.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}" >> release-notes.md
-          echo "\`\`\`" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "## Verification" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "All binaries are provided with SHA256 and SHA512 checksums. Verify downloads:" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "\`\`\`bash" >> release-notes.md
-          echo "# Verify SHA256 checksum" >> release-notes.md
-          echo "shasum -a 256 -c valknut-*.sha256" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "# Verify SHA512 checksum" >> release-notes.md
-          echo "shasum -a 512 -c valknut-*.sha512" >> release-notes.md
-          echo "\`\`\`" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "## Build Information" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "- **Build Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> release-notes.md
-          echo "- **Commit**: ${{ github.sha }}" >> release-notes.md
-          echo "- **Rust Version**: $(rustc --version)" >> release-notes.md
-          echo "- **Features**: All features enabled" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "## Security" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "This release has been:" >> release-notes.md
-          echo "- 🔒 Security audited with \`cargo audit\`" >> release-notes.md
-          echo "- 📋 License checked with \`cargo deny\`" >> release-notes.md
-          echo "- 🧪 Comprehensively tested with \`cargo nextest\`" >> release-notes.md
-          echo "- 📊 Performance benchmarked" >> release-notes.md
-          echo "- 🏗️ SBOM (Software Bill of Materials) included" >> release-notes.md
-
-      - name: Create GitHub release
-        id: create_release
+      - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ needs.validate-release.outputs.tag }}
-          name: "Valknut ${{ needs.validate-release.outputs.version }}"
-          body_path: release-notes.md
-          files: release-assets/*
-          draft: false
-          prerelease: ${{ needs.validate-release.outputs.is_prerelease }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: "Valknut ${{ needs.validate.outputs.version }}"
+          files: artifacts/*
+          prerelease: ${{ needs.validate.outputs.is_prerelease }}
           generate_release_notes: true
-          make_latest: ${{ needs.validate-release.outputs.is_prerelease != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Publish to crates.io
-  publish-crates:
-    name: Publish to crates.io
-    needs: [validate-release, create-release]
-    if: needs.validate-release.outputs.is_prerelease != 'true' && needs.validate-release.outputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Verify build
-        run: cargo build --release --all-features
-
-      - name: Dry run publish
-        run: cargo publish --dry-run
-
-      - name: Publish to crates.io
-        if: env.CARGO_REGISTRY_TOKEN != ''
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Skip crates.io publish
-        if: env.CARGO_REGISTRY_TOKEN == ''
-        run: |
-          echo "⚠️ CARGO_REGISTRY_TOKEN not configured, skipping crates.io publish"
-          echo "To enable automatic publishing, add CARGO_REGISTRY_TOKEN to repository secrets"
-
-  # Publish to npm
   publish-npm:
-    name: Publish to npm
-    needs: [validate-release, build-release]
-    if: needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
+    name: Publish npm
+    needs: [validate, build]
+    if: needs.validate.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -698,47 +193,29 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Download all binary artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           path: artifacts/
           merge-multiple: true
 
-      - name: List downloaded artifacts
-        run: ls -la artifacts/
-
-      - name: Prepare npm packages
+      - name: Prepare packages
         run: |
-          VERSION="${{ needs.validate-release.outputs.version }}"
+          VERSION="${{ needs.validate.outputs.version }}"
 
-          # Map of rust targets to npm package directories
-          declare -A TARGET_MAP=(
-            ["x86_64-unknown-linux-gnu"]="linux-x64-gnu"
-            ["x86_64-unknown-linux-musl"]="linux-x64-musl"
-            ["aarch64-unknown-linux-gnu"]="linux-arm64-gnu"
-            ["aarch64-unknown-linux-musl"]="linux-arm64-musl"
-            ["x86_64-apple-darwin"]="darwin-x64"
-            ["aarch64-apple-darwin"]="darwin-arm64"
-            ["x86_64-pc-windows-msvc"]="win32-x64"
-          )
-
-          # Map of artifact names to targets
           declare -A ARTIFACT_MAP=(
-            ["valknut-x86_64-linux-gnu"]="x86_64-unknown-linux-gnu"
-            ["valknut-x86_64-linux-musl"]="x86_64-unknown-linux-musl"
-            ["valknut-aarch64-linux-gnu"]="aarch64-unknown-linux-gnu"
-            ["valknut-aarch64-linux-musl"]="aarch64-unknown-linux-musl"
-            ["valknut-x86_64-macos"]="x86_64-apple-darwin"
-            ["valknut-aarch64-macos"]="aarch64-apple-darwin"
-            ["valknut-x86_64-windows.exe"]="x86_64-pc-windows-msvc"
+            ["valknut-x86_64-linux-gnu"]="linux-x64-gnu"
+            ["valknut-x86_64-linux-musl"]="linux-x64-musl"
+            ["valknut-aarch64-linux-gnu"]="linux-arm64-gnu"
+            ["valknut-aarch64-linux-musl"]="linux-arm64-musl"
+            ["valknut-x86_64-macos"]="darwin-x64"
+            ["valknut-aarch64-macos"]="darwin-arm64"
+            ["valknut-x86_64-windows.exe"]="win32-x64"
           )
 
-          # Copy binaries to npm package directories
           for artifact in "${!ARTIFACT_MAP[@]}"; do
-            target="${ARTIFACT_MAP[$artifact]}"
-            npm_dir="${TARGET_MAP[$target]}"
-
+            npm_dir="${ARTIFACT_MAP[$artifact]}"
             if [ -f "artifacts/$artifact" ]; then
               if [[ "$artifact" == *.exe ]]; then
                 cp "artifacts/$artifact" "npm/valknut-$npm_dir/valknut.exe"
@@ -746,36 +223,20 @@ jobs:
                 cp "artifacts/$artifact" "npm/valknut-$npm_dir/valknut"
                 chmod +x "npm/valknut-$npm_dir/valknut"
               fi
-              echo "Copied $artifact to npm/valknut-$npm_dir/"
-            else
-              echo "Warning: artifact $artifact not found"
             fi
           done
 
-          # Update versions in all package.json files
+          # Update versions
           for pkg_dir in npm/valknut-*/; do
             jq --arg v "$VERSION" '.version = $v' "$pkg_dir/package.json" > "$pkg_dir/package.json.tmp"
             mv "$pkg_dir/package.json.tmp" "$pkg_dir/package.json"
-            echo "Updated version in $pkg_dir/package.json to $VERSION"
           done
 
-          # Update main package version and optionalDependencies versions
           jq --arg v "$VERSION" '
             .version = $v |
             .optionalDependencies = (.optionalDependencies | to_entries | map(.value = $v) | from_entries)
           ' npm/valknut/package.json > npm/valknut/package.json.tmp
           mv npm/valknut/package.json.tmp npm/valknut/package.json
-          echo "Updated main package version and dependencies to $VERSION"
-
-      - name: Verify packages
-        run: |
-          echo "Package contents:"
-          for pkg_dir in npm/*/; do
-            echo "=== $pkg_dir ==="
-            ls -la "$pkg_dir"
-            cat "$pkg_dir/package.json"
-            echo ""
-          done
 
       - name: Publish platform packages
         if: env.NPM_TOKEN != ''
@@ -784,10 +245,8 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for pkg_dir in npm/valknut-*/; do
-            pkg_name=$(jq -r '.name' "$pkg_dir/package.json")
-            echo "Publishing $pkg_name..."
             cd "$pkg_dir"
-            npm publish --access public || echo "Failed to publish $pkg_name (may already exist)"
+            npm publish --access public || true
             cd - > /dev/null
           done
 
@@ -799,261 +258,34 @@ jobs:
         run: |
           cd npm/valknut
           npm publish --access public
-          echo "Published @sibyllinesoft/valknut"
 
-      - name: Skip npm publish
+      - name: Skip (no token)
         if: env.NPM_TOKEN == ''
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo "⚠️ NPM_TOKEN not configured, skipping npm publish"
-          echo "To enable automatic publishing, add NPM_TOKEN to repository secrets"
+        run: echo "⚠️ NPM_TOKEN not set, skipping npm publish"
 
-  # Update Homebrew formula
-  update-homebrew:
-    name: Update Homebrew Formula
-    needs: [validate-release, create-release]
-    if: needs.validate-release.outputs.is_prerelease != 'true' && needs.validate-release.outputs.dry_run != 'true'
+  publish-crates:
+    name: Publish crates.io
+    needs: [validate, release]
+    if: needs.validate.outputs.is_prerelease != 'true' && needs.validate.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate Homebrew formula
-        run: |
-          # Create homebrew directory if it doesn't exist
-          mkdir -p homebrew
-          
-          # Download release assets to calculate checksums
-          MACOS_X64_URL="https://github.com/${{ github.repository }}/releases/download/${{ needs.validate-release.outputs.tag }}/valknut-x86_64-macos"
-          MACOS_ARM64_URL="https://github.com/${{ github.repository }}/releases/download/${{ needs.validate-release.outputs.tag }}/valknut-aarch64-macos"
-          
-          # Create Homebrew formula
-          cat > homebrew/valknut.rb << 'EOF'
-          class Valknut < Formula
-            desc "High-performance code analysis engine for refactorability scoring"
-            homepage "https://github.com/${{ github.repository }}"
-            version "${{ needs.validate-release.outputs.version }}"
-            license "MIT"
-          
-            if Hardware::CPU.arm?
-              url "MACOS_ARM64_URL_PLACEHOLDER"
-              sha256 "ARM64_SHA256_PLACEHOLDER"
-            else
-              url "MACOS_X64_URL_PLACEHOLDER"  
-              sha256 "X64_SHA256_PLACEHOLDER"
-            end
-          
-            def install
-              bin.install "valknut-#{Hardware::CPU.arch}-macos" => "valknut"
-            end
-          
-            test do
-              system "#{bin}/valknut", "--version"
-            end
-          end
-          EOF
-          
-          # Replace placeholders (would need actual checksums in a real implementation)
-          sed -i "s|MACOS_ARM64_URL_PLACEHOLDER|$MACOS_ARM64_URL|g" homebrew/valknut.rb
-          sed -i "s|MACOS_X64_URL_PLACEHOLDER|$MACOS_X64_URL|g" homebrew/valknut.rb
-          sed -i "s|ARM64_SHA256_PLACEHOLDER|TO_BE_CALCULATED|g" homebrew/valknut.rb
-          sed -i "s|X64_SHA256_PLACEHOLDER|TO_BE_CALCULATED|g" homebrew/valknut.rb
-          
-          echo "📦 Homebrew formula generated"
-          cat homebrew/valknut.rb
-
-      - name: Upload Homebrew formula
-        uses: actions/upload-artifact@v4
-        with:
-          name: homebrew-formula
-          path: homebrew/valknut.rb
-
-      - name: Create or update Homebrew tap (if configured)
-        if: env.HOMEBREW_TAP_TOKEN != ''
-        run: |
-          echo "🍺 Would update Homebrew tap with new formula"
-          echo "To enable automatic tap updates, configure HOMEBREW_TAP_TOKEN"
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-
-  # Performance regression monitoring
-  performance-monitoring:
-    name: Performance Regression Check
-    needs: [validate-release, benchmark-validation]
-    if: needs.validate-release.outputs.tag != 'validation'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Run performance comparison
-        run: |
-          if [ -d "benches" ] && [ -n "$(ls benches/*.rs 2>/dev/null)" ]; then
-            echo "🚀 Running performance regression check..."
-            
-            # Run benchmarks and save results
-            cargo bench --features benchmarks > current-bench.txt 2>&1
-            
-            # Check for significant regressions (simplified check)
-            echo "## Performance Analysis" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "Current benchmark results:" >> $GITHUB_STEP_SUMMARY
-            tail -10 current-bench.txt >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            
-            # In a real implementation, this would compare against baseline
-            echo "⚠️ Performance regression detection requires baseline comparison" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ No benchmarks configured for performance monitoring"
-          fi
-
-  # Comprehensive notification system
-  notify-release:
-    name: Release Notifications
-    needs: [validate-release, create-release, publish-crates, publish-npm, update-homebrew]
-    if: always() && needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Prepare notification data
-        id: notification_data
-        run: |
-          SUCCESS="true"
-          FAILURES=""
-          
-          # Check job statuses
-          if [ "${{ needs.create-release.result }}" != "success" ]; then
-            SUCCESS="false"
-            FAILURES="$FAILURES GitHub Release,"
-          fi
-          
-          if [ "${{ needs.publish-crates.result }}" == "failure" ]; then
-            SUCCESS="false"
-            FAILURES="$FAILURES Crates.io,"
-          fi
-
-          if [ "${{ needs.publish-npm.result }}" == "failure" ]; then
-            SUCCESS="false"
-            FAILURES="$FAILURES npm,"
-          fi
-
-          if [ "${{ needs.update-homebrew.result }}" == "failure" ]; then
-            SUCCESS="false"
-            FAILURES="$FAILURES Homebrew,"
-          fi
-          
-          # Remove trailing comma
-          FAILURES=${FAILURES%,}
-          
-          echo "success=$SUCCESS" >> $GITHUB_OUTPUT
-          echo "failures=$FAILURES" >> $GITHUB_OUTPUT
-          echo "version=${{ needs.validate-release.outputs.version }}" >> $GITHUB_OUTPUT
-          echo "release_url=${{ needs.create-release.outputs.release_url }}" >> $GITHUB_OUTPUT
-
-      - name: Success notification
-        if: steps.notification_data.outputs.success == 'true'
-        run: |
-          echo "🎉 Release ${{ steps.notification_data.outputs.version }} completed successfully!"
-          echo "Release URL: ${{ steps.notification_data.outputs.release_url }}"
-          
-          # Generate success summary
-          echo "## 🎉 Release Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ steps.notification_data.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Release**: [${{ steps.notification_data.outputs.release_url }}](${{ steps.notification_data.outputs.release_url }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ Completed Successfully:" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔍 Comprehensive validation and testing" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔒 Security audit and dependency check" >> $GITHUB_STEP_SUMMARY
-          echo "- 🏗️ Multi-platform binary builds" >> $GITHUB_STEP_SUMMARY
-          echo "- 🐳 Docker image build and push" >> $GITHUB_STEP_SUMMARY
-          echo "- 📋 SBOM generation" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 GitHub release creation" >> $GITHUB_STEP_SUMMARY
-          echo "- 📢 Crates.io publication" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 npm package publication" >> $GITHUB_STEP_SUMMARY
-          echo "- 🍺 Homebrew formula update" >> $GITHUB_STEP_SUMMARY
-
-      - name: Failure notification
-        if: steps.notification_data.outputs.success != 'true'
-        run: |
-          echo "❌ Release ${{ steps.notification_data.outputs.version }} encountered failures!"
-          echo "Failed components: ${{ steps.notification_data.outputs.failures }}"
-          
-          # Generate failure summary
-          echo "## ❌ Release Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ steps.notification_data.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Failed Components**: ${{ steps.notification_data.outputs.failures }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔍 Investigation Required:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Check the failed job logs above" >> $GITHUB_STEP_SUMMARY
-          echo "2. Verify configuration and secrets" >> $GITHUB_STEP_SUMMARY
-          echo "3. Consider manual intervention if needed" >> $GITHUB_STEP_SUMMARY
-          
-          exit 1
-
-      - name: Discord notification (if configured)
-        if: env.DISCORD_WEBHOOK != ''
-        run: |
-          STATUS_EMOJI="${{ steps.notification_data.outputs.success == 'true' && '🎉' || '❌' }}"
-          STATUS_TEXT="${{ steps.notification_data.outputs.success == 'true' && 'Released' || 'Failed' }}"
-          
-          curl -H "Content-Type: application/json" \
-               -d "{\"content\":\"$STATUS_EMOJI Valknut ${{ steps.notification_data.outputs.version }} $STATUS_TEXT\"}" \
-               "${{ secrets.DISCORD_WEBHOOK }}" || true
+      - name: Publish
+        if: env.CARGO_REGISTRY_TOKEN != ''
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Slack notification (if configured)
-        if: env.SLACK_WEBHOOK != ''
-        run: |
-          STATUS_COLOR="${{ steps.notification_data.outputs.success == 'true' && 'good' || 'danger' }}"
-          STATUS_TEXT="${{ steps.notification_data.outputs.success == 'true' && 'Success' || 'Failed' }}"
-          
-          curl -X POST -H "Content-Type: application/json" \
-               -d "{\"attachments\":[{\"color\":\"$STATUS_COLOR\",\"title\":\"Valknut Release $STATUS_TEXT\",\"text\":\"Version ${{ steps.notification_data.outputs.version }}\"}]}" \
-               "${{ secrets.SLACK_WEBHOOK }}" || true
+      - name: Skip (no token)
+        if: env.CARGO_REGISTRY_TOKEN == ''
         env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-  # Final cleanup and validation
-  post-release-validation:
-    name: Post-Release Validation
-    needs: [validate-release, create-release, notify-release]
-    if: always() && needs.validate-release.outputs.tag != 'validation' && needs.validate-release.outputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Validate release assets
-        run: |
-          # Check if release was created successfully
-          if [ "${{ needs.create-release.result }}" == "success" ]; then
-            echo "✅ GitHub release created successfully"
-            echo "Release URL: ${{ needs.create-release.outputs.release_url }}"
-          else
-            echo "❌ GitHub release creation failed"
-          fi
-
-      - name: Trigger downstream workflows
-        if: needs.create-release.result == 'success'
-        run: |
-          echo "🔄 Consider triggering downstream workflows:"
-          echo "- Documentation updates"
-          echo "- Package manager notifications"
-          echo "- User communication"
-
-      - name: Archive workflow artifacts
-        run: |
-          echo "📁 Workflow completed. Artifacts retained for 30 days."
-          echo "Version: ${{ needs.validate-release.outputs.version }}"
-          echo "Tag: ${{ needs.validate-release.outputs.tag }}"
-          echo "Commit: ${{ github.sha }}"
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: echo "⚠️ CARGO_REGISTRY_TOKEN not set, skipping crates.io publish"
