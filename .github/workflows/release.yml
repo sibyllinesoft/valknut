@@ -107,6 +107,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install OpenSSL (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "Installing OpenSSL via vcpkg"
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        shell: bash
+
       - name: Setup cross
         if: matrix.cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -118,6 +127,9 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          # Use system OpenSSL in cross Docker images, not vendored
+          OPENSSL_NO_VENDOR: ${{ matrix.cross && '1' || '' }}
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }} --bin valknut
