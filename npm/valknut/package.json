@@ -28,6 +28,9 @@
   },
   "optionalDependencies": {
     "@sibyllinesoft/valknut-linux-x64-gnu": "0.0.0",
+    "@sibyllinesoft/valknut-linux-x64-musl": "0.0.0",
+    "@sibyllinesoft/valknut-linux-arm64-gnu": "0.0.0",
+    "@sibyllinesoft/valknut-linux-arm64-musl": "0.0.0",
     "@sibyllinesoft/valknut-darwin-x64": "0.0.0",
     "@sibyllinesoft/valknut-darwin-arm64": "0.0.0",
     "@sibyllinesoft/valknut-win32-x64": "0.0.0"

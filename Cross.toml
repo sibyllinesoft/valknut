@@ -1,6 +1,10 @@
 # Cross-compilation configuration
 # https://github.com/cross-rs/cross
 
+[build]
+# Run builds in Docker with proper volume mounts
+default-target = "x86_64-unknown-linux-gnu"
+
 [build.env]
 passthrough = [
     "OPENSSL_NO_VENDOR",
@@ -8,4 +12,33 @@ passthrough = [
     "OPENSSL_STATIC",
     "OPENSSL_LIB_DIR",
     "OPENSSL_INCLUDE_DIR",
+    "PKG_CONFIG_ALLOW_CROSS",
 ]
+
+# x86_64 musl - install OpenSSL for musl
+[target.x86_64-unknown-linux-musl]
+pre-build = [
+    "apt-get update && apt-get install -y musl-tools pkg-config libssl-dev"
+]
+
+[target.x86_64-unknown-linux-musl.env]
+passthrough = ["OPENSSL_STATIC=1", "PKG_CONFIG_ALLOW_CROSS=1"]
+
+# aarch64 glibc - install OpenSSL dev headers
+[target.aarch64-unknown-linux-gnu]
+pre-build = [
+    "dpkg --add-architecture arm64",
+    "apt-get update && apt-get install -y libssl-dev:arm64 pkg-config"
+]
+
+[target.aarch64-unknown-linux-gnu.env]
+passthrough = ["PKG_CONFIG_ALLOW_CROSS=1"]
+
+# aarch64 musl - install OpenSSL for musl
+[target.aarch64-unknown-linux-musl]
+pre-build = [
+    "apt-get update && apt-get install -y musl-tools pkg-config libssl-dev"
+]
+
+[target.aarch64-unknown-linux-musl.env]
+passthrough = ["OPENSSL_STATIC=1", "PKG_CONFIG_ALLOW_CROSS=1"]

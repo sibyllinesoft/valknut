@@ -88,22 +88,22 @@ jobs:
             name: valknut-x86_64-windows.exe
             cross: false
             features: ""
-          # Cross-compiled builds (disabled for now - need cross Docker configuration)
-          # - target: x86_64-unknown-linux-musl
-          #   os: ubuntu-latest
-          #   name: valknut-x86_64-linux-musl
-          #   cross: true
-          #   features: ""
-          # - target: aarch64-unknown-linux-gnu
-          #   os: ubuntu-latest
-          #   name: valknut-aarch64-linux-gnu
-          #   cross: true
-          #   features: ""
-          # - target: aarch64-unknown-linux-musl
-          #   os: ubuntu-latest
-          #   name: valknut-aarch64-linux-musl
-          #   cross: true
-          #   features: ""
+          # Cross-compiled Linux builds
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: valknut-x86_64-linux-musl
+            cross: true
+            features: ""
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: valknut-aarch64-linux-gnu
+            cross: true
+            features: ""
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            name: valknut-aarch64-linux-musl
+            cross: true
+            features: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: Setup cross
         if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --locked
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
@@ -235,6 +235,9 @@ jobs:
           # Map artifact names to npm package suffixes
           declare -A ARTIFACT_MAP=(
             ["valknut-x86_64-linux-gnu"]="linux-x64-gnu"
+            ["valknut-x86_64-linux-musl"]="linux-x64-musl"
+            ["valknut-aarch64-linux-gnu"]="linux-arm64-gnu"
+            ["valknut-aarch64-linux-musl"]="linux-arm64-musl"
             ["valknut-x86_64-macos"]="darwin-x64"
             ["valknut-aarch64-macos"]="darwin-arm64"
             ["valknut-x86_64-windows.exe"]="win32-x64"
