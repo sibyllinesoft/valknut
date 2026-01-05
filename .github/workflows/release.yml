@@ -67,43 +67,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Native builds (fast and reliable)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: valknut-x86_64-linux-gnu
-            cross: false
             features: ""
           - target: x86_64-apple-darwin
-            os: macos-latest  # Cross-compile x86_64 on ARM64 runner
+            os: macos-latest
             name: valknut-x86_64-macos
-            cross: false
             features: "vendored-openssl"
           - target: aarch64-apple-darwin
             os: macos-latest
             name: valknut-aarch64-macos
-            cross: false
             features: "vendored-openssl"
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: valknut-x86_64-windows.exe
-            cross: false
             features: ""
-          # Cross-compiled Linux builds (use vendored OpenSSL since host libssl-dev won't work)
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            name: valknut-x86_64-linux-musl
-            cross: true
-            features: "vendored-openssl"
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: valknut-aarch64-linux-gnu
-            cross: true
-            features: "vendored-openssl"
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
-            name: valknut-aarch64-linux-musl
-            cross: true
-            features: "vendored-openssl"
+          # NOTE: Cross-compiled Linux builds (musl, aarch64) are disabled because
+          # fastembed/ONNX Runtime has C++ dependencies that don't cross-compile well.
+          # Users on ARM Linux or Alpine can compile from source:
+          #   cargo install --git https://github.com/NathanRiceDev/valknut
 
     runs-on: ${{ matrix.os }}
 
@@ -116,8 +99,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install OpenSSL (Linux native)
-        if: matrix.os == 'ubuntu-latest' && matrix.cross == false
+      - name: Install OpenSSL (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
       - name: Install OpenSSL (Windows)
@@ -128,14 +111,6 @@ jobs:
           echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $GITHUB_ENV
           echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
         shell: bash
-
-      - name: Setup cross-compilation
-        if: matrix.cross
-        run: |
-          # Install dependencies for vendored OpenSSL
-          sudo apt-get update && sudo apt-get install -y perl make
-          pip3 install ziglang
-          cargo install cargo-zigbuild
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
@@ -150,12 +125,7 @@ jobs:
           if [ -n "$FEATURES" ]; then
             FEATURE_FLAGS="--features $FEATURES"
           fi
-
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cargo zigbuild --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
-          else
-            cargo build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
-          fi
+          cargo build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
 
       - name: Package
         shell: bash
@@ -236,12 +206,9 @@ jobs:
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
 
-          # Map artifact names to npm package suffixes
+          # Map artifact names to npm package suffixes (only native builds)
           declare -A ARTIFACT_MAP=(
             ["valknut-x86_64-linux-gnu"]="linux-x64-gnu"
-            ["valknut-x86_64-linux-musl"]="linux-x64-musl"
-            ["valknut-aarch64-linux-gnu"]="linux-arm64-gnu"
-            ["valknut-aarch64-linux-musl"]="linux-arm64-musl"
             ["valknut-x86_64-macos"]="darwin-x64"
             ["valknut-aarch64-macos"]="darwin-arm64"
             ["valknut-x86_64-windows.exe"]="win32-x64"
