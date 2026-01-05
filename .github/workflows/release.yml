@@ -129,9 +129,11 @@ jobs:
           echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
         shell: bash
 
-      - name: Setup cross
+      - name: Setup cross-compilation
         if: matrix.cross
-        uses: taiki-e/install-action@cross
+        run: |
+          pip3 install ziglang
+          cargo install cargo-zigbuild
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
@@ -140,8 +142,6 @@ jobs:
 
       - name: Build
         shell: bash
-        env:
-          CROSS_DEBUG: "1"
         run: |
           FEATURES="${{ matrix.features }}"
           FEATURE_FLAGS=""
@@ -150,7 +150,7 @@ jobs:
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS -v
+            cargo zigbuild --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
           else
             cargo build --release --target ${{ matrix.target }} --bin valknut $FEATURE_FLAGS
           fi
