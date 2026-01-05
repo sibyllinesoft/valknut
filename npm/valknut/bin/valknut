@@ -5,10 +5,7 @@ const path = require("path");
 const fs = require("fs");
 
 const PLATFORMS = {
-  "linux-x64-gnu": "@sibyllinesoft/valknut-linux-x64-gnu",
-  "linux-x64-musl": "@sibyllinesoft/valknut-linux-x64-musl",
-  "linux-arm64-gnu": "@sibyllinesoft/valknut-linux-arm64-gnu",
-  "linux-arm64-musl": "@sibyllinesoft/valknut-linux-arm64-musl",
+  "linux-x64": "@sibyllinesoft/valknut-linux-x64-gnu",
   "darwin-x64": "@sibyllinesoft/valknut-darwin-x64",
   "darwin-arm64": "@sibyllinesoft/valknut-darwin-arm64",
   "win32-x64": "@sibyllinesoft/valknut-win32-x64",
@@ -26,37 +23,11 @@ function getPlatformKey() {
     return `darwin-${arch}`;
   }
 
-  if (platform === "linux") {
-    // Detect musl vs glibc
-    const isMusl = detectMusl();
-    const libc = isMusl ? "musl" : "gnu";
-    return `linux-${arch}-${libc}`;
+  if (platform === "linux" && arch === "x64") {
+    return "linux-x64";
   }
 
   return null;
-}
-
-function detectMusl() {
-  // Check if we're running on Alpine or musl-based distro
-  try {
-    const output = execFileSync("ldd", ["--version"], {
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return output.toLowerCase().includes("musl");
-  } catch (e) {
-    // ldd --version exits with error on musl, check stderr
-    if (e.stderr && e.stderr.toLowerCase().includes("musl")) {
-      return true;
-    }
-    // Fallback: check /etc/os-release for Alpine
-    try {
-      const osRelease = fs.readFileSync("/etc/os-release", "utf8");
-      return osRelease.toLowerCase().includes("alpine");
-    } catch {
-      return false;
-    }
-  }
 }
 
 function findBinary() {

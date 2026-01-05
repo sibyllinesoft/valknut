@@ -67,28 +67,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Native builds (fast and reliable)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: valknut-x86_64-linux-gnu
             cross: false
             features: ""
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            name: valknut-x86_64-linux-musl
-            cross: true
-            features: ""
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: valknut-aarch64-linux-gnu
-            cross: true
-            features: ""
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
-            name: valknut-aarch64-linux-musl
-            cross: true
-            features: ""
           - target: x86_64-apple-darwin
-            os: macos-13  # Use Intel runner for x86_64 builds
+            os: macos-13
             name: valknut-x86_64-macos
             cross: false
             features: "vendored-openssl"
@@ -102,6 +88,22 @@ jobs:
             name: valknut-x86_64-windows.exe
             cross: false
             features: ""
+          # Cross-compiled builds (disabled for now - need cross Docker configuration)
+          # - target: x86_64-unknown-linux-musl
+          #   os: ubuntu-latest
+          #   name: valknut-x86_64-linux-musl
+          #   cross: true
+          #   features: ""
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   name: valknut-aarch64-linux-gnu
+          #   cross: true
+          #   features: ""
+          # - target: aarch64-unknown-linux-musl
+          #   os: ubuntu-latest
+          #   name: valknut-aarch64-linux-musl
+          #   cross: true
+          #   features: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -230,11 +232,9 @@ jobs:
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
 
+          # Map artifact names to npm package suffixes
           declare -A ARTIFACT_MAP=(
             ["valknut-x86_64-linux-gnu"]="linux-x64-gnu"
-            ["valknut-x86_64-linux-musl"]="linux-x64-musl"
-            ["valknut-aarch64-linux-gnu"]="linux-arm64-gnu"
-            ["valknut-aarch64-linux-musl"]="linux-arm64-musl"
             ["valknut-x86_64-macos"]="darwin-x64"
             ["valknut-aarch64-macos"]="darwin-arm64"
             ["valknut-x86_64-windows.exe"]="win32-x64"
