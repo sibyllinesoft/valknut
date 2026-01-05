@@ -303,13 +303,14 @@ def hello():
     fn test_should_skip_directory() {
         let config = create_test_config();
         let analyzer = DirectoryAnalyzer::new(config);
+        let root = Path::new("/project");
 
-        assert!(analyzer.should_skip_directory(Path::new("node_modules")));
-        assert!(analyzer.should_skip_directory(Path::new("target")));
-        assert!(analyzer.should_skip_directory(Path::new(".git")));
-        assert!(analyzer.should_skip_directory(Path::new("__pycache__")));
-        assert!(!analyzer.should_skip_directory(Path::new("src")));
-        assert!(!analyzer.should_skip_directory(Path::new("lib")));
+        assert!(analyzer.should_skip_directory(Path::new("node_modules"), root));
+        assert!(analyzer.should_skip_directory(Path::new("target"), root));
+        assert!(analyzer.should_skip_directory(Path::new(".git"), root));
+        assert!(analyzer.should_skip_directory(Path::new("__pycache__"), root));
+        assert!(!analyzer.should_skip_directory(Path::new("src"), root));
+        assert!(!analyzer.should_skip_directory(Path::new("lib"), root));
     }
 
     #[test]

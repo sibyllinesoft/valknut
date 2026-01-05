@@ -177,6 +177,9 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         if other.analysis.max_files != 0 {
             self.analysis.max_files = other.analysis.max_files;
         }
+        if other.analysis.max_file_size_bytes != default_analysis.max_file_size_bytes {
+            self.analysis.max_file_size_bytes = other.analysis.max_file_size_bytes;
+        }
 
         // Replace include/exclude/ignore patterns only when explicitly changed from defaults
         if other.analysis.include_patterns != default_analysis.include_patterns {
@@ -216,6 +219,28 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         if other.cohesion.enabled {
             self.cohesion = other.cohesion.clone();
             self.analysis.enable_cohesion_analysis = true;
+        }
+
+        // Merge doc health config
+        self.docs.merge_with(other.docs);
+    }
+}
+
+/// Merge higher-priority DocHealthConfig values into an existing config.
+impl ConfigMerge<valknut_rs::core::config::DocHealthConfig>
+    for valknut_rs::core::config::DocHealthConfig
+{
+    /// Merge another DocHealthConfig, giving precedence to the incoming config.
+    fn merge_with(&mut self, other: valknut_rs::core::config::DocHealthConfig) {
+        let default = valknut_rs::core::config::DocHealthConfig::default();
+        if other.min_fn_nodes != default.min_fn_nodes {
+            self.min_fn_nodes = other.min_fn_nodes;
+        }
+        if other.min_file_nodes != default.min_file_nodes {
+            self.min_file_nodes = other.min_file_nodes;
+        }
+        if other.min_files_per_dir != default.min_files_per_dir {
+            self.min_files_per_dir = other.min_files_per_dir;
         }
     }
 }
@@ -446,15 +471,68 @@ impl ConfigMerge<api_config::AnalysisConfig> for api_config::AnalysisConfig {
 impl ConfigMerge<CoverageConfig> for CoverageConfig {
     /// Merge another CoverageConfig, keeping explicit overrides intact.
     fn merge_with(&mut self, other: CoverageConfig) {
+        let default = CoverageConfig::default();
+
         if other.coverage_file.is_some() {
             self.coverage_file = other.coverage_file;
         }
         if !other.auto_discover {
             self.auto_discover = false;
         }
-        if other.max_age_days != 7 {
-            // 7 is the default
+        if other.max_age_days != default.max_age_days {
             self.max_age_days = other.max_age_days;
+        }
+        if other.enabled != default.enabled {
+            self.enabled = other.enabled;
+        }
+        if !other.search_paths.is_empty() && other.search_paths != default.search_paths {
+            self.search_paths = other.search_paths;
+        }
+        if !other.file_patterns.is_empty() && other.file_patterns != default.file_patterns {
+            self.file_patterns = other.file_patterns;
+        }
+        if !other.report_paths.is_empty() && other.report_paths != default.report_paths {
+            self.report_paths = other.report_paths;
+        }
+        if other.max_gaps_per_file != default.max_gaps_per_file {
+            self.max_gaps_per_file = other.max_gaps_per_file;
+        }
+        if other.min_gap_loc != default.min_gap_loc {
+            self.min_gap_loc = other.min_gap_loc;
+        }
+        if other.snippet_context_lines != default.snippet_context_lines {
+            self.snippet_context_lines = other.snippet_context_lines;
+        }
+        if other.long_gap_head_tail != default.long_gap_head_tail {
+            self.long_gap_head_tail = other.long_gap_head_tail;
+        }
+        if other.group_cross_file != default.group_cross_file {
+            self.group_cross_file = other.group_cross_file;
+        }
+        if (other.target_repo_gain - default.target_repo_gain).abs() > f64::EPSILON {
+            self.target_repo_gain = other.target_repo_gain;
+        }
+        // Merge weights if any differ from defaults
+        if (other.weights.size - default.weights.size).abs() > f64::EPSILON {
+            self.weights.size = other.weights.size;
+        }
+        if (other.weights.complexity - default.weights.complexity).abs() > f64::EPSILON {
+            self.weights.complexity = other.weights.complexity;
+        }
+        if (other.weights.fan_in - default.weights.fan_in).abs() > f64::EPSILON {
+            self.weights.fan_in = other.weights.fan_in;
+        }
+        if (other.weights.exports - default.weights.exports).abs() > f64::EPSILON {
+            self.weights.exports = other.weights.exports;
+        }
+        if (other.weights.centrality - default.weights.centrality).abs() > f64::EPSILON {
+            self.weights.centrality = other.weights.centrality;
+        }
+        if (other.weights.docs - default.weights.docs).abs() > f64::EPSILON {
+            self.weights.docs = other.weights.docs;
+        }
+        if !other.exclude_patterns.is_empty() && other.exclude_patterns != default.exclude_patterns {
+            self.exclude_patterns = other.exclude_patterns;
         }
     }
 }
@@ -478,48 +556,50 @@ impl ConfigMerge<DenoiseConfig> for DenoiseConfig {
         }
 
         // Merge numerical parameters if they differ from defaults
-        if other.min_function_tokens != 40 {
+        if other.min_function_tokens != default.min_function_tokens {
             self.min_function_tokens = other.min_function_tokens;
         }
-        if other.min_match_tokens != 24 {
+        if other.min_match_tokens != default.min_match_tokens {
             self.min_match_tokens = other.min_match_tokens;
         }
-        if other.require_blocks != 2 {
+        if other.require_blocks != default.require_blocks {
             self.require_blocks = other.require_blocks;
         }
-        if other.similarity != 0.82 {
+        if (other.similarity - default.similarity).abs() > f64::EPSILON {
             self.similarity = other.similarity;
             self.threshold_s = other.similarity;
         }
 
         // Merge weights if they differ from defaults
-        if other.weights.ast != 0.35 {
+        if (other.weights.ast - default.weights.ast).abs() > f64::EPSILON {
             self.weights.ast = other.weights.ast;
         }
-        if other.weights.pdg != 0.45 {
+        if (other.weights.pdg - default.weights.pdg).abs() > f64::EPSILON {
             self.weights.pdg = other.weights.pdg;
         }
-        if other.weights.emb != 0.20 {
+        if (other.weights.emb - default.weights.emb).abs() > f64::EPSILON {
             self.weights.emb = other.weights.emb;
         }
 
-        if other.io_mismatch_penalty != 0.25 {
+        if (other.io_mismatch_penalty - default.io_mismatch_penalty).abs() > f64::EPSILON {
             self.io_mismatch_penalty = other.io_mismatch_penalty;
         }
 
         // Merge auto-calibration settings
-        if other.auto_calibration.quality_target != 0.8 {
+        if (other.auto_calibration.quality_target - default.auto_calibration.quality_target).abs()
+            > f64::EPSILON
+        {
             self.auto_calibration.quality_target = other.auto_calibration.quality_target;
         }
-        if other.auto_calibration.sample_size != 200 {
+        if other.auto_calibration.sample_size != default.auto_calibration.sample_size {
             self.auto_calibration.sample_size = other.auto_calibration.sample_size;
         }
 
         // Merge ranking settings
-        if other.ranking.min_saved_tokens != 100 {
+        if other.ranking.min_saved_tokens != default.ranking.min_saved_tokens {
             self.ranking.min_saved_tokens = other.ranking.min_saved_tokens;
         }
-        if other.ranking.min_rarity_gain != 1.2 {
+        if (other.ranking.min_rarity_gain - default.ranking.min_rarity_gain).abs() > f64::EPSILON {
             self.ranking.min_rarity_gain = other.ranking.min_rarity_gain;
         }
 

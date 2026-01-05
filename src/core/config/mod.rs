@@ -712,6 +712,51 @@ impl PerformanceConfig {
     }
 }
 
+/// Weights for coverage gap scoring algorithm
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverageScoringWeights {
+    /// Weight for gap size
+    #[serde(default = "CoverageScoringWeights::default_size")]
+    pub size: f64,
+    /// Weight for code complexity
+    #[serde(default = "CoverageScoringWeights::default_complexity")]
+    pub complexity: f64,
+    /// Weight for fan-in (how many callers)
+    #[serde(default = "CoverageScoringWeights::default_fan_in")]
+    pub fan_in: f64,
+    /// Weight for exported symbols
+    #[serde(default = "CoverageScoringWeights::default_exports")]
+    pub exports: f64,
+    /// Weight for graph centrality
+    #[serde(default = "CoverageScoringWeights::default_centrality")]
+    pub centrality: f64,
+    /// Weight for documentation coverage
+    #[serde(default = "CoverageScoringWeights::default_docs")]
+    pub docs: f64,
+}
+
+impl CoverageScoringWeights {
+    fn default_size() -> f64 { 0.40 }
+    fn default_complexity() -> f64 { 0.20 }
+    fn default_fan_in() -> f64 { 0.15 }
+    fn default_exports() -> f64 { 0.10 }
+    fn default_centrality() -> f64 { 0.10 }
+    fn default_docs() -> f64 { 0.05 }
+}
+
+impl Default for CoverageScoringWeights {
+    fn default() -> Self {
+        Self {
+            size: Self::default_size(),
+            complexity: Self::default_complexity(),
+            fan_in: Self::default_fan_in(),
+            exports: Self::default_exports(),
+            centrality: Self::default_centrality(),
+            docs: Self::default_docs(),
+        }
+    }
+}
+
 /// Configuration for coverage analysis and automatic file discovery
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageConfig {
@@ -731,6 +776,55 @@ pub struct CoverageConfig {
 
     /// Specific coverage file path (overrides auto discovery)
     pub coverage_file: Option<PathBuf>,
+
+    /// Whether coverage gap analysis is enabled
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Explicit report locations to analyze
+    #[serde(default)]
+    pub report_paths: Vec<PathBuf>,
+
+    /// Maximum number of gaps to surface per file
+    #[serde(default = "CoverageConfig::default_max_gaps_per_file")]
+    pub max_gaps_per_file: usize,
+
+    /// Minimum gap length (in LOC) to consider actionable
+    #[serde(default = "CoverageConfig::default_min_gap_loc")]
+    pub min_gap_loc: usize,
+
+    /// Context lines to include before/after a gap in previews
+    #[serde(default = "CoverageConfig::default_snippet_context_lines")]
+    pub snippet_context_lines: usize,
+
+    /// Number of head/tail lines to include for long gaps
+    #[serde(default = "CoverageConfig::default_long_gap_head_tail")]
+    pub long_gap_head_tail: usize,
+
+    /// Whether to group gaps across files into packs
+    #[serde(default)]
+    pub group_cross_file: bool,
+
+    /// Target repo coverage gain used for prioritization
+    #[serde(default = "CoverageConfig::default_target_repo_gain")]
+    pub target_repo_gain: f64,
+
+    /// Scoring weights for gap prioritization
+    #[serde(default)]
+    pub weights: CoverageScoringWeights,
+
+    /// Patterns to exclude from coverage analysis
+    #[serde(default)]
+    pub exclude_patterns: Vec<String>,
+}
+
+/// Default value helpers for [`CoverageConfig`].
+impl CoverageConfig {
+    fn default_max_gaps_per_file() -> usize { 5 }
+    fn default_min_gap_loc() -> usize { 3 }
+    fn default_snippet_context_lines() -> usize { 5 }
+    fn default_long_gap_head_tail() -> usize { 2 }
+    fn default_target_repo_gain() -> f64 { 0.02 }
 }
 
 /// Default implementation for [`CoverageConfig`].
@@ -789,6 +883,20 @@ impl Default for CoverageConfig {
             ],
             max_age_days: 7, // Only use coverage files newer than 7 days
             coverage_file: None,
+            enabled: false,
+            report_paths: vec![
+                PathBuf::from("coverage.xml"),
+                PathBuf::from("lcov.info"),
+                PathBuf::from("coverage-final.json"),
+            ],
+            max_gaps_per_file: Self::default_max_gaps_per_file(),
+            min_gap_loc: Self::default_min_gap_loc(),
+            snippet_context_lines: Self::default_snippet_context_lines(),
+            long_gap_head_tail: Self::default_long_gap_head_tail(),
+            group_cross_file: false,
+            target_repo_gain: Self::default_target_repo_gain(),
+            weights: CoverageScoringWeights::default(),
+            exclude_patterns: vec!["**/tests/**".to_string(), "**/spec/**".to_string()],
         }
     }
 }

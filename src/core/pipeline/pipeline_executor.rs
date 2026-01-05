@@ -105,6 +105,7 @@ impl AnalysisPipeline {
         let coverage_detector_config = detector_coverage_config(
             &valknut_config.coverage,
             valknut_config.analysis.enable_coverage_analysis,
+            &valknut_config.analysis.exclude_patterns,
         );
 
         // Create common analyzers once
@@ -649,9 +650,13 @@ impl AnalysisPipeline {
 fn detector_coverage_config(
     core_config: &crate::core::config::CoverageConfig,
     coverage_enabled: bool,
+    analysis_exclude_patterns: &[String],
 ) -> CoverageDetectorConfig {
+    use crate::detectors::coverage::types::ScoringWeights;
+
     let mut detector_config = CoverageDetectorConfig::default();
 
+    // Basic discovery settings
     detector_config.auto_discover = core_config.auto_discover;
     detector_config.search_paths = core_config.search_paths.clone();
     detector_config.file_patterns = core_config.file_patterns.clone();
@@ -659,6 +664,39 @@ fn detector_coverage_config(
     detector_config.coverage_file = core_config.coverage_file.clone();
     detector_config.enabled = coverage_enabled;
 
+    // Report paths
+    if !core_config.report_paths.is_empty() {
+        detector_config.report_paths = core_config.report_paths.clone();
+    }
+
+    // Gap analysis settings
+    detector_config.max_gaps_per_file = core_config.max_gaps_per_file;
+    detector_config.min_gap_loc = core_config.min_gap_loc;
+    detector_config.snippet_context_lines = core_config.snippet_context_lines;
+    detector_config.long_gap_head_tail = core_config.long_gap_head_tail;
+    detector_config.group_cross_file = core_config.group_cross_file;
+    detector_config.target_repo_gain = core_config.target_repo_gain;
+
+    // Scoring weights
+    detector_config.weights = ScoringWeights {
+        size: core_config.weights.size,
+        complexity: core_config.weights.complexity,
+        fan_in: core_config.weights.fan_in,
+        exports: core_config.weights.exports,
+        centrality: core_config.weights.centrality,
+        docs: core_config.weights.docs,
+    };
+
+    // Exclude patterns - merge coverage-specific and analysis-level patterns
+    let mut exclude_patterns = core_config.exclude_patterns.clone();
+    for pattern in analysis_exclude_patterns {
+        if !exclude_patterns.contains(pattern) {
+            exclude_patterns.push(pattern.clone());
+        }
+    }
+    detector_config.exclude_patterns = exclude_patterns;
+
+    // Add coverage file to report paths if not already present
     if let Some(path) = &core_config.coverage_file {
         if !detector_config
             .report_paths

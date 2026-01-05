@@ -71,8 +71,15 @@ impl AnalysisStages {
         );
 
         // Initialize cohesion extractor if enabled in config
+        // Wire analysis.exclude_patterns to cohesion config
         let cohesion_extractor = if valknut_config.cohesion.enabled {
-            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(valknut_config.cohesion.clone())))
+            let mut cohesion_config = valknut_config.cohesion.clone();
+            for pattern in &valknut_config.analysis.exclude_patterns {
+                if !cohesion_config.issues.exclude_patterns.contains(pattern) {
+                    cohesion_config.issues.exclude_patterns.push(pattern.clone());
+                }
+            }
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(cohesion_config)))
         } else {
             None
         };
@@ -107,8 +114,15 @@ impl AnalysisStages {
         );
 
         // Initialize cohesion extractor if enabled in config
+        // Wire analysis.exclude_patterns to cohesion config
         let cohesion_extractor = if valknut_config.cohesion.enabled {
-            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(valknut_config.cohesion.clone())))
+            let mut cohesion_config = valknut_config.cohesion.clone();
+            for pattern in &valknut_config.analysis.exclude_patterns {
+                if !cohesion_config.issues.exclude_patterns.contains(pattern) {
+                    cohesion_config.issues.exclude_patterns.push(pattern.clone());
+                }
+            }
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(cohesion_config)))
         } else {
             None
         };
