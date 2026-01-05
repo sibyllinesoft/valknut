@@ -68,7 +68,7 @@ Thumbs.db
 
 # Project specific
 out/
-cache/
+/cache/
 *.jsonl
 *.sarif
 rr.yml
