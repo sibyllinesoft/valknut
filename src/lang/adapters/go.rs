@@ -43,12 +43,11 @@ impl GoAdapter {
         let mut index = ParseIndex::new();
         let mut entity_id_counter = 0;
 
-        // Walk the tree and extract entities
-        self.extract_entities_recursive(
+        // Walk the tree and extract entities (iterative to avoid stack overflow)
+        self.extract_entities_iterative_go(
             tree.root_node(),
             source_code,
             file_path,
-            None,
             &mut index,
             &mut entity_id_counter,
         )?;
@@ -120,6 +119,61 @@ impl GoAdapter {
         }
 
         self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)
+    }
+
+    /// Iterative entity extraction for Go - avoids stack overflow on deeply nested code.
+    /// Handles const/var declarations specially like the recursive version.
+    fn extract_entities_iterative_go(
+        &self,
+        root: Node,
+        source_code: &str,
+        file_path: &str,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        // Stack entries: (node, parent_id)
+        let mut stack: Vec<(Node, Option<String>)> = vec![(root, None)];
+
+        while let Some((node, parent_id)) = stack.pop() {
+            // Handle grouped const/var declarations specially
+            if node.kind() == "const_declaration" || node.kind() == "var_declaration" {
+                self.handle_grouped_declaration(
+                    node,
+                    source_code,
+                    file_path,
+                    parent_id.clone(),
+                    index,
+                    entity_id_counter,
+                )?;
+                // handle_grouped_declaration processes children via traverse_children,
+                // but those children don't contain nested entities, so we continue
+                continue;
+            }
+
+            // Process this node normally
+            let new_parent_id = if let Some(entity) = self.node_to_entity(
+                node,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                entity_id_counter,
+            )? {
+                let entity_id = entity.id.clone();
+                index.add_entity(entity);
+                Some(entity_id)
+            } else {
+                parent_id
+            };
+
+            // Push children in reverse order for depth-first traversal
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push((child, new_parent_id.clone()));
+            }
+        }
+
+        Ok(())
     }
 
     /// Extract all identifiers from a const/var declaration (handles both single and grouped)

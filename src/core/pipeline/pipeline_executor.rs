@@ -168,10 +168,10 @@ impl AnalysisPipeline {
 
         Self {
             config: analysis_config,
-            valknut_config: Some(valknut_config),
+            valknut_config: Some(valknut_config.clone()),
             feature_scorer,
             file_discoverer: GitAwareFileDiscoverer::shared(),
-            file_reader: BatchedFileReader::default_shared(),
+            file_reader: BatchedFileReader::shared_with_bundled_detection(valknut_config.bundled),
             stage_runner,
             result_aggregator: Arc::new(DefaultResultAggregator::default()),
         }

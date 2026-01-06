@@ -663,6 +663,49 @@ pub trait EntityExtractor {
         }
         Ok(())
     }
+
+    /// Extract entities from the AST using an iterative stack-based approach.
+    ///
+    /// This avoids stack overflow on deeply nested code by using an explicit stack
+    /// instead of the call stack. Preferred over `extract_entities_recursive` for
+    /// production use.
+    fn extract_entities_iterative(
+        &self,
+        root: Node,
+        source_code: &str,
+        file_path: &str,
+        index: &mut ParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        // Stack entries: (node, parent_id)
+        let mut stack: Vec<(Node, Option<String>)> = vec![(root, None)];
+
+        while let Some((node, parent_id)) = stack.pop() {
+            // Process this node
+            let new_parent_id = if let Some(entity) = self.node_to_entity(
+                node,
+                source_code,
+                file_path,
+                parent_id.clone(),
+                entity_id_counter,
+            )? {
+                let entity_id = entity.id.clone();
+                index.add_entity(entity);
+                Some(entity_id)
+            } else {
+                parent_id
+            };
+
+            // Push children in reverse order for depth-first traversal
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push((child, new_parent_id.clone()));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

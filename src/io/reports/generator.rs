@@ -13,7 +13,8 @@ use chrono::Utc;
 use handlebars::{Handlebars, Renderable};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 use super::assets::{
@@ -207,8 +208,10 @@ impl ReportGenerator {
         } else {
             serde_json::to_value(results)?
         };
-        let json_content = serde_json::to_string_pretty(&combined_result)?;
-        fs::write(output_path, json_content)?;
+        // Stream directly to file to avoid building large string in memory
+        let file = File::create(output_path)?;
+        let writer = BufWriter::new(file);
+        serde_json::to_writer_pretty(writer, &combined_result)?;
         Ok(())
     }
 

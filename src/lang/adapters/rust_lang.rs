@@ -47,12 +47,11 @@ impl RustAdapter {
         let mut index = ParseIndex::new();
         let mut entity_id_counter = 0;
 
-        // Walk the tree and extract entities
-        self.extract_entities_recursive(
+        // Walk the tree and extract entities (iterative to avoid stack overflow)
+        self.extract_entities_iterative(
             tree.root_node(),
             source_code,
             file_path,
-            None,
             &mut index,
             &mut entity_id_counter,
         )?;

@@ -1,5 +1,7 @@
 //! Report generation logic for various output formats.
 
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 
 use valknut_rs::api::results::AnalysisResults;
@@ -13,6 +15,29 @@ pub async fn write_report(path: &Path, content: &str, format_name: &str) -> anyh
     tokio::fs::write(path, content)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to write {} report: {}", format_name, e))
+}
+
+/// Write JSON report directly to file (streaming, avoids building string in memory).
+pub fn write_json_streaming(
+    path: &Path,
+    result: &AnalysisResults,
+    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
+) -> anyhow::Result<()> {
+    let file = File::create(path)
+        .map_err(|e| anyhow::anyhow!("Failed to create JSON file: {}", e))?;
+    let writer = BufWriter::new(file);
+
+    let combined = match oracle_response {
+        Some(oracle) => serde_json::json!({
+            "oracle_refactoring_plan": oracle,
+            "analysis_results": result
+        }),
+        None => serde_json::to_value(result)
+            .map_err(|e| anyhow::anyhow!("Failed to convert analysis to JSON: {}", e))?,
+    };
+
+    serde_json::to_writer_pretty(writer, &combined)
+        .map_err(|e| anyhow::anyhow!("Failed to write JSON: {}", e))
 }
 
 /// Generate JSON report content.
@@ -143,6 +168,12 @@ pub async fn generate_reports_with_oracle(
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let path = args.out.join(format!("report_{}.html", timestamp));
         generate_html_file(result, oracle_response, &path)?;
+        path
+    } else if args.format == OutputFormat::Json {
+        // Use streaming for JSON to avoid building large string in memory
+        let (filename, _) = format_file_info(&args.format);
+        let path = args.out.join(filename);
+        write_json_streaming(&path, result, oracle_response)?;
         path
     } else {
         let (filename, format_label) = format_file_info(&args.format);

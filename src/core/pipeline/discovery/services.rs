@@ -20,6 +20,7 @@ use crate::core::pipeline::results::pipeline_results::{
     ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
     StructureAnalysisResults,
 };
+use crate::detectors::bundled::{BundledDetectionConfig, BundledFileDetector};
 use crate::detectors::cohesion::CohesionAnalysisResults;
 use crate::core::pipeline::{QualityGateResult, QualityGateViolation};
 use serde::{Deserialize, Serialize};
@@ -96,17 +97,32 @@ pub trait FileBatchReader: Send + Sync {
 /// Default implementation that processes files in fixed batches using Tokio async I/O.
 ///
 /// Files within each batch are read concurrently, while batches are processed
-/// sequentially to limit memory usage.
+/// sequentially to limit memory usage. Optionally filters out bundled JS/TS files.
 #[derive(Debug, Default)]
 pub struct BatchedFileReader {
     batch_size: usize,
+    bundled_detector: Option<BundledFileDetector>,
 }
 
 /// Constructor and utility methods for [`BatchedFileReader`].
 impl BatchedFileReader {
     /// Creates a new batched file reader with the specified batch size.
     pub fn new(batch_size: usize) -> Self {
-        Self { batch_size }
+        Self {
+            batch_size,
+            bundled_detector: None,
+        }
+    }
+
+    /// Enables bundled file detection with the given configuration.
+    ///
+    /// When enabled, JavaScript/TypeScript files that appear to be bundler
+    /// output (webpack, rollup, esbuild, parcel) will be skipped.
+    pub fn with_bundled_detection(mut self, config: BundledDetectionConfig) -> Self {
+        if config.enabled {
+            self.bundled_detector = Some(BundledFileDetector::new(config));
+        }
+        self
     }
 
     /// Returns the effective batch size, ensuring at least 1.
@@ -119,6 +135,9 @@ impl BatchedFileReader {
 #[async_trait]
 impl FileBatchReader for BatchedFileReader {
     /// Reads files in batches using async I/O.
+    ///
+    /// If bundled detection is enabled, JavaScript/TypeScript files that
+    /// appear to be bundler output will be skipped.
     async fn read_files(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
         let mut file_contents = Vec::with_capacity(files.len());
         for batch in files.chunks(self.effective_batch_size()) {
@@ -126,15 +145,34 @@ impl FileBatchReader for BatchedFileReader {
             for file_path in batch {
                 let path = file_path.clone();
                 batch_results.push(async move {
-                    let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
+                    let bytes = tokio::fs::read(&path).await.map_err(|e| {
                         ValknutError::io(format!("Failed to read file {}", path.display()), e)
                     })?;
+                    let content = match String::from_utf8(bytes) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            tracing::warn!(
+                                "File {} contains invalid UTF-8, using lossy conversion",
+                                path.display()
+                            );
+                            String::from_utf8_lossy(e.as_bytes()).into_owned()
+                        }
+                    };
                     Ok::<_, ValknutError>((path, content))
                 });
             }
 
             for result in future::join_all(batch_results).await {
                 let (path, content) = result?;
+
+                // Skip bundled JS/TS files if detection is enabled
+                if let Some(ref detector) = self.bundled_detector {
+                    if detector.should_check(&path) && detector.is_bundled(&content) {
+                        tracing::debug!("Skipping bundled file: {}", path.display());
+                        continue;
+                    }
+                }
+
                 file_contents.push((path, content));
             }
         }
@@ -148,6 +186,11 @@ impl BatchedFileReader {
     /// Returns a shared reference to a default batched reader (batch size: 200).
     pub fn default_shared() -> Arc<dyn FileBatchReader> {
         Arc::new(Self::new(200))
+    }
+
+    /// Returns a shared reference with bundled file detection enabled.
+    pub fn shared_with_bundled_detection(config: BundledDetectionConfig) -> Arc<dyn FileBatchReader> {
+        Arc::new(Self::new(200).with_bundled_detection(config))
     }
 }
 

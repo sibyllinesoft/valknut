@@ -31,6 +31,7 @@
 //! let features = detector.extract_features(&source_file)?;
 //! ```
 
+pub mod bundled;
 pub mod cohesion;
 pub mod complexity;
 pub mod coverage;

@@ -112,6 +112,7 @@ pub mod core {
 pub mod detectors {
     //! Specialized code analysis detectors.
 
+    pub mod bundled;
     pub mod cohesion;
     pub mod complexity;
     pub mod coverage;

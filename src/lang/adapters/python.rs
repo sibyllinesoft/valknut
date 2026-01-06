@@ -53,12 +53,11 @@ impl PythonAdapter {
         let mut index = ParseIndex::new();
         let mut entity_id_counter = 0;
 
-        // Walk the tree and extract entities
-        self.extract_entities_recursive(
+        // Walk the tree and extract entities (iterative to avoid stack overflow)
+        self.extract_entities_iterative(
             tree.root_node(),
             source_code,
             file_path,
-            None,
             &mut index,
             &mut entity_id_counter,
         )?;
@@ -97,12 +96,11 @@ impl PythonAdapter {
         let mut index = InternedParseIndex::new();
         let mut entity_id_counter = 0;
 
-        // Walk the tree and extract entities using interned strings
-        self.extract_entities_recursive_interned(
+        // Walk the tree and extract entities using interned strings (iterative to avoid stack overflow)
+        self.extract_entities_iterative_interned(
             tree.root_node(),
             source_code,
             file_path,
-            None,
             &mut index,
             &mut entity_id_counter,
         )?;
@@ -313,6 +311,45 @@ impl PythonAdapter {
                     index,
                     entity_id_counter,
                 )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// OPTIMIZED: Extract entities iteratively using interned strings - avoids stack overflow.
+    fn extract_entities_iterative_interned(
+        &self,
+        root: Node,
+        source_code: &str,
+        file_path: &str,
+        index: &mut InternedParseIndex,
+        entity_id_counter: &mut usize,
+    ) -> Result<()> {
+        // Stack entries: (node, parent_id)
+        let mut stack: Vec<(Node, Option<InternedString>)> = vec![(root, None)];
+
+        while let Some((node, parent_id)) = stack.pop() {
+            // Process this node
+            let new_parent_id = if let Some(entity) = self.node_to_interned_entity(
+                node,
+                source_code,
+                file_path,
+                parent_id,
+                entity_id_counter,
+            )? {
+                let entity_id = entity.id;
+                index.add_entity(entity);
+                Some(entity_id)
+            } else {
+                parent_id
+            };
+
+            // Push children in reverse order for depth-first traversal
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push((child, new_parent_id));
             }
         }
 

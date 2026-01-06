@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::core::errors::{Result, ValknutError};
+use crate::detectors::bundled::BundledDetectionConfig;
 use crate::detectors::cohesion::CohesionConfig;
 use crate::detectors::structure::StructureConfig;
 
@@ -121,6 +122,10 @@ pub struct ValknutConfig {
     #[serde(default)]
     pub cohesion: CohesionConfig,
 
+    /// Bundled JavaScript/TypeScript file detection configuration
+    #[serde(default)]
+    pub bundled: BundledDetectionConfig,
+
     /// Live reachability analysis configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub live_reach: Option<LiveReachConfig>,
@@ -160,6 +165,7 @@ impl ValknutConfig {
             coverage: CoverageConfig::default(),
             docs: DocHealthConfig::default(),
             cohesion: CohesionConfig::default(),
+            bundled: BundledDetectionConfig::default(),
             live_reach: None,
             _names_placeholder: None,
         }
