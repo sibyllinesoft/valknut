@@ -38,6 +38,20 @@ Valknut is a Rust-native analysis platform that combines structural heuristics, 
 | `valknut mcp-stdio` / `mcp-manifest` | Launch the MCP server or emit a manifest for IDE agents |
 
 ## Installation
+
+### npm (easiest)
+Pre-built binaries for supported platforms:
+```bash
+npm install -g @sibyllinesoft/valknut
+```
+
+| Platform | Architecture | Supported |
+|----------|--------------|-----------|
+| Linux | x64 (glibc) | ✅ |
+| macOS | x64 | ✅ |
+| macOS | ARM64 (Apple Silicon) | ✅ |
+| Windows | x64 | ✅ |
+
 ### Homebrew (macOS)
 ```bash
 brew tap sibyllinesoft/valknut
@@ -49,11 +63,9 @@ brew install valknut
 cargo install valknut-rs
 ```
 
-### Build from Source
+For platforms without pre-built binaries (ARM Linux, Alpine/musl), compile from source:
 ```bash
-git clone https://github.com/sibyllinesoft/valknut
-cd valknut
-cargo build --release
+cargo install --git https://github.com/sibyllinesoft/valknut
 ```
 
 ## Quickstart
@@ -102,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cargo install valknut-rs
+      - run: npm install -g @sibyllinesoft/valknut
       - run: |
           valknut analyze ./src \
             --format html \
