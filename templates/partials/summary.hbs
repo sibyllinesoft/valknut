@@ -28,10 +28,12 @@
     <div id="health-tooltip" class="valknut-tooltip" style="display:none;position:fixed;pointer-events:none;z-index:9999;max-width:280px;"></div>
     <script id="health-candidates-data" type="application/json">{{{json refactoring_candidates}}}</script>
     <script id="health-doc-score" type="application/json">{{#if health_metrics.doc_health_score}}{{health_metrics.doc_health_score}}{{else}}null{{/if}}</script>
+    <script id="health-overall-score" type="application/json">{{#if health_metrics.overall_health_score}}{{health_metrics.overall_health_score}}{{else}}null{{/if}}</script>
     <script>
     (function() {
         const dataEl = document.getElementById('health-candidates-data');
         const docScoreEl = document.getElementById('health-doc-score');
+        const overallScoreEl = document.getElementById('health-overall-score');
         const container = document.getElementById('health-gauges-container');
         const tooltipEl = document.getElementById('health-tooltip');
         if (!dataEl || !container) return;
@@ -46,6 +48,11 @@
         let docHealthScore = null;
         try {
             docHealthScore = JSON.parse(docScoreEl?.textContent || 'null');
+        } catch (e) {}
+
+        let backendOverallHealth = null;
+        try {
+            backendOverallHealth = JSON.parse(overallScoreEl?.textContent || 'null');
         } catch (e) {}
 
         if (!candidates.length) return;
@@ -128,8 +135,11 @@
             return;
         }
 
-        // Overall health
-        const overallHealth = metrics.reduce((sum, m) => sum + m.health, 0) / metrics.length;
+        // Overall health - use backend score if available, otherwise compute from metrics
+        const computedHealth = metrics.reduce((sum, m) => sum + m.health, 0) / metrics.length;
+        const overallHealth = (typeof backendOverallHealth === 'number' && !isNaN(backendOverallHealth))
+            ? backendOverallHealth
+            : computedHealth;
 
         // Interpolate color for health gauges using same scale as treemap
         // Treemap uses severity (0=good, 100=bad): gray -> brown -> dark red
