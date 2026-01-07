@@ -513,9 +513,23 @@ impl RefactoringCandidate {
             };
 
             // Convert to relative path by stripping project root
+            // Try multiple approaches to handle canonicalized vs non-canonicalized paths
             let path = std::path::Path::new(&raw_path);
+
+            // First try direct strip_prefix
             if let Ok(relative) = path.strip_prefix(project_root) {
                 relative.to_string_lossy().to_string()
+            } else if !project_root.as_os_str().is_empty() {
+                // Try string-based prefix stripping (handles most cases)
+                let root_str = project_root.to_string_lossy();
+                if raw_path.starts_with(root_str.as_ref()) {
+                    let relative = &raw_path[root_str.len()..];
+                    relative.trim_start_matches('/').to_string()
+                } else if raw_path.starts_with("./") {
+                    raw_path[2..].to_string()
+                } else {
+                    raw_path
+                }
             } else if raw_path.starts_with("./") {
                 // Fallback: clean "./" prefix
                 raw_path[2..].to_string()
