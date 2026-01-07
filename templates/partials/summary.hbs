@@ -27,13 +27,11 @@
     </div>
     <div id="health-tooltip" class="valknut-tooltip" style="display:none;position:fixed;pointer-events:none;z-index:9999;max-width:280px;"></div>
     <script id="health-candidates-data" type="application/json">{{{json refactoring_candidates}}}</script>
-    <script id="health-doc-score" type="application/json">{{#if health_metrics.doc_health_score}}{{health_metrics.doc_health_score}}{{else}}null{{/if}}</script>
-    <script id="health-overall-score" type="application/json">{{#if health_metrics.overall_health_score}}{{health_metrics.overall_health_score}}{{else}}null{{/if}}</script>
+    <script id="health-metrics-data" type="application/json">{{{json health_metrics}}}</script>
     <script>
     (function() {
         const dataEl = document.getElementById('health-candidates-data');
-        const docScoreEl = document.getElementById('health-doc-score');
-        const overallScoreEl = document.getElementById('health-overall-score');
+        const metricsEl = document.getElementById('health-metrics-data');
         const container = document.getElementById('health-gauges-container');
         const tooltipEl = document.getElementById('health-tooltip');
         if (!dataEl || !container) return;
@@ -45,14 +43,9 @@
             return;
         }
 
-        let docHealthScore = null;
+        let healthMetrics = {};
         try {
-            docHealthScore = JSON.parse(docScoreEl?.textContent || 'null');
-        } catch (e) {}
-
-        let backendOverallHealth = null;
-        try {
-            backendOverallHealth = JSON.parse(overallScoreEl?.textContent || 'null');
+            healthMetrics = JSON.parse(metricsEl?.textContent || '{}') || {};
         } catch (e) {}
 
         if (!candidates.length) return;
@@ -115,19 +108,40 @@
         });
 
         const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+        const validScore = (v) => typeof v === 'number' && !isNaN(v);
 
-        // Health metrics (higher = better): convert severity to health
+        // Use backend health_metrics scores where available, fall back to computed from severities
+        // Backend scores are already 0-100 percentages (higher = better)
         const metrics = [
-            { label: 'Maintainability', health: avg(categoryTotals.maintainability) !== null ? 100 - avg(categoryTotals.maintainability) : null },
-            { label: 'Complexity', health: avg(categoryTotals.complexity) !== null ? 100 - avg(categoryTotals.complexity) : null },
-            { label: 'Cognitive', health: avg(categoryTotals.cognitive) !== null ? 100 - avg(categoryTotals.cognitive) : null },
-            { label: 'Structure', health: avg(categoryTotals.structure) !== null ? 100 - avg(categoryTotals.structure) : null },
-            { label: 'Debt', health: avg(categoryTotals.debt) !== null ? 100 - avg(categoryTotals.debt) : null },
+            {
+                label: 'Maintainability',
+                health: validScore(healthMetrics.maintainability_score)
+                    ? healthMetrics.maintainability_score
+                    : (avg(categoryTotals.maintainability) !== null ? 100 - avg(categoryTotals.maintainability) : null)
+            },
+            {
+                label: 'Complexity',
+                health: validScore(healthMetrics.complexity_score)
+                    ? Math.max(0, 100 - healthMetrics.complexity_score)  // Lower complexity = better health
+                    : (avg(categoryTotals.complexity) !== null ? 100 - avg(categoryTotals.complexity) : null)
+            },
+            {
+                label: 'Structure',
+                health: validScore(healthMetrics.structure_quality_score)
+                    ? healthMetrics.structure_quality_score
+                    : (avg(categoryTotals.structure) !== null ? 100 - avg(categoryTotals.structure) : null)
+            },
+            {
+                label: 'Debt',
+                health: validScore(healthMetrics.technical_debt_ratio)
+                    ? Math.max(0, 100 - healthMetrics.technical_debt_ratio)  // Lower debt = better health
+                    : (avg(categoryTotals.debt) !== null ? 100 - avg(categoryTotals.debt) : null)
+            },
         ].filter(m => m.health !== null);
 
         // Add docs score if present (already a health score)
-        if (typeof docHealthScore === 'number' && !isNaN(docHealthScore)) {
-            metrics.push({ label: 'Docs', health: docHealthScore });
+        if (validScore(healthMetrics.doc_health_score)) {
+            metrics.push({ label: 'Docs', health: healthMetrics.doc_health_score });
         }
 
         if (!metrics.length) {
@@ -137,8 +151,8 @@
 
         // Overall health - use backend score if available, otherwise compute from metrics
         const computedHealth = metrics.reduce((sum, m) => sum + m.health, 0) / metrics.length;
-        const overallHealth = (typeof backendOverallHealth === 'number' && !isNaN(backendOverallHealth))
-            ? backendOverallHealth
+        const overallHealth = validScore(healthMetrics.overall_health_score)
+            ? healthMetrics.overall_health_score
             : computedHealth;
 
         // Interpolate color for health gauges using same scale as treemap
