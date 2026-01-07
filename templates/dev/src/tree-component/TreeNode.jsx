@@ -1442,10 +1442,23 @@ export const TreeNode = ({ node, style, innerRef, tree, projectRoot }) => {
     }
 
     // Pre-compute all badge data before adding to children array
-    const nodeHealthPercent = computeHealthPercent(
+    // Prefer precomputed healthScore from backend (same formula as project health)
+    // healthScore is in 0-1 scale, convert to 0-100 for display
+    const precomputedHealth = typeof data.healthScore === 'number'
+        ? data.healthScore * 100
+        : null;
+    const computedHealth = computeHealthPercent(
         aggregates.severityCounts || aggregates.severity_counts || {},
         aggregates.entityCount || data.entityCount || 1
     );
+    // Debug: log first node's health calculation
+    if (!window.__nodeHealthDebugLogged && (isFolder || isFile)) {
+        console.log('[TreeNode Debug] name:', data.name, 'type:', data.type);
+        console.log('[TreeNode Debug] data.healthScore:', data.healthScore, 'precomputedHealth:', precomputedHealth);
+        console.log('[TreeNode Debug] computedHealth:', computedHealth);
+        window.__nodeHealthDebugLogged = true;
+    }
+    const nodeHealthPercent = precomputedHealth !== null ? precomputedHealth : computedHealth;
     const nodeHealthRatio = nodeHealthPercent / 100;
     const folderComplexityRatio = isFolder ? getMaxComplexityRatio(data) : null;
     const folderAcceptable = formatAcceptableRatio(folderComplexityRatio);

@@ -39,6 +39,31 @@ impl DirectoryHealthTree {
         }
     }
 
+    /// Overlay precomputed health scores onto the tree.
+    /// This uses health values computed from ALL scoring results (not just refactoring candidates)
+    /// to ensure consistency with overall project health.
+    /// Health scores are on 0-100 scale (same as overall project health).
+    pub fn apply_health_overlays(&mut self, health_scores: &HashMap<String, f64>) {
+        for (path, score) in health_scores {
+            let key = PathBuf::from(path);
+            // Convert from 0-100 scale to 0-1 scale for internal storage
+            let health = (*score / 100.0).clamp(0.0, 1.0);
+            if let Some(dir) = self.directories.get_mut(&key) {
+                dir.health_score = health;
+            } else if *path == self.root.path.to_string_lossy() {
+                self.root.health_score = health;
+            }
+        }
+
+        // Update tree statistics with the new average health
+        if !self.directories.is_empty() {
+            let total_health: f64 = self.directories.values().map(|d| d.health_score).sum();
+            let count = self.directories.len() as f64;
+            self.tree_statistics.avg_health_score =
+                (self.root.health_score + total_health) / (count + 1.0);
+        }
+    }
+
     /// Create a minimal directory health tree from refactoring candidates.
     pub fn from_candidates(candidates: &[RefactoringCandidate]) -> Self {
         let file_count = candidates.len();

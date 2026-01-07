@@ -1101,6 +1101,9 @@ function buildTemplateData(results) {
     passes: results.passes || results.stage_results || null,
     documentation: results.documentation || null,
     cohesion: results.cohesion || results.passes?.cohesion || null,
+    directory_health: results.directory_health || results.directoryHealth || {},
+    file_health: results.file_health || results.fileHealth || {},
+    entity_health: results.entity_health || results.entityHealth || {},
   };
 }
 
@@ -1340,6 +1343,12 @@ function render() {
     clonePairs: templateData.clone_pairs,
     passes: templateData.passes,
     documentation: templateData.documentation,
+    directory_health: templateData.directory_health,
+    directoryHealth: templateData.directory_health,
+    file_health: templateData.file_health,
+    fileHealth: templateData.file_health,
+    entity_health: templateData.entity_health,
+    entityHealth: templateData.entity_health,
   };
 
   fs.writeFileSync(OUTPUT_DATA_JSON, JSON.stringify(frontendPayload, null, 2));

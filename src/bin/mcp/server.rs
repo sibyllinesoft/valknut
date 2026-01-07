@@ -548,6 +548,8 @@ mod tests {
             warnings: vec!["Minor warning".to_string()],
             code_dictionary,
             documentation: None,
+            directory_health: HashMap::new(),
+            file_health: HashMap::new(),
         }
     }
 

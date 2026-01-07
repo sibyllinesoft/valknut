@@ -26,7 +26,10 @@
             "graph_insights": {{#if graph_insights}}{{{json graph_insights}}}{{else}}{"hasInsights":false}{{/if}},
             "cohesion": {{#if cohesion}}{{{json cohesion}}}{{else}}null{{/if}},
             "clone_pairs": {{#if clone_pairs}}{{{json clone_pairs}}}{{else}}[]{{/if}},
-            "clone_analysis": {{#if clone_analysis}}{{{json clone_analysis}}}{{else}}null{{/if}}
+            "clone_analysis": {{#if clone_analysis}}{{{json clone_analysis}}}{{else}}null{{/if}},
+            "directory_health": {{#if directory_health}}{{{json directory_health}}}{{else}}{}{{/if}},
+            "file_health": {{#if file_health}}{{{json file_health}}}{{else}}{}{{/if}},
+            "entity_health": {{#if entity_health}}{{{json entity_health}}}{{else}}{}{{/if}}
         }
     </script>
 

@@ -42,6 +42,18 @@ pub struct AnalysisResults {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub health_metrics: Option<HealthMetrics>,
 
+    /// Per-directory health scores (0-100, using same formula as overall health)
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub directory_health: std::collections::HashMap<String, f64>,
+
+    /// Per-file health scores (0-100, using same formula as overall health)
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub file_health: std::collections::HashMap<String, f64>,
+
+    /// Per-entity health scores (0-100, using same formula as overall health)
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub entity_health: std::collections::HashMap<String, f64>,
+
     /// Code quality analysis results (simple pattern-based analysis)
     // pub naming_results: Option<NamingAnalysisResults>,
 

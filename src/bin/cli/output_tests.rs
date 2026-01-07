@@ -249,6 +249,8 @@
             warnings: vec!["Sample warning".to_string()],
             code_dictionary: CodeDictionary::default(),
             documentation: None,
+            directory_health: HashMap::new(),
+            file_health: HashMap::new(),
         }
     }
 

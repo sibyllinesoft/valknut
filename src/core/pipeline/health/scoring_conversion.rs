@@ -11,6 +11,306 @@ use crate::detectors::complexity::ComplexitySeverity;
 
 use crate::core::pipeline::results::pipeline_results::{ComprehensiveAnalysisResult, HealthMetrics};
 
+/// Compute individual health metrics from an average absolute score.
+/// These are the component metrics used in the weighted health formula.
+fn compute_health_metrics_from_avg_score(avg_abs_score: f64) -> (f64, f64, f64, f64) {
+    let maintainability = (100.0 - avg_abs_score * 18.0).clamp(0.0, 100.0);
+    let technical_debt = (avg_abs_score * 25.0).clamp(0.0, 100.0);
+    let complexity = (avg_abs_score * 30.0).clamp(0.0, 100.0);
+    let structure_quality = (100.0 - avg_abs_score * 12.0).clamp(0.0, 100.0);
+    (maintainability, technical_debt, complexity, structure_quality)
+}
+
+/// Compute overall health from component metrics using the weighted formula.
+/// This matches the formula used in pipeline_executor.rs for project health.
+/// Weights: maintainability=0.28, structure=0.25, complexity=0.18, debt=0.19, docs=0.10
+fn compute_weighted_health(
+    maintainability: f64,
+    structure_quality: f64,
+    complexity: f64,
+    technical_debt: f64,
+    doc_health: f64,
+) -> f64 {
+    (maintainability * 0.28
+        + structure_quality * 0.25
+        + (100.0 - complexity) * 0.18
+        + (100.0 - technical_debt) * 0.19
+        + doc_health * 0.10)
+        .clamp(0.0, 100.0)
+}
+
+/// Compute a single health score from a set of overall_score values.
+/// Uses the same weighted formula as overall project health.
+fn compute_health_from_avg_score(avg_abs_score: f64) -> f64 {
+    let (maintainability, technical_debt, complexity, structure_quality) =
+        compute_health_metrics_from_avg_score(avg_abs_score);
+    // Use 100.0 for doc_health as we don't have doc info at this level
+    compute_weighted_health(maintainability, structure_quality, complexity, technical_debt, 100.0)
+}
+
+/// Per-directory health metrics (matching the project-level formula)
+#[derive(Debug, Default)]
+struct DirHealthAccum {
+    maintainability_sum: f64,
+    cyclomatic_sum: f64,
+    cognitive_sum: f64,
+    debt_sum: f64,
+    count: usize,
+}
+
+/// Compute per-directory health metrics from all scoring results.
+/// Uses the same formula as project-level health, computing:
+/// - maintainability_score from average maintainability_index
+/// - complexity_score from average (cyclomatic + cognitive) / 2 * 4
+/// - technical_debt_ratio from average technical_debt_score
+/// Returns a map of relative directory path -> health score (0-100).
+pub fn health_per_directory(
+    scoring: &[ScoringResult],
+    project_root: &std::path::Path,
+) -> std::collections::HashMap<String, f64> {
+    use std::collections::HashMap;
+
+    let mut dir_metrics: HashMap<String, DirHealthAccum> = HashMap::new();
+    let root_str = project_root.to_string_lossy();
+
+    for result in scoring {
+        // Extract directory from entity_id (format: "file_path:type:name")
+        let parts: Vec<&str> = result.entity_id.split(':').collect();
+        let file_path = if parts.len() >= 2 { parts[0] } else { "unknown" };
+        // Make path relative to project root
+        let relative_path = file_path
+            .strip_prefix(&*root_str)
+            .map(|p| p.trim_start_matches('/'))
+            .unwrap_or(file_path);
+        let dir_path = std::path::Path::new(relative_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string());
+
+        // Extract metrics from feature_contributions
+        let maintainability = result
+            .feature_contributions
+            .get("maintainability_index")
+            .copied()
+            .unwrap_or(100.0);
+        let cyclomatic = result
+            .feature_contributions
+            .get("cyclomatic_complexity")
+            .copied()
+            .unwrap_or(0.0);
+        let cognitive = result
+            .feature_contributions
+            .get("cognitive_complexity")
+            .copied()
+            .unwrap_or(0.0);
+        let debt = result
+            .feature_contributions
+            .get("technical_debt_score")
+            .copied()
+            .unwrap_or(0.0);
+
+        let entry = dir_metrics.entry(dir_path).or_default();
+        entry.maintainability_sum += maintainability;
+        entry.cyclomatic_sum += cyclomatic;
+        entry.cognitive_sum += cognitive;
+        entry.debt_sum += debt;
+        entry.count += 1;
+    }
+
+    // Compute health for each directory using the same formula as project health
+    dir_metrics
+        .into_iter()
+        .map(|(dir, accum)| {
+            if accum.count == 0 {
+                return (dir, 100.0);
+            }
+
+            let count = accum.count as f64;
+            let avg_maintainability = accum.maintainability_sum / count;
+            let avg_cyclomatic = accum.cyclomatic_sum / count;
+            let avg_cognitive = accum.cognitive_sum / count;
+            let avg_debt = accum.debt_sum / count;
+
+            // Match project-level formula exactly:
+            // complexity_score = (avg_cyclomatic + avg_cognitive) / 2 * 4, capped at 100
+            let complexity_score = ((avg_cyclomatic + avg_cognitive) / 2.0 * 4.0).min(100.0);
+            // technical_debt_ratio = average_technical_debt_score
+            let technical_debt_ratio = avg_debt;
+            // maintainability_score = average_maintainability_index
+            let maintainability_score = avg_maintainability;
+            // structure_quality_score - we don't have issues at this level, use 100
+            let structure_quality_score = 100.0;
+            // doc_health_score - use 100 as placeholder
+            let doc_health_score = 100.0;
+
+            let health = compute_weighted_health(
+                maintainability_score,
+                structure_quality_score,
+                complexity_score,
+                technical_debt_ratio,
+                doc_health_score,
+            );
+
+            (dir, health)
+        })
+        .collect()
+}
+
+/// Compute per-file health metrics from all scoring results.
+/// Uses the same formula as project-level health.
+/// Returns a map of relative file path -> health score (0-100).
+pub fn health_per_file(
+    scoring: &[ScoringResult],
+    project_root: &std::path::Path,
+) -> std::collections::HashMap<String, f64> {
+    use std::collections::HashMap;
+
+    let mut file_metrics: HashMap<String, DirHealthAccum> = HashMap::new();
+    let root_str = project_root.to_string_lossy();
+
+    for result in scoring {
+        // Extract file path from entity_id (format: "file_path:type:name")
+        let parts: Vec<&str> = result.entity_id.split(':').collect();
+        let abs_path = if parts.len() >= 2 { parts[0] } else { "unknown" };
+        // Make path relative to project root
+        let file_path = abs_path
+            .strip_prefix(&*root_str)
+            .map(|p| p.trim_start_matches('/').to_string())
+            .unwrap_or_else(|| abs_path.to_string());
+
+        // Extract metrics from feature_contributions
+        let maintainability = result
+            .feature_contributions
+            .get("maintainability_index")
+            .copied()
+            .unwrap_or(100.0);
+        let cyclomatic = result
+            .feature_contributions
+            .get("cyclomatic_complexity")
+            .copied()
+            .unwrap_or(0.0);
+        let cognitive = result
+            .feature_contributions
+            .get("cognitive_complexity")
+            .copied()
+            .unwrap_or(0.0);
+        let debt = result
+            .feature_contributions
+            .get("technical_debt_score")
+            .copied()
+            .unwrap_or(0.0);
+
+        let entry = file_metrics.entry(file_path).or_default();
+        entry.maintainability_sum += maintainability;
+        entry.cyclomatic_sum += cyclomatic;
+        entry.cognitive_sum += cognitive;
+        entry.debt_sum += debt;
+        entry.count += 1;
+    }
+
+    // Compute health for each file using the same formula as project health
+    file_metrics
+        .into_iter()
+        .map(|(file, accum)| {
+            if accum.count == 0 {
+                return (file, 100.0);
+            }
+
+            let count = accum.count as f64;
+            let avg_maintainability = accum.maintainability_sum / count;
+            let avg_cyclomatic = accum.cyclomatic_sum / count;
+            let avg_cognitive = accum.cognitive_sum / count;
+            let avg_debt = accum.debt_sum / count;
+
+            // Match project-level formula exactly
+            let complexity_score = ((avg_cyclomatic + avg_cognitive) / 2.0 * 4.0).min(100.0);
+            let technical_debt_ratio = avg_debt;
+            let maintainability_score = avg_maintainability;
+            let structure_quality_score = 100.0;
+            let doc_health_score = 100.0;
+
+            let health = compute_weighted_health(
+                maintainability_score,
+                structure_quality_score,
+                complexity_score,
+                technical_debt_ratio,
+                doc_health_score,
+            );
+
+            (file, health)
+        })
+        .collect()
+}
+
+/// Compute per-entity health metrics from all scoring results.
+/// Uses the same formula as project-level health.
+/// Returns a map of entity_id -> health score (0-100).
+pub fn health_per_entity(
+    scoring: &[ScoringResult],
+    project_root: &std::path::Path,
+) -> std::collections::HashMap<String, f64> {
+    let root_str = project_root.to_string_lossy();
+
+    scoring
+        .iter()
+        .map(|result| {
+            // Make entity_id relative to project root
+            let entity_id = {
+                let parts: Vec<&str> = result.entity_id.split(':').collect();
+                if parts.len() >= 3 {
+                    let abs_path = parts[0];
+                    let relative_path = abs_path
+                        .strip_prefix(&*root_str)
+                        .map(|p| p.trim_start_matches('/'))
+                        .unwrap_or(abs_path);
+                    format!("{}:{}:{}", relative_path, parts[1], parts[2])
+                } else {
+                    result.entity_id.clone()
+                }
+            };
+
+            // Extract metrics from feature_contributions
+            let maintainability = result
+                .feature_contributions
+                .get("maintainability_index")
+                .copied()
+                .unwrap_or(100.0);
+            let cyclomatic = result
+                .feature_contributions
+                .get("cyclomatic_complexity")
+                .copied()
+                .unwrap_or(0.0);
+            let cognitive = result
+                .feature_contributions
+                .get("cognitive_complexity")
+                .copied()
+                .unwrap_or(0.0);
+            let debt = result
+                .feature_contributions
+                .get("technical_debt_score")
+                .copied()
+                .unwrap_or(0.0);
+
+            // Match project-level formula exactly (no averaging needed for single entity)
+            let complexity_score = ((cyclomatic + cognitive) / 2.0 * 4.0).min(100.0);
+            let technical_debt_ratio = debt;
+            let maintainability_score = maintainability;
+            let structure_quality_score = 100.0;
+            let doc_health_score = 100.0;
+
+            let health = compute_weighted_health(
+                maintainability_score,
+                structure_quality_score,
+                complexity_score,
+                technical_debt_ratio,
+                doc_health_score,
+            );
+
+            (entity_id, health)
+        })
+        .collect()
+}
+
 /// Compute health metrics from scoring results.
 pub fn health_from_scores(scoring: &[ScoringResult]) -> HealthMetrics {
     if scoring.is_empty() {
@@ -30,7 +330,7 @@ pub fn health_from_scores(scoring: &[ScoringResult]) -> HealthMetrics {
         .sum::<f64>()
         / scoring.len() as f64;
 
-    let overall_health = (100.0 - avg_abs_score * 20.0).clamp(0.0, 100.0);
+    let overall_health = compute_health_from_avg_score(avg_abs_score);
     let maintainability = (100.0 - avg_abs_score * 18.0).clamp(0.0, 100.0);
     let technical_debt = (avg_abs_score * 25.0).clamp(0.0, 100.0);
     let complexity = (avg_abs_score * 30.0).clamp(0.0, 100.0);

@@ -98,6 +98,9 @@ impl AnalysisResults {
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
             documentation: None,
+            directory_health: HashMap::new(),
+            file_health: HashMap::new(),
+            entity_health: HashMap::new(),
         }
     }
 
@@ -362,6 +365,22 @@ impl AnalysisResults {
                         .clone(),
                 });
 
+        // Compute per-directory, per-file, and per-entity health using the same formula as overall health
+        // This ensures consistency across all granularity levels
+        // Pass project_root so paths are stored as relative
+        let directory_health = crate::core::pipeline::health::health_per_directory(
+            &pipeline_results.scoring_results.files,
+            &project_root,
+        );
+        let file_health = crate::core::pipeline::health::health_per_file(
+            &pipeline_results.scoring_results.files,
+            &project_root,
+        );
+        let entity_health = crate::core::pipeline::health::health_per_entity(
+            &pipeline_results.scoring_results.files,
+            &project_root,
+        );
+
         Self {
             project_root,
             summary,
@@ -376,6 +395,9 @@ impl AnalysisResults {
             health_metrics,
             code_dictionary,
             documentation,
+            directory_health,
+            file_health,
+            entity_health,
         }
     }
 

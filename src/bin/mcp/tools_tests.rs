@@ -119,6 +119,8 @@ fn sample_results() -> AnalysisResults {
         warnings: Vec::new(),
         code_dictionary,
         documentation: None,
+        directory_health: HashMap::new(),
+        file_health: HashMap::new(),
     }
 }
 

@@ -360,6 +360,14 @@ impl ReportGenerator {
         // Add cohesion analysis data for semantic alignment tab
         data.insert("cohesion", safe_json_value(&results.passes.cohesion));
 
+        // Add precomputed health scores (same formula as project health)
+        data.insert("directory_health", safe_json_value(&results.directory_health));
+        data.insert("directoryHealth", safe_json_value(&results.directory_health));
+        data.insert("file_health", safe_json_value(&results.file_health));
+        data.insert("fileHealth", safe_json_value(&results.file_health));
+        data.insert("entity_health", safe_json_value(&results.entity_health));
+        data.insert("entityHealth", safe_json_value(&results.entity_health));
+
         serde_json::to_value(data).unwrap_or_else(|_| serde_json::Value::Null)
     }
 
@@ -455,6 +463,8 @@ impl ReportGenerator {
             }
 
             if let Some(mut tree) = directory_tree.clone() {
+                // Apply precomputed health scores for consistency with overall project health
+                tree.apply_health_overlays(&results.directory_health);
                 if let Some(doc) = &results.documentation {
                     tree.apply_doc_overlays(&doc.directory_doc_health, &doc.directory_doc_issues);
                 }
@@ -469,6 +479,8 @@ impl ReportGenerator {
             }
 
             if let Some(mut tree) = directory_tree.clone() {
+                // Apply precomputed health scores for consistency with overall project health
+                tree.apply_health_overlays(&results.directory_health);
                 if let Some(doc) = &results.documentation {
                     tree.apply_doc_overlays(&doc.directory_doc_health, &doc.directory_doc_issues);
                 }
@@ -483,6 +495,18 @@ impl ReportGenerator {
             if let Ok(doc_value) = serde_json::to_value(doc) {
                 payload.insert("documentation".into(), doc_value);
             }
+        }
+
+        // Add precomputed file health scores (same formula as project health)
+        if let Ok(file_health_value) = serde_json::to_value(&results.file_health) {
+            payload.insert("file_health".into(), file_health_value.clone());
+            payload.insert("fileHealth".into(), file_health_value);
+        }
+
+        // Add precomputed directory health scores
+        if let Ok(dir_health_value) = serde_json::to_value(&results.directory_health) {
+            payload.insert("directory_health".into(), dir_health_value.clone());
+            payload.insert("directoryHealth".into(), dir_health_value);
         }
 
         Value::Object(payload)

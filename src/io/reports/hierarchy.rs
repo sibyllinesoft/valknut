@@ -17,19 +17,28 @@ pub fn build_unified_hierarchy(
     tree: &DirectoryHealthTree,
     file_groups: &[FileRefactoringGroup],
 ) -> Vec<serde_json::Value> {
+    build_unified_hierarchy_with_health(tree, file_groups, &std::collections::HashMap::new())
+}
+
+/// Build a unified hierarchy with precomputed file health scores
+pub fn build_unified_hierarchy_with_health(
+    tree: &DirectoryHealthTree,
+    file_groups: &[FileRefactoringGroup],
+    file_health: &std::collections::HashMap<String, f64>,
+) -> Vec<serde_json::Value> {
     let dir_map = build_directory_map(tree);
     let files_by_dir = group_files_by_directory(file_groups);
 
     let mut roots = Vec::new();
     for (path, dir) in dir_map.iter() {
         if is_root_directory(dir, &dir_map) {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir));
+            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health));
         }
     }
 
     if roots.is_empty() {
         for (path, dir) in dir_map.iter() {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir));
+            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health));
         }
     }
 
@@ -69,9 +78,10 @@ fn build_dir_node(
     dir: &DirectoryHealthScore,
     dir_map: &HashMap<String, &DirectoryHealthScore>,
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+    file_health: &std::collections::HashMap<String, f64>,
 ) -> serde_json::Value {
-    let mut children = collect_child_directories(path, dir_map, files_by_dir);
-    children.extend(collect_file_children(path, files_by_dir));
+    let mut children = collect_child_directories(path, dir_map, files_by_dir, file_health);
+    children.extend(collect_file_children(path, files_by_dir, file_health));
     children.sort_by(|a, b| {
         let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -100,6 +110,7 @@ fn collect_child_directories(
     path: &str,
     dir_map: &HashMap<String, &DirectoryHealthScore>,
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+    file_health: &std::collections::HashMap<String, f64>,
 ) -> Vec<serde_json::Value> {
     dir_map.iter()
         .filter(|(_, child_dir)| {
@@ -107,7 +118,7 @@ fn collect_child_directories(
                 .map(|p| p.to_string_lossy() == path)
                 .unwrap_or(false)
         })
-        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir))
+        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir, file_health))
         .collect()
 }
 
@@ -115,17 +126,29 @@ fn collect_child_directories(
 fn collect_file_children(
     path: &str,
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
+    file_health: &std::collections::HashMap<String, f64>,
 ) -> Vec<serde_json::Value> {
     files_by_dir.get(path)
-        .map(|files| files.iter().map(|fg| build_unified_file_node(fg)).collect())
+        .map(|files| files.iter().map(|fg| build_unified_file_node(fg, file_health)).collect())
         .unwrap_or_default()
 }
 
 /// Build a file node for the unified hierarchy.
-fn build_unified_file_node(file_group: &FileRefactoringGroup) -> serde_json::Value {
+fn build_unified_file_node(
+    file_group: &FileRefactoringGroup,
+    file_health_map: &std::collections::HashMap<String, f64>,
+) -> serde_json::Value {
     let total_issues: usize = file_group.entities.iter().map(|e| e.issues.len()).sum();
-    let entity_count = file_group.entities.len().max(1);
-    let file_health = (1.0 - (total_issues as f64 / entity_count as f64)).clamp(0.0, 1.0);
+
+    // Use precomputed file health if available (same formula as project health),
+    // otherwise fall back to issue-count based calculation
+    let file_health = file_health_map
+        .get(&file_group.file_path)
+        .map(|h| *h / 100.0) // Convert from 0-100 to 0-1 scale
+        .unwrap_or_else(|| {
+            let entity_count = file_group.entities.len().max(1);
+            (1.0 - (total_issues as f64 / entity_count as f64)).clamp(0.0, 1.0)
+        });
 
     let entities: Vec<serde_json::Value> = file_group.entities.iter()
         .map(build_unified_entity_value)

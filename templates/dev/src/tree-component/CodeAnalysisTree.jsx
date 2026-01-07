@@ -204,6 +204,28 @@ export const CodeAnalysisTree = ({ data }) => {
         });
     }, [getPriorityRank]);
 
+    // Precomputed health maps from backend (using same weighted formula as project health)
+    const precomputedDirectoryHealth = useMemo(() => {
+        if (!data || typeof data !== 'object') return {};
+        const health = data.directory_health || data.directoryHealth || {};
+        console.log('[DEBUG] precomputedDirectoryHealth loaded, keys:', Object.keys(health).length, Object.keys(health).slice(0, 3));
+        return health;
+    }, [data]);
+
+    const precomputedFileHealth = useMemo(() => {
+        if (!data || typeof data !== 'object') return {};
+        const health = data.file_health || data.fileHealth || {};
+        console.log('[DEBUG] precomputedFileHealth loaded, keys:', Object.keys(health).length, Object.keys(health).slice(0, 3));
+        return health;
+    }, [data]);
+
+    const precomputedEntityHealth = useMemo(() => {
+        if (!data || typeof data !== 'object') return {};
+        const health = data.entity_health || data.entityHealth || {};
+        console.log('[DEBUG] precomputedEntityHealth loaded, keys:', Object.keys(health).length, Object.keys(health).slice(0, 3));
+        return health;
+    }, [data]);
+
     // Build tree structure from file paths and directory health
     const aggregateTreeMetrics = useCallback((nodes) => {
         if (!Array.isArray(nodes)) {
@@ -415,7 +437,9 @@ export const CodeAnalysisTree = ({ data }) => {
         return cleanup(aggregated);
     }, []);
 
-    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap, activeProjectRoot = projectRoot) => {
+    const buildTreeData = useCallback((refactoringFiles, directoryHealth, coveragePacks, docIssuesMap, activeProjectRoot = projectRoot, precomputedDirHealth = {}, precomputedFHealth = {}) => {
+        console.log('[buildTreeData] called with precomputedDirHealth keys:', Object.keys(precomputedDirHealth || {}).length);
+        console.log('[buildTreeData] called with precomputedFHealth keys:', Object.keys(precomputedFHealth || {}).length);
         const folderMap = new Map();
         const result = [];
         const directoryLookup = (directoryHealth && directoryHealth.directories) || {};
@@ -461,12 +485,35 @@ export const CodeAnalysisTree = ({ data }) => {
                     if (!folder) {
                         const folderChildren = [];
                         
+                        // Look up precomputed health (0-100 scale) and convert to 0-1 scale
+                        const dirKey = currentPath.replace(/^\//, '');
+                        const precomputedHealth = precomputedDirHealth[dirKey];
+                        // Debug: log lookups to find path mismatch
+                        if (Object.keys(precomputedDirHealth).length > 0) {
+                            if (!window.__healthDebugLogged) {
+                                console.log('[Health Debug] precomputedDirHealth keys sample:', Object.keys(precomputedDirHealth).slice(0, 10));
+                                window.__healthDebugLogged = true;
+                            }
+                            if (precomputedHealth === undefined && !window.__missedPaths) {
+                                window.__missedPaths = [];
+                            }
+                            if (precomputedHealth === undefined && window.__missedPaths && window.__missedPaths.length < 5) {
+                                window.__missedPaths.push(dirKey);
+                                console.log('[Health Debug] MISS - dirKey:', JSON.stringify(dirKey), 'currentPath:', JSON.stringify(currentPath));
+                            }
+                        }
+                        const healthValue = typeof precomputedHealth === 'number'
+                            ? precomputedHealth / 100
+                            : typeof health?.health_score === 'number'
+                                ? health.health_score
+                                : undefined;
+
                         folder = {
                             id: 'folder-' + currentPath,
                             name: String(part),
                             type: 'folder',
                             children: folderChildren,
-                            healthScore: typeof health?.health_score === 'number' ? health.health_score : undefined,
+                            healthScore: healthValue,
                             fileCount: typeof health?.file_count === 'number' ? health.file_count : 0,
                             entityCount: typeof health?.entity_count === 'number' ? health.entity_count : 0,
                             refactoringNeeded: typeof health?.refactoring_needed === 'number' ? health.refactoring_needed : 0,
@@ -491,7 +538,12 @@ export const CodeAnalysisTree = ({ data }) => {
 
                     if (healthSource) {
                         const categories = formatIssueCategories(healthSource.issue_categories);
-                        if (typeof healthSource.health_score === 'number') {
+                        // Prefer precomputed health (0-100 scale, convert to 0-1)
+                        const dirKey = currentPath.replace(/^\//, '');
+                        const precomputedHealth = precomputedDirHealth[dirKey];
+                        if (typeof precomputedHealth === 'number') {
+                            folder.healthScore = precomputedHealth / 100;
+                        } else if (typeof healthSource.health_score === 'number') {
                             folder.healthScore = healthSource.health_score;
                         }
                         if (typeof healthSource.file_count === 'number') {
@@ -803,6 +855,13 @@ export const CodeAnalysisTree = ({ data }) => {
 
                 const displayName = toProjectRelativePath(fileGroup.filePath, activeProjectRoot || projectRoot || '');
 
+                // Look up precomputed file health (0-100 scale, convert to 0-1)
+                const fileKey = fileGroup.filePath.replace(/^\.?\//, '');
+                const precomputedFileHealthValue = precomputedFHealth[fileKey];
+                const fileHealthScore = typeof precomputedFileHealthValue === 'number'
+                    ? precomputedFileHealthValue / 100
+                    : undefined;
+
                 const fileNode = {
                     id: fileNodeId,
                     name: String(displayName || fileName),
@@ -814,6 +873,7 @@ export const CodeAnalysisTree = ({ data }) => {
                     totalIssues: typeof fileGroup.totalIssues === 'number' ? fileGroup.totalIssues : Object.values(fileSeverityCounts).reduce((acc, value) => acc + (value || 0), 0),
                     severityCounts: fileSeverityCounts,
                     docIssues: lookupDocIssues(fileGroup.filePath),
+                    healthScore: fileHealthScore,
                     children: fileChildren
                 };
                 
@@ -1323,8 +1383,77 @@ export const CodeAnalysisTree = ({ data }) => {
                         : [];
 
                 if (unifiedHierarchy.length > 0) {
+                    console.log('[unified_hierarchy path] injecting health, dir keys:', Object.keys(precomputedDirectoryHealth).length, 'file keys:', Object.keys(precomputedFileHealth).length, 'entity keys:', Object.keys(precomputedEntityHealth).length);
+                    console.log('[unified_hierarchy path] sample dir keys:', Object.keys(precomputedDirectoryHealth).slice(0, 5));
+                    // Inject precomputed health scores into hierarchy nodes
+                    let debugCount = 0;
+                    const injectHealth = (nodes, parentFilePath = '') => {
+                        return nodes.map(node => {
+                            const nodePath = node.path || node.file_path || node.filePath || '';
+                            const pathKey = nodePath.replace(/^\.?\//, '');
+                            let healthScore = node.healthScore;
+
+                            if (node.type === 'folder' && typeof healthScore !== 'number') {
+                                const dirHealth = precomputedDirectoryHealth[pathKey];
+                                if (debugCount < 3) {
+                                    console.log('[injectHealth] folder:', node.name, 'pathKey:', JSON.stringify(pathKey), 'found:', dirHealth);
+                                    debugCount++;
+                                }
+                                if (typeof dirHealth === 'number') {
+                                    healthScore = dirHealth / 100; // Convert 0-100 to 0-1
+                                }
+                            } else if (node.type === 'file' && typeof healthScore !== 'number') {
+                                const fileHealth = precomputedFileHealth[pathKey];
+                                if (typeof fileHealth === 'number') {
+                                    healthScore = fileHealth / 100; // Convert 0-100 to 0-1
+                                }
+                            } else if (node.type === 'entity' && typeof healthScore !== 'number') {
+                                // Entity health key format: "file_path:type:name"
+                                // Try to find the file path from parent or node properties
+                                const entityFilePath = node.file_path || node.filePath || parentFilePath || pathKey;
+                                const entityFileKey = entityFilePath.replace(/^\.?\//, '');
+                                const entityName = node.name || '';
+                                const entityType = node.entity_type || 'function';
+
+                                // Try different key formats
+                                const entityKeys = [
+                                    `${entityFileKey}:${entityType}:${entityName}`,
+                                    `${entityFileKey}:function:${entityName}`,
+                                    `${entityFileKey}:${entityName}`,
+                                ];
+
+                                for (const key of entityKeys) {
+                                    const entityHealth = precomputedEntityHealth[key];
+                                    if (typeof entityHealth === 'number') {
+                                        if (debugCount < 5) {
+                                            console.log('[injectHealth] entity:', entityName, 'key:', key, 'health:', entityHealth);
+                                            debugCount++;
+                                        }
+                                        healthScore = entityHealth / 100; // Convert 0-100 to 0-1
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // Pass file path to children for entity health lookup
+                            const currentFilePath = node.type === 'file' ? pathKey : parentFilePath;
+
+                            return {
+                                ...node,
+                                healthScore,
+                                children: Array.isArray(node.children) ? injectHealth(node.children, currentFilePath) : []
+                            };
+                        });
+                    };
+
                     const hierarchy = JSON.parse(JSON.stringify(unifiedHierarchy));
-                    const aggregated = aggregateTreeMetrics(hierarchy);
+                    const withHealth = injectHealth(hierarchy);
+                    // Debug: check if healthScore survived
+                    const firstFolder = withHealth.find(n => n.type === 'folder');
+                    console.log('[After injectHealth] first folder healthScore:', firstFolder?.name, firstFolder?.healthScore);
+                    const aggregated = aggregateTreeMetrics(withHealth);
+                    const firstFolderAgg = aggregated.find(n => n.type === 'folder');
+                    console.log('[After aggregateTreeMetrics] first folder healthScore:', firstFolderAgg?.name, firstFolderAgg?.healthScore);
                     const annotated = annotateNodesWithDictionary(aggregated);
                     const normalized = normalizeTreeData(annotated);
                     const aggregatedNormalized = aggregateTreeMetrics(normalized);
@@ -1416,7 +1545,9 @@ export const CodeAnalysisTree = ({ data }) => {
                     data.directory_health_tree || data.directoryHealthTree || null,
                     coveragePacks,
                     docIssuesMap,
-                    effectiveProjectRoot
+                    effectiveProjectRoot,
+                    precomputedDirectoryHealth,
+                    precomputedFileHealth
                 );
                 const annotated = annotateNodesWithDictionary(treeStructure);
                 const normalized = normalizeTreeData(annotated);
@@ -1445,6 +1576,9 @@ export const CodeAnalysisTree = ({ data }) => {
         groupCandidatesByFile,
         detectProjectRoot,
         projectRoot,
+        precomputedDirectoryHealth,
+        precomputedFileHealth,
+        precomputedEntityHealth,
     ]);
 
     useEffect(() => {

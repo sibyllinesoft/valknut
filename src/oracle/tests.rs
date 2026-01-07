@@ -182,6 +182,8 @@
             }),
             code_dictionary,
             documentation: None,
+            directory_health: HashMap::new(),
+            file_health: HashMap::new(),
         }
     }
 
@@ -459,6 +461,8 @@
             health_metrics: None,
             code_dictionary: CodeDictionary::default(),
             documentation: None,
+            directory_health: HashMap::new(),
+            file_health: HashMap::new(),
         };
 
         let condensed = oracle.condense_analysis_results(&results);
