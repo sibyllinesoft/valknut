@@ -88,7 +88,8 @@ mod tests {
             Commands::Analyze(args) => {
                 assert_eq!(args.paths, vec![PathBuf::from(".")]);
                 assert_eq!(args.out, PathBuf::from(".valknut"));
-                assert!(matches!(args.format, OutputFormat::Jsonl));
+                // No format specified, so vec is empty (effective_formats() will default to jsonl)
+                assert!(args.format.is_empty());
                 assert!(!args.quiet);
                 assert!(!args.quality_gate.quality_gate);
                 assert!(!args.quality_gate.fail_on_issues);
@@ -128,7 +129,7 @@ mod tests {
                 assert_eq!(args.paths, vec![PathBuf::from("src/")]);
                 assert_eq!(args.config, Some(PathBuf::from("test.yml")));
                 assert_eq!(args.out, PathBuf::from("reports"));
-                assert!(matches!(args.format, OutputFormat::Html));
+                assert_eq!(args.format, vec![OutputFormat::Html]);
                 assert!(args.quiet);
                 assert!(args.quality_gate.quality_gate);
                 assert_eq!(args.quality_gate.max_complexity, Some(80.0));
@@ -395,8 +396,9 @@ mod tests {
             let cli = Cli::parse_from(["valknut", "analyze", "--format", format_str]);
             match cli.command {
                 Commands::Analyze(args) => {
+                    assert_eq!(args.format.len(), 1, "Expected single format");
                     assert!(
-                        std::mem::discriminant(&args.format)
+                        std::mem::discriminant(&args.format[0])
                             == std::mem::discriminant(&expected_format)
                     );
                 }

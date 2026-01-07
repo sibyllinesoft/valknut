@@ -350,10 +350,19 @@ fn print_run_overview(
 
     println!("Valknut v{VERSION} — analyze");
     println!("Targets : {targets}");
+
+    // Format display for multiple formats
+    let formats = args.effective_formats();
+    let format_display = if formats.len() == 1 {
+        format_to_string(&formats[0]).to_string()
+    } else {
+        formats.iter().map(|f| format_to_string(f)).collect::<Vec<_>>().join(", ")
+    };
+
     println!(
         "Output  : {} | Format: {} | Profile: {}",
         args.out.display(),
-        format_to_string(&args.format),
+        format_display,
         profile
     );
     println!("Coverage: {coverage} | Quality gate: {quality}");

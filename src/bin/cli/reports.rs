@@ -150,41 +150,110 @@ pub async fn generate_format_content(
 
 /// Determines whether CLI output should be suppressed for the given args.
 pub fn is_quiet(args: &AnalyzeArgs) -> bool {
-    args.quiet || args.format.is_machine_readable()
+    args.quiet || args.has_machine_readable_format()
+}
+
+/// Generate a single report for a specific format.
+async fn generate_single_report(
+    format: &OutputFormat,
+    result: &AnalysisResults,
+    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
+    out_dir: &std::path::Path,
+) -> anyhow::Result<std::path::PathBuf> {
+    let path = match format {
+        OutputFormat::Html => {
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let path = out_dir.join(format!("report_{}.html", timestamp));
+            generate_html_file(result, oracle_response, &path)?;
+            path
+        }
+        OutputFormat::Json => {
+            let (filename, _) = format_file_info(format);
+            let path = out_dir.join(filename);
+            write_json_streaming(&path, result, oracle_response)?;
+            path
+        }
+        OutputFormat::CiSummary => {
+            let path = out_dir.join("ci-summary.json");
+            let content = generate_ci_summary_content(result, oracle_response)?;
+            write_report(&path, &content, "CI Summary").await?;
+            path
+        }
+        OutputFormat::Pretty => {
+            // Pretty format is for terminal display, not file output
+            // Skip file generation but don't error
+            return Ok(out_dir.join("(terminal output)"));
+        }
+        _ => {
+            let (filename, format_label) = format_file_info(format);
+            let path = out_dir.join(filename);
+            let content = generate_format_content(format, result, oracle_response).await?;
+            write_report(&path, &content, format_label).await?;
+            path
+        }
+    };
+    Ok(path)
+}
+
+/// Generate CI summary content (concise JSON for automated systems).
+fn generate_ci_summary_content(
+    result: &AnalysisResults,
+    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
+) -> anyhow::Result<String> {
+    let summary = serde_json::json!({
+        "status": if result.summary.critical > 0 { "critical" }
+                  else if result.summary.high_priority > 0 { "warning" }
+                  else { "ok" },
+        "files_analyzed": result.summary.files_processed,
+        "entities_analyzed": result.summary.entities_analyzed,
+        "issues": {
+            "total": result.summary.total_issues,
+            "critical": result.summary.critical,
+            "high": result.summary.high_priority,
+        },
+        "code_health_score": result.summary.code_health_score,
+        "refactoring_candidates": result.refactoring_candidates.len(),
+        "has_oracle_analysis": oracle_response.is_some(),
+    });
+    serde_json::to_string_pretty(&summary)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize CI summary: {}", e))
 }
 
 /// Generate reports with optional oracle data.
+/// Supports multiple output formats via --format (repeatable) and --output-bundle.
 pub async fn generate_reports_with_oracle(
     result: &AnalysisResults,
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<()> {
     let quiet_mode = is_quiet(args);
+    let formats = args.effective_formats();
+
     if !quiet_mode {
-        println!("Saving report...");
+        if formats.len() == 1 {
+            println!("Saving report...");
+        } else {
+            println!("Saving {} reports...", formats.len());
+        }
     }
 
-    let output_file = if args.format == OutputFormat::Html {
-        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let path = args.out.join(format!("report_{}.html", timestamp));
-        generate_html_file(result, oracle_response, &path)?;
-        path
-    } else if args.format == OutputFormat::Json {
-        // Use streaming for JSON to avoid building large string in memory
-        let (filename, _) = format_file_info(&args.format);
-        let path = args.out.join(filename);
-        write_json_streaming(&path, result, oracle_response)?;
-        path
-    } else {
-        let (filename, format_label) = format_file_info(&args.format);
-        let path = args.out.join(filename);
-        let content = generate_format_content(&args.format, result, oracle_response).await?;
-        write_report(&path, &content, format_label).await?;
-        path
-    };
+    let mut output_files = Vec::new();
+
+    for format in &formats {
+        let path = generate_single_report(format, result, oracle_response, &args.out).await?;
+        output_files.push((format.clone(), path));
+    }
 
     if !quiet_mode {
-        println!("Report: {}", output_file.display());
+        if output_files.len() == 1 {
+            println!("Report: {}", output_files[0].1.display());
+        } else {
+            println!("Reports:");
+            for (format, path) in &output_files {
+                let format_name = super::output::format_to_string(format);
+                println!("  {}: {}", format_name.to_uppercase(), path.display());
+            }
+        }
     }
     Ok(())
 }

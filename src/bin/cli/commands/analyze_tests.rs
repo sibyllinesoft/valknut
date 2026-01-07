@@ -235,7 +235,8 @@
         AnalyzeArgs {
             paths: vec![PathBuf::from("test")],
             out: PathBuf::from("output"),
-            format: OutputFormat::Json,
+            format: vec![OutputFormat::Json],
+            output_bundle: None,
             config: None,
             quiet: false,
             profile: PerformanceProfile::Balanced,
@@ -501,7 +502,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = true;
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
 
         let result = sample_analysis_results();
         generate_reports_with_oracle(&result, &None, &args)
@@ -517,7 +518,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Html;
+        args.format = vec![OutputFormat::Html];
 
         let result = sample_analysis_results();
         let oracle = sample_oracle_response();
@@ -550,7 +551,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Markdown;
+        args.format = vec![OutputFormat::Markdown];
 
         let result = sample_analysis_results();
 
@@ -567,7 +568,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Csv;
+        args.format = vec![OutputFormat::Csv];
 
         let result = sample_analysis_results();
 
@@ -584,7 +585,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Yaml;
+        args.format = vec![OutputFormat::Yaml];
 
         let result = sample_analysis_results();
 
@@ -601,7 +602,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Jsonl;
+        args.format = vec![OutputFormat::Jsonl];
 
         let result = sample_analysis_results();
 
@@ -618,7 +619,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::Sonar;
+        args.format = vec![OutputFormat::Sonar];
 
         let result = sample_analysis_results();
 
@@ -630,12 +631,98 @@ export function accumulate(values: number[]): number {
     }
 
     #[tokio::test]
+    async fn generate_reports_with_multiple_formats() {
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = true;
+        args.format = vec![OutputFormat::Json, OutputFormat::Csv, OutputFormat::Yaml];
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("multi-format report generation should succeed");
+
+        // All three formats should be generated
+        assert!(temp.path().join("analysis-results.json").exists());
+        assert!(temp.path().join("analysis-data.csv").exists());
+        assert!(temp.path().join("analysis-results.yaml").exists());
+    }
+
+    #[tokio::test]
+    async fn generate_reports_with_output_bundle_ci() {
+        use crate::cli::args::OutputBundle;
+
+        let temp = TempDir::new().expect("temp dir");
+        let mut args = create_default_analyze_args();
+        args.out = temp.path().to_path_buf();
+        args.quiet = true;
+        args.format = vec![]; // Empty - will use bundle
+        args.output_bundle = Some(OutputBundle::Ci);
+
+        let result = sample_analysis_results();
+
+        generate_reports_with_oracle(&result, &None, &args)
+            .await
+            .expect("bundle report generation should succeed");
+
+        // CI bundle should generate: json, sonar, ci-summary
+        assert!(temp.path().join("analysis-results.json").exists());
+        assert!(temp.path().join("sonarqube-issues.json").exists());
+        assert!(temp.path().join("ci-summary.json").exists());
+    }
+
+    #[test]
+    fn effective_formats_combines_explicit_and_bundle() {
+        use crate::cli::args::OutputBundle;
+
+        let mut args = create_default_analyze_args();
+        args.format = vec![OutputFormat::Markdown];
+        args.output_bundle = Some(OutputBundle::Dev); // html, json
+
+        let formats = args.effective_formats();
+
+        // Should have markdown (explicit) + html, json (from dev bundle), deduplicated
+        assert!(formats.contains(&OutputFormat::Markdown));
+        assert!(formats.contains(&OutputFormat::Html));
+        assert!(formats.contains(&OutputFormat::Json));
+        assert_eq!(formats.len(), 3);
+    }
+
+    #[test]
+    fn effective_formats_deduplicates() {
+        use crate::cli::args::OutputBundle;
+
+        let mut args = create_default_analyze_args();
+        args.format = vec![OutputFormat::Json, OutputFormat::Html]; // Same as dev bundle
+        args.output_bundle = Some(OutputBundle::Dev);
+
+        let formats = args.effective_formats();
+
+        // Should be deduplicated
+        assert_eq!(formats.len(), 2);
+    }
+
+    #[test]
+    fn effective_formats_defaults_to_jsonl() {
+        let mut args = create_default_analyze_args();
+        args.format = vec![];
+        args.output_bundle = None;
+
+        let formats = args.effective_formats();
+
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0], OutputFormat::Jsonl);
+    }
+
+    #[tokio::test]
     async fn generate_reports_with_oracle_combines_for_ci_summary() {
         let temp = TempDir::new().expect("temp dir");
         let mut args = create_default_analyze_args();
         args.out = temp.path().to_path_buf();
         args.quiet = false;
-        args.format = OutputFormat::CiSummary;
+        args.format = vec![OutputFormat::CiSummary];
         args.ai_features.oracle = true;
 
         let result = sample_analysis_results();
@@ -643,14 +730,18 @@ export function accumulate(values: number[]): number {
 
         generate_reports_with_oracle(&result, &Some(oracle), &args)
             .await
-            .expect("ci summary should fall back to combined json");
+            .expect("ci summary generation should succeed");
 
-        let combined_path = temp.path().join("analysis-results.json");
-        assert!(combined_path.exists());
-        let contents = fs::read_to_string(combined_path).expect("read combined output");
+        let ci_summary_path = temp.path().join("ci-summary.json");
+        assert!(ci_summary_path.exists());
+        let contents = fs::read_to_string(ci_summary_path).expect("read ci summary output");
         assert!(
-            contents.contains("oracle_refactoring_plan"),
-            "combined report should include oracle data"
+            contents.contains("has_oracle_analysis"),
+            "ci summary should include oracle indicator"
+        );
+        assert!(
+            contents.contains("\"has_oracle_analysis\": true"),
+            "ci summary should indicate oracle data present"
         );
     }
 
@@ -839,10 +930,10 @@ export function accumulate(values: number[]): number {
     fn is_quiet_respects_format_overrides() {
         let mut args = create_default_analyze_args();
         args.quiet = false;
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
         assert!(super::is_quiet(&args));
 
-        args.format = OutputFormat::Pretty;
+        args.format = vec![OutputFormat::Pretty];
         assert!(!super::is_quiet(&args));
 
         args.quiet = true;
@@ -1171,11 +1262,11 @@ export function accumulate(values: number[]): number {
         assert!(is_quiet(&args)); // machine-readable default
 
         args.quiet = true;
-        args.format = OutputFormat::Markdown;
+        args.format = vec![OutputFormat::Markdown];
         assert!(is_quiet(&args)); // explicit quiet flag
 
         args.quiet = false;
-        args.format = OutputFormat::Markdown;
+        args.format = vec![OutputFormat::Markdown];
         assert!(!is_quiet(&args)); // human-readable without quiet flag
     }
 
@@ -1414,7 +1505,7 @@ export function accumulate(values: number[]): number {
         args.paths = vec![PathBuf::from("definitely_missing_path")];
         args.out = temp_out.path().join("reports");
         args.quiet = false;
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
 
         let result = analyze_command(args, false, SurveyVerbosity::Low, false).await;
         assert!(result.is_err());
@@ -1428,7 +1519,7 @@ export function accumulate(values: number[]): number {
         args.paths.clear();
         args.out = temp_out.path().join("reports");
         args.quiet = false;
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
 
         let result = analyze_command(args, false, SurveyVerbosity::Low, false).await;
         assert!(result.is_err());
@@ -1451,7 +1542,7 @@ export function accumulate(values: number[]): number {
         args.paths = vec![project_root];
         args.out = out_path;
         args.quiet = true;
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
         args.profile = PerformanceProfile::Fast;
         args.coverage.no_coverage = true;
         args.coverage.no_coverage_auto_discover = true;
@@ -1480,7 +1571,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.paths = vec![project_path.clone()];
         args.out = output_dir.path().to_path_buf();
-        args.format = OutputFormat::Pretty;
+        args.format = vec![OutputFormat::Pretty];
         args.clone_detection.denoise = true;
         args.clone_detection.denoise_dry_run = true;
         args.clone_detection.min_function_tokens = Some(12);
@@ -1530,7 +1621,7 @@ export function accumulate(values: number[]): number {
         let mut args = create_default_analyze_args();
         args.paths = vec![project_path.clone()];
         args.out = output_dir.path().to_path_buf();
-        args.format = OutputFormat::Json;
+        args.format = vec![OutputFormat::Json];
         args.clone_detection.denoise = true;
         args.clone_detection.min_function_tokens = Some(8);
         args.clone_detection.min_match_tokens = Some(4);
@@ -1563,7 +1654,7 @@ export function accumulate(values: number[]): number {
         let mut args_no_denoise = create_default_analyze_args();
         args_no_denoise.paths = vec![project_path.clone()];
         args_no_denoise.out = output_dir.path().to_path_buf();
-        args_no_denoise.format = OutputFormat::Json;
+        args_no_denoise.format = vec![OutputFormat::Json];
         args_no_denoise.clone_detection.denoise = false;
         args_no_denoise.clone_detection.denoise_dry_run = false;
         args_no_denoise.coverage.no_coverage = true;

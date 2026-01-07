@@ -392,9 +392,15 @@ pub struct AnalyzeArgs {
     #[arg(short, long, default_value = ".valknut")]
     pub out: PathBuf,
 
-    /// Output format: jsonl (line-delimited JSON), json (single file), markdown (team report), html (interactive report), sonar (SonarQube integration), csv (spreadsheet data)
-    #[arg(short, long, value_enum, default_value = "jsonl")]
-    pub format: OutputFormat,
+    /// Output format(s) - can be specified multiple times for multiple outputs
+    /// Available: jsonl, json, yaml, markdown, html, sonar, csv, ci-summary, pretty
+    #[arg(short, long, value_enum, action = clap::ArgAction::Append)]
+    pub format: Vec<OutputFormat>,
+
+    /// Output bundle preset - expands to multiple formats
+    /// ci: json, sonar, ci-summary | dev: html, json | full: all formats | review: html, markdown, json
+    #[arg(long, value_enum)]
+    pub output_bundle: Option<OutputBundle>,
 
     /// Suppress non-essential output
     #[arg(short, long)]
@@ -424,6 +430,38 @@ pub struct AnalyzeArgs {
 
     #[command(flatten)]
     pub ai_features: AIFeaturesArgs,
+}
+
+impl AnalyzeArgs {
+    /// Get the effective list of output formats, combining explicit formats and bundle presets.
+    /// Returns deduplicated list. Defaults to jsonl if nothing specified.
+    #[must_use]
+    pub fn effective_formats(&self) -> Vec<OutputFormat> {
+        let mut formats = self.format.clone();
+
+        // Add formats from bundle if specified
+        if let Some(bundle) = &self.output_bundle {
+            formats.extend(bundle.formats());
+        }
+
+        // Default to jsonl if nothing specified
+        if formats.is_empty() {
+            formats.push(OutputFormat::Jsonl);
+        }
+
+        // Deduplicate while preserving order
+        let mut seen = std::collections::HashSet::new();
+        formats.retain(|f| seen.insert(std::mem::discriminant(f)));
+
+        formats
+    }
+
+    /// Returns true if any of the effective formats are machine-readable.
+    /// Used to determine quiet mode behavior.
+    #[must_use]
+    pub fn has_machine_readable_format(&self) -> bool {
+        self.effective_formats().iter().any(|f| f.is_machine_readable())
+    }
 }
 
 /// Initialize a configuration file with default values
@@ -468,13 +506,13 @@ pub struct McpManifestArgs {
 
 /// Available output formats for analysis reports
 /// Report serialization options for the `analyze` command.
-#[derive(Clone, PartialEq, ValueEnum)]
+#[derive(Clone, Debug, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     /// Line-delimited JSON format
     Jsonl,
     /// JSON format output
     Json,
-    /// YAML format output  
+    /// YAML format output
     Yaml,
     /// Markdown team report
     Markdown,
@@ -488,6 +526,19 @@ pub enum OutputFormat {
     CiSummary,
     /// Human-readable format
     Pretty,
+}
+
+/// Preset bundles of output formats for common workflows
+#[derive(Clone, PartialEq, ValueEnum)]
+pub enum OutputBundle {
+    /// CI/CD pipeline outputs: json, sonar, ci-summary
+    Ci,
+    /// Developer workflow: html, json
+    Dev,
+    /// Full artifact set: all formats
+    Full,
+    /// Review/audit outputs: html, markdown, json
+    Review,
 }
 
 /// Utilities for working with output formats.
@@ -504,6 +555,40 @@ impl OutputFormat {
                 | OutputFormat::Sonar
                 | OutputFormat::CiSummary
         )
+    }
+}
+
+/// Utilities for working with output bundles.
+impl OutputBundle {
+    /// Expand the bundle into its constituent formats.
+    #[must_use]
+    pub fn formats(&self) -> Vec<OutputFormat> {
+        match self {
+            OutputBundle::Ci => vec![
+                OutputFormat::Json,
+                OutputFormat::Sonar,
+                OutputFormat::CiSummary,
+            ],
+            OutputBundle::Dev => vec![
+                OutputFormat::Html,
+                OutputFormat::Json,
+            ],
+            OutputBundle::Full => vec![
+                OutputFormat::Json,
+                OutputFormat::Jsonl,
+                OutputFormat::Html,
+                OutputFormat::Markdown,
+                OutputFormat::Yaml,
+                OutputFormat::Csv,
+                OutputFormat::Sonar,
+                OutputFormat::CiSummary,
+            ],
+            OutputBundle::Review => vec![
+                OutputFormat::Html,
+                OutputFormat::Markdown,
+                OutputFormat::Json,
+            ],
+        }
     }
 }
 
