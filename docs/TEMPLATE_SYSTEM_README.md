@@ -16,13 +16,13 @@ I've successfully implemented a comprehensive template system for Valknut HTML r
   - Comprehensive error handling
 
 ### 2. Multiple Themes
-- **Default Theme** (`themes/default.css`): Clean, professional design
-- **Dracula Theme** (`themes/dracula.css`): Dark cyberpunk aesthetics with animations
+- **Default Theme** (`templates/themes/default.css`): Clean, professional design
+- **Dracula Theme** (`templates/themes/dracula.css`): Dark cyberpunk aesthetics with animations
 - **High Contrast Theme**: Built-in accessibility support
 
 ### 3. Template Structure
 - **Templates**: `templates/report.hbs` - Customizable HTML structure
-- **Themes**: `themes/*.css` - Visual styling and theming
+- **Themes**: `templates/themes/*.css` - Visual styling and theming
 - **Built-in fallback**: Default template embedded in the Rust code
 
 ## 🔧 VS Code Extension
@@ -55,16 +55,17 @@ vscode-extension/
 valknut/
 ├── src/io/reports.rs           # Template engine implementation
 ├── templates/
-│   └── report.hbs             # Main report template
-├── themes/
-│   ├── default.css            # Default theme
-│   └── dracula.css            # Dark theme
+│   ├── report.hbs             # Main report template
+│   └── themes/
+│       ├── default.css        # Default theme
+│       └── dracula.css        # Dark theme
 ├── vscode-extension/          # VS Code extension
 ├── docs/
 │   └── template-system.md     # Documentation
 ├── examples/
 │   └── sample-report.json     # Sample data for testing
-└── valknut.yml.example        # Canonical configuration example
+└── config/
+    └── valknut.yml.example    # Canonical configuration example
 ```
 
 ## 🚀 Usage
@@ -151,10 +152,10 @@ Templates receive rich data including:
 
 ## 🎨 Theme Customization
 
-Create custom themes by adding CSS files to `themes/` directory:
+Create custom themes by adding CSS files to `templates/themes/` directory:
 
 ```css
-/* themes/my-theme.css */
+/* templates/themes/my-theme.css */
 :root {
     --primary-color: #your-brand-color;
     --background-color: #your-background;
@@ -174,7 +175,7 @@ Create custom themes by adding CSS files to `themes/` directory:
 1. **Rust Dependencies**: The handlebars crate has been added to `Cargo.toml`
 2. **VS Code Extension**: Build with `npm install && npm run compile` in the `vscode-extension/` directory
 3. **Templates**: Customize templates in the `templates/` directory
-4. **Themes**: Add new themes to the `themes/` directory
+4. **Themes**: Add new themes to the `templates/themes/` directory
 
 ### Testing
 - Use `examples/sample-report.json` to test the template system

@@ -107,6 +107,9 @@ scribe_analysis.json
 reports/
 test_output/
 test_structure/
+html/
+json/
+ci-summary/
 
 # Configuration examples
 example_*.yml

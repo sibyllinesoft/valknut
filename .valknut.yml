@@ -20,7 +20,7 @@ analysis:
     - "**/*-bundle*.js"
     - "**/*bundle*.js"
     - ".valknut/**"
-    - "datasets/**"
+    - "tests/fixtures/datasets/**"
     - "templates/**"
     - "vscode-extension/**"
     - "benchmarks/**"

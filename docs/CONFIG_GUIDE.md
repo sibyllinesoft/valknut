@@ -289,7 +289,7 @@ Use different configurations for different environments:
 valknut analyze --config .valknut-dev.json ./src
 
 # CI/CD
-valknut analyze --config ci-examples/.valknut-ci.json ./src
+valknut analyze --config docs/ci/.valknut-ci.json ./src
 
 # Production analysis
 valknut analyze --config .valknut-prod.json ./src
@@ -345,9 +345,9 @@ valknut print-default-config > current-config.json
 
 ## Examples
 
-See the repository root and `ci-examples/` directory for complete configuration examples:
-- `valknut.yml.example` - Annotated reference configuration in YAML
-- `.valknut-ci.json` - Optimized for CI/CD pipelines
+See `config/` and `docs/ci/` directories for complete configuration examples:
+- `config/valknut.yml.example` - Annotated reference configuration in YAML
+- `docs/ci/.valknut-ci.json` - Optimized for CI/CD pipelines
 - GitHub Actions, GitLab CI, Azure DevOps templates with corresponding configs
 
 For more details on specific analysis modules, see their respective documentation files.

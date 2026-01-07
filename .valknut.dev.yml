@@ -32,7 +32,7 @@ analysis:
     - '**/*.spec.*'
     - '**/*.snap'
     - benchmarks/**
-    - datasets/**
+    - tests/fixtures/datasets/**
     - target/**
     - node_modules/**
     - templates/**
@@ -118,7 +118,7 @@ dedupe:
   exclude:
   - benchmarks/**
   - examples/**
-  - datasets/**
+  - tests/fixtures/datasets/**
   - '**/generated/**'
   - '**/*.pb.rs'
   min_function_tokens: 40
