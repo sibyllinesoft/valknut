@@ -14,5 +14,6 @@ pub use hierarchy::{
 };
 pub use path_utils::{
     clean_directory_health_tree_paths, clean_entity_refs, clean_path_prefixes,
-    clean_path_prefixes_in_file_groups, clean_path_string,
+    clean_path_prefixes_in_file_groups, clean_path_string, clean_path_with_root,
+    detect_project_root,
 };
