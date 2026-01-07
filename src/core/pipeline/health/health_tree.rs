@@ -53,7 +53,9 @@ impl DirectoryHealthTree {
         let mut root = DirectoryHealthScore {
             path: PathBuf::from("."),
             health_score: if entity_count > 0 {
-                (1.0 - (refactoring_needed as f64 / entity_count as f64)).clamp(0.0, 1.0)
+                // Convert refactoring score (0-100, higher=worse) to health (0-1, higher=better)
+                // Score of 0 = 100% health, score of 50 = 50% health, score of 100 = 0% health
+                ((100.0 - avg_score) / 100.0).clamp(0.0, 1.0)
             } else {
                 1.0
             },
@@ -117,9 +119,9 @@ impl DirectoryHealthTree {
         for entry in directories.values_mut() {
             if entry.entity_count > 0 {
                 entry.avg_refactoring_score /= entry.entity_count as f64;
-                entry.health_score = (1.0
-                    - (entry.refactoring_needed as f64 / entry.entity_count as f64))
-                    .clamp(0.0, 1.0);
+                // Convert refactoring score (0-100, higher=worse) to health (0-1, higher=better)
+                entry.health_score =
+                    ((100.0 - entry.avg_refactoring_score) / 100.0).clamp(0.0, 1.0);
             } else {
                 entry.health_score = 1.0;
             }
