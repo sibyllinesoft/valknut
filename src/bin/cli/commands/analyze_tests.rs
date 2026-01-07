@@ -403,6 +403,7 @@ export function accumulate(values: number[]): number {
         let candidate = sample_candidate("src/lib.rs", Priority::High, 2.5);
 
         AnalysisResults {
+            project_root: std::path::PathBuf::new(),
             summary: AnalysisSummary {
                 files_processed: 1,
                 entities_analyzed: 1,

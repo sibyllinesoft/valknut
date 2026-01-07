@@ -18,6 +18,10 @@ mod tests;
 /// High-level analysis results for public API consumption
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisResults {
+    /// Root directory of the analyzed project. All file paths are relative to this.
+    #[serde(default)]
+    pub project_root: PathBuf,
+
     /// Summary of the analysis
     pub summary: AnalysisSummary,
 

@@ -57,6 +57,7 @@ impl AnalysisResults {
     /// Create an empty analysis result placeholder
     pub fn empty() -> Self {
         AnalysisResults {
+            project_root: PathBuf::new(),
             summary: AnalysisSummary {
                 files_processed: 0,
                 entities_analyzed: 0,
@@ -177,7 +178,10 @@ impl AnalysisResults {
     }
 
     /// Create analysis results from pipeline results
-    pub fn from_pipeline_results(pipeline_results: PipelineResults) -> Self {
+    ///
+    /// The `project_root` is the base directory for all analyzed files.
+    /// All file paths in the results will be stored relative to this root.
+    pub fn from_pipeline_results(pipeline_results: PipelineResults, project_root: PathBuf) -> Self {
         let summary_stats = pipeline_results.summary();
 
         // Convert scoring results to refactoring candidates
@@ -193,7 +197,7 @@ impl AnalysisResults {
                 needs
             })
             .map(|result| {
-                RefactoringCandidate::from_scoring_result(result, &pipeline_results.feature_vectors)
+                RefactoringCandidate::from_scoring_result(result, &pipeline_results.feature_vectors, &project_root)
             })
             .collect();
         // Created refactoring candidates
@@ -359,6 +363,7 @@ impl AnalysisResults {
                 });
 
         Self {
+            project_root,
             summary,
             normalized: None,
             passes,
@@ -486,7 +491,13 @@ impl AnalysisResults {
 /// Factory and conversion methods for [`RefactoringCandidate`].
 impl RefactoringCandidate {
     /// Create a refactoring candidate from a scoring result
-    pub(crate) fn from_scoring_result(result: &ScoringResult, feature_vectors: &[FeatureVector]) -> Self {
+    ///
+    /// The `project_root` is used to convert absolute file paths to relative paths.
+    pub(crate) fn from_scoring_result(
+        result: &ScoringResult,
+        feature_vectors: &[FeatureVector],
+        project_root: &std::path::Path,
+    ) -> Self {
         // Find the corresponding feature vector
         let feature_vector = feature_vectors
             .iter()
@@ -501,8 +512,12 @@ impl RefactoringCandidate {
                 "unknown".to_string()
             };
 
-            // Clean path prefixes early in the pipeline
-            if raw_path.starts_with("./") {
+            // Convert to relative path by stripping project root
+            let path = std::path::Path::new(&raw_path);
+            if let Ok(relative) = path.strip_prefix(project_root) {
+                relative.to_string_lossy().to_string()
+            } else if raw_path.starts_with("./") {
+                // Fallback: clean "./" prefix
                 raw_path[2..].to_string()
             } else {
                 raw_path

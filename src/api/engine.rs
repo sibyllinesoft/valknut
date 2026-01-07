@@ -12,6 +12,37 @@ use crate::core::featureset::FeatureVector;
 use crate::core::pipeline::AnalysisResults;
 use crate::core::pipeline::{AnalysisConfig as PipelineAnalysisConfig, AnalysisPipeline};
 
+/// Compute the common root directory from a list of paths.
+/// Returns the longest common prefix that ends at a directory boundary.
+fn compute_common_root(paths: &[PathBuf]) -> PathBuf {
+    if paths.is_empty() {
+        return PathBuf::new();
+    }
+
+    // Canonicalize paths that exist, otherwise use as-is
+    let canonical_paths: Vec<PathBuf> = paths
+        .iter()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+        .collect();
+
+    // Start with the first path's parent directory
+    let first = &canonical_paths[0];
+    let mut common = first.parent().unwrap_or(first).to_path_buf();
+
+    // Find the common prefix across all paths
+    for path in &canonical_paths[1..] {
+        while !path.starts_with(&common) {
+            if let Some(parent) = common.parent() {
+                common = parent.to_path_buf();
+            } else {
+                return PathBuf::new();
+            }
+        }
+    }
+
+    common
+}
+
 /// Main valknut analysis engine
 pub struct ValknutEngine {
     /// Internal analysis pipeline
@@ -96,8 +127,9 @@ impl ValknutEngine {
         // Run the pipeline
         let pipeline_results = self.pipeline.analyze_directory(path).await?;
 
-        // Convert to public API format
-        let results = AnalysisResults::from_pipeline_results(pipeline_results);
+        // Convert to public API format with the directory as project root
+        let project_root = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let results = AnalysisResults::from_pipeline_results(pipeline_results, project_root);
 
         info!(
             "Directory analysis completed: {} files processed, {} entities analyzed",
@@ -131,7 +163,9 @@ impl ValknutEngine {
 
         let pipeline_results = self.pipeline.wrap_results(comprehensive);
 
-        Ok(AnalysisResults::from_pipeline_results(pipeline_results))
+        // Compute project root from common prefix of file paths
+        let project_root = compute_common_root(&paths);
+        Ok(AnalysisResults::from_pipeline_results(pipeline_results, project_root))
     }
 
     /// Analyze pre-extracted feature vectors (for testing and advanced usage)
@@ -151,8 +185,8 @@ impl ValknutEngine {
         // Run analysis
         let pipeline_results = self.pipeline.analyze_vectors(vectors).await?;
 
-        // Convert to public API format
-        let results = AnalysisResults::from_pipeline_results(pipeline_results);
+        // Convert to public API format (no project root for vector-only analysis)
+        let results = AnalysisResults::from_pipeline_results(pipeline_results, PathBuf::new());
 
         info!(
             "Vector analysis completed: {} entities analyzed",

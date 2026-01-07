@@ -307,7 +307,7 @@
             .feature_contributions
             .insert("cyclomatic".to_string(), 1.2);
 
-        let candidate = RefactoringCandidate::from_scoring_result(&scoring_result, &[]);
+        let candidate = RefactoringCandidate::from_scoring_result(&scoring_result, &[], std::path::Path::new(""));
 
         assert_eq!(candidate.entity_id, "test_entity");
         assert_eq!(candidate.priority, Priority::High);
@@ -393,7 +393,7 @@
     #[test]
     fn from_pipeline_results_populates_dictionary_and_warnings() {
         let pipeline_results = pipeline_results_fixture();
-        let analysis = AnalysisResults::from_pipeline_results(pipeline_results);
+        let analysis = AnalysisResults::from_pipeline_results(pipeline_results, std::path::PathBuf::new());
 
         assert_eq!(analysis.summary.total_files, 2);
         assert_eq!(analysis.refactoring_candidates.len(), 1);

@@ -130,6 +130,7 @@
         );
 
         AnalysisResults {
+            project_root: std::path::PathBuf::new(),
             summary,
             normalized: None,
             passes: StageResultsBundle::disabled(),
@@ -417,6 +418,7 @@
         let oracle = RefactoringOracle::new(oracle_config_fixture(100_000));
 
         let results = AnalysisResults {
+            project_root: std::path::PathBuf::new(),
             summary: AnalysisSummary {
                 code_health_score: 75.5,
                 files_processed: 10,

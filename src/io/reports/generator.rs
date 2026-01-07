@@ -23,10 +23,6 @@ use super::assets::{
 use super::error::ReportError;
 use super::helpers::{register_helpers, safe_json_value};
 use super::hierarchy::create_file_groups_from_candidates;
-use super::path_utils::{
-    clean_directory_health_tree_paths, clean_entity_refs, clean_path_prefixes,
-    clean_path_prefixes_in_file_groups, clean_path_string,
-};
 use super::templates::{
     detect_templates_dir, load_templates_from_dir, register_fallback_template, CSV_TEMPLATE_NAME,
     FALLBACK_TEMPLATE_NAME, MARKDOWN_TEMPLATE_NAME, SONAR_TEMPLATE_NAME,
@@ -320,23 +316,18 @@ impl ReportGenerator {
         // Add analysis results
         data.insert("results", safe_json_value(results));
 
-        let source_candidates = results.refactoring_candidates.clone();
+        // Paths are stored as relative at creation time, so no cleaning needed
+        let candidates = &results.refactoring_candidates;
+        data.insert("refactoring_candidates", safe_json_value(candidates));
 
-        let cleaned_candidates = clean_path_prefixes(&source_candidates);
-        data.insert(
-            "refactoring_candidates",
-            safe_json_value(&cleaned_candidates),
-        );
-
-        let base_groups = create_file_groups_from_candidates(&source_candidates);
-        let cleaned_candidates_by_file = clean_path_prefixes_in_file_groups(&base_groups);
+        let candidates_by_file = create_file_groups_from_candidates(candidates);
         data.insert(
             "refactoring_candidates_by_file",
-            safe_json_value(&cleaned_candidates_by_file),
+            safe_json_value(&candidates_by_file),
         );
         data.insert(
             "file_count",
-            serde_json::to_value(cleaned_candidates_by_file.len()).unwrap(),
+            serde_json::to_value(candidates_by_file.len()).unwrap(),
         );
 
         // Add summary statistics
@@ -354,8 +345,8 @@ impl ReportGenerator {
         data.insert(
             "tree_payload",
             serde_json::json!({
-                "refactoring_candidates": cleaned_candidates,
-                "refactoring_candidates_by_file": cleaned_candidates_by_file,
+                "refactoring_candidates": candidates,
+                "refactoring_candidates_by_file": candidates_by_file,
                 "code_dictionary": &results.code_dictionary,
                 "codeDictionary": &results.code_dictionary,
             }),

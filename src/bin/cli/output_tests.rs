@@ -208,6 +208,7 @@
         };
 
         AnalysisResults {
+            project_root: std::path::PathBuf::new(),
             summary: AnalysisSummary {
                 files_processed: 1,
                 entities_analyzed: 1,

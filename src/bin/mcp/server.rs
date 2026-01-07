@@ -524,6 +524,7 @@ mod tests {
         );
 
         AnalysisResults {
+            project_root: std::path::PathBuf::new(),
             summary,
             normalized: None,
             passes: valknut_rs::api::results::StageResultsBundle::disabled(),

@@ -4,10 +4,6 @@
         add_files_to_hierarchy, build_candidate_lookup, build_unified_hierarchy,
         create_file_groups_from_candidates,
     };
-    use crate::io::reports::path_utils::{
-        clean_directory_health_tree_paths, clean_path_prefixes, clean_path_prefixes_in_file_groups,
-        clean_path_string,
-    };
     use crate::core::pipeline::{
         AnalysisResults, AnalysisStatistics, AnalysisSummary, CodeDefinition, CodeDictionary,
         DirectoryHealthScore, DirectoryHealthTree, FeatureContribution,
@@ -22,7 +18,6 @@
     use crate::oracle::{
         CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap, RefactoringTask,
     };
-    use serial_test::serial;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -480,63 +475,6 @@
         assert!(csv_content.contains("complex_function"));
     }
 
-    #[serial]
-    #[test]
-    fn test_clean_path_helpers_strip_prefixes() {
-        let generator = ReportGenerator::new();
-
-        let original_dir = std::env::current_dir().unwrap();
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        let absolute_path = temp_dir.path().join("src/lib.rs");
-        let cleaned_abs = clean_path_string(absolute_path.to_str().unwrap());
-        assert_eq!(cleaned_abs, "src/lib.rs");
-
-        std::env::set_current_dir(&original_dir).unwrap();
-
-        let with_dot = clean_path_string("./src/main.rs");
-        assert_eq!(with_dot, "src/main.rs");
-    }
-
-    #[test]
-    fn test_clean_path_prefixes_in_file_groups_and_candidates() {
-        let generator = ReportGenerator::new();
-
-        let candidates = vec![RefactoringCandidate {
-            entity_id: "./src/lib.rs:function".into(),
-            name: "./src/lib.rs::function".into(),
-            file_path: "./src/lib.rs".into(),
-            line_range: Some((1, 10)),
-            priority: Priority::High,
-            score: 0.8,
-            confidence: 0.9,
-            issues: vec![],
-            suggestions: vec![],
-            issue_count: 1,
-            suggestion_count: 0,
-            coverage_percentage: None,
-        }];
-
-        let file_groups = vec![FileRefactoringGroup {
-            file_path: "./src/lib.rs".into(),
-            file_name: "lib.rs".into(),
-            entity_count: 1,
-            avg_score: 0.8,
-            highest_priority: Priority::High,
-            total_issues: 1,
-            entities: vec![entity_ref(&candidates[0])],
-        }];
-
-        let cleaned_candidates = clean_path_prefixes(&candidates);
-        assert_eq!(cleaned_candidates[0].file_path, "src/lib.rs");
-        assert_eq!(cleaned_candidates[0].entity_id, "src/lib.rs:function");
-
-        let cleaned_groups = clean_path_prefixes_in_file_groups(&file_groups);
-        assert_eq!(cleaned_groups[0].file_path, "src/lib.rs");
-        assert_eq!(cleaned_groups[0].entities[0].name, "src/lib.rs::function");
-    }
-
     #[test]
     fn test_calculate_summary() {
         let generator = ReportGenerator::new();
@@ -689,130 +627,6 @@
 
         // Should have same number of templates (no new ones added)
         assert_eq!(generator.handlebars.get_templates().len(), initial_count);
-    }
-
-    #[test]
-    fn test_clean_directory_health_tree_paths() {
-        let generator = ReportGenerator::new();
-
-        // Create a test directory health tree with "./" prefixes
-        let mut directories = std::collections::HashMap::new();
-
-        // Create directory with ./ prefix
-        let src_dir = DirectoryHealthScore {
-            path: PathBuf::from("./src"),
-            health_score: 0.7,
-            file_count: 2,
-            entity_count: 3,
-            refactoring_needed: 1,
-            critical_issues: 0,
-            high_priority_issues: 1,
-            avg_refactoring_score: 1.5,
-            weight: 1.0,
-            children: vec![PathBuf::from("./src/core")],
-            parent: Some(PathBuf::from("./")),
-            issue_categories: std::collections::HashMap::new(),
-            doc_health_score: 1.0,
-            doc_issue_count: 0,
-        };
-
-        let core_dir = DirectoryHealthScore {
-            path: PathBuf::from("./src/core"),
-            health_score: 0.6,
-            file_count: 1,
-            entity_count: 2,
-            refactoring_needed: 2,
-            critical_issues: 1,
-            high_priority_issues: 2,
-            avg_refactoring_score: 2.0,
-            weight: 2.0,
-            children: vec![],
-            parent: Some(PathBuf::from("./src")),
-            issue_categories: std::collections::HashMap::new(),
-            doc_health_score: 1.0,
-            doc_issue_count: 0,
-        };
-
-        directories.insert(PathBuf::from("./src"), src_dir);
-        directories.insert(PathBuf::from("./src/core"), core_dir);
-
-        let hotspot_directories = vec![DirectoryHotspot {
-            path: PathBuf::from("./src/core"),
-            health_score: 0.6,
-            rank: 1,
-            primary_issue_category: "complexity".to_string(),
-            recommendation: "Reduce complexity".to_string(),
-        }];
-
-        let tree_statistics = TreeStatistics {
-            total_directories: 2,
-            max_depth: 2,
-            avg_health_score: 0.65,
-            health_score_std_dev: 0.05,
-            hotspot_directories,
-            health_by_depth: std::collections::HashMap::new(),
-        };
-
-        let root = DirectoryHealthScore {
-            path: PathBuf::from("./"),
-            health_score: 0.8,
-            file_count: 0,
-            entity_count: 0,
-            refactoring_needed: 0,
-            critical_issues: 0,
-            high_priority_issues: 0,
-            avg_refactoring_score: 0.0,
-            weight: 1.0,
-            children: vec![PathBuf::from("./src")],
-            parent: None,
-            issue_categories: std::collections::HashMap::new(),
-            doc_health_score: 1.0,
-            doc_issue_count: 0,
-        };
-
-        let original_tree = DirectoryHealthTree {
-            root,
-            directories,
-            tree_statistics,
-        };
-
-        // Clean the paths
-        let cleaned_tree = clean_directory_health_tree_paths(&original_tree);
-
-        // Verify that "./" prefixes are removed
-        assert_eq!(cleaned_tree.root.path, PathBuf::from(""));
-        assert_eq!(cleaned_tree.root.children[0], PathBuf::from("src"));
-
-        // Check that directories HashMap keys are cleaned
-        assert!(cleaned_tree.directories.contains_key(&PathBuf::from("src")));
-        assert!(cleaned_tree
-            .directories
-            .contains_key(&PathBuf::from("src/core")));
-        assert!(!cleaned_tree
-            .directories
-            .contains_key(&PathBuf::from("./src")));
-        assert!(!cleaned_tree
-            .directories
-            .contains_key(&PathBuf::from("./src/core")));
-
-        // Check that directory paths are cleaned within DirectoryHealthScore
-        let src_dir_cleaned = cleaned_tree.directories.get(&PathBuf::from("src")).unwrap();
-        assert_eq!(src_dir_cleaned.path, PathBuf::from("src"));
-        assert_eq!(src_dir_cleaned.children[0], PathBuf::from("src/core"));
-        assert_eq!(src_dir_cleaned.parent, Some(PathBuf::from("")));
-
-        let core_dir_cleaned = cleaned_tree
-            .directories
-            .get(&PathBuf::from("src/core"))
-            .unwrap();
-        assert_eq!(core_dir_cleaned.path, PathBuf::from("src/core"));
-        assert_eq!(core_dir_cleaned.parent, Some(PathBuf::from("src")));
-
-        // Check that hotspot directories are cleaned
-        assert_eq!(
-            cleaned_tree.tree_statistics.hotspot_directories[0].path,
-            PathBuf::from("src/core")
-        );
     }
 
     #[test]
