@@ -48,6 +48,15 @@ static DEFAULT_IGNORED_DIR_NAMES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         ".fastembed_cache",
         ".github",
         "scripts",
+        // Test directories
+        "tests",
+        "test",
+        "__tests__",
+        "spec",
+        "specs",
+        "fixtures",
+        "testdata",
+        "test_data",
     ]
     .into_iter()
     .collect()
@@ -71,6 +80,8 @@ static DEFAULT_IGNORED_GLOBS: Lazy<Vec<&'static str>> = Lazy::new(|| {
     vec![
         // Test files and directories
         "**/tests/**",
+        "**/test/**",
+        "**/__tests__/**",
         "**/tests.rs",
         "**/test_dir/**",
         "**/*_test.*",
@@ -80,6 +91,16 @@ static DEFAULT_IGNORED_GLOBS: Lazy<Vec<&'static str>> = Lazy::new(|| {
         "**/*_tests.rs",
         "**/*_tests.py",
         "**/*_tests.ts",
+        "**/*_tests.js",
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js",
+        "**/test_*.py",
+        "**/test_*.rs",
+        "**/*_spec.rb",
+        // Rust inline test modules (files ending with _tests suffix)
+        "**/*_tests.rs",
         // Generated/bundled files
         "**/*bundle*.js",
         "**/*-bundle*.js",
@@ -91,6 +112,11 @@ static DEFAULT_IGNORED_GLOBS: Lazy<Vec<&'static str>> = Lazy::new(|| {
         "vscode-extension/**",
         "benchmarks/**",
         "examples/**",
+        // Fixture and mock files
+        "**/fixtures/**",
+        "**/mocks/**",
+        "**/testdata/**",
+        "**/test_data/**",
     ]
 });
 

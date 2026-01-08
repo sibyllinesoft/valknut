@@ -184,6 +184,7 @@
             documentation: None,
             directory_health: HashMap::new(),
             file_health: HashMap::new(),
+            entity_health: HashMap::new(),
         }
     }
 
@@ -463,6 +464,7 @@
             documentation: None,
             directory_health: HashMap::new(),
             file_health: HashMap::new(),
+            entity_health: HashMap::new(),
         };
 
         let condensed = oracle.condense_analysis_results(&results);
