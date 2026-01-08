@@ -54,6 +54,10 @@ pub struct AnalysisResults {
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub entity_health: std::collections::HashMap<String, f64>,
 
+    /// Directory health tree structure for file browser visualization
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory_health_tree: Option<DirectoryHealthTree>,
+
     /// Code quality analysis results (simple pattern-based analysis)
     // pub naming_results: Option<NamingAnalysisResults>,
 

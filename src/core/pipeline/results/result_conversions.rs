@@ -101,6 +101,7 @@ impl AnalysisResults {
             directory_health: HashMap::new(),
             file_health: HashMap::new(),
             entity_health: HashMap::new(),
+            directory_health_tree: None,
         }
     }
 
@@ -186,184 +187,26 @@ impl AnalysisResults {
     /// All file paths in the results will be stored relative to this root.
     pub fn from_pipeline_results(pipeline_results: PipelineResults, project_root: PathBuf) -> Self {
         let summary_stats = pipeline_results.summary();
-
-        // Convert scoring results to refactoring candidates
-        // Processing scoring results
-
-        let refactoring_candidates: Vec<RefactoringCandidate> = pipeline_results
-            .scoring_results
-            .files
-            .iter()
-            .filter(|result| {
-                let needs = result.needs_refactoring();
-                // Scoring result processing
-                needs
-            })
-            .map(|result| {
-                RefactoringCandidate::from_scoring_result(result, &pipeline_results.feature_vectors, &project_root)
-            })
-            .collect();
-        // Created refactoring candidates
-
-        // Calculate priority distribution
-        let mut priority_distribution = HashMap::new();
-        for result in &pipeline_results.scoring_results.files {
-            let priority_name = format!("{:?}", result.priority);
-            *priority_distribution.entry(priority_name).or_insert(0) += 1;
-        }
-
-        // Count critical and high priority
-        let critical_count = pipeline_results
-            .scoring_results
-            .files
-            .iter()
-            .filter(|r| matches!(r.priority, Priority::Critical))
-            .count();
-
-        let high_priority_count = pipeline_results
-            .scoring_results
-            .files
-            .iter()
-            .filter(|r| matches!(r.priority, Priority::High | Priority::Critical))
-            .count();
-
-        // Calculate code health score
-        let code_health_score = Self::calculate_code_health_score(&summary_stats);
-
-        let base_summary = &pipeline_results.results.summary;
-
-        let summary = AnalysisSummary {
-            files_processed: pipeline_results.statistics.files_processed,
-            entities_analyzed: summary_stats.total_entities,
-            refactoring_needed: summary_stats.refactoring_needed,
-            high_priority: high_priority_count,
-            critical: critical_count,
-            avg_refactoring_score: summary_stats.avg_score,
-            code_health_score,
-            total_files: base_summary.total_files,
-            total_entities: base_summary.total_entities,
-            total_lines_of_code: base_summary.total_lines_of_code,
-            languages: base_summary.languages.clone(),
-            total_issues: base_summary.total_issues,
-            high_priority_issues: base_summary.high_priority_issues,
-            critical_issues: base_summary.critical_issues,
-            doc_health_score: base_summary.doc_health_score,
-            doc_issue_count: base_summary.doc_issue_count,
-        };
-
-        let statistics = AnalysisStatistics {
-            total_duration: Duration::from_millis(pipeline_results.statistics.total_duration_ms),
-            avg_file_processing_time: Duration::from_millis(
-                pipeline_results.statistics.total_duration_ms
-                    / pipeline_results.statistics.files_processed.max(1) as u64,
-            ),
-            avg_entity_processing_time: Duration::from_millis(
-                pipeline_results.statistics.total_duration_ms
-                    / summary_stats.total_entities.max(1) as u64,
-            ),
-            features_per_entity: HashMap::new(), // TODO: Calculate from feature vectors
-            priority_distribution,
-            issue_distribution: HashMap::new(), // TODO: Calculate from issues
-            memory_stats: MemoryStats {
-                peak_memory_bytes: pipeline_results.statistics.memory_stats.peak_memory_bytes,
-                final_memory_bytes: pipeline_results.statistics.memory_stats.final_memory_bytes,
-                efficiency_score: pipeline_results.statistics.memory_stats.efficiency_score,
-            },
-        };
-
-        let warnings = pipeline_results
-            .errors
-            .iter()
-            .map(|e| e.to_string())
-            .collect();
-
-        // Convert LSH results to clone analysis results
+        let mut refactoring_candidates = Self::build_refactoring_candidates(&pipeline_results, &project_root);
+        let (priority_distribution, critical_count, high_priority_count) =
+            Self::count_priorities(&pipeline_results.scoring_results.files);
+        let summary = Self::build_summary(&pipeline_results, &summary_stats, critical_count, high_priority_count);
+        let statistics = Self::build_statistics(&pipeline_results, &summary_stats, priority_distribution);
+        let warnings = pipeline_results.errors.iter().map(|e| e.to_string()).collect();
         let clone_analysis = Self::convert_lsh_to_clone_analysis(&pipeline_results);
+        let coverage_packs = crate::core::pipeline::verification::coverage_mapping::convert_coverage_to_packs(
+            &pipeline_results.results.coverage,
+        );
 
-        // Extract coverage packs from pipeline results
-        let coverage_packs =
-            crate::core::pipeline::verification::coverage_mapping::convert_coverage_to_packs(&pipeline_results.results.coverage);
-
-        // Annotate existing candidates with coverage percentages (instead of creating fake entities)
-        let mut refactoring_candidates = refactoring_candidates;
         crate::core::pipeline::verification::coverage_mapping::annotate_candidates_with_coverage(
             &mut refactoring_candidates,
             &coverage_packs,
         );
 
+        let code_dictionary = Self::build_code_dictionary(&refactoring_candidates, &coverage_packs);
+        let passes = Self::build_passes(&pipeline_results);
+        let documentation = Self::build_documentation(&pipeline_results);
         let health_metrics = Some(pipeline_results.results.health_metrics.clone());
-
-        let mut code_dictionary = CodeDictionary::default();
-        for candidate in &refactoring_candidates {
-            for issue in &candidate.issues {
-                code_dictionary
-                    .issues
-                    .entry(issue.code.clone())
-                    .or_insert_with(|| issue_definition_for_category(&issue.category));
-            }
-            for suggestion in &candidate.suggestions {
-                code_dictionary
-                    .suggestions
-                    .entry(suggestion.code.clone())
-                    .or_insert_with(|| {
-                        suggestion_definition_for_kind(&suggestion.refactoring_type)
-                    });
-            }
-        }
-
-        // Add ADDTEST suggestion definition to dictionary if coverage candidates exist
-        if !coverage_packs.is_empty() {
-            code_dictionary
-                .suggestions
-                .entry("ADDTEST".to_string())
-                .or_insert_with(|| CodeDefinition {
-                    code: "ADDTEST".to_string(),
-                    title: "Add Test Coverage".to_string(),
-                    summary: "Write tests to cover this untested code path and improve safety."
-                        .to_string(),
-                    category: Some("coverage".to_string()),
-                });
-        }
-
-        let passes = StageResultsBundle {
-            structure: pipeline_results.results.structure.clone(),
-            coverage: pipeline_results.results.coverage.clone(),
-            complexity: pipeline_results.results.complexity.clone(),
-            refactoring: pipeline_results.results.refactoring.clone(),
-            impact: pipeline_results.results.impact.clone(),
-            lsh: pipeline_results.results.lsh.clone(),
-            cohesion: pipeline_results.results.cohesion.clone(),
-        };
-
-        let documentation =
-            pipeline_results
-                .results
-                .documentation
-                .enabled
-                .then(|| DocumentationResults {
-                    issues_count: pipeline_results.results.documentation.issues_count,
-                    doc_health_score: pipeline_results.results.documentation.doc_health_score,
-                    file_doc_health: pipeline_results
-                        .results
-                        .documentation
-                        .file_doc_health
-                        .clone(),
-                    file_doc_issues: pipeline_results
-                        .results
-                        .documentation
-                        .file_doc_issues
-                        .clone(),
-                    directory_doc_health: pipeline_results
-                        .results
-                        .documentation
-                        .directory_doc_health
-                        .clone(),
-                    directory_doc_issues: pipeline_results
-                        .results
-                        .documentation
-                        .directory_doc_issues
-                        .clone(),
-                });
 
         // Compute per-directory, per-file, and per-entity health using the same formula as overall health
         // This ensures consistency across all granularity levels
@@ -380,6 +223,13 @@ impl AnalysisResults {
             &pipeline_results.scoring_results.files,
             &project_root,
         );
+
+        // Build directory health tree from file health for file browser visualization
+        let directory_health_tree = if !file_health.is_empty() {
+            Some(DirectoryHealthTree::from_file_health(&file_health))
+        } else {
+            None
+        };
 
         Self {
             project_root,
@@ -398,22 +248,152 @@ impl AnalysisResults {
             directory_health,
             file_health,
             entity_health,
+            directory_health_tree,
         }
     }
 
     /// Calculate overall code health score from pipeline summary
     pub(crate) fn calculate_code_health_score(summary: &ResultSummary) -> f64 {
         if summary.total_entities == 0 {
-            return 1.0; // No entities = perfect health (or no data)
+            return 1.0;
         }
-
         let refactoring_ratio = summary.refactoring_needed as f64 / summary.total_entities as f64;
         let health_score = 1.0 - refactoring_ratio;
-
-        // Adjust based on average score magnitude
         let score_penalty = (summary.avg_score.abs() / 2.0).min(0.3);
-
         (health_score - score_penalty).clamp(0.0, 1.0)
+    }
+
+    fn build_refactoring_candidates(
+        pipeline_results: &PipelineResults,
+        project_root: &PathBuf,
+    ) -> Vec<RefactoringCandidate> {
+        pipeline_results
+            .scoring_results
+            .files
+            .iter()
+            .filter(|r| r.needs_refactoring())
+            .map(|r| RefactoringCandidate::from_scoring_result(r, &pipeline_results.feature_vectors, project_root))
+            .collect()
+    }
+
+    fn count_priorities(files: &[crate::core::scoring::features::ScoringResult]) -> (HashMap<String, usize>, usize, usize) {
+        let mut dist = HashMap::new();
+        let mut critical = 0;
+        let mut high = 0;
+        for r in files {
+            *dist.entry(format!("{:?}", r.priority)).or_insert(0) += 1;
+            if matches!(r.priority, Priority::Critical) {
+                critical += 1;
+            }
+            if matches!(r.priority, Priority::High | Priority::Critical) {
+                high += 1;
+            }
+        }
+        (dist, critical, high)
+    }
+
+    fn build_summary(
+        pipeline_results: &PipelineResults,
+        summary_stats: &ResultSummary,
+        critical_count: usize,
+        high_priority_count: usize,
+    ) -> AnalysisSummary {
+        let base = &pipeline_results.results.summary;
+        AnalysisSummary {
+            files_processed: pipeline_results.statistics.files_processed,
+            entities_analyzed: summary_stats.total_entities,
+            refactoring_needed: summary_stats.refactoring_needed,
+            high_priority: high_priority_count,
+            critical: critical_count,
+            avg_refactoring_score: summary_stats.avg_score,
+            code_health_score: Self::calculate_code_health_score(summary_stats),
+            total_files: base.total_files,
+            total_entities: base.total_entities,
+            total_lines_of_code: base.total_lines_of_code,
+            languages: base.languages.clone(),
+            total_issues: base.total_issues,
+            high_priority_issues: base.high_priority_issues,
+            critical_issues: base.critical_issues,
+            doc_health_score: base.doc_health_score,
+            doc_issue_count: base.doc_issue_count,
+        }
+    }
+
+    fn build_statistics(
+        pipeline_results: &PipelineResults,
+        summary_stats: &ResultSummary,
+        priority_distribution: HashMap<String, usize>,
+    ) -> AnalysisStatistics {
+        let dur_ms = pipeline_results.statistics.total_duration_ms;
+        AnalysisStatistics {
+            total_duration: Duration::from_millis(dur_ms),
+            avg_file_processing_time: Duration::from_millis(
+                dur_ms / pipeline_results.statistics.files_processed.max(1) as u64,
+            ),
+            avg_entity_processing_time: Duration::from_millis(
+                dur_ms / summary_stats.total_entities.max(1) as u64,
+            ),
+            features_per_entity: HashMap::new(),
+            priority_distribution,
+            issue_distribution: HashMap::new(),
+            memory_stats: MemoryStats {
+                peak_memory_bytes: pipeline_results.statistics.memory_stats.peak_memory_bytes,
+                final_memory_bytes: pipeline_results.statistics.memory_stats.final_memory_bytes,
+                efficiency_score: pipeline_results.statistics.memory_stats.efficiency_score,
+            },
+        }
+    }
+
+    fn build_code_dictionary(
+        candidates: &[RefactoringCandidate],
+        coverage_packs: &[crate::detectors::coverage::CoveragePack],
+    ) -> CodeDictionary {
+        let mut dict = CodeDictionary::default();
+        for c in candidates {
+            for issue in &c.issues {
+                dict.issues
+                    .entry(issue.code.clone())
+                    .or_insert_with(|| issue_definition_for_category(&issue.category));
+            }
+            for sug in &c.suggestions {
+                dict.suggestions
+                    .entry(sug.code.clone())
+                    .or_insert_with(|| suggestion_definition_for_kind(&sug.refactoring_type));
+            }
+        }
+        if !coverage_packs.is_empty() {
+            dict.suggestions.entry("ADDTEST".to_string()).or_insert_with(|| CodeDefinition {
+                code: "ADDTEST".to_string(),
+                title: "Add Test Coverage".to_string(),
+                summary: "Write tests to cover this untested code path and improve safety.".to_string(),
+                category: Some("coverage".to_string()),
+            });
+        }
+        dict
+    }
+
+    fn build_passes(pipeline_results: &PipelineResults) -> StageResultsBundle {
+        StageResultsBundle {
+            structure: pipeline_results.results.structure.clone(),
+            coverage: pipeline_results.results.coverage.clone(),
+            complexity: pipeline_results.results.complexity.clone(),
+            refactoring: pipeline_results.results.refactoring.clone(),
+            impact: pipeline_results.results.impact.clone(),
+            lsh: pipeline_results.results.lsh.clone(),
+            cohesion: pipeline_results.results.cohesion.clone(),
+        }
+    }
+
+    fn build_documentation(pipeline_results: &PipelineResults) -> Option<DocumentationResults> {
+        let doc = &pipeline_results.results.documentation;
+        doc.enabled.then(|| DocumentationResults {
+            issues_count: doc.issues_count,
+            doc_health_score: doc.doc_health_score,
+            file_doc_health: doc.file_doc_health.clone(),
+            file_doc_issues: doc.file_doc_issues.clone(),
+            directory_doc_health: doc.directory_doc_health.clone(),
+            directory_doc_issues: doc.directory_doc_issues.clone(),
+        })
     }
 
     /// Convert LSH results to CloneAnalysisResults

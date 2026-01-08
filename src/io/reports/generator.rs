@@ -341,15 +341,19 @@ impl ReportGenerator {
             data.insert("codeDictionary", dict_value);
         }
 
-        // Minimal tree payload to satisfy template consumers (legacy fields removed)
+        // Build directory health tree from file health scores (covers all files, not just candidates)
+        let directory_tree = if !results.file_health.is_empty() {
+            Some(DirectoryHealthTree::from_file_health(&results.file_health))
+        } else if !candidates.is_empty() {
+            Some(DirectoryHealthTree::from_candidates(candidates))
+        } else {
+            None
+        };
+
+        // Build full tree payload with directory health tree
         data.insert(
             "tree_payload",
-            serde_json::json!({
-                "refactoring_candidates": candidates,
-                "refactoring_candidates_by_file": candidates_by_file,
-                "code_dictionary": &results.code_dictionary,
-                "codeDictionary": &results.code_dictionary,
-            }),
+            self.build_tree_payload(results, &candidates_by_file, &directory_tree),
         );
 
         // Add documentation data for treemap doc health coloring
@@ -485,6 +489,7 @@ impl ReportGenerator {
                     tree.apply_doc_overlays(&doc.directory_doc_health, &doc.directory_doc_issues);
                 }
                 if let Ok(tree_value) = serde_json::to_value(&tree) {
+                    payload.insert("directory_health_tree".into(), tree_value.clone());
                     payload.insert("directoryHealthTree".into(), tree_value);
                 }
             }

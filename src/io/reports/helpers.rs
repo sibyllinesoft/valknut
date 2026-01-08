@@ -305,12 +305,11 @@ fn register_eq_helper(handlebars: &mut Handlebars<'static>) {
     );
 }
 
-/// Logo paths to search for the data URL helper
-const LOGO_PATHS: &[&str] = &[
+/// Logo paths to search for the data URL helper (relative to CWD or template root)
+const LOGO_RELATIVE_PATHS: &[&str] = &[
     "assets/logo.webp",
-    "./assets/logo.webp",
     "webpage_files/valknut-large.webp",
-    "./webpage_files/valknut-large.webp",
+    "assets/webpage_files/valknut-large.webp",
     ".valknut/webpage_files/valknut-large.webp",
 ];
 
@@ -328,8 +327,24 @@ fn register_logo_data_url_helper(handlebars: &mut Handlebars<'static>) {
              _: &mut RenderContext,
              out: &mut dyn handlebars::Output|
              -> HelperResult {
-                for path in LOGO_PATHS {
-                    if let Ok(content) = fs::read(path) {
+                // Build list of paths to check: template root paths first, then relative paths
+                let mut paths_to_check: Vec<std::path::PathBuf> = Vec::new();
+
+                // Check VALKNUT_TEMPLATE_ROOT first (used in container deployments)
+                if let Ok(template_root) = std::env::var("VALKNUT_TEMPLATE_ROOT") {
+                    let root = std::path::Path::new(&template_root);
+                    for rel_path in LOGO_RELATIVE_PATHS {
+                        paths_to_check.push(root.join(rel_path));
+                    }
+                }
+
+                // Also check relative to CWD
+                for rel_path in LOGO_RELATIVE_PATHS {
+                    paths_to_check.push(std::path::PathBuf::from(rel_path));
+                }
+
+                for path in paths_to_check {
+                    if let Ok(content) = fs::read(&path) {
                         if !content.is_empty() {
                             let base64_content = general_purpose::STANDARD.encode(&content);
                             let data_url = format!("data:image/webp;base64,{}", base64_content);
@@ -486,14 +501,34 @@ fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: Inl
                     RenderError::new(&format!("{} helper requires a file path parameter", helper_name))
                 })?;
 
-                // Try each prefix location
+                // Build list of paths to try: VALKNUT_TEMPLATE_ROOT first, then CWD-relative
+                let mut paths_to_try: Vec<String> = Vec::new();
+
+                // Check VALKNUT_TEMPLATE_ROOT first (used in container deployments)
+                if let Ok(template_root) = std::env::var("VALKNUT_TEMPLATE_ROOT") {
+                    for prefix in &prefixes {
+                        let full_path = if prefix.is_empty() {
+                            format!("{}/{}", template_root, file_path)
+                        } else {
+                            format!("{}/{}{}", template_root, prefix, file_path)
+                        };
+                        paths_to_try.push(full_path);
+                    }
+                }
+
+                // Also try CWD-relative paths
                 for prefix in &prefixes {
                     let full_path = if prefix.is_empty() {
                         file_path.to_string()
                     } else {
                         format!("{}{}", prefix, file_path)
                     };
-                    if let Ok(content) = fs::read_to_string(&full_path) {
+                    paths_to_try.push(full_path);
+                }
+
+                // Try each path location
+                for full_path in &paths_to_try {
+                    if let Ok(content) = fs::read_to_string(full_path) {
                         out.write(&content)?;
                         return Ok(());
                     }

@@ -72,7 +72,7 @@
                 return normalized;
             };
 
-            function buildHealthLookup(tree, fileHealth = {}) {
+            function buildHealthLookup(tree, fileHealth = {}, entityHealth = {}, codeFileHealth = {}, directoryHealth = {}) {
                 const map = {};
                 let rootPath = '';
                 if (tree && tree.directories) {
@@ -109,6 +109,28 @@
                     });
                 }
 
+                // Directory-level health from directory_health HashMap (path -> score)
+                Object.entries(directoryHealth || {}).forEach(([path, score]) => {
+                    const normalized = normalizePath(path);
+                    const healthScore = score > 1 ? score / 100 : score;
+                    const variants = new Set();
+                    variants.add(normalized);
+                    variants.add(normalized.replace(/^\.\//, ''));
+                    if (normalized.startsWith('./')) {
+                        variants.add(normalized.slice(2));
+                    } else {
+                        variants.add('./' + normalized);
+                    }
+                    const base = normalized.split('/').filter(Boolean).pop();
+                    if (base) variants.add(base);
+
+                    variants.forEach((k) => {
+                        if (!k) return;
+                        if (!map[k]) map[k] = {};
+                        map[k].health_score = healthScore;
+                    });
+                });
+
                 // File-level doc health overrides/augments map
                 Object.entries(fileHealth || {}).forEach(([path, score]) => {
                     const normalized = normalizePath(path);
@@ -118,6 +140,37 @@
                         if (!map[k]) map[k] = {};
                         map[k].doc_health = score;
                     });
+                });
+
+                // File-level code health (from file_health HashMap)
+                Object.entries(codeFileHealth || {}).forEach(([path, score]) => {
+                    const normalized = normalizePath(path);
+                    // Convert from 0-100 to 0-1 if needed
+                    const healthScore = score > 1 ? score / 100 : score;
+                    const variants = [normalized, normalized.replace(/^\.\//, ''), normalized.split('/').pop()];
+                    variants.forEach((k) => {
+                        if (!k) return;
+                        if (!map[k]) map[k] = {};
+                        map[k].health_score = healthScore;
+                    });
+                });
+
+                // Entity-level health (functions, classes, etc.)
+                Object.entries(entityHealth || {}).forEach(([entityId, score]) => {
+                    // entity_id format is typically "file_path:type:name" or similar
+                    // Convert from 0-100 to 0-1 if needed
+                    const healthScore = score > 1 ? score / 100 : score;
+                    // Store by full entity_id
+                    if (!map[entityId]) map[entityId] = {};
+                    map[entityId].health_score = healthScore;
+                    // Also store by just the entity name (last part after colon)
+                    const parts = entityId.split(':');
+                    if (parts.length >= 2) {
+                        const entityName = parts[parts.length - 1];
+                        if (entityName && !map[entityName]) {
+                            map[entityName] = { health_score: healthScore };
+                        }
+                    }
                 });
 
                 return { map, rootPath };
@@ -138,12 +191,29 @@
                     const base = pathKey.split('/').filter(Boolean).pop();
                     const rootPrefixed = rootPath ? normalizePath(`${rootPath}/${pathKey}`) : null;
 
-                    const healthSource =
+                    // For entities (functions, classes), also try to match by entity_id
+                    const entityId = node.entity_id || node.entityId || null;
+                    const nodeName = node.name || '';
+
+                    let healthSource =
                         directoriesMap[pathKey]
                         || directoriesMap[altKey]
-                        || directoriesMap['.']
                         || (base ? directoriesMap[base] : null)
                         || (rootPrefixed ? directoriesMap[rootPrefixed] : null);
+
+                    // For entities, try entity_id lookup first, then by name
+                    if (!healthSource && entityId) {
+                        healthSource = directoriesMap[entityId];
+                    }
+                    if (!healthSource && nodeName && node.type === 'entity') {
+                        healthSource = directoriesMap[nodeName];
+                    }
+
+                    // Fall back to root only for directories/files, not entities
+                    if (!healthSource && node.type !== 'entity') {
+                        healthSource = directoriesMap['.'];
+                    }
+
                     if (healthSource && typeof healthSource.health_score === 'number') {
                         node.healthScore = healthSource.health_score; // 0-1 range
                         node.health_score = healthSource.health_score;
@@ -486,13 +556,15 @@
 
                     if (Array.isArray(payload.unified_hierarchy) && payload.unified_hierarchy.length > 0) {
                         collectEntityDetails(payload.unified_hierarchy);
-                        if (payload.directory_health_tree && payload.directory_health_tree.directories) {
-                            const { map: healthMap, rootPath } = buildHealthLookup(
-                                payload.directory_health_tree,
-                                (payload.documentation && payload.documentation.file_doc_health) || {}
-                            );
-                            applyHealthToHierarchy(payload.unified_hierarchy, healthMap, '', rootPath);
-                        }
+                        // Build health lookup from all sources: directory tree, doc health, entity health, file health, directory health
+                        const { map: healthMap, rootPath } = buildHealthLookup(
+                            payload.directory_health_tree || null,
+                            (payload.documentation && payload.documentation.file_doc_health) || {},
+                            payload.entity_health || {},
+                            payload.file_health || {},
+                            payload.directory_health || {}
+                        );
+                        applyHealthToHierarchy(payload.unified_hierarchy, healthMap, '', rootPath);
 
                         // Apply cohesion scores to hierarchy
                         if (payload.cohesion && payload.cohesion.enabled) {

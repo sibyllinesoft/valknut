@@ -9,146 +9,210 @@ use std::path::Path;
 /// Test functions and test modules are automatically excluded from the audit.
 /// Nested functions (functions defined inside other functions) are also excluded.
 pub fn scan_rust(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
-    let lines: Vec<&str> = source.lines().collect();
+    let mut state = ScanState::new(source);
     let mut issues = Vec::new();
-    let mut pending_attrs: Vec<String> = Vec::new();
-    let mut index = 0usize;
-    let mut brace_depth = 0isize;
-    let mut test_module_depth: Option<isize> = None; // Track depth when entering #[cfg(test)] mod
 
-    while index < lines.len() {
-        let line = lines[index];
-        let trimmed = line.trim_start();
-
-        // Track brace depth to detect nested functions
-        // Use smart counting that ignores braces in strings and comments
-        let brace_delta = count_brace_delta(line);
-
-        if trimmed.is_empty() || trimmed.starts_with("///") || trimmed.starts_with("//!") {
-            brace_depth += brace_delta;
-            index += 1;
-            continue;
-        }
-
-        // Check if we've exited the test module
-        if let Some(test_depth) = test_module_depth {
-            if brace_depth <= test_depth {
-                test_module_depth = None; // Exited test module
-            }
-        }
-
-        // Handle attribute lines
-        if trimmed.starts_with("#[") {
-            let effective_line = handle_attribute_line(trimmed, &mut pending_attrs);
-            if let Some(remainder) = effective_line {
-                let has_test_attr = has_test_attribute(&pending_attrs);
-                let in_test_module = test_module_depth.is_some();
-
-                // Check if this is a test module declaration
-                if has_test_attr && remainder.starts_with("mod ") {
-                    test_module_depth = Some(brace_depth);
-                }
-
-                // Only check items at top level (brace_depth == 0) and not in test module
-                if brace_depth == 0 && !in_test_module {
-                    if let Some(new_index) = process_item_line(
-                        &remainder, &lines, index, has_test_attr, &mut pending_attrs,
-                        &mut issues, path, root,
-                    ) {
-                        brace_depth += brace_delta;
-                        index = new_index;
-                        continue;
-                    }
-                }
-            }
-            brace_depth += brace_delta;
-            index += 1;
-            continue;
-        }
-
-        let has_test_attr = has_test_attribute(&pending_attrs);
-        let in_test_module = test_module_depth.is_some();
-
-        // Check if this starts a test module
-        if has_test_attr && trimmed.starts_with("mod ") {
-            test_module_depth = Some(brace_depth);
-        }
-
-        // Only check items at top level (brace_depth == 0) and not in test module
-        if brace_depth == 0 && !in_test_module {
-            if let Some(new_index) = process_item_line(
-                trimmed, &lines, index, has_test_attr, &mut pending_attrs,
-                &mut issues, path, root,
-            ) {
-                brace_depth += brace_delta;
-                index = new_index;
-                continue;
-            }
-        }
-        pending_attrs.clear();
-        brace_depth += brace_delta;
-        index += 1;
+    while state.index < state.lines.len() {
+        state.process_line(&mut issues, path, root);
     }
 
     issues
 }
 
-/// Count brace delta for a line, ignoring braces in strings and comments.
-fn count_brace_delta(line: &str) -> isize {
-    let mut delta = 0isize;
-    let mut in_string = false;
-    let mut in_char = false;
-    let mut escape_next = false;
-    let chars: Vec<char> = line.chars().collect();
-    let len = chars.len();
+/// State for scanning Rust source files.
+struct ScanState<'a> {
+    lines: Vec<&'a str>,
+    pending_attrs: Vec<String>,
+    index: usize,
+    brace_depth: isize,
+    test_module_depth: Option<isize>,
+}
 
-    for i in 0..len {
-        let c = chars[i];
-
-        // Handle escape sequences
-        if escape_next {
-            escape_next = false;
-            continue;
+impl<'a> ScanState<'a> {
+    fn new(source: &'a str) -> Self {
+        Self {
+            lines: source.lines().collect(),
+            pending_attrs: Vec::new(),
+            index: 0,
+            brace_depth: 0,
+            test_module_depth: None,
         }
-        if c == '\\' && (in_string || in_char) {
-            escape_next = true;
-            continue;
-        }
+    }
 
-        // Skip line comments
-        if !in_string && !in_char && c == '/' && i + 1 < len && chars[i + 1] == '/' {
-            break; // Rest of line is a comment
-        }
+    fn process_line(&mut self, issues: &mut Vec<DocIssue>, path: &Path, root: &Path) {
+        let line = self.lines[self.index];
+        let trimmed = line.trim_start();
+        let brace_delta = count_brace_delta(line);
 
-        // Handle string boundaries
-        if c == '"' && !in_char {
-            // Check for raw string (r#"..."#)
-            if !in_string && i > 0 && chars[i - 1] == 'r' {
-                // Start of raw string, but we just count it as string entry
-                in_string = true;
-            } else {
-                in_string = !in_string;
-            }
-            continue;
+        if self.is_skippable_line(trimmed) {
+            self.advance(brace_delta);
+            return;
         }
 
-        // Handle char literals
-        if c == '\'' && !in_string {
-            in_char = !in_char;
-            continue;
-        }
+        self.update_test_module_tracking();
 
-        // Count braces only outside strings and chars
-        if !in_string && !in_char {
-            match c {
-                '{' => delta += 1,
-                '}' => delta -= 1,
-                _ => {}
+        let line_to_check = if trimmed.starts_with("#[") {
+            handle_attribute_line(trimmed, &mut self.pending_attrs)
+        } else {
+            Some(trimmed.to_string())
+        };
+
+        if let Some(check_line) = line_to_check {
+            self.try_process_item(&check_line, issues, path, root, brace_delta);
+        } else {
+            self.advance(brace_delta);
+        }
+    }
+
+    fn is_skippable_line(&self, trimmed: &str) -> bool {
+        trimmed.is_empty() || trimmed.starts_with("///") || trimmed.starts_with("//!")
+    }
+
+    fn update_test_module_tracking(&mut self) {
+        if let Some(test_depth) = self.test_module_depth {
+            if self.brace_depth <= test_depth {
+                self.test_module_depth = None;
             }
         }
     }
 
-    delta
+    fn try_process_item(
+        &mut self,
+        check_line: &str,
+        issues: &mut Vec<DocIssue>,
+        path: &Path,
+        root: &Path,
+        brace_delta: isize,
+    ) {
+        let has_test_attr = has_test_attribute(&self.pending_attrs);
+        let in_test_module = self.test_module_depth.is_some();
+
+        if has_test_attr && check_line.starts_with("mod ") {
+            self.test_module_depth = Some(self.brace_depth);
+        }
+
+        if self.brace_depth == 0 && !in_test_module {
+            if let Some(new_index) = process_item_line(
+                check_line,
+                &self.lines,
+                self.index,
+                has_test_attr,
+                &mut self.pending_attrs,
+                issues,
+                path,
+                root,
+            ) {
+                self.brace_depth += brace_delta;
+                self.index = new_index;
+                return;
+            }
+        }
+
+        self.pending_attrs.clear();
+        self.advance(brace_delta);
+    }
+
+    fn advance(&mut self, brace_delta: isize) {
+        self.brace_depth += brace_delta;
+        self.index += 1;
+    }
+}
+
+/// Count brace delta for a line, ignoring braces in strings and comments.
+fn count_brace_delta(line: &str) -> isize {
+    let chars: Vec<char> = line.chars().collect();
+    let mut state = BraceCountState::default();
+
+    for (i, &c) in chars.iter().enumerate() {
+        if state.process_char(c, i, &chars) == CharAction::Stop {
+            break;
+        }
+    }
+
+    state.delta
+}
+
+/// State for brace counting with string/char/escape tracking.
+#[derive(Default)]
+struct BraceCountState {
+    delta: isize,
+    in_string: bool,
+    in_char: bool,
+    escape_next: bool,
+}
+
+/// Action to take after processing a character.
+#[derive(PartialEq)]
+enum CharAction {
+    Continue,
+    Stop,
+}
+
+impl BraceCountState {
+    fn process_char(&mut self, c: char, i: usize, chars: &[char]) -> CharAction {
+        if self.handle_escape(c) {
+            return CharAction::Continue;
+        }
+        if self.is_line_comment(c, i, chars) {
+            return CharAction::Stop;
+        }
+        if self.handle_string_boundary(c, i, chars) {
+            return CharAction::Continue;
+        }
+        if self.handle_char_boundary(c) {
+            return CharAction::Continue;
+        }
+        self.count_brace(c);
+        CharAction::Continue
+    }
+
+    fn handle_escape(&mut self, c: char) -> bool {
+        if self.escape_next {
+            self.escape_next = false;
+            return true;
+        }
+        if c == '\\' && (self.in_string || self.in_char) {
+            self.escape_next = true;
+            return true;
+        }
+        false
+    }
+
+    fn is_line_comment(&self, c: char, i: usize, chars: &[char]) -> bool {
+        !self.in_string && !self.in_char && c == '/' && chars.get(i + 1) == Some(&'/')
+    }
+
+    fn handle_string_boundary(&mut self, c: char, i: usize, chars: &[char]) -> bool {
+        if c != '"' || self.in_char {
+            return false;
+        }
+        // Handle raw string start (r"..." or r#"..."#)
+        if !self.in_string && i > 0 && chars[i - 1] == 'r' {
+            self.in_string = true;
+        } else {
+            self.in_string = !self.in_string;
+        }
+        true
+    }
+
+    fn handle_char_boundary(&mut self, c: char) -> bool {
+        if c == '\'' && !self.in_string {
+            self.in_char = !self.in_char;
+            return true;
+        }
+        false
+    }
+
+    fn count_brace(&mut self, c: char) {
+        if self.in_string || self.in_char {
+            return;
+        }
+        match c {
+            '{' => self.delta += 1,
+            '}' => self.delta -= 1,
+            _ => {}
+        }
+    }
 }
 
 /// Handle attribute line and return remainder if item follows on same line

@@ -122,6 +122,7 @@ fn sample_results() -> AnalysisResults {
         directory_health: HashMap::new(),
         file_health: HashMap::new(),
         entity_health: HashMap::new(),
+        directory_health_tree: None,
     }
 }
 

@@ -141,43 +141,65 @@ impl FileBatchReader for BatchedFileReader {
     async fn read_files(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
         let mut file_contents = Vec::with_capacity(files.len());
         for batch in files.chunks(self.effective_batch_size()) {
-            let mut batch_results = Vec::with_capacity(batch.len());
-            for file_path in batch {
-                let path = file_path.clone();
-                batch_results.push(async move {
-                    let bytes = tokio::fs::read(&path).await.map_err(|e| {
-                        ValknutError::io(format!("Failed to read file {}", path.display()), e)
-                    })?;
-                    let content = match String::from_utf8(bytes) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            tracing::warn!(
-                                "File {} contains invalid UTF-8, using lossy conversion",
-                                path.display()
-                            );
-                            String::from_utf8_lossy(e.as_bytes()).into_owned()
-                        }
-                    };
-                    Ok::<_, ValknutError>((path, content))
-                });
+            let batch_results = self.read_batch(batch).await;
+            self.collect_batch_results(batch_results, &mut file_contents).await?;
+        }
+        Ok(file_contents)
+    }
+}
+
+/// Private helper methods for [`BatchedFileReader`].
+impl BatchedFileReader {
+    async fn read_batch(&self, batch: &[PathBuf]) -> Vec<impl std::future::Future<Output = Result<(PathBuf, String)>>> {
+        batch.iter().map(|file_path| {
+            let path = file_path.clone();
+            async move { Self::read_single_file(path).await }
+        }).collect()
+    }
+
+    async fn read_single_file(path: PathBuf) -> Result<(PathBuf, String)> {
+        let bytes = tokio::fs::read(&path).await.map_err(|e| {
+            ValknutError::io(format!("Failed to read file {}", path.display()), e)
+        })?;
+        let content = Self::bytes_to_string(&path, bytes);
+        Ok((path, content))
+    }
+
+    fn bytes_to_string(path: &PathBuf, bytes: Vec<u8>) -> String {
+        match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("File {} contains invalid UTF-8, using lossy conversion", path.display());
+                String::from_utf8_lossy(e.as_bytes()).into_owned()
             }
+        }
+    }
 
-            for result in future::join_all(batch_results).await {
-                let (path, content) = result?;
-
-                // Skip bundled JS/TS files if detection is enabled
-                if let Some(ref detector) = self.bundled_detector {
-                    if detector.should_check(&path) && detector.is_bundled(&content) {
-                        tracing::debug!("Skipping bundled file: {}", path.display());
-                        continue;
-                    }
-                }
-
+    async fn collect_batch_results<F>(
+        &self,
+        batch_results: Vec<F>,
+        file_contents: &mut Vec<(PathBuf, String)>,
+    ) -> Result<()>
+    where
+        F: std::future::Future<Output = Result<(PathBuf, String)>>,
+    {
+        for result in future::join_all(batch_results).await {
+            let (path, content) = result?;
+            if !self.should_skip_bundled(&path, &content) {
                 file_contents.push((path, content));
             }
         }
+        Ok(())
+    }
 
-        Ok(file_contents)
+    fn should_skip_bundled(&self, path: &PathBuf, content: &str) -> bool {
+        if let Some(ref detector) = self.bundled_detector {
+            if detector.should_check(path) && detector.is_bundled(content) {
+                tracing::debug!("Skipping bundled file: {}", path.display());
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -376,82 +398,28 @@ impl ResultAggregator for DefaultResultAggregator {
     ) -> AnalysisSummary {
         let total_files = files.len();
         let total_entities = complexity.detailed_results.len();
-        let total_lines_of_code = complexity
-            .detailed_results
-            .iter()
-            .map(|r| r.metrics.lines_of_code as usize)
-            .sum();
-
-        let mut languages = HashSet::new();
-        for file in files {
-            if let Some(extension) = file.extension().and_then(|ext| ext.to_str()) {
-                let language = match extension {
-                    "py" => "Python",
-                    "js" | "jsx" => "JavaScript",
-                    "ts" | "tsx" => "TypeScript",
-                    "rs" => "Rust",
-                    "go" => "Go",
-                    "java" => "Java",
-                    _ => continue,
-                };
-                languages.insert(language.to_string());
-            }
-        }
-
+        let total_lines_of_code = Self::count_lines_of_code(complexity);
+        let languages = Self::detect_languages(files);
         let total_issues = structure.issues_count + complexity.issues_count + impact.issues_count;
-
-        let mut high_priority_issues = 0;
-        let mut critical_issues = 0;
-
-        for result in &complexity.detailed_results {
-            for issue in &result.issues {
-                match issue.severity.as_str() {
-                    "High" => high_priority_issues += 1,
-                    "VeryHigh" => high_priority_issues += 1,
-                    "Critical" => critical_issues += 1,
-                    _ => {}
-                }
-            }
-        }
-
-        let files_processed = total_files;
-        let entities_analyzed = total_entities;
-        let refactoring_needed = refactoring.opportunities_count;
-        let high_priority = high_priority_issues;
-        let critical = critical_issues;
-        let avg_refactoring_score = if refactoring_needed > 0 {
-            refactoring
-                .detailed_results
-                .iter()
-                .map(|result| result.refactoring_score)
-                .sum::<f64>()
-                / refactoring_needed as f64
-        } else {
-            0.0
-        };
-
-        let code_health_score = if total_entities > 0 {
-            let penalty = (total_issues as f64 / total_entities as f64).min(1.0);
-            (1.0 - penalty).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
+        let (high_priority_issues, critical_issues) = Self::count_priority_issues(complexity);
+        let avg_refactoring_score = Self::calculate_avg_refactoring_score(refactoring);
+        let code_health_score = Self::calculate_code_health_score(total_entities, total_issues);
 
         AnalysisSummary {
-            files_processed,
-            entities_analyzed,
-            refactoring_needed,
-            high_priority,
-            critical,
+            files_processed: total_files,
+            entities_analyzed: total_entities,
+            refactoring_needed: refactoring.opportunities_count,
+            high_priority: high_priority_issues,
+            critical: critical_issues,
             avg_refactoring_score,
             code_health_score,
             total_files,
             total_entities,
             total_lines_of_code,
-            languages: languages.into_iter().collect(),
+            languages,
             total_issues,
-            high_priority_issues: high_priority,
-            critical_issues: critical,
+            high_priority_issues,
+            critical_issues,
             doc_health_score: 1.0,
             doc_issue_count: 0,
         }
@@ -628,6 +596,73 @@ impl ResultAggregator for DefaultResultAggregator {
             passed: violations.is_empty(),
             violations,
             overall_score: results.health_metrics.overall_health_score,
+        }
+    }
+}
+
+/// Helper methods for [`DefaultResultAggregator`].
+impl DefaultResultAggregator {
+    fn count_lines_of_code(complexity: &ComplexityAnalysisResults) -> usize {
+        complexity
+            .detailed_results
+            .iter()
+            .map(|r| r.metrics.lines_of_code as usize)
+            .sum()
+    }
+
+    fn detect_languages(files: &[PathBuf]) -> Vec<String> {
+        let mut languages = HashSet::new();
+        for file in files {
+            if let Some(ext) = file.extension().and_then(|e| e.to_str()) {
+                let lang = match ext {
+                    "py" => "Python",
+                    "js" | "jsx" => "JavaScript",
+                    "ts" | "tsx" => "TypeScript",
+                    "rs" => "Rust",
+                    "go" => "Go",
+                    "java" => "Java",
+                    _ => continue,
+                };
+                languages.insert(lang.to_string());
+            }
+        }
+        languages.into_iter().collect()
+    }
+
+    fn count_priority_issues(complexity: &ComplexityAnalysisResults) -> (usize, usize) {
+        let mut high = 0;
+        let mut critical = 0;
+        for result in &complexity.detailed_results {
+            for issue in &result.issues {
+                match issue.severity.as_str() {
+                    "High" | "VeryHigh" => high += 1,
+                    "Critical" => critical += 1,
+                    _ => {}
+                }
+            }
+        }
+        (high, critical)
+    }
+
+    fn calculate_avg_refactoring_score(refactoring: &RefactoringAnalysisResults) -> f64 {
+        if refactoring.opportunities_count > 0 {
+            refactoring
+                .detailed_results
+                .iter()
+                .map(|r| r.refactoring_score)
+                .sum::<f64>()
+                / refactoring.opportunities_count as f64
+        } else {
+            0.0
+        }
+    }
+
+    fn calculate_code_health_score(total_entities: usize, total_issues: usize) -> f64 {
+        if total_entities > 0 {
+            let penalty = (total_issues as f64 / total_entities as f64).min(1.0);
+            (1.0 - penalty).clamp(0.0, 1.0)
+        } else {
+            1.0
         }
     }
 }

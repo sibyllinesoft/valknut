@@ -614,5 +614,39 @@
     </script>
     {{#if enable_animation}}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="./webpage_files/trefoil-animation.js"></script>
+    <script>
+    // Trefoil Knot Animation using Three.js
+    document.addEventListener('DOMContentLoaded', function() {
+        const canvas = document.getElementById('neural-network');
+        if (!canvas) return;
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+        camera.position.z = 5;
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        renderer.setClearColor(0x000000, 0);
+        const geometry = new THREE.TorusKnotGeometry(1, 0.4, 100, 16, 2, 3);
+        const material = new THREE.MeshPhongMaterial({ color: 0x7c3aed, emissive: 0x220033, shininess: 100, wireframe: false });
+        const trefoil = new THREE.Mesh(geometry, material);
+        scene.add(trefoil);
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+        function animate() {
+            requestAnimationFrame(animate);
+            trefoil.rotation.x += 0.005;
+            trefoil.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', function() {
+            camera.aspect = canvas.clientWidth / canvas.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        });
+    });
+    </script>
     {{/if}}

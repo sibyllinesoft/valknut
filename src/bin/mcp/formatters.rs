@@ -7,6 +7,7 @@ use std::path::Path;
 
 use valknut_rs::api::results::AnalysisResults;
 use valknut_rs::core::config::ReportFormat;
+use valknut_rs::core::pipeline::{CodeDictionary, RefactoringCandidate};
 use valknut_rs::core::scoring::Priority;
 use valknut_rs::io::reports::ReportGenerator;
 
@@ -215,107 +216,80 @@ pub(crate) fn create_file_quality_report(
 
 /// Create a simple markdown report
 pub fn create_markdown_report(results: &AnalysisResults) -> Result<String, DynError> {
-    let mut markdown = String::new();
+    let mut md = String::new();
+    md.push_str("# Code Analysis Report\n\n");
+    write_summary_section(&mut md, results);
+    write_candidates_section(&mut md, results);
+    write_statistics_section(&mut md, results);
+    write_warnings_section(&mut md, results);
+    Ok(md)
+}
 
-    markdown.push_str("# Code Analysis Report\n\n");
+fn write_summary_section(md: &mut String, results: &AnalysisResults) {
+    let s = &results.summary;
+    md.push_str("## Summary\n\n");
+    md.push_str(&format!("- **Files Processed**: {}\n", s.files_processed));
+    md.push_str(&format!("- **Entities Analyzed**: {}\n", s.entities_analyzed));
+    md.push_str(&format!("- **Refactoring Needed**: {}\n", s.refactoring_needed));
+    md.push_str(&format!("- **High Priority**: {}\n", s.high_priority));
+    md.push_str(&format!("- **Critical**: {}\n", s.critical));
+    md.push_str(&format!("- **Average Refactoring Score**: {:.2}\n", s.avg_refactoring_score));
+    md.push_str(&format!("- **Code Health Score**: {:.2}\n\n", s.code_health_score));
+}
 
-    // Summary section
-    markdown.push_str("## Summary\n\n");
-    markdown.push_str(&format!(
-        "- **Files Processed**: {}\n",
-        results.summary.files_processed
-    ));
-    markdown.push_str(&format!(
-        "- **Entities Analyzed**: {}\n",
-        results.summary.entities_analyzed
-    ));
-    markdown.push_str(&format!(
-        "- **Refactoring Needed**: {}\n",
-        results.summary.refactoring_needed
-    ));
-    markdown.push_str(&format!(
-        "- **High Priority**: {}\n",
-        results.summary.high_priority
-    ));
-    markdown.push_str(&format!("- **Critical**: {}\n", results.summary.critical));
-    markdown.push_str(&format!(
-        "- **Average Refactoring Score**: {:.2}\n",
-        results.summary.avg_refactoring_score
-    ));
-    markdown.push_str(&format!(
-        "- **Code Health Score**: {:.2}\n\n",
-        results.summary.code_health_score
-    ));
+fn write_candidates_section(md: &mut String, results: &AnalysisResults) {
+    if results.refactoring_candidates.is_empty() {
+        return;
+    }
+    md.push_str("## Refactoring Candidates\n\n");
+    for (i, c) in results.refactoring_candidates.iter().enumerate() {
+        write_candidate(md, i + 1, c, &results.code_dictionary);
+    }
+}
 
-    // Refactoring candidates
-    if !results.refactoring_candidates.is_empty() {
-        markdown.push_str("## Refactoring Candidates\n\n");
+fn write_candidate(
+    md: &mut String,
+    num: usize,
+    c: &RefactoringCandidate,
+    dict: &CodeDictionary,
+) {
+    md.push_str(&format!("### {}. {}\n\n", num, c.name));
+    md.push_str(&format!("- **File**: `{}`\n", c.file_path));
+    md.push_str(&format!("- **Priority**: {:?}\n", c.priority));
+    md.push_str(&format!("- **Score**: {:.2}\n", c.score));
+    md.push_str(&format!("- **Confidence**: {:.2}\n", c.confidence));
 
-        for (i, candidate) in results.refactoring_candidates.iter().enumerate() {
-            markdown.push_str(&format!("### {}. {}\n\n", i + 1, candidate.name));
-            markdown.push_str(&format!("- **File**: `{}`\n", candidate.file_path));
-            markdown.push_str(&format!("- **Priority**: {:?}\n", candidate.priority));
-            markdown.push_str(&format!("- **Score**: {:.2}\n", candidate.score));
-            markdown.push_str(&format!("- **Confidence**: {:.2}\n", candidate.confidence));
-
-            if !candidate.issues.is_empty() {
-                markdown.push_str("- **Issues**:\n");
-                for issue in &candidate.issues {
-                    let issue_title = results
-                        .code_dictionary
-                        .issues
-                        .get(&issue.code)
-                        .map(|entry| entry.title.as_str())
-                        .unwrap_or(issue.category.as_str());
-                    markdown.push_str(&format!(
-                        "  - {}: {} (severity {:.2})\n",
-                        issue.code, issue_title, issue.severity
-                    ));
-                }
-            }
-
-            if !candidate.suggestions.is_empty() {
-                markdown.push_str("- **Suggestions**:\n");
-                for suggestion in &candidate.suggestions {
-                    let suggestion_title = results
-                        .code_dictionary
-                        .suggestions
-                        .get(&suggestion.code)
-                        .map(|entry| entry.title.as_str())
-                        .unwrap_or(suggestion.refactoring_type.as_str());
-                    markdown.push_str(&format!(
-                        "  - {}: {} (Priority: {:.2}, Effort: {:.2})\n",
-                        suggestion.code, suggestion_title, suggestion.priority, suggestion.effort
-                    ));
-                }
-            }
-
-            markdown.push('\n');
+    if !c.issues.is_empty() {
+        md.push_str("- **Issues**:\n");
+        for issue in &c.issues {
+            let title = dict.issues.get(&issue.code).map(|e| e.title.as_str()).unwrap_or(&issue.category);
+            md.push_str(&format!("  - {}: {} (severity {:.2})\n", issue.code, title, issue.severity));
         }
     }
 
-    // Statistics
-    markdown.push_str("## Statistics\n\n");
-    markdown.push_str(&format!(
-        "- **Total Duration**: {:.2} seconds\n",
-        results.statistics.total_duration.as_secs_f64()
-    ));
-    markdown.push_str(&format!(
-        "- **Average File Processing Time**: {:.3} seconds\n",
-        results.statistics.avg_file_processing_time.as_secs_f64()
-    ));
-    markdown.push_str(&format!(
-        "- **Average Entity Processing Time**: {:.3} seconds\n",
-        results.statistics.avg_entity_processing_time.as_secs_f64()
-    ));
-
-    // Warnings
-    if !results.warnings.is_empty() {
-        markdown.push_str("\n## Warnings\n\n");
-        for warning in &results.warnings {
-            markdown.push_str(&format!("- {}\n", warning));
+    if !c.suggestions.is_empty() {
+        md.push_str("- **Suggestions**:\n");
+        for sug in &c.suggestions {
+            let title = dict.suggestions.get(&sug.code).map(|e| e.title.as_str()).unwrap_or(&sug.refactoring_type);
+            md.push_str(&format!("  - {}: {} (Priority: {:.2}, Effort: {:.2})\n", sug.code, title, sug.priority, sug.effort));
         }
     }
+    md.push('\n');
+}
 
-    Ok(markdown)
+fn write_statistics_section(md: &mut String, results: &AnalysisResults) {
+    md.push_str("## Statistics\n\n");
+    md.push_str(&format!("- **Total Duration**: {:.2} seconds\n", results.statistics.total_duration.as_secs_f64()));
+    md.push_str(&format!("- **Average File Processing Time**: {:.3} seconds\n", results.statistics.avg_file_processing_time.as_secs_f64()));
+    md.push_str(&format!("- **Average Entity Processing Time**: {:.3} seconds\n", results.statistics.avg_entity_processing_time.as_secs_f64()));
+}
+
+fn write_warnings_section(md: &mut String, results: &AnalysisResults) {
+    if results.warnings.is_empty() {
+        return;
+    }
+    md.push_str("\n## Warnings\n\n");
+    for w in &results.warnings {
+        md.push_str(&format!("- {}\n", w));
+    }
 }
