@@ -246,36 +246,53 @@ impl AstComplexityAnalyzer {
         Ok(entities)
     }
 
-    /// Recursively traverse AST to extract code entities
+    /// Iteratively traverse AST to extract code entities.
+    /// Uses explicit stack to avoid stack overflow on deeply nested ASTs.
     fn traverse_for_entities(
         &self,
-        node: &tree_sitter::Node,
+        root: &tree_sitter::Node,
         context: &crate::core::ast_service::AstContext<'_>,
         entities: &mut Vec<CodeEntity>,
-        depth: usize,
+        initial_depth: usize,
     ) -> Result<()> {
-        // Extract functions and methods only - complexity is measured per-function.
-        // Class/impl size concerns are handled separately by member count thresholds.
-        match node.kind() {
-            // Python function patterns
-            "function_definition"
-            // JavaScript/TypeScript function patterns
-            | "function_declaration" | "function_expression" | "arrow_function" | "method_definition"
-            // Rust function patterns
-            | "function_item"
-            // Go function patterns
-            | "method_declaration" => {
-                if let Some(entity) = self.extract_function_entity(node, context, depth)? {
-                    entities.push(entity);
-                }
-            }
-            _ => {}
-        }
+        // Stack of (start_byte, end_byte, depth)
+        let mut stack: Vec<(usize, usize, usize)> = vec![(root.start_byte(), root.end_byte(), initial_depth)];
+        let tree = context.tree;
 
-        // Continue traversing children
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.traverse_for_entities(&child, context, entities, depth + 1)?;
+        while let Some((start_byte, end_byte, depth)) = stack.pop() {
+            let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) else {
+                continue;
+            };
+
+            // Skip if we got a different node
+            if node.start_byte() != start_byte || node.end_byte() != end_byte {
+                continue;
+            }
+
+            // Extract functions and methods only - complexity is measured per-function.
+            // Class/impl size concerns are handled separately by member count thresholds.
+            match node.kind() {
+                // Python function patterns
+                "function_definition"
+                // JavaScript/TypeScript function patterns
+                | "function_declaration" | "function_expression" | "arrow_function" | "method_definition"
+                // Rust function patterns
+                | "function_item"
+                // Go function patterns
+                | "method_declaration" => {
+                    if let Some(entity) = self.extract_function_entity(&node, context, depth)? {
+                        entities.push(entity);
+                    }
+                }
+                _ => {}
+            }
+
+            // Push children in reverse order so they're processed left-to-right
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push((child.start_byte(), child.end_byte(), depth + 1));
+            }
         }
 
         Ok(())

@@ -213,18 +213,24 @@ pub fn node_text_normalized(node: &Node, source: &str) -> crate::core::errors::R
         .join(" "))
 }
 
-/// Recursively walk an AST tree, calling a callback for each node.
+/// Walk an AST tree iteratively, calling a callback for each node.
 ///
 /// This performs a pre-order traversal, calling the callback on the node
-/// before visiting its children.
+/// before visiting its children. Uses an explicit stack to avoid
+/// stack overflow on deeply nested ASTs.
 pub fn walk_tree<F>(node: Node, callback: &mut F)
 where
     F: FnMut(Node),
 {
-    callback(node);
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        walk_tree(child, callback);
+    let mut stack = vec![node];
+    while let Some(current) = stack.pop() {
+        callback(current);
+        // Push children in reverse order so they're processed left-to-right
+        let mut cursor = current.walk();
+        let children: Vec<_> = current.children(&mut cursor).collect();
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
     }
 }
 

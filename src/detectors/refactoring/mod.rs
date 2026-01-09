@@ -455,40 +455,47 @@ impl RefactoringAnalyzer {
             })
     }
 
-    /// Recursively collects normalized tokens from an AST node for fingerprinting.
+    /// Iteratively collects normalized tokens from an AST node for fingerprinting.
+    /// Uses explicit stack to avoid stack overflow on deeply nested ASTs.
     fn collect_fingerprint_tokens(
         &self,
-        node: tree_sitter::Node<'_>,
+        root: tree_sitter::Node<'_>,
         source: &str,
         tokens: &mut Vec<String>,
     ) {
-        if !node.is_named() {
-            return;
-        }
+        let mut stack = vec![root];
 
-        let kind = node.kind();
-        if let Some(token) = Self::normalize_token_kind(kind) {
-            tokens.push(token);
-        } else {
-            return; // Comment node, skip children too
-        }
-
-        if matches!(kind, "binary_expression" | "assignment_expression" | "logical_expression") {
-            if let Some(op_text) = node
-                .child_by_field_name("operator")
-                .and_then(|op| node_text(op, source))
-            {
-                tokens.push(format!("OP:{}", op_text.trim()));
+        while let Some(node) = stack.pop() {
+            if !node.is_named() {
+                continue;
             }
-        }
 
-        if matches!(kind, "call_expression" | "call") {
-            tokens.push(format!("CALL_ARGS:{}", Self::count_call_arguments(&node)));
-        }
+            let kind = node.kind();
+            if let Some(token) = Self::normalize_token_kind(kind) {
+                tokens.push(token);
+            } else {
+                continue; // Comment node, skip children too
+            }
 
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.collect_fingerprint_tokens(child, source, tokens);
+            if matches!(kind, "binary_expression" | "assignment_expression" | "logical_expression") {
+                if let Some(op_text) = node
+                    .child_by_field_name("operator")
+                    .and_then(|op| node_text(op, source))
+                {
+                    tokens.push(format!("OP:{}", op_text.trim()));
+                }
+            }
+
+            if matches!(kind, "call_expression" | "call") {
+                tokens.push(format!("CALL_ARGS:{}", Self::count_call_arguments(&node)));
+            }
+
+            // Push children in reverse order so they're processed left-to-right
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
         }
     }
 

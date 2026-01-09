@@ -245,36 +245,54 @@ impl<'a> ComplexityCalculator<'a> {
         })
     }
 
-    /// Recursively traverse AST nodes
-    fn traverse_node(&mut self, node: &Node, nesting_level: u32) {
-        // Check if this node contributes to complexity
-        if let Some(decision_kind) = self.classify_node(node) {
-            let location = SourceLocation {
-                file_path: self.context.file_path.to_string(),
-                start_line: node.start_position().row + 1,
-                end_line: node.end_position().row + 1,
-                start_column: node.start_position().column + 1,
-                end_column: node.end_position().column + 1,
+    /// Iteratively traverse AST nodes using explicit stack to avoid stack overflow
+    fn traverse_node(&mut self, root: &Node, initial_nesting: u32) {
+        // Use explicit stack: (node_id, start_byte, end_byte, nesting_level)
+        // We store byte positions instead of Node references to work around lifetime issues
+        let mut stack: Vec<(usize, usize, u32)> = vec![(root.start_byte(), root.end_byte(), initial_nesting)];
+        let tree = self.context.tree;
+
+        while let Some((start_byte, end_byte, nesting_level)) = stack.pop() {
+            // Find the node at this position
+            let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) else {
+                continue;
             };
 
-            self.decision_points.push(DecisionPoint {
-                kind: decision_kind,
-                location,
-                nesting_level,
-            });
-        }
+            // Skip if we got a different node (can happen with byte range lookups)
+            if node.start_byte() != start_byte || node.end_byte() != end_byte {
+                continue;
+            }
 
-        // Determine nesting level for children
-        let child_nesting = if self.increases_nesting(node) {
-            nesting_level + 1
-        } else {
-            nesting_level
-        };
+            // Check if this node contributes to complexity
+            if let Some(decision_kind) = self.classify_node(&node) {
+                let location = SourceLocation {
+                    file_path: self.context.file_path.to_string(),
+                    start_line: node.start_position().row + 1,
+                    end_line: node.end_position().row + 1,
+                    start_column: node.start_position().column + 1,
+                    end_column: node.end_position().column + 1,
+                };
 
-        // Traverse children
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.traverse_node(&child, child_nesting);
+                self.decision_points.push(DecisionPoint {
+                    kind: decision_kind,
+                    location,
+                    nesting_level,
+                });
+            }
+
+            // Determine nesting level for children
+            let child_nesting = if self.increases_nesting(&node) {
+                nesting_level + 1
+            } else {
+                nesting_level
+            };
+
+            // Push children in reverse order so they're processed left-to-right
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                stack.push((child.start_byte(), child.end_byte(), child_nesting));
+            }
         }
     }
 
