@@ -453,7 +453,7 @@ impl FeatureScorer {
         const CATEGORY_PATTERNS: &[(&[&str], &str)] = &[
             (&["cyclomatic", "cognitive", "complexity"], "complexity"),
             (&["betweenness", "centrality", "fan_"], "graph"),
-            (&["structure", "class", "method", "function", "directory", "lines_of_code"], "structure"),
+            (&["structure", "class", "method", "function", "directory", "lines_of_code", "nesting"], "structure"),
             (&["style", "naming", "format"], "style"),
             (&["coverage", "test"], "coverage"),
         ];
