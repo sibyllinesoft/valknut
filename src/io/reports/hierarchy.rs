@@ -10,6 +10,7 @@ use crate::core::pipeline::{
     CodeDictionary, DirectoryHealthScore, DirectoryHealthTree, FileRefactoringGroup,
     RefactoringCandidate,
 };
+use crate::core::pipeline::health::normalize_dir_path;
 use crate::core::scoring::Priority;
 
 /// Build a unified hierarchy combining directory health with refactoring candidates
@@ -17,14 +18,15 @@ pub fn build_unified_hierarchy(
     tree: &DirectoryHealthTree,
     file_groups: &[FileRefactoringGroup],
 ) -> Vec<serde_json::Value> {
-    build_unified_hierarchy_with_health(tree, file_groups, &std::collections::HashMap::new())
+    build_unified_hierarchy_with_health(tree, file_groups, &std::collections::HashMap::new(), &std::collections::HashMap::new())
 }
 
-/// Build a unified hierarchy with precomputed file health scores
+/// Build a unified hierarchy with precomputed file and directory health scores
 pub fn build_unified_hierarchy_with_health(
     tree: &DirectoryHealthTree,
     file_groups: &[FileRefactoringGroup],
     file_health: &std::collections::HashMap<String, f64>,
+    directory_health: &std::collections::HashMap<String, f64>,
 ) -> Vec<serde_json::Value> {
     let dir_map = build_directory_map(tree);
     let files_by_dir = group_files_by_directory(file_groups);
@@ -32,13 +34,13 @@ pub fn build_unified_hierarchy_with_health(
     let mut roots = Vec::new();
     for (path, dir) in dir_map.iter() {
         if is_root_directory(dir, &dir_map) {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health));
+            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health, directory_health));
         }
     }
 
     if roots.is_empty() {
         for (path, dir) in dir_map.iter() {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health));
+            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health, directory_health));
         }
     }
 
@@ -46,9 +48,10 @@ pub fn build_unified_hierarchy_with_health(
 }
 
 /// Build a lookup map of directory paths to health scores.
+/// Paths are normalized to ensure consistent matching.
 fn build_directory_map(tree: &DirectoryHealthTree) -> HashMap<String, &DirectoryHealthScore> {
     tree.directories.iter()
-        .map(|(path_buf, dir)| (path_buf.to_string_lossy().to_string(), dir))
+        .map(|(path_buf, dir)| (normalize_dir_path(&path_buf.to_string_lossy()), dir))
         .collect()
 }
 
@@ -68,7 +71,7 @@ fn group_files_by_directory(file_groups: &[FileRefactoringGroup]) -> BTreeMap<St
 /// Check if a directory is a root (no parent in the map).
 fn is_root_directory(dir: &DirectoryHealthScore, dir_map: &HashMap<String, &DirectoryHealthScore>) -> bool {
     dir.parent.as_ref()
-        .map(|p| !dir_map.contains_key(&p.to_string_lossy().to_string()))
+        .map(|p| !dir_map.contains_key(&normalize_dir_path(&p.to_string_lossy())))
         .unwrap_or(true)
 }
 
@@ -79,8 +82,9 @@ fn build_dir_node(
     dir_map: &HashMap<String, &DirectoryHealthScore>,
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
     file_health: &std::collections::HashMap<String, f64>,
+    directory_health: &std::collections::HashMap<String, f64>,
 ) -> serde_json::Value {
-    let mut children = collect_child_directories(path, dir_map, files_by_dir, file_health);
+    let mut children = collect_child_directories(path, dir_map, files_by_dir, file_health, directory_health);
     children.extend(collect_file_children(path, files_by_dir, file_health));
     children.sort_by(|a, b| {
         let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -92,12 +96,33 @@ fn build_dir_node(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string());
 
+    // Use precomputed directory health if available (0-100 scale)
+    // For intermediate directories not in the HashMap, compute from children
+    let normalized_path = normalize_dir_path(path);
+    let health_score_01 = directory_health.get(&normalized_path)
+        .map(|h| h / 100.0)
+        .or_else(|| {
+            // Compute from children's health scores if this is an intermediate directory
+            let child_scores: Vec<f64> = children.iter()
+                .filter_map(|c| c.get("healthScore").and_then(|v| v.as_f64()))
+                .filter(|&s| s > 0.0)
+                .collect();
+            if !child_scores.is_empty() {
+                Some(child_scores.iter().sum::<f64>() / child_scores.len() as f64)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0.0);
+    let health_score_100 = health_score_01 * 100.0;
+
     serde_json::json!({
         "id": format!("directory_{}", path.replace('/', "_")),
         "type": "folder",
         "path": path,
         "name": display_name,
-        "health_score": dir.health_score,
+        "health_score": health_score_100,
+        "healthScore": health_score_01,
         "entity_count": dir.entity_count,
         "file_count": dir.file_count,
         "refactoring_needed": dir.refactoring_needed,
@@ -111,14 +136,16 @@ fn collect_child_directories(
     dir_map: &HashMap<String, &DirectoryHealthScore>,
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
     file_health: &std::collections::HashMap<String, f64>,
+    directory_health: &std::collections::HashMap<String, f64>,
 ) -> Vec<serde_json::Value> {
+    let normalized_path = normalize_dir_path(path);
     dir_map.iter()
         .filter(|(_, child_dir)| {
             child_dir.parent.as_ref()
-                .map(|p| p.to_string_lossy() == path)
+                .map(|p| normalize_dir_path(&p.to_string_lossy()) == normalized_path)
                 .unwrap_or(false)
         })
-        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir, file_health))
+        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir, file_health, directory_health))
         .collect()
 }
 
@@ -158,11 +185,13 @@ fn build_unified_file_node(
         "id": format!("file_{}", file_group.file_path.replace('/', "_")),
         "type": "file",
         "path": file_group.file_path,
+        "file_path": file_group.file_path,  // Also add file_path for entity health lookup
         "name": file_group.file_name,
         "entity_count": file_group.entity_count,
         "avg_score": ((file_group.avg_score * 10.0).round() / 10.0),
         "priority": file_group.highest_priority,
         "health_score": file_health,
+        "healthScore": file_health,  // React expects camelCase (already 0-1 scale)
         "total_issues": total_issues,
         "children": entities
     })
@@ -185,6 +214,32 @@ fn build_unified_entity_value(entity: &RefactoringCandidate) -> serde_json::Valu
         ));
     }
     v
+}
+
+/// Create minimal file groups from file_health map (for files without refactoring candidates)
+pub fn create_file_groups_from_health(
+    file_health: &std::collections::HashMap<String, f64>,
+) -> Vec<FileRefactoringGroup> {
+    file_health
+        .keys()
+        .map(|file_path| {
+            let file_name = std::path::Path::new(file_path)
+                .file_name()
+                .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+                .to_string_lossy()
+                .to_string();
+
+            FileRefactoringGroup {
+                file_path: file_path.clone(),
+                file_name,
+                entity_count: 0,
+                entities: Vec::new(),
+                avg_score: 0.0,
+                highest_priority: Priority::None,
+                total_issues: 0,
+            }
+        })
+        .collect()
 }
 
 /// Create real file groups from individual refactoring candidates

@@ -156,20 +156,31 @@
                 });
 
                 // Entity-level health (functions, classes, etc.)
+                // entity_id format is "file_path:entity_type:entity_name"
                 Object.entries(entityHealth || {}).forEach(([entityId, score]) => {
-                    // entity_id format is typically "file_path:type:name" or similar
-                    // Convert from 0-100 to 0-1 if needed
                     const healthScore = score > 1 ? score / 100 : score;
                     // Store by full entity_id
                     if (!map[entityId]) map[entityId] = {};
                     map[entityId].health_score = healthScore;
-                    // Also store by just the entity name (last part after colon)
+
                     const parts = entityId.split(':');
-                    if (parts.length >= 2) {
+                    if (parts.length >= 3) {
+                        const filePath = parts[0];
+                        const entityType = parts[1];
                         const entityName = parts[parts.length - 1];
+
+                        // Store by various key formats
+                        // Just the entity name
                         if (entityName && !map[entityName]) {
                             map[entityName] = { health_score: healthScore };
                         }
+                        // file:name format (used by some tree representations)
+                        const fileNameKey = `${filePath}:${entityName}`;
+                        if (!map[fileNameKey]) map[fileNameKey] = { health_score: healthScore };
+                        // Also store by relative path variants
+                        const normalizedPath = normalizePath(filePath);
+                        const altEntityId = `${normalizedPath}:${entityType}:${entityName}`;
+                        if (!map[altEntityId]) map[altEntityId] = { health_score: healthScore };
                     }
                 });
 
@@ -194,6 +205,8 @@
                     // For entities (functions, classes), also try to match by entity_id
                     const entityId = node.entity_id || node.entityId || null;
                     const nodeName = node.name || '';
+                    const nodeType = node.type || '';
+                    const entityType = node.entity_type || node.entityType || '';
 
                     let healthSource =
                         directoriesMap[pathKey]
@@ -201,12 +214,23 @@
                         || (base ? directoriesMap[base] : null)
                         || (rootPrefixed ? directoriesMap[rootPrefixed] : null);
 
-                    // For entities, try entity_id lookup first, then by name
+                    // For entities, try multiple matching strategies
                     if (!healthSource && entityId) {
                         healthSource = directoriesMap[entityId];
                     }
-                    if (!healthSource && nodeName && node.type === 'entity') {
-                        healthSource = directoriesMap[nodeName];
+                    // Try constructing entity_id from parent path and entity name
+                    if (!healthSource && nodeName && nodeType === 'entity') {
+                        // Try file_path:entity_type:entity_name format
+                        const constructedId = `${parentPath}:${entityType || 'function'}:${nodeName}`;
+                        healthSource = directoriesMap[constructedId] || directoriesMap[normalizePath(constructedId)];
+                        // Try file_path:entity_name format
+                        if (!healthSource) {
+                            healthSource = directoriesMap[`${parentPath}:${nodeName}`];
+                        }
+                        // Try just the entity name
+                        if (!healthSource) {
+                            healthSource = directoriesMap[nodeName];
+                        }
                     }
 
                     // Fall back to root only for directories/files, not entities

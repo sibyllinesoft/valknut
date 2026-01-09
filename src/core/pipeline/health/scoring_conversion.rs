@@ -82,10 +82,11 @@ pub fn health_per_directory(
             .strip_prefix(&*root_str)
             .map(|p| p.trim_start_matches('/'))
             .unwrap_or(file_path);
-        let dir_path = std::path::Path::new(relative_path)
+        let dir_path_raw = std::path::Path::new(relative_path)
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string());
+        let dir_path = super::normalize_dir_path(&dir_path_raw);
 
         // Extract metrics from feature_contributions
         let maintainability = result

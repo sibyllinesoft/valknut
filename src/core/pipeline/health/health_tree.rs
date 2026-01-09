@@ -198,7 +198,7 @@ impl DirectoryHealthTree {
     fn new_directory_score(path: PathBuf, parent: Option<PathBuf>) -> DirectoryHealthScore {
         DirectoryHealthScore {
             path,
-            health_score: 1.0,
+            health_score: 0.0,
             file_count: 0,
             entity_count: 0,
             refactoring_needed: 0,
