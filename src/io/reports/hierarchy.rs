@@ -430,8 +430,44 @@ fn build_entity_node(
         .map(|part| part.to_string())
         .unwrap_or_else(|| entity.name.clone());
 
-    let entity_children = candidate_lookup.get(&entity.entity_id)
-        .map(|candidate| build_entity_children(candidate, &entity.entity_id, code_dictionary))
+    let candidate = candidate_lookup.get(&entity.entity_id);
+    let entity_children = candidate
+        .map(|c| build_entity_children(c, &entity.entity_id, code_dictionary))
+        .unwrap_or_default();
+
+    // Build issues array for tooltip display
+    let issues: Vec<serde_json::Value> = candidate
+        .map(|c| {
+            c.issues.iter().map(|issue| {
+                let issue_meta = code_dictionary.issues.get(&issue.code);
+                serde_json::json!({
+                    "code": issue.code,
+                    "category": issue.category,
+                    "title": issue_meta.map(|def| def.title.clone()).unwrap_or_else(|| issue.category.clone()),
+                    "summary": issue_meta.map(|def| def.summary.clone()).unwrap_or_default(),
+                    "severity": issue.severity,
+                    "contributing_features": issue.contributing_features
+                })
+            }).collect()
+        })
+        .unwrap_or_default();
+
+    // Build suggestions array for tooltip display
+    let suggestions: Vec<serde_json::Value> = candidate
+        .map(|c| {
+            c.suggestions.iter().map(|suggestion| {
+                let suggestion_meta = code_dictionary.suggestions.get(&suggestion.refactoring_type);
+                serde_json::json!({
+                    "code": suggestion.refactoring_type.clone(),
+                    "refactoring_type": suggestion.refactoring_type.clone(),
+                    "title": suggestion_meta.map(|def| def.title.clone()).unwrap_or_else(|| suggestion.refactoring_type.clone()),
+                    "summary": suggestion_meta.map(|def| def.summary.clone()).unwrap_or_default(),
+                    "impact": suggestion.impact,
+                    "effort": suggestion.effort,
+                    "priority": suggestion.priority
+                })
+            }).collect()
+        })
         .unwrap_or_default();
 
     serde_json::json!({
@@ -442,6 +478,8 @@ fn build_entity_node(
         "priority": format!("{:?}", entity.priority),
         "issue_count": entity.issue_count,
         "suggestion_count": entity.suggestion_count,
+        "issues": issues,
+        "suggestions": suggestions,
         "children": entity_children
     })
 }

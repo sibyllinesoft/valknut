@@ -633,7 +633,11 @@ impl RefactoringCandidate {
             "complexity" => {
                 feature_name.contains("cyclomatic") || feature_name.contains("cognitive")
             }
-            "structure" => feature_name.contains("structure") || feature_name.contains("class"),
+            "structure" => {
+                feature_name.contains("structure")
+                    || feature_name.contains("class")
+                    || feature_name.contains("nesting")
+            }
             "graph" => feature_name.contains("fan_") || feature_name.contains("centrality"),
             _ => true,
         }
