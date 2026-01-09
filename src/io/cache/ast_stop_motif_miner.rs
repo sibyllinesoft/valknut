@@ -120,79 +120,89 @@ impl AstStopMotifMiner {
 
     /// Select stop-motifs based on frequency analysis
     fn select_stop_motifs(&self, patterns: &[AstPattern]) -> Result<Vec<AstStopMotifEntry>> {
-        let mut stop_motifs = Vec::new();
-
-        // Calculate pattern frequencies by type
-        let mut pattern_frequencies: HashMap<String, usize> = HashMap::new();
-        for pattern in patterns {
-            *pattern_frequencies.entry(pattern.id.clone()).or_insert(0) += 1;
-        }
-
-        // Sort patterns by frequency
-        let mut frequency_pairs: Vec<(String, usize)> = pattern_frequencies.into_iter().collect();
-        frequency_pairs.sort_by(|a, b| b.1.cmp(&a.1));
-
+        let frequency_pairs = Self::calculate_sorted_frequencies(patterns);
         let total_patterns = frequency_pairs.len();
+        let total_functions = patterns.len();
 
-        // Select top percentile patterns as stop-motifs
-        for (i, (pattern_id, support)) in frequency_pairs.iter().enumerate() {
-            if let Some(pattern) = patterns.iter().find(|p| &p.id == pattern_id) {
-                let percentile_threshold = match pattern.pattern_type {
-                    AstPatternType::NodeType => self.frequency_thresholds.node_type_percentile,
-                    AstPatternType::SubtreePattern => self.frequency_thresholds.subtree_percentile,
-                    AstPatternType::TokenSequence => {
-                        self.frequency_thresholds.token_sequence_percentile
-                    }
-                    AstPatternType::ControlFlowPattern => {
-                        self.frequency_thresholds.subtree_percentile
-                    }
-                    AstPatternType::FrameworkPattern => {
-                        self.frequency_thresholds.subtree_percentile
-                    }
-                };
-
-                // Calculate which percentile this pattern falls into
-                let pattern_rank = i + 1;
-
-                let pattern_percentile = 1.0 - (pattern_rank as f64 / total_patterns as f64);
-
-                if pattern_percentile >= percentile_threshold
-                    && *support >= self.pattern_extractor.config.min_support
-                {
-                    // Calculate IDF score
-                    let total_functions = patterns.len();
-                    let idf_score = (total_functions as f64 / *support as f64).ln();
-
-                    if idf_score >= self.frequency_thresholds.min_idf_score {
-                        let category = match pattern.pattern_type {
-                            AstPatternType::NodeType => AstPatternCategory::NodeType,
-                            AstPatternType::SubtreePattern => AstPatternCategory::SubtreePattern,
-                            AstPatternType::TokenSequence => AstPatternCategory::TokenSequence,
-                            AstPatternType::ControlFlowPattern => {
-                                AstPatternCategory::ControlFlowPattern
-                            }
-                            AstPatternType::FrameworkPattern => {
-                                AstPatternCategory::FrameworkPattern
-                            }
-                        };
-
-                        let stop_motif = AstStopMotifEntry {
-                            pattern: pattern.id.clone(),
-                            support: *support,
-                            idf_score,
-                            weight_multiplier: 0.2, // Common weight for stop-motifs
-                            category,
-                            language: pattern.language.clone(),
-                            metadata: pattern.metadata.clone(),
-                        };
-
-                        stop_motifs.push(stop_motif);
-                    }
-                }
-            }
-        }
+        let stop_motifs = frequency_pairs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (pattern_id, support))| {
+                let pattern = patterns.iter().find(|p| &p.id == pattern_id)?;
+                self.try_create_stop_motif(pattern, *support, i, total_patterns, total_functions)
+            })
+            .collect();
 
         Ok(stop_motifs)
+    }
+
+    /// Calculate pattern frequencies sorted by support descending.
+    fn calculate_sorted_frequencies(patterns: &[AstPattern]) -> Vec<(String, usize)> {
+        let mut frequencies: HashMap<String, usize> = HashMap::new();
+        for pattern in patterns {
+            *frequencies.entry(pattern.id.clone()).or_insert(0) += 1;
+        }
+        let mut pairs: Vec<_> = frequencies.into_iter().collect();
+        pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        pairs
+    }
+
+    /// Get the percentile threshold for a pattern type.
+    fn get_percentile_threshold(&self, pattern_type: &AstPatternType) -> f64 {
+        match pattern_type {
+            AstPatternType::NodeType => self.frequency_thresholds.node_type_percentile,
+            AstPatternType::SubtreePattern
+            | AstPatternType::ControlFlowPattern
+            | AstPatternType::FrameworkPattern => self.frequency_thresholds.subtree_percentile,
+            AstPatternType::TokenSequence => self.frequency_thresholds.token_sequence_percentile,
+        }
+    }
+
+    /// Try to create a stop motif entry if the pattern meets thresholds.
+    fn try_create_stop_motif(
+        &self,
+        pattern: &AstPattern,
+        support: usize,
+        rank: usize,
+        total_patterns: usize,
+        total_functions: usize,
+    ) -> Option<AstStopMotifEntry> {
+        let percentile_threshold = self.get_percentile_threshold(&pattern.pattern_type);
+        let pattern_percentile = 1.0 - ((rank + 1) as f64 / total_patterns as f64);
+
+        if pattern_percentile < percentile_threshold {
+            return None;
+        }
+        if support < self.pattern_extractor.config.min_support {
+            return None;
+        }
+
+        let idf_score = (total_functions as f64 / support as f64).ln();
+        if idf_score < self.frequency_thresholds.min_idf_score {
+            return None;
+        }
+
+        Some(AstStopMotifEntry {
+            pattern: pattern.id.clone(),
+            support,
+            idf_score,
+            weight_multiplier: 0.2,
+            category: pattern.pattern_type.clone().into(),
+            language: pattern.language.clone(),
+            metadata: pattern.metadata.clone(),
+        })
+    }
+}
+
+impl From<AstPatternType> for AstPatternCategory {
+    fn from(pattern_type: AstPatternType) -> Self {
+        match pattern_type {
+            AstPatternType::NodeType => AstPatternCategory::NodeType,
+            AstPatternType::SubtreePattern => AstPatternCategory::SubtreePattern,
+            AstPatternType::TokenSequence => AstPatternCategory::TokenSequence,
+            AstPatternType::ControlFlowPattern => AstPatternCategory::ControlFlowPattern,
+            AstPatternType::FrameworkPattern => AstPatternCategory::FrameworkPattern,
+        }
     }
 }
 

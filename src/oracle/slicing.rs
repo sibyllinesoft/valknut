@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 
 use super::bundle::{SKIP_DIRS, SOURCE_EXTENSIONS};
 use super::helpers::{is_test_file, task_priority_score};
-use super::types::{CodebaseAssessment, OracleConfig, RefactoringOracleResponse};
+use super::types::{CodebaseAssessment, OracleConfig, RefactoringOracleResponse, RefactoringTask};
 use super::gemini::SliceAnalysisResult;
 
 /// Dry-run mode: show slicing plan without calling the API.
@@ -219,6 +219,59 @@ pub fn print_slice_info(slice: &CodeSlice, current: usize, total: usize) {
     }
 }
 
+/// Get the module prefix for a slice result.
+fn get_module_prefix(result: &SliceAnalysisResult) -> String {
+    result.primary_module.clone().unwrap_or_else(|| format!("slice_{}", result.slice_id))
+}
+
+/// Aggregate assessment data from all slice results.
+fn aggregate_assessments(results: &[SliceAnalysisResult]) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut summaries = Vec::new();
+    let mut strengths = Vec::new();
+    let mut issues = Vec::new();
+
+    for result in results {
+        let prefix = get_module_prefix(result);
+        summaries.push(format!("[{}] {}", prefix, result.response.assessment.get_summary()));
+
+        for s in &result.response.assessment.strengths {
+            strengths.push(format!("[{}] {}", prefix, s));
+        }
+        for i in &result.response.assessment.issues {
+            issues.push(format!("[{}] {}", prefix, i));
+        }
+    }
+
+    (summaries, strengths, issues)
+}
+
+/// Aggregate and sort tasks from all slice results.
+fn aggregate_tasks(results: &[SliceAnalysisResult]) -> Vec<RefactoringTask> {
+    let mut tasks = Vec::new();
+    let mut id_counter = 1;
+
+    for result in results {
+        let prefix = get_module_prefix(result);
+        for task in result.response.all_tasks() {
+            tasks.push(RefactoringTask {
+                id: format!("T{}", id_counter),
+                title: format!("[{}] {}", prefix, task.title),
+                depends_on: vec![],
+                ..task.clone()
+            });
+            id_counter += 1;
+        }
+    }
+
+    tasks.sort_by(|a, b| {
+        task_priority_score(b)
+            .partial_cmp(&task_priority_score(a))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    tasks.truncate(20);
+    tasks
+}
+
 /// Aggregate results from multiple slices into a single response.
 pub fn aggregate_slice_results(
     slice_results: Vec<SliceAnalysisResult>,
@@ -228,80 +281,22 @@ pub fn aggregate_slice_results(
         return Err(ValknutError::internal("No slice results to aggregate".to_string()));
     }
 
-    // If only one slice, return it directly
     if slice_results.len() == 1 {
         return Ok(slice_results.into_iter().next().unwrap().response);
     }
 
-    // Combine assessments
-    let mut all_issues = Vec::new();
-    let mut all_strengths = Vec::new();
-    let mut summaries = Vec::new();
-
-    for result in &slice_results {
-        let module_prefix = result
-            .primary_module
-            .clone()
-            .unwrap_or_else(|| format!("slice_{}", result.slice_id));
-
-        let summary = result.response.assessment.get_summary();
-        summaries.push(format!("[{}] {}", module_prefix, summary));
-
-        for strength in &result.response.assessment.strengths {
-            all_strengths.push(format!("[{}] {}", module_prefix, strength));
-        }
-
-        for issue in &result.response.assessment.issues {
-            all_issues.push(format!("[{}] {}", module_prefix, issue));
-        }
-    }
-
-    // Combine tasks, adding slice context
-    let mut all_tasks = Vec::new();
-    let mut task_id_counter = 1;
-
-    for result in &slice_results {
-        let module_prefix = result
-            .primary_module
-            .clone()
-            .unwrap_or_else(|| format!("slice_{}", result.slice_id));
-
-        for task in result.response.all_tasks() {
-            let mut new_task = task.clone();
-            new_task.id = format!("T{}", task_id_counter);
-            new_task.title = format!("[{}] {}", module_prefix, task.title);
-            // Clear depends_on since cross-slice dependencies are complex
-            new_task.depends_on = vec![];
-            all_tasks.push(new_task);
-            task_id_counter += 1;
-        }
-    }
-
-    // Deduplicate and sort tasks by impact/effort
-    all_tasks.sort_by(|a, b| {
-        let a_score = task_priority_score(a);
-        let b_score = task_priority_score(b);
-        b_score
-            .partial_cmp(&a_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Limit to top 20 tasks
-    all_tasks.truncate(20);
+    let (summaries, strengths, issues) = aggregate_assessments(&slice_results);
+    let tasks = aggregate_tasks(&slice_results);
 
     Ok(RefactoringOracleResponse {
         assessment: CodebaseAssessment {
-            summary: Some(format!(
-                "Aggregated from {} slices. {}",
-                slice_results.len(),
-                summaries.join(" ")
-            )),
+            summary: Some(format!("Aggregated from {} slices. {}", slice_results.len(), summaries.join(" "))),
             architectural_narrative: None,
             architectural_style: None,
-            strengths: all_strengths.into_iter().take(5).collect(),
-            issues: all_issues.into_iter().take(10).collect(),
+            strengths: strengths.into_iter().take(5).collect(),
+            issues: issues.into_iter().take(10).collect(),
         },
-        tasks: all_tasks,
+        tasks,
         refactoring_roadmap: None,
     })
 }

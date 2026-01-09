@@ -22,11 +22,13 @@ use std::sync::Arc;
 
 use super::health::doc_health::compute_doc_health;
 use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
+use super::discovery::services::StageResultsBundle;
 use super::results::pipeline_results::{
     ComprehensiveAnalysisResult, CoverageAnalysisResults, DocumentationAnalysisResults,
     HealthMetrics, MemoryStats, PipelineResults, PipelineStatistics, PipelineStatus,
     ScoringResults,
 };
+use super::results::result_types::AnalysisSummary;
 use super::pipeline_stages::AnalysisStages;
 use super::health::scoring_conversion::{
     convert_to_scoring_results, create_feature_vectors_from_results, health_from_scores,
@@ -35,7 +37,6 @@ use super::discovery::services::{
     BatchedFileReader, DefaultResultAggregator, FileBatchReader, FileDiscoverer,
     GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator,
 };
-use crate::core::pipeline::AnalysisSummary;
 use crate::detectors::cohesion::CohesionAnalysisResults;
 
 /// Progress callback function type
@@ -207,125 +208,46 @@ impl AnalysisPipeline {
     ) -> Result<ComprehensiveAnalysisResult> {
         let start_time = Instant::now();
         let analysis_id = Uuid::new_v4().to_string();
+        info!("Starting comprehensive analysis {} for {} paths", analysis_id, paths.len());
 
-        info!(
-            "Starting comprehensive analysis {} for {} paths",
-            analysis_id,
-            paths.len()
-        );
+        let report = |msg: &str, pct: f64| {
+            if let Some(ref cb) = progress_callback {
+                cb(msg, pct);
+            }
+        };
 
-        // Update progress
-        if let Some(ref callback) = progress_callback {
-            callback("Discovering files...", 0.0);
-        }
-
-        // Stage 1: File discovery
+        // Stage 1: File discovery and reading
+        report("Discovering files...", 0.0);
         let files = self.discover_files(paths).await?;
         info!("Discovered {} files for analysis", files.len());
 
-        if let Some(ref callback) = progress_callback {
-            callback("Running arena-based entity extraction...", 5.0);
-        }
-
-        // Stage 1.5: Batched file reading for performance
-        if let Some(ref callback) = progress_callback {
-            callback("Reading file contents in batches...", 7.5);
-        }
-
+        report("Reading file contents in batches...", 5.0);
         let file_contents = self.read_files_batched(&files).await?;
         info!("Read {} files in batches", file_contents.len());
 
-        // Stage 1.6: Arena-based entity extraction (performance optimization)
-        let arena_results = self
-            .stage_runner
-            .run_arena_analysis_with_content(&file_contents)
-            .await?;
+        // Stage 2: Arena-based entity extraction
+        report("Running arena-based entity extraction...", 7.5);
+        let arena_results = self.stage_runner.run_arena_analysis_with_content(&file_contents).await?;
         info!(
             "Arena analysis completed: {} files processed with {:.2} KB total arena usage",
             arena_results.len(),
             arena_results.iter().map(|r| r.arena_kb_used()).sum::<f64>()
         );
 
-        if let Some(ref callback) = progress_callback {
-            callback("Running parallel analysis stages...", 10.0);
-        }
+        // Stage 3: Run all analysis stages
+        report("Running parallel analysis stages...", 10.0);
+        let stages = self.stage_runner.run_all_stages(&self.config, paths, &files, &arena_results).await?;
 
-        let stage_results_bundle = self
-            .stage_runner
-            .run_all_stages(&self.config, paths, &files, &arena_results)
-            .await?;
-        let structure_results = stage_results_bundle.structure;
-        let coverage_results = stage_results_bundle.coverage;
-        let complexity_results = stage_results_bundle.complexity;
-        let refactoring_results = stage_results_bundle.refactoring;
-        let impact_results = stage_results_bundle.impact;
-        let lsh_results = stage_results_bundle.lsh;
-        let cohesion_results = stage_results_bundle.cohesion;
-
-        if let Some(ref callback) = progress_callback {
-            callback("Calculating health metrics...", 90.0);
-        }
-
-        // Stage 8: Calculate summary and health metrics
-        let mut summary = self.result_aggregator.build_summary(
-            &files,
-            &structure_results,
-            &complexity_results,
-            &refactoring_results,
-            &impact_results,
-        );
-        let mut health_metrics = self.result_aggregator.build_health_metrics(
-            &complexity_results,
-            &structure_results,
-            &impact_results,
+        // Stage 4: Calculate health metrics
+        report("Calculating health metrics...", 90.0);
+        let (mut summary, mut health_metrics) = self.build_metrics(&files, &stages);
+        let documentation_results = self.compute_documentation_health(
+            paths, &files, &mut summary, &mut health_metrics
         );
 
-        let mut documentation_results = DocumentationAnalysisResults::default();
-
-        // Compute documentation health (project-level for now)
-        if let Some(doc_health_result) = compute_doc_health(
-            paths,
-            &files,
-            self.valknut_config
-                .as_ref()
-                .map(|c| &c.docs)
-                .unwrap_or(&crate::core::config::DocHealthConfig::default()),
-        ) {
-            health_metrics.doc_health_score = doc_health_result.score;
-            health_metrics.overall_health_score = (health_metrics.maintainability_score * 0.28
-                + health_metrics.structure_quality_score * 0.25
-                + (100.0 - health_metrics.complexity_score) * 0.18
-                + (100.0 - health_metrics.technical_debt_ratio) * 0.19
-                + health_metrics.doc_health_score * 0.10)
-                .clamp(0.0, 100.0);
-
-            summary.doc_health_score = (doc_health_result.score / 100.0).clamp(0.0, 1.0);
-            summary.apply_doc_issues(doc_health_result.issue_count);
-
-            documentation_results.enabled = true;
-            documentation_results.issues_count = doc_health_result.issue_count;
-            documentation_results.doc_health_score = doc_health_result.score;
-            documentation_results.file_doc_issues = doc_health_result.file_issues;
-            documentation_results.file_doc_health = doc_health_result.file_health;
-            documentation_results.directory_doc_health = doc_health_result.dir_scores;
-            documentation_results.directory_doc_issues = doc_health_result.dir_issues;
-        }
-
-        if let Some(ref callback) = progress_callback {
-            callback("Analysis complete", 100.0);
-        }
-
+        report("Analysis complete", 100.0);
         let processing_time = start_time.elapsed().as_secs_f64();
-
-        info!(
-            "Comprehensive analysis completed in {:.2}s",
-            processing_time
-        );
-        info!("Total issues found: {}", summary.total_issues);
-        info!(
-            "Overall health score: {:.1}",
-            health_metrics.overall_health_score
-        );
+        self.log_completion(&summary, &health_metrics, processing_time);
 
         Ok(ComprehensiveAnalysisResult {
             analysis_id,
@@ -333,16 +255,89 @@ impl AnalysisPipeline {
             processing_time,
             config: self.config.clone(),
             summary,
-            structure: structure_results,
-            complexity: complexity_results,
-            refactoring: refactoring_results,
-            impact: impact_results,
-            lsh: lsh_results,
-            coverage: coverage_results,
+            structure: stages.structure,
+            complexity: stages.complexity,
+            refactoring: stages.refactoring,
+            impact: stages.impact,
+            lsh: stages.lsh,
+            coverage: stages.coverage,
             documentation: documentation_results,
-            cohesion: cohesion_results,
+            cohesion: stages.cohesion,
             health_metrics,
         })
+    }
+
+    /// Build summary and health metrics from stage results.
+    fn build_metrics(
+        &self,
+        files: &[PathBuf],
+        stages: &StageResultsBundle,
+    ) -> (AnalysisSummary, HealthMetrics) {
+        let summary = self.result_aggregator.build_summary(
+            files,
+            &stages.structure,
+            &stages.complexity,
+            &stages.refactoring,
+            &stages.impact,
+        );
+        let health_metrics = self.result_aggregator.build_health_metrics(
+            &stages.complexity,
+            &stages.structure,
+            &stages.impact,
+        );
+        (summary, health_metrics)
+    }
+
+    /// Compute documentation health and update metrics.
+    fn compute_documentation_health(
+        &self,
+        paths: &[PathBuf],
+        files: &[PathBuf],
+        summary: &mut AnalysisSummary,
+        health_metrics: &mut HealthMetrics,
+    ) -> DocumentationAnalysisResults {
+        let default_doc_config = crate::core::config::DocHealthConfig::default();
+        let doc_config = self.valknut_config
+            .as_ref()
+            .map(|c| &c.docs)
+            .unwrap_or(&default_doc_config);
+
+        let Some(doc_result) = compute_doc_health(paths, files, doc_config) else {
+            return DocumentationAnalysisResults::default();
+        };
+
+        health_metrics.doc_health_score = doc_result.score;
+        health_metrics.overall_health_score = self.calculate_overall_health(health_metrics);
+
+        summary.doc_health_score = (doc_result.score / 100.0).clamp(0.0, 1.0);
+        summary.apply_doc_issues(doc_result.issue_count);
+
+        DocumentationAnalysisResults {
+            enabled: true,
+            issues_count: doc_result.issue_count,
+            doc_health_score: doc_result.score,
+            file_doc_issues: doc_result.file_issues,
+            file_doc_health: doc_result.file_health,
+            directory_doc_health: doc_result.dir_scores,
+            directory_doc_issues: doc_result.dir_issues,
+        }
+    }
+
+    /// Calculate overall health score from component metrics.
+    fn calculate_overall_health(&self, metrics: &HealthMetrics) -> f64 {
+        (metrics.maintainability_score * 0.28
+            + metrics.structure_quality_score * 0.25
+            + (100.0 - metrics.complexity_score) * 0.18
+            + (100.0 - metrics.technical_debt_ratio) * 0.19
+            + metrics.doc_health_score * 0.10)
+            .clamp(0.0, 100.0)
+    }
+
+    /// Log analysis completion info.
+    fn log_completion(&self, summary: &AnalysisSummary, health: &HealthMetrics, time: f64) {
+        info!("Comprehensive analysis completed in {:.2}s", time);
+        info!("Total issues found: {}", summary.total_issues);
+        info!("Overall health score: {:.1}", health.overall_health_score);
     }
 
     /// Discover files to analyze using git-aware file discovery
