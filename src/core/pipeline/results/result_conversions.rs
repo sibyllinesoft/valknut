@@ -490,6 +490,59 @@ impl AnalysisResults {
     }
 }
 
+/// Extract file path from an entity_id (format: "file_path:type:name").
+fn extract_raw_path_from_entity_id(entity_id: &str) -> String {
+    let parts: Vec<&str> = entity_id.split(':').collect();
+    if parts.len() >= 2 {
+        parts[0].to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+/// Convert an absolute path to a relative path by stripping the project root.
+fn convert_to_relative_path(raw_path: &str, project_root: &std::path::Path) -> String {
+    let path = std::path::Path::new(raw_path);
+
+    // First try direct strip_prefix
+    if let Ok(relative) = path.strip_prefix(project_root) {
+        return relative.to_string_lossy().to_string();
+    }
+
+    // Try string-based prefix stripping (handles most cases)
+    if !project_root.as_os_str().is_empty() {
+        let root_str = project_root.to_string_lossy();
+        if raw_path.starts_with(root_str.as_ref()) {
+            let relative = &raw_path[root_str.len()..];
+            return relative.trim_start_matches('/').to_string();
+        }
+    }
+
+    // Fallback: clean "./" prefix if present
+    if raw_path.starts_with("./") {
+        raw_path[2..].to_string()
+    } else {
+        raw_path.to_string()
+    }
+}
+
+/// Extract line range from feature vector metadata.
+fn extract_line_range_from_metadata(vector: &FeatureVector) -> Option<(usize, usize)> {
+    vector
+        .metadata
+        .get("line_range")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            if arr.len() >= 2 {
+                let start = arr[0].as_u64()?;
+                let end = arr[1].as_u64()?;
+                Some((start as usize, end as usize))
+            } else {
+                None
+            }
+        })
+}
+
 /// Factory and conversion methods for [`RefactoringCandidate`].
 impl RefactoringCandidate {
     /// Create a refactoring candidate from a scoring result
@@ -500,70 +553,21 @@ impl RefactoringCandidate {
         feature_vectors: &[FeatureVector],
         project_root: &std::path::Path,
     ) -> Self {
-        // Find the corresponding feature vector
         let feature_vector = feature_vectors
             .iter()
             .find(|v| v.entity_id == result.entity_id);
 
-        // Extract file path from entity_id (format: "file_path:type:name")
-        let file_path = {
-            let parts: Vec<&str> = result.entity_id.split(':').collect();
-            let raw_path = if parts.len() >= 2 {
-                parts[0].to_string()
-            } else {
-                "unknown".to_string()
-            };
+        let raw_path = extract_raw_path_from_entity_id(&result.entity_id);
+        let file_path = convert_to_relative_path(&raw_path, project_root);
 
-            // Convert to relative path by stripping project root
-            // Try multiple approaches to handle canonicalized vs non-canonicalized paths
-            let path = std::path::Path::new(&raw_path);
-
-            // First try direct strip_prefix
-            if let Ok(relative) = path.strip_prefix(project_root) {
-                relative.to_string_lossy().to_string()
-            } else if !project_root.as_os_str().is_empty() {
-                // Try string-based prefix stripping (handles most cases)
-                let root_str = project_root.to_string_lossy();
-                if raw_path.starts_with(root_str.as_ref()) {
-                    let relative = &raw_path[root_str.len()..];
-                    relative.trim_start_matches('/').to_string()
-                } else if raw_path.starts_with("./") {
-                    raw_path[2..].to_string()
-                } else {
-                    raw_path
-                }
-            } else if raw_path.starts_with("./") {
-                // Fallback: clean "./" prefix
-                raw_path[2..].to_string()
-            } else {
-                raw_path
-            }
-        };
-
-        // Extract entity information
         let (name, line_range) = if let Some(vector) = feature_vector {
-            // Extract from metadata if available, falling back to parsing entity_id
             let name = vector
                 .metadata
                 .get("name")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| Self::extract_name_from_entity_id(&result.entity_id));
-
-            let line_range = vector
-                .metadata
-                .get("line_range")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| {
-                    if arr.len() >= 2 {
-                        let start = arr[0].as_u64()?;
-                        let end = arr[1].as_u64()?;
-                        Some((start as usize, end as usize))
-                    } else {
-                        None
-                    }
-                });
-
+            let line_range = extract_line_range_from_metadata(vector);
             (name, line_range)
         } else {
             (Self::extract_name_from_entity_id(&result.entity_id), None)

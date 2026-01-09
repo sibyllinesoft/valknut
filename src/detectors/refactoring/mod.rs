@@ -157,83 +157,32 @@ impl RefactoringAnalyzer {
 
     /// Analyze a single file for refactoring opportunities
     async fn analyze_file(&self, file_path: &Path) -> Result<RefactoringAnalysisResult> {
-        debug!(
-            "Analyzing refactoring opportunities for: {}",
-            file_path.display()
-        );
+        debug!("Analyzing refactoring opportunities for: {}", file_path.display());
 
         let content = FileReader::read_to_string(file_path)?;
         let file_path_str = file_path.to_string_lossy().to_string();
 
-        let complexity_results = match self
-            .complexity_analyzer
-            .analyze_file_with_results(&file_path_str, &content)
-            .await
-        {
-            Ok(results) => results,
-            Err(err) => {
-                warn!(
-                    "Complexity analysis failed for {}: {}",
-                    file_path.display(),
-                    err
-                );
-                Vec::new()
-            }
-        };
-        let complexity_by_id: HashMap<String, ComplexityAnalysisResult> = complexity_results
-            .into_iter()
-            .map(|res| (res.entity_id.clone(), res))
-            .collect();
+        let complexity_by_id = self.get_complexity_map(&file_path_str, &content).await;
 
         let mut adapter = match adapter_for_file(file_path) {
             Ok(adapter) => adapter,
             Err(err) => {
                 warn!("No language adapter for {}: {}", file_path.display(), err);
-                return Ok(RefactoringAnalysisResult {
-                    file_path: file_path_str,
-                    recommendations: Vec::new(),
-                    refactoring_score: 0.0,
-                });
+                return Ok(Self::empty_result(file_path_str));
             }
         };
 
         let parse_index = adapter.parse_source(&content, &file_path_str)?;
         let cached_tree = self.ast_service.get_ast(&file_path_str, &content).await?;
-        let ast_context = self
-            .ast_service
-            .create_context(&cached_tree, &file_path_str);
+        let ast_context = self.ast_service.create_context(&cached_tree, &file_path_str);
         let entity_summaries =
             self.collect_entity_summaries(&parse_index, &content, &complexity_by_id, &ast_context)?;
 
         if entity_summaries.is_empty() {
-            return Ok(RefactoringAnalysisResult {
-                file_path: file_path_str,
-                recommendations: Vec::new(),
-                refactoring_score: 0.0,
-            });
+            return Ok(Self::empty_result(file_path_str));
         }
 
-        let functions: Vec<_> = entity_summaries
-            .iter()
-            .filter(|e| Self::is_function_entity(e))
-            .cloned()
-            .collect();
-
-        let type_like_entities: Vec<_> = entity_summaries
-            .iter()
-            .filter(|e| Self::is_type_entity(e))
-            .cloned()
-            .collect();
-
-        let mut recommendations = Vec::new();
-        recommendations.extend(self.detect_long_methods(&functions));
-        recommendations.extend(self.detect_complex_conditionals(&functions));
-        recommendations.extend(self.detect_duplicate_code(&functions));
-        recommendations.extend(self.detect_large_types(&type_like_entities));
-
-        recommendations.retain(|rec| rec.estimated_impact >= self.config.min_impact_threshold);
-        recommendations.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
-
+        let recommendations = self.collect_recommendations(&entity_summaries, &content);
         let refactoring_score = self.calculate_refactoring_score(&recommendations, &content);
 
         Ok(RefactoringAnalysisResult {
@@ -241,6 +190,50 @@ impl RefactoringAnalyzer {
             recommendations,
             refactoring_score,
         })
+    }
+
+    /// Create an empty refactoring result for a file.
+    fn empty_result(file_path: String) -> RefactoringAnalysisResult {
+        RefactoringAnalysisResult {
+            file_path,
+            recommendations: Vec::new(),
+            refactoring_score: 0.0,
+        }
+    }
+
+    /// Get complexity results as a map, returning empty on error.
+    async fn get_complexity_map(
+        &self,
+        file_path: &str,
+        content: &str,
+    ) -> HashMap<String, ComplexityAnalysisResult> {
+        match self.complexity_analyzer.analyze_file_with_results(file_path, content).await {
+            Ok(results) => results.into_iter().map(|r| (r.entity_id.clone(), r)).collect(),
+            Err(err) => {
+                warn!("Complexity analysis failed for {}: {}", file_path, err);
+                HashMap::new()
+            }
+        }
+    }
+
+    /// Collect all refactoring recommendations for the given entities.
+    fn collect_recommendations(
+        &self,
+        entities: &[CodeEntity],
+        _content: &str,
+    ) -> Vec<RefactoringRecommendation> {
+        let functions: Vec<_> = entities.iter().filter(|e| Self::is_function_entity(e)).cloned().collect();
+        let types: Vec<_> = entities.iter().filter(|e| Self::is_type_entity(e)).cloned().collect();
+
+        let mut recs = Vec::new();
+        recs.extend(self.detect_long_methods(&functions));
+        recs.extend(self.detect_complex_conditionals(&functions));
+        recs.extend(self.detect_duplicate_code(&functions));
+        recs.extend(self.detect_large_types(&types));
+
+        recs.retain(|r| r.estimated_impact >= self.config.min_impact_threshold);
+        recs.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
+        recs
     }
 
     /// Collect entity summaries from the parse index for later analysis

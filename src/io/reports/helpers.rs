@@ -480,6 +480,40 @@ struct InlineFileConfig {
     file_type: &'static str,
 }
 
+/// Build a list of paths to search for a file, checking VALKNUT_TEMPLATE_ROOT first.
+fn build_search_paths(file_path: &str, prefixes: &[String]) -> Vec<String> {
+    let mut paths = Vec::new();
+
+    // Check VALKNUT_TEMPLATE_ROOT first (used in container deployments)
+    if let Ok(template_root) = std::env::var("VALKNUT_TEMPLATE_ROOT") {
+        for prefix in prefixes {
+            let full_path = if prefix.is_empty() {
+                format!("{}/{}", template_root, file_path)
+            } else {
+                format!("{}/{}{}", template_root, prefix, file_path)
+            };
+            paths.push(full_path);
+        }
+    }
+
+    // Also try CWD-relative paths
+    for prefix in prefixes {
+        let full_path = if prefix.is_empty() {
+            file_path.to_string()
+        } else {
+            format!("{}{}", prefix, file_path)
+        };
+        paths.push(full_path);
+    }
+
+    paths
+}
+
+/// Try to read a file from a list of possible paths.
+fn try_read_from_paths(paths: &[String]) -> Option<String> {
+    paths.iter().find_map(|path| fs::read_to_string(path).ok())
+}
+
 /// Register a helper that inlines file content from disk, trying multiple paths.
 fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: InlineFileConfig) {
     let helper_name = config.name.to_string();
@@ -501,37 +535,11 @@ fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: Inl
                     RenderError::new(&format!("{} helper requires a file path parameter", helper_name))
                 })?;
 
-                // Build list of paths to try: VALKNUT_TEMPLATE_ROOT first, then CWD-relative
-                let mut paths_to_try: Vec<String> = Vec::new();
+                let paths_to_try = build_search_paths(file_path, &prefixes);
 
-                // Check VALKNUT_TEMPLATE_ROOT first (used in container deployments)
-                if let Ok(template_root) = std::env::var("VALKNUT_TEMPLATE_ROOT") {
-                    for prefix in &prefixes {
-                        let full_path = if prefix.is_empty() {
-                            format!("{}/{}", template_root, file_path)
-                        } else {
-                            format!("{}/{}{}", template_root, prefix, file_path)
-                        };
-                        paths_to_try.push(full_path);
-                    }
-                }
-
-                // Also try CWD-relative paths
-                for prefix in &prefixes {
-                    let full_path = if prefix.is_empty() {
-                        file_path.to_string()
-                    } else {
-                        format!("{}{}", prefix, file_path)
-                    };
-                    paths_to_try.push(full_path);
-                }
-
-                // Try each path location
-                for full_path in &paths_to_try {
-                    if let Ok(content) = fs::read_to_string(full_path) {
-                        out.write(&content)?;
-                        return Ok(());
-                    }
+                if let Some(content) = try_read_from_paths(&paths_to_try) {
+                    out.write(&content)?;
+                    return Ok(());
                 }
 
                 // Handle fallback
@@ -541,6 +549,7 @@ fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: Inl
                         return Ok(());
                     }
                 }
+
                 eprintln!(
                     "Warning: {} file '{}' not found, using empty content",
                     file_type, file_path

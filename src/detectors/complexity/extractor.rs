@@ -131,77 +131,92 @@ impl FeatureExtractor for AstComplexityExtractor {
         _context: &ExtractionContext,
     ) -> Result<HashMap<String, f64>> {
         let mut features = self.initialise_feature_map();
-
         let results = self.file_results(&entity.file_path).await?;
-
-        let entity_range = entity.line_range.unwrap_or_else(|| {
-            let lines = entity.line_count().max(1);
-            (1, lines)
-        });
-
-        let mut relevant: Vec<&ComplexityAnalysisResult> = results
-            .iter()
-            .filter(|result| {
-                result.entity_id == entity.id
-                    || (result.entity_name == entity.name && result.file_path == entity.file_path)
-                    || ranges_overlap(entity_range, result_line_range(result))
-            })
-            .collect();
-
-        if relevant.is_empty() && !results.is_empty() {
-            if let Some(worst) = results.iter().max_by(|a, b| {
-                a.metrics
-                    .cyclomatic_complexity
-                    .partial_cmp(&b.metrics.cyclomatic_complexity)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }) {
-                relevant.push(worst);
-            }
-        }
+        let relevant = find_relevant_results(entity, &results);
 
         if !relevant.is_empty() {
-            let mut cyclomatic = 0.0_f64;
-            let mut cognitive = 0.0_f64;
-            let mut nesting = 0.0_f64;
-            let mut parameters = 0.0_f64;
-            let mut loc = 0.0_f64;
-
-            for result in relevant {
-                let metrics = &result.metrics;
-                cyclomatic = cyclomatic.max(metrics.cyclomatic_complexity);
-                cognitive = cognitive.max(metrics.cognitive_complexity);
-                nesting = nesting.max(metrics.max_nesting_depth);
-                parameters = parameters.max(metrics.parameter_count);
-                loc = loc.max(metrics.lines_of_code);
-            }
-
-            features.insert("cyclomatic_complexity".to_string(), cyclomatic);
-            features.insert("cognitive_complexity".to_string(), cognitive);
-            features.insert("nesting_depth".to_string(), nesting);
-            features.insert("parameter_count".to_string(), parameters);
-            if loc > 0.0 {
-                features.insert("lines_of_code".to_string(), loc);
-            }
+            aggregate_metrics_into_features(&relevant, &mut features);
         }
 
-        // Always provide a LOC value, even when analysis fails
-        features
-            .entry("lines_of_code".to_string())
-            .or_insert_with(|| {
-                entity
-                    .line_range
-                    .map(|(start, end)| {
-                        if end >= start {
-                            (end - start + 1) as f64
-                        } else {
-                            entity.line_count() as f64
-                        }
-                    })
-                    .unwrap_or_else(|| entity.line_count() as f64)
-            });
-
+        ensure_loc_value(&mut features, entity);
         Ok(features)
     }
+}
+
+/// Find complexity results relevant to the given entity.
+fn find_relevant_results<'a>(
+    entity: &CodeEntity,
+    results: &'a [ComplexityAnalysisResult],
+) -> Vec<&'a ComplexityAnalysisResult> {
+    let entity_range = entity.line_range.unwrap_or_else(|| {
+        let lines = entity.line_count().max(1);
+        (1, lines)
+    });
+
+    let mut relevant: Vec<&ComplexityAnalysisResult> = results
+        .iter()
+        .filter(|result| {
+            result.entity_id == entity.id
+                || (result.entity_name == entity.name && result.file_path == entity.file_path)
+                || ranges_overlap(entity_range, result_line_range(result))
+        })
+        .collect();
+
+    // Fallback: use highest complexity result if no match found
+    if relevant.is_empty() && !results.is_empty() {
+        if let Some(worst) = results.iter().max_by(|a, b| {
+            a.metrics
+                .cyclomatic_complexity
+                .partial_cmp(&b.metrics.cyclomatic_complexity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            relevant.push(worst);
+        }
+    }
+
+    relevant
+}
+
+/// Aggregate maximum metrics from relevant results into the feature map.
+fn aggregate_metrics_into_features(
+    relevant: &[&ComplexityAnalysisResult],
+    features: &mut HashMap<String, f64>,
+) {
+    let (mut cyclomatic, mut cognitive, mut nesting, mut parameters, mut loc) =
+        (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+
+    for result in relevant {
+        let m = &result.metrics;
+        cyclomatic = cyclomatic.max(m.cyclomatic_complexity);
+        cognitive = cognitive.max(m.cognitive_complexity);
+        nesting = nesting.max(m.max_nesting_depth);
+        parameters = parameters.max(m.parameter_count);
+        loc = loc.max(m.lines_of_code);
+    }
+
+    features.insert("cyclomatic_complexity".to_string(), cyclomatic);
+    features.insert("cognitive_complexity".to_string(), cognitive);
+    features.insert("nesting_depth".to_string(), nesting);
+    features.insert("parameter_count".to_string(), parameters);
+    if loc > 0.0 {
+        features.insert("lines_of_code".to_string(), loc);
+    }
+}
+
+/// Ensure a lines_of_code value exists, computing from entity if needed.
+fn ensure_loc_value(features: &mut HashMap<String, f64>, entity: &CodeEntity) {
+    features.entry("lines_of_code".to_string()).or_insert_with(|| {
+        entity
+            .line_range
+            .map(|(start, end)| {
+                if end >= start {
+                    (end - start + 1) as f64
+                } else {
+                    entity.line_count() as f64
+                }
+            })
+            .unwrap_or_else(|| entity.line_count() as f64)
+    });
 }
 
 /// Compute line range from a complexity analysis result.
