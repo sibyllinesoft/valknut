@@ -73,8 +73,13 @@ impl BundledFileDetector {
         }
 
         // Only scan the header portion for performance
+        // Find a valid UTF-8 character boundary at or before scan_limit_bytes
         let scan_content = if content.len() > self.config.scan_limit_bytes {
-            &content[..self.config.scan_limit_bytes]
+            let mut end = self.config.scan_limit_bytes;
+            while end > 0 && !content.is_char_boundary(end) {
+                end -= 1;
+            }
+            &content[..end]
         } else {
             content
         };
