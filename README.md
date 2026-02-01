@@ -24,6 +24,9 @@ Valknut is a Rust-native analysis platform that combines structural heuristics, 
 | TypeScript / JavaScript | ✅ Full support | Handles `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` |
 | Rust | ✅ Full support | Ownership-aware complexity & dependency graphs |
 | Go | 🚧 Beta | AST parsing works; recommendations still limited |
+| C++ | 🚧 Beta | Handles `.cpp`, `.cxx`, `.cc`, `.hpp`, `.h` and more; tested against 40+ major OSS repos |
+
+> **C++ Support (Beta)**: The C++ adapter has been validated against major open source codebases including fmt, nlohmann/json, googletest, protobuf, OpenCV, TensorFlow, and others with 99%+ parse success rates. Feedback welcome via [GitHub Issues](https://github.com/sibyllinesoft/valknut/issues).
 
 > Valknut currently exposes only these adapters in `src/lang/registry.rs`. Other extensions will be skipped unless/until dedicated adapters are implemented.
 

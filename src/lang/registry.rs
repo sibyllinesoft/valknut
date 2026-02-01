@@ -5,6 +5,7 @@ use tree_sitter::Language;
 
 use crate::core::errors::{Result, ValknutError};
 use crate::lang::common::LanguageAdapter;
+use crate::lang::cpp::CppAdapter;
 use crate::lang::go::GoAdapter;
 use crate::lang::javascript::JavaScriptAdapter;
 use crate::lang::python::PythonAdapter;
@@ -69,6 +70,13 @@ const REGISTERED_LANGUAGES: &[LanguageInfo] = &[
         status: LanguageStability::Beta,
         notes: "AST parsing & structure checks",
     },
+    LanguageInfo {
+        key: "cpp",
+        name: "C++",
+        extensions: &["cpp", "cxx", "cc", "c++", "hpp", "hxx", "hh", "h++", "h"],
+        status: LanguageStability::Beta,
+        notes: "Classes, namespaces, templates",
+    },
 ];
 
 /// Return the languages that are compiled into this build.
@@ -106,6 +114,7 @@ pub fn adapter_for_language(language: &str) -> Result<Box<dyn LanguageAdapter>> 
         Some("ts") => Ok(Box::new(TypeScriptAdapter::new()?)),
         Some("rs") => Ok(Box::new(RustAdapter::new()?)),
         Some("go") => Ok(Box::new(GoAdapter::new()?)),
+        Some("cpp") => Ok(Box::new(CppAdapter::new()?)),
         _ => Err(ValknutError::unsupported(format!(
             "Language adapter for '{}' is not yet implemented",
             language
@@ -121,6 +130,7 @@ pub fn get_tree_sitter_language(language_key: &str) -> Result<Language> {
         Some("js") => Ok(tree_sitter_javascript::LANGUAGE.into()),
         Some("ts") => Ok(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
         Some("go") => Ok(tree_sitter_go::LANGUAGE.into()),
+        Some("cpp") => Ok(tree_sitter_cpp::LANGUAGE.into()),
         _ => Err(ValknutError::unsupported(format!(
             "No tree-sitter grammar for: {}",
             language_key
@@ -175,6 +185,9 @@ fn normalize_language_key(language: &str) -> Option<&'static str> {
         "ts" | "tsx" | "cts" | "mts" | "typescript" => Some("ts"),
         "rs" | "rust" => Some("rs"),
         "go" | "golang" => Some("go"),
+        "cpp" | "cxx" | "cc" | "c++" | "hpp" | "hxx" | "hh" | "h++" | "h" | "cplusplus" => {
+            Some("cpp")
+        }
         other => registered_languages()
             .iter()
             .find(|info| info.key == other)
@@ -213,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_adapter_creation_supported_languages() {
-        for lang in ["py", "js", "ts", "rs", "go"] {
+        for lang in ["py", "js", "ts", "rs", "go", "cpp"] {
             let adapter = adapter_for_language(lang);
             assert!(adapter.is_ok(), "adapter for {} should be available", lang);
         }
@@ -221,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_adapter_creation_language_aliases() {
-        for alias in ["python", "javascript", "typescript", "rust", "golang"] {
+        for alias in ["python", "javascript", "typescript", "rust", "golang", "cplusplus"] {
             let adapter = adapter_for_language(alias);
             assert!(
                 adapter.is_ok(),
@@ -233,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_extension_support() {
-        for ext in ["py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go"] {
+        for ext in ["py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go", "cpp", "hpp", "cc"] {
             assert!(
                 extension_is_supported(ext),
                 "extension {} should be supported",
@@ -246,13 +259,13 @@ mod tests {
     #[test]
     fn test_tree_sitter_functions() {
         // Test get_tree_sitter_language
-        for lang in ["py", "rs", "js", "ts", "go"] {
+        for lang in ["py", "rs", "js", "ts", "go", "cpp"] {
             let result = get_tree_sitter_language(lang);
             assert!(result.is_ok(), "Language {} should be supported", lang);
         }
 
         // Test create_parser_for_language
-        for lang in ["py", "rs", "js", "ts", "go"] {
+        for lang in ["py", "rs", "js", "ts", "go", "cpp"] {
             let result = create_parser_for_language(lang);
             assert!(result.is_ok(), "Should create parser for {}", lang);
         }
@@ -265,5 +278,7 @@ mod tests {
         assert_eq!(detect_language_from_path("test.cjs"), "js");
         assert_eq!(detect_language_from_path("test.ts"), "ts");
         assert_eq!(detect_language_from_path("test.go"), "go");
+        assert_eq!(detect_language_from_path("test.cpp"), "cpp");
+        assert_eq!(detect_language_from_path("test.hpp"), "cpp");
     }
 }

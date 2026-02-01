@@ -208,3 +208,6 @@ coverage.lcov
 
 node_modules/
 .fastembed_cache/
+
+# C++ benchmark repos for testing
+benchmarks/
