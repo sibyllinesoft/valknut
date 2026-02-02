@@ -211,3 +211,7 @@ node_modules/
 
 # C++ benchmark repos for testing
 benchmarks/
+
+# npm release binaries
+npm/*/valknut
+npm/*/valknut.exe
