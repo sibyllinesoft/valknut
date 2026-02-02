@@ -257,6 +257,28 @@ impl ValknutConfig {
             },
         );
 
+        languages.insert(
+            "cpp".to_string(),
+            LanguageConfig {
+                enabled: true,
+                file_extensions: vec![
+                    ".cpp".to_string(),
+                    ".cxx".to_string(),
+                    ".cc".to_string(),
+                    ".c++".to_string(),
+                    ".hpp".to_string(),
+                    ".hxx".to_string(),
+                    ".hh".to_string(),
+                    ".h++".to_string(),
+                    ".h".to_string(),
+                ],
+                tree_sitter_language: "cpp".to_string(),
+                max_file_size_mb: 10.0,
+                complexity_threshold: 15.0,
+                additional_settings: HashMap::new(),
+            },
+        );
+
         languages
     }
 
