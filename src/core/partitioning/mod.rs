@@ -274,6 +274,46 @@ impl ImportGraphPartitioner {
         (graph, index_map, reverse_map)
     }
 
+    /// Calculate token counts for SCCs and sort by size descending.
+    fn prepare_sccs_by_tokens(
+        sccs: &[Vec<NodeIndex>],
+        nodes: &HashMap<PathBuf, FileNode>,
+        reverse_map: &HashMap<NodeIndex, PathBuf>,
+    ) -> Vec<(usize, Vec<NodeIndex>)> {
+        let mut scc_with_tokens: Vec<(usize, Vec<NodeIndex>)> = sccs
+            .iter()
+            .map(|scc| {
+                let tokens: usize = scc
+                    .iter()
+                    .filter_map(|idx| reverse_map.get(idx))
+                    .filter_map(|path| nodes.get(path))
+                    .map(|node| node.tokens)
+                    .sum();
+                (tokens, scc.clone())
+            })
+            .collect();
+        scc_with_tokens.sort_by(|a, b| b.0.cmp(&a.0));
+        scc_with_tokens
+    }
+
+    /// Extract unassigned paths from an SCC.
+    fn extract_scc_paths(
+        scc: &[NodeIndex],
+        reverse_map: &HashMap<NodeIndex, PathBuf>,
+        assigned: &HashSet<PathBuf>,
+    ) -> Vec<PathBuf> {
+        scc.iter()
+            .filter_map(|idx| reverse_map.get(idx))
+            .filter(|path| !assigned.contains(*path))
+            .cloned()
+            .collect()
+    }
+
+    /// Calculate total tokens for a set of paths.
+    fn calculate_tokens(paths: &[PathBuf], nodes: &HashMap<PathBuf, FileNode>) -> usize {
+        paths.iter().filter_map(|p| nodes.get(p)).map(|n| n.tokens).sum()
+    }
+
     /// Partition files into slices respecting token budget
     fn partition_by_budget(
         &self,
@@ -288,82 +328,49 @@ impl ImportGraphPartitioner {
         let mut assigned: HashSet<PathBuf> = HashSet::new();
         let mut slice_id = 0;
 
-        // Process SCCs from largest to smallest (they're returned in reverse topological order)
-        let mut scc_with_tokens: Vec<(usize, Vec<NodeIndex>)> = sccs
-            .iter()
-            .enumerate()
-            .map(|(i, scc)| {
-                let tokens: usize = scc
-                    .iter()
-                    .filter_map(|idx| reverse_map.get(idx))
-                    .filter_map(|path| nodes.get(path))
-                    .map(|node| node.tokens)
-                    .sum();
-                (tokens, scc.clone())
-            })
-            .collect();
-
-        // Sort by token count descending
-        scc_with_tokens.sort_by(|a, b| b.0.cmp(&a.0));
+        let scc_with_tokens = Self::prepare_sccs_by_tokens(sccs, nodes, reverse_map);
 
         for (_tokens, scc) in scc_with_tokens {
-            let scc_paths: Vec<PathBuf> = scc
-                .iter()
-                .filter_map(|idx| reverse_map.get(idx))
-                .filter(|path| !assigned.contains(*path))
-                .cloned()
-                .collect();
-
+            let scc_paths = Self::extract_scc_paths(&scc, reverse_map, &assigned);
             if scc_paths.is_empty() {
                 continue;
             }
 
-            // Try to fit this SCC into an existing slice
-            let scc_tokens: usize = scc_paths
-                .iter()
-                .filter_map(|p| nodes.get(p))
-                .map(|n| n.tokens)
-                .sum();
-
-            // First pass: try to find a slice with a direct connection
-            let added_to_connected = self.try_add_to_connected_slice(
+            let scc_tokens = Self::calculate_tokens(&scc_paths, nodes);
+            let added = self.try_add_to_connected_slice(
                 &scc_paths, scc_tokens, &mut slices, nodes, project_path, graph, index_map, &mut assigned
-            );
-
-            // Second pass: if no connected slice, find the best-matching slice
-            let added_to_existing = added_to_connected || self.try_add_to_best_affinity_slice(
+            ) || self.try_add_to_best_affinity_slice(
                 &scc_paths, scc_tokens, &mut slices, nodes, project_path, &mut assigned
             );
 
-            if !added_to_existing {
-                // Create new slice(s) for this SCC
-                let new_slices =
-                    self.create_slices_for_files(&scc_paths, nodes, project_path, &mut slice_id)?;
+            if !added {
+                let new_slices = self.create_slices_for_files(&scc_paths, nodes, project_path, &mut slice_id)?;
                 assigned.extend(new_slices.iter().flat_map(|s| s.files.iter().cloned()));
                 slices.extend(new_slices);
             }
         }
 
-        // Collect unassigned files
-        let unassigned: Vec<PathBuf> = nodes
-            .keys()
-            .filter(|p| !assigned.contains(*p))
-            .cloned()
-            .collect();
+        self.finalize_slices(&mut slices, nodes, &assigned, project_path, &mut slice_id)?;
+        Ok((slices, vec![]))
+    }
 
-        // Add any remaining unassigned files to existing slices or create new ones
+    /// Finalize slices by handling unassigned files and setting primary modules.
+    fn finalize_slices(
+        &self,
+        slices: &mut Vec<CodeSlice>,
+        nodes: &HashMap<PathBuf, FileNode>,
+        assigned: &HashSet<PathBuf>,
+        project_path: &Path,
+        slice_id: &mut usize,
+    ) -> Result<()> {
+        let unassigned: Vec<PathBuf> = nodes.keys().filter(|p| !assigned.contains(*p)).cloned().collect();
         if !unassigned.is_empty() {
-            let new_slices =
-                self.create_slices_for_files(&unassigned, nodes, project_path, &mut slice_id)?;
-            slices.extend(new_slices);
+            slices.extend(self.create_slices_for_files(&unassigned, nodes, project_path, slice_id)?);
         }
-
-        // Determine primary module for each slice
-        for slice in &mut slices {
+        for slice in slices.iter_mut() {
             slice.primary_module = self.determine_primary_module(&slice.files);
         }
-
-        Ok((slices, vec![]))
+        Ok(())
     }
 
     /// Add files to a slice, updating token counts and assigned set

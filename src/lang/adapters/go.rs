@@ -347,6 +347,22 @@ impl GoAdapter {
         }
     }
 
+    /// Extract metadata based on entity kind.
+    fn extract_entity_metadata(
+        &self,
+        kind: EntityKind,
+        node: &Node,
+        source_code: &str,
+        metadata: &mut HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        match kind {
+            EntityKind::Function | EntityKind::Method => self.extract_function_metadata(node, source_code, metadata),
+            EntityKind::Struct => self.extract_struct_metadata(node, source_code, metadata),
+            EntityKind::Interface => self.extract_interface_metadata(node, source_code, metadata),
+            _ => Ok(()),
+        }
+    }
+
     /// Extract function-specific metadata
     fn extract_function_metadata(
         &self,
@@ -687,6 +703,17 @@ impl LanguageAdapter for GoAdapter {
     }
 }
 
+/// Create source location from a tree-sitter node.
+fn create_go_source_location(file_path: &str, node: &Node) -> SourceLocation {
+    SourceLocation::from_positions(
+        file_path,
+        node.start_position().row,
+        node.start_position().column,
+        node.end_position().row,
+        node.end_position().column,
+    )
+}
+
 /// [`EntityExtractor`] implementation providing the language-specific node conversion.
 /// Go overrides `extract_entities_recursive` to handle grouped const/var declarations.
 impl EntityExtractor for GoAdapter {
@@ -708,29 +735,10 @@ impl EntityExtractor for GoAdapter {
 
         *entity_id_counter += 1;
         let entity_id = generate_entity_id(file_path, entity_kind, *entity_id_counter);
-
-        let location = SourceLocation::from_positions(
-            file_path,
-            node.start_position().row,
-            node.start_position().column,
-            node.end_position().row,
-            node.end_position().column,
-        );
-
+        let location = create_go_source_location(file_path, &node);
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
-        match entity_kind {
-            EntityKind::Function | EntityKind::Method => {
-                self.extract_function_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Struct => {
-                self.extract_struct_metadata(&node, source_code, &mut metadata)?;
-            }
-            EntityKind::Interface => {
-                self.extract_interface_metadata(&node, source_code, &mut metadata)?;
-            }
-            _ => {}
-        }
+        self.extract_entity_metadata(entity_kind, &node, source_code, &mut metadata)?;
 
         Ok(Some(ParsedEntity {
             id: entity_id,

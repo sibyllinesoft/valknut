@@ -215,3 +215,9 @@ benchmarks/
 # npm release binaries
 npm/*/valknut
 npm/*/valknut.exe
+
+# Generated dev template data (regenerate with: templates/dev/scripts/generate-data.sh)
+templates/dev/data/analysis.json
+templates/dev/data/tree-data.json
+templates/dev/public/data.json
+templates/dev/public/report-dev.html

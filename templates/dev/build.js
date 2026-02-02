@@ -24,6 +24,33 @@ function log(message, color = colors.reset) {
   console.log(`${color}${message}${colors.reset}`);
 }
 
+function ensureDevData() {
+  const dataFile = resolve('./data/analysis.json');
+  const treeDataFile = resolve('./data/tree-data.json');
+
+  if (existsSync(dataFile) && existsSync(treeDataFile)) {
+    return true;
+  }
+
+  log('📊 Dev data not found, generating...', colors.yellow);
+
+  const result = spawnSync({
+    cmd: ['bash', 'scripts/generate-data.sh'],
+    cwd: resolve('.'),
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+
+  if (result.exitCode !== 0) {
+    log('⚠️  Failed to generate dev data. Some features may not work.', colors.yellow);
+    log('   Run manually: ./templates/dev/scripts/generate-data.sh', colors.yellow);
+    return false;
+  }
+
+  log('✅ Dev data generated', colors.green);
+  return true;
+}
+
 function createDistDirectory() {
   const distDir = resolve('./dist');
   if (!existsSync(distDir)) {
@@ -247,9 +274,10 @@ async function main() {
   
   log('🚀 Valknut Tree Component Build Script', colors.bright);
   log(`Mode: ${mode}`, colors.cyan);
-  
+
   createDistDirectory();
-  
+  ensureDevData();
+
   if (mode === 'production') {
     // Build both production and debug versions
     log('📦 Building both production and debug bundles...', colors.yellow);

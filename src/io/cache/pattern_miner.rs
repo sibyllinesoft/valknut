@@ -349,47 +349,58 @@ impl PatternMiner {
 
     /// Normalize a token for consistent analysis
     pub(crate) fn normalize_token(&self, token: &str) -> String {
-        // Preserve control flow keywords and important language constructs
-        match token {
-            // Control flow keywords - preserve these for pattern detection
+        if Self::is_preserved_keyword(token) || Self::is_preserved_operator(token) {
+            return token.to_string();
+        }
+        Self::normalize_literal_or_identifier(token)
+    }
+
+    /// Check if token is a preserved keyword (control flow or structural).
+    fn is_preserved_keyword(token: &str) -> bool {
+        matches!(
+            token,
             "if" | "else" | "for" | "while" | "loop" | "match" | "switch" | "case" | "break"
             | "continue" | "return" | "yield" | "await" | "try" | "catch" | "finally" | "throw"
-            | "with" => token.to_string(),
+            | "with" | "fn" | "function" | "def" | "class" | "struct" | "enum" | "trait"
+            | "interface" | "type" | "let" | "var" | "const" | "mut" | "pub" | "public"
+            | "private" | "protected" | "static"
+        )
+    }
 
-            // Function/class keywords - preserve for structural patterns
-            "fn" | "function" | "def" | "class" | "struct" | "enum" | "trait" | "interface"
-            | "type" | "let" | "var" | "const" | "mut" | "pub" | "public" | "private"
-            | "protected" | "static" => token.to_string(),
-
-            // Operators - preserve common ones
+    /// Check if token is a preserved operator.
+    fn is_preserved_operator(token: &str) -> bool {
+        matches!(
+            token,
             "==" | "!=" | "<=" | ">=" | "&&" | "||" | "+=" | "-=" | "*=" | "/=" | "=>" | "->"
-            | "::" | "." | ";" | "," | "(" | ")" | "{" | "}" | "[" | "]" | "<" | ">" => {
-                token.to_string()
-            }
+            | "::" | "." | ";" | "," | "(" | ")" | "{" | "}" | "[" | "]" | "<" | ">"
+        )
+    }
 
-            // Everything else gets normalized
-            _ => {
-                // Simple normalization - could be more sophisticated
-                if token.parse::<f64>().is_ok() {
-                    if token.contains('.') {
-                        "FLOAT_LIT".to_string()
-                    } else {
-                        "INT_LIT".to_string()
-                    }
-                } else if (token.starts_with('"') && token.ends_with('"'))
-                    || (token.starts_with('\'') && token.ends_with('\''))
-                {
-                    "STR_LIT".to_string()
-                } else if token.len() < 20
-                    && token.chars().all(|c| c.is_alphanumeric() || c == '_')
-                    && token.chars().any(|c| c.is_lowercase())
-                {
-                    "LOCAL_VAR".to_string()
-                } else {
-                    token.to_string()
-                }
-            }
+    /// Normalize a literal or identifier token.
+    fn normalize_literal_or_identifier(token: &str) -> String {
+        if token.parse::<f64>().is_ok() {
+            return if token.contains('.') { "FLOAT_LIT" } else { "INT_LIT" }.to_string();
         }
+        if Self::is_string_literal(token) {
+            return "STR_LIT".to_string();
+        }
+        if Self::is_local_variable(token) {
+            return "LOCAL_VAR".to_string();
+        }
+        token.to_string()
+    }
+
+    /// Check if token is a string literal.
+    fn is_string_literal(token: &str) -> bool {
+        (token.starts_with('"') && token.ends_with('"'))
+            || (token.starts_with('\'') && token.ends_with('\''))
+    }
+
+    /// Check if token looks like a local variable name.
+    fn is_local_variable(token: &str) -> bool {
+        token.len() < 20
+            && token.chars().all(|c| c.is_alphanumeric() || c == '_')
+            && token.chars().any(|c| c.is_lowercase())
     }
 
     /// Categorize a motif based on its name

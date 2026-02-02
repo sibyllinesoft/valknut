@@ -348,157 +348,143 @@ pub fn health_from_scores(scoring: &[ScoringResult]) -> HealthMetrics {
     }
 }
 
+/// Clamp a value into the scoring range [0.0, 100.0].
+fn clamp_score(value: f64) -> f64 {
+    value.clamp(0.0, 100.0)
+}
+
+/// Calculate priority from a weighted score.
+fn priority_from_score(score: f64) -> Priority {
+    if score >= 70.0 {
+        Priority::Critical
+    } else if score >= 55.0 {
+        Priority::High
+    } else if score >= 35.0 {
+        Priority::Medium
+    } else if score >= 20.0 {
+        Priority::Low
+    } else {
+        Priority::None
+    }
+}
+
+/// Calculate confidence from lines of code.
+fn confidence_from_loc(loc: f64) -> f64 {
+    if loc >= 30.0 {
+        0.95
+    } else if loc >= 15.0 {
+        0.85
+    } else if loc >= 5.0 {
+        0.7
+    } else {
+        0.5
+    }
+}
+
+use crate::detectors::complexity::ComplexityAnalysisResult;
+use crate::detectors::refactoring::RefactoringAnalysisResult;
+
+/// Convert a single complexity result to a ScoringResult.
+fn complexity_to_scoring(result: &ComplexityAnalysisResult) -> ScoringResult {
+    let entity_id = format!("{}:{}:{}", result.file_path, result.entity_type, result.entity_name);
+    let metrics = &result.metrics;
+
+    let cyclomatic_score = clamp_score((metrics.cyclomatic() / 10.0) * 40.0);
+    let cognitive_score = clamp_score((metrics.cognitive() / 15.0) * 30.0);
+    let nesting_score = clamp_score(metrics.max_nesting_depth * 6.0);
+    let debt_score = clamp_score(metrics.technical_debt_score);
+    let maintainability_penalty = clamp_score(100.0 - metrics.maintainability_index);
+
+    let category_scores = HashMap::from([
+        ("complexity".to_string(), cyclomatic_score),
+        ("cognitive".to_string(), cognitive_score),
+        ("structure".to_string(), nesting_score),
+        ("debt".to_string(), debt_score),
+        ("maintainability".to_string(), maintainability_penalty),
+    ]);
+
+    let feature_contributions = HashMap::from([
+        ("cyclomatic_complexity".to_string(), metrics.cyclomatic()),
+        ("cognitive_complexity".to_string(), metrics.cognitive()),
+        ("max_nesting_depth".to_string(), metrics.max_nesting_depth),
+        ("lines_of_code".to_string(), metrics.lines_of_code),
+        ("technical_debt_score".to_string(), metrics.technical_debt_score),
+        ("maintainability_index".to_string(), metrics.maintainability_index),
+    ]);
+
+    let weighted_overall = clamp_score(
+        cyclomatic_score * 0.30
+            + cognitive_score * 0.25
+            + nesting_score * 0.15
+            + debt_score * 0.20
+            + maintainability_penalty * 0.10,
+    );
+
+    let priority = if result.issues.is_empty() {
+        priority_from_score(weighted_overall)
+    } else {
+        match result.severity {
+            ComplexitySeverity::Critical => Priority::Critical,
+            ComplexitySeverity::VeryHigh | ComplexitySeverity::High => Priority::High,
+            ComplexitySeverity::Medium | ComplexitySeverity::Moderate => Priority::Medium,
+            ComplexitySeverity::Low => Priority::Low,
+        }
+    };
+
+    ScoringResult {
+        entity_id,
+        overall_score: weighted_overall,
+        priority,
+        category_scores,
+        feature_contributions,
+        normalized_feature_count: 6,
+        confidence: confidence_from_loc(metrics.lines_of_code),
+    }
+}
+
+/// Convert a single refactoring result to a ScoringResult if priority is not None.
+fn refactoring_to_scoring(result: &RefactoringAnalysisResult) -> Option<ScoringResult> {
+    let entity_id = format!("{}:refactoring:{}", result.file_path, result.recommendations.len());
+    let overall_score = clamp_score(result.refactoring_score);
+    let priority = priority_from_score(overall_score);
+
+    if priority == Priority::None {
+        return None;
+    }
+
+    let category_scores = HashMap::from([("refactoring".to_string(), result.refactoring_score)]);
+    let feature_contributions = HashMap::from([
+        ("refactoring_score".to_string(), result.refactoring_score),
+        ("refactoring_recommendations".to_string(), result.recommendations.len() as f64),
+    ]);
+
+    Some(ScoringResult {
+        entity_id,
+        overall_score,
+        priority,
+        category_scores,
+        feature_contributions,
+        normalized_feature_count: 2,
+        confidence: 0.85,
+    })
+}
+
 /// Convert comprehensive analysis results to scoring results.
 pub fn convert_to_scoring_results(results: &ComprehensiveAnalysisResult) -> Vec<ScoringResult> {
-    let mut scoring_results = Vec::new();
+    let mut scoring_results: Vec<ScoringResult> = results
+        .complexity
+        .detailed_results
+        .iter()
+        .map(complexity_to_scoring)
+        .collect();
 
-    // Helper closure to clamp values into scoring range
-    let clamp_score = |value: f64| value.clamp(0.0, 100.0);
-
-    // Convert complexity analysis results to scoring results
-    for complexity_result in &results.complexity.detailed_results {
-        let entity_id = format!(
-            "{}:{}:{}",
-            complexity_result.file_path,
-            complexity_result.entity_type,
-            complexity_result.entity_name
-        );
-
-        let metrics = &complexity_result.metrics;
-
-        // Normalise metrics against reasonable thresholds for functions
-        let cyclomatic_score = clamp_score((metrics.cyclomatic() / 10.0) * 40.0);
-        let cognitive_score = clamp_score((metrics.cognitive() / 15.0) * 30.0);
-        let nesting_score = clamp_score(metrics.max_nesting_depth * 6.0);
-        let debt_score = clamp_score(metrics.technical_debt_score);
-        let maintainability_penalty = clamp_score(100.0 - metrics.maintainability_index);
-
-        let mut category_scores = HashMap::new();
-        category_scores.insert("complexity".to_string(), cyclomatic_score);
-        category_scores.insert("cognitive".to_string(), cognitive_score);
-        category_scores.insert("structure".to_string(), nesting_score);
-        category_scores.insert("debt".to_string(), debt_score);
-        category_scores.insert("maintainability".to_string(), maintainability_penalty);
-
-        let mut feature_contributions = HashMap::new();
-        feature_contributions.insert("cyclomatic_complexity".to_string(), metrics.cyclomatic());
-        feature_contributions.insert("cognitive_complexity".to_string(), metrics.cognitive());
-        feature_contributions.insert("max_nesting_depth".to_string(), metrics.max_nesting_depth);
-        feature_contributions.insert("lines_of_code".to_string(), metrics.lines_of_code);
-        feature_contributions.insert(
-            "technical_debt_score".to_string(),
-            metrics.technical_debt_score,
-        );
-        feature_contributions.insert(
-            "maintainability_index".to_string(),
-            metrics.maintainability_index,
-        );
-
-        let weighted_overall = clamp_score(
-            cyclomatic_score * 0.30
-                + cognitive_score * 0.25
-                + nesting_score * 0.15
-                + debt_score * 0.20
-                + maintainability_penalty * 0.10,
-        );
-
-        let mut priority = match complexity_result.severity {
-            ComplexitySeverity::Critical => Priority::Critical,
-            ComplexitySeverity::VeryHigh => Priority::High,
-            ComplexitySeverity::High => Priority::High,
-            ComplexitySeverity::Medium => Priority::Medium,
-            ComplexitySeverity::Moderate => Priority::Medium,
-            ComplexitySeverity::Low => Priority::Low,
-        };
-
-        if complexity_result.issues.is_empty() {
-            priority = if weighted_overall >= 70.0 {
-                Priority::Critical
-            } else if weighted_overall >= 55.0 {
-                Priority::High
-            } else if weighted_overall >= 35.0 {
-                Priority::Medium
-            } else if weighted_overall >= 20.0 {
-                Priority::Low
-            } else {
-                Priority::None
-            };
-        }
-
-        let confidence = if metrics.lines_of_code >= 30.0 {
-            0.95
-        } else if metrics.lines_of_code >= 15.0 {
-            0.85
-        } else if metrics.lines_of_code >= 5.0 {
-            0.7
-        } else {
-            0.5
-        };
-
-        let feature_count = feature_contributions.len();
-        scoring_results.push(ScoringResult {
-            entity_id,
-            overall_score: weighted_overall,
-            priority,
-            category_scores,
-            feature_contributions,
-            normalized_feature_count: feature_count,
-            confidence,
-        });
-    }
-
-    // Convert refactoring analysis results to scoring results
-    for refactoring_result in &results.refactoring.detailed_results {
-        let entity_id = format!(
-            "{}:refactoring:{}",
-            refactoring_result.file_path,
-            refactoring_result.recommendations.len()
-        );
-
-        // Map refactoring metrics to scoring categories
-        let mut category_scores = HashMap::new();
-        let refactoring_score = refactoring_result.refactoring_score;
-        category_scores.insert("refactoring".to_string(), refactoring_score);
-
-        // Map individual features to contributions
-        let mut feature_contributions = HashMap::new();
-        feature_contributions.insert("refactoring_score".to_string(), refactoring_score);
-        feature_contributions.insert(
-            "refactoring_recommendations".to_string(),
-            refactoring_result.recommendations.len() as f64,
-        );
-
-        // Calculate overall score based on refactoring needs
-        let overall_score = clamp_score(refactoring_score);
-
-        let priority = if overall_score >= 75.0 {
-            Priority::Critical
-        } else if overall_score >= 55.0 {
-            Priority::High
-        } else if overall_score >= 35.0 {
-            Priority::Medium
-        } else if overall_score >= 20.0 {
-            Priority::Low
-        } else {
-            Priority::None
-        };
-
-        // High confidence for refactoring analysis
-        let confidence = 0.85;
-
-        if priority != Priority::None {
-            let feature_count = feature_contributions.len();
-            scoring_results.push(ScoringResult {
-                entity_id,
-                overall_score,
-                priority,
-                category_scores,
-                feature_contributions,
-                normalized_feature_count: feature_count,
-                confidence,
-            });
-        }
-    }
+    scoring_results.extend(
+        results
+            .refactoring
+            .detailed_results
+            .iter()
+            .filter_map(refactoring_to_scoring),
+    );
 
     scoring_results
 }
