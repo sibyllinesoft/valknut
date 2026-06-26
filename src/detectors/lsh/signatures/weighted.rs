@@ -106,7 +106,10 @@ impl WeightedShingleAnalyzer {
 
     /// Count frequencies for a chunk of entities
     #[cfg(feature = "parallel")]
-    fn count_chunk_frequencies(&self, chunk: &[&CodeEntity]) -> std::collections::HashMap<String, usize> {
+    fn count_chunk_frequencies(
+        &self,
+        chunk: &[&CodeEntity],
+    ) -> std::collections::HashMap<String, usize> {
         let mut local_frequencies = std::collections::HashMap::new();
 
         for entity in chunk {

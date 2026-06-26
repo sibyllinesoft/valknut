@@ -3,14 +3,14 @@
 //! This module provides functions for building unified directory hierarchies
 //! that combine directory health data with refactoring candidates.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
+use crate::core::pipeline::health::normalize_dir_path;
 use crate::core::pipeline::{
     CodeDictionary, DirectoryHealthScore, DirectoryHealthTree, FileRefactoringGroup,
     RefactoringCandidate,
 };
-use crate::core::pipeline::health::normalize_dir_path;
 use crate::core::scoring::Priority;
 
 /// Build a unified hierarchy combining directory health with refactoring candidates
@@ -18,7 +18,12 @@ pub fn build_unified_hierarchy(
     tree: &DirectoryHealthTree,
     file_groups: &[FileRefactoringGroup],
 ) -> Vec<serde_json::Value> {
-    build_unified_hierarchy_with_health(tree, file_groups, &std::collections::HashMap::new(), &std::collections::HashMap::new())
+    build_unified_hierarchy_with_health(
+        tree,
+        file_groups,
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::new(),
+    )
 }
 
 /// Build a unified hierarchy with precomputed file and directory health scores
@@ -34,13 +39,31 @@ pub fn build_unified_hierarchy_with_health(
     let mut roots = Vec::new();
     for (path, dir) in dir_map.iter() {
         if is_root_directory(dir, &dir_map) {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health, directory_health));
+            let mut visited = HashSet::new();
+            roots.push(build_dir_node(
+                path,
+                dir,
+                &dir_map,
+                &files_by_dir,
+                file_health,
+                directory_health,
+                &mut visited,
+            ));
         }
     }
 
     if roots.is_empty() {
         for (path, dir) in dir_map.iter() {
-            roots.push(build_dir_node(path, dir, &dir_map, &files_by_dir, file_health, directory_health));
+            let mut visited = HashSet::new();
+            roots.push(build_dir_node(
+                path,
+                dir,
+                &dir_map,
+                &files_by_dir,
+                file_health,
+                directory_health,
+                &mut visited,
+            ));
         }
     }
 
@@ -50,18 +73,22 @@ pub fn build_unified_hierarchy_with_health(
 /// Build a lookup map of directory paths to health scores.
 /// Paths are normalized to ensure consistent matching.
 fn build_directory_map(tree: &DirectoryHealthTree) -> HashMap<String, &DirectoryHealthScore> {
-    tree.directories.iter()
+    tree.directories
+        .iter()
         .map(|(path_buf, dir)| (normalize_dir_path(&path_buf.to_string_lossy()), dir))
         .collect()
 }
 
 /// Group file refactoring groups by their parent directory.
-fn group_files_by_directory(file_groups: &[FileRefactoringGroup]) -> BTreeMap<String, Vec<&FileRefactoringGroup>> {
+fn group_files_by_directory(
+    file_groups: &[FileRefactoringGroup],
+) -> BTreeMap<String, Vec<&FileRefactoringGroup>> {
     let mut files_by_dir: BTreeMap<String, Vec<&FileRefactoringGroup>> = BTreeMap::new();
     for group in file_groups {
         let dir = Path::new(&group.file_path)
             .parent()
-            .map(|p| p.to_string_lossy().to_string())
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(|p| normalize_dir_path(&p.to_string_lossy()))
             .unwrap_or_else(|| ".".to_string());
         files_by_dir.entry(dir).or_default().push(group);
     }
@@ -69,8 +96,12 @@ fn group_files_by_directory(file_groups: &[FileRefactoringGroup]) -> BTreeMap<St
 }
 
 /// Check if a directory is a root (no parent in the map).
-fn is_root_directory(dir: &DirectoryHealthScore, dir_map: &HashMap<String, &DirectoryHealthScore>) -> bool {
-    dir.parent.as_ref()
+fn is_root_directory(
+    dir: &DirectoryHealthScore,
+    dir_map: &HashMap<String, &DirectoryHealthScore>,
+) -> bool {
+    dir.parent
+        .as_ref()
         .map(|p| !dir_map.contains_key(&normalize_dir_path(&p.to_string_lossy())))
         .unwrap_or(true)
 }
@@ -83,8 +114,19 @@ fn build_dir_node(
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
     file_health: &std::collections::HashMap<String, f64>,
     directory_health: &std::collections::HashMap<String, f64>,
+    visited: &mut HashSet<String>,
 ) -> serde_json::Value {
-    let mut children = collect_child_directories(path, dir_map, files_by_dir, file_health, directory_health);
+    let normalized_path = normalize_dir_path(path);
+    visited.insert(normalized_path.clone());
+
+    let mut children = collect_child_directories(
+        path,
+        dir_map,
+        files_by_dir,
+        file_health,
+        directory_health,
+        visited,
+    );
     children.extend(collect_file_children(path, files_by_dir, file_health));
     children.sort_by(|a, b| {
         let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -92,18 +134,20 @@ fn build_dir_node(
         name_a.cmp(name_b)
     });
 
-    let display_name = Path::new(path).file_name()
+    let display_name = Path::new(path)
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string());
 
     // Use precomputed directory health if available (0-100 scale)
     // For intermediate directories not in the HashMap, compute from children
-    let normalized_path = normalize_dir_path(path);
-    let health_score_01 = directory_health.get(&normalized_path)
+    let health_score_01 = directory_health
+        .get(&normalized_path)
         .map(|h| h / 100.0)
         .or_else(|| {
             // Compute from children's health scores if this is an intermediate directory
-            let child_scores: Vec<f64> = children.iter()
+            let child_scores: Vec<f64> = children
+                .iter()
                 .filter_map(|c| c.get("healthScore").and_then(|v| v.as_f64()))
                 .filter(|&s| s > 0.0)
                 .collect();
@@ -116,7 +160,7 @@ fn build_dir_node(
         .unwrap_or(0.0);
     let health_score_100 = health_score_01 * 100.0;
 
-    serde_json::json!({
+    let node = serde_json::json!({
         "id": format!("directory_{}", path.replace('/', "_")),
         "type": "folder",
         "path": path,
@@ -127,7 +171,10 @@ fn build_dir_node(
         "file_count": dir.file_count,
         "refactoring_needed": dir.refactoring_needed,
         "children": children
-    })
+    });
+
+    visited.remove(&normalized_path);
+    node
 }
 
 /// Collect child directory nodes for a given path.
@@ -137,16 +184,37 @@ fn collect_child_directories(
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
     file_health: &std::collections::HashMap<String, f64>,
     directory_health: &std::collections::HashMap<String, f64>,
+    visited: &mut HashSet<String>,
 ) -> Vec<serde_json::Value> {
     let normalized_path = normalize_dir_path(path);
-    dir_map.iter()
-        .filter(|(_, child_dir)| {
-            child_dir.parent.as_ref()
-                .map(|p| normalize_dir_path(&p.to_string_lossy()) == normalized_path)
-                .unwrap_or(false)
-        })
-        .map(|(child_path, child_dir)| build_dir_node(child_path, child_dir, dir_map, files_by_dir, file_health, directory_health))
-        .collect()
+    let mut children = Vec::new();
+
+    for (child_path, child_dir) in dir_map {
+        let normalized_child_path = normalize_dir_path(child_path);
+        if normalized_child_path == normalized_path || visited.contains(&normalized_child_path) {
+            continue;
+        }
+
+        let is_child = child_dir
+            .parent
+            .as_ref()
+            .map(|p| normalize_dir_path(&p.to_string_lossy()) == normalized_path)
+            .unwrap_or(false);
+
+        if is_child {
+            children.push(build_dir_node(
+                child_path,
+                child_dir,
+                dir_map,
+                files_by_dir,
+                file_health,
+                directory_health,
+                visited,
+            ));
+        }
+    }
+
+    children
 }
 
 /// Collect file nodes for a given directory path.
@@ -155,8 +223,15 @@ fn collect_file_children(
     files_by_dir: &BTreeMap<String, Vec<&FileRefactoringGroup>>,
     file_health: &std::collections::HashMap<String, f64>,
 ) -> Vec<serde_json::Value> {
-    files_by_dir.get(path)
-        .map(|files| files.iter().map(|fg| build_unified_file_node(fg, file_health)).collect())
+    let normalized_path = normalize_dir_path(path);
+    files_by_dir
+        .get(&normalized_path)
+        .map(|files| {
+            files
+                .iter()
+                .map(|fg| build_unified_file_node(fg, file_health))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -177,7 +252,9 @@ fn build_unified_file_node(
             (1.0 - (total_issues as f64 / entity_count as f64)).clamp(0.0, 1.0)
         });
 
-    let entities: Vec<serde_json::Value> = file_group.entities.iter()
+    let entities: Vec<serde_json::Value> = file_group
+        .entities
+        .iter()
         .map(build_unified_entity_value)
         .collect();
 
@@ -208,10 +285,8 @@ fn build_unified_entity_value(entity: &RefactoringCandidate) -> serde_json::Valu
         } else {
             entity.name.clone()
         };
-        v["id"] = serde_json::Value::String(format!(
-            "entity_{}",
-            id.replace('/', "_").replace(':', "_")
-        ));
+        v["id"] =
+            serde_json::Value::String(format!("entity_{}", id.replace('/', "_").replace(':', "_")));
     }
     v
 }
@@ -363,12 +438,19 @@ fn add_files_to_node(
 
     if let Some(file_groups) = files_by_dir.get(&node_path) {
         for file_group in file_groups {
-            new_children.push(build_file_node(file_group, code_dictionary, candidate_lookup));
+            new_children.push(build_file_node(
+                file_group,
+                code_dictionary,
+                candidate_lookup,
+            ));
         }
     }
 
     if let serde_json::Value::Object(ref mut obj) = new_node {
-        obj.insert("children".to_string(), serde_json::Value::Array(new_children));
+        obj.insert(
+            "children".to_string(),
+            serde_json::Value::Array(new_children),
+        );
     }
 
     new_node
@@ -381,7 +463,8 @@ fn extract_node_path(node: &serde_json::Value) -> String {
     }
     if let Some(id) = node.get("id").and_then(|id| id.as_str()) {
         if id.starts_with("directory_") {
-            return id.strip_prefix("directory_")
+            return id
+                .strip_prefix("directory_")
                 .unwrap_or(id)
                 .replace("_", "/")
                 .replace("root", ".");
@@ -402,7 +485,8 @@ fn build_file_node(
         .to_string_lossy()
         .to_string();
 
-    let file_children: Vec<serde_json::Value> = file_group.entities
+    let file_children: Vec<serde_json::Value> = file_group
+        .entities
         .iter()
         .map(|entity| build_entity_node(entity, code_dictionary, candidate_lookup))
         .collect();
@@ -426,7 +510,10 @@ fn build_entity_node(
     code_dictionary: &CodeDictionary,
     candidate_lookup: &HashMap<String, RefactoringCandidate>,
 ) -> serde_json::Value {
-    let display_name = entity.name.split(':').last()
+    let display_name = entity
+        .name
+        .split(':')
+        .last()
         .map(|part| part.to_string())
         .unwrap_or_else(|| entity.name.clone());
 
@@ -496,7 +583,12 @@ fn build_entity_children(
         children.push(build_issue_node(issue, entity_id, i, code_dictionary));
     }
     for (i, suggestion) in candidate.suggestions.iter().enumerate() {
-        children.push(build_suggestion_node(suggestion, entity_id, i, code_dictionary));
+        children.push(build_suggestion_node(
+            suggestion,
+            entity_id,
+            i,
+            code_dictionary,
+        ));
     }
 
     children
@@ -510,9 +602,11 @@ fn build_issue_node(
     code_dictionary: &CodeDictionary,
 ) -> serde_json::Value {
     let issue_meta = code_dictionary.issues.get(&issue.code);
-    let issue_title = issue_meta.map(|def| def.title.clone())
+    let issue_title = issue_meta
+        .map(|def| def.title.clone())
         .unwrap_or_else(|| issue.category.clone());
-    let issue_summary = issue_meta.map(|def| def.summary.clone())
+    let issue_summary = issue_meta
+        .map(|def| def.summary.clone())
         .unwrap_or_else(|| format!("{} signals detected by analyzer.", issue.category));
 
     serde_json::json!({
@@ -537,9 +631,11 @@ fn build_suggestion_node(
     code_dictionary: &CodeDictionary,
 ) -> serde_json::Value {
     let suggestion_meta = code_dictionary.suggestions.get(&suggestion.code);
-    let suggestion_title = suggestion_meta.map(|def| def.title.clone())
+    let suggestion_title = suggestion_meta
+        .map(|def| def.title.clone())
         .unwrap_or_else(|| suggestion.refactoring_type.clone());
-    let suggestion_summary = suggestion_meta.map(|def| def.summary.clone())
+    let suggestion_summary = suggestion_meta
+        .map(|def| def.summary.clone())
         .unwrap_or_else(|| suggestion.refactoring_type.replace('_', " "));
 
     serde_json::json!({

@@ -6,7 +6,9 @@
 use std::collections::HashSet;
 
 use crate::core::pipeline::discovery::code_dictionary::suggestion_code_for_kind;
-use crate::core::pipeline::results::result_types::{FeatureContribution, RefactoringIssue, RefactoringSuggestion};
+use crate::core::pipeline::results::result_types::{
+    FeatureContribution, RefactoringIssue, RefactoringSuggestion,
+};
 
 /// Helper struct for suggestion base values computed from issue severity
 pub struct SuggestionBase {
@@ -87,7 +89,12 @@ pub fn suggestion_for_feature(
     // Feature pattern matching with associated suggestion params
     let (kind_fmt, effort, priority_boost, impact_boost): (&str, f64, f64, f64) =
         if name.contains("duplicate_code_count") {
-            ("eliminate_duplication_{}_blocks", 0.65, 0.0, count as f64 * 0.05)
+            (
+                "eliminate_duplication_{}_blocks",
+                0.65,
+                0.0,
+                count as f64 * 0.05,
+            )
         } else if name.contains("extract_method_count") {
             ("extract_method_{}_helpers", 0.55, 0.0, 0.0)
         } else if name.contains("extract_class_count") {

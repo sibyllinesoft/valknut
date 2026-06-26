@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
 use super::super::common::{
-    create_base_metadata, extract_identifiers_by_kinds, extract_node_text, find_boilerplate_patterns,
-    generate_entity_id, sort_and_dedup, EntityExtractor, EntityKind, LanguageAdapter, ParseIndex,
-    ParsedEntity, SourceLocation,
+    create_base_metadata, extract_identifiers_by_kinds, extract_node_text,
+    find_boilerplate_patterns, generate_entity_id, sort_and_dedup, EntityExtractor, EntityKind,
+    LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation,
 };
 use super::super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::errors::{Result, ValknutError};
@@ -136,11 +136,13 @@ impl PythonAdapter {
             "function_definition" => Some(EntityKind::Function),
             "class_definition" => Some(EntityKind::Class),
             "module" => None,
-            "assignment" => {
-                self.extract_name(node, source_code)?.map(|name| {
-                    if Self::is_constant_name(&name) { EntityKind::Constant } else { EntityKind::Variable }
-                })
-            }
+            "assignment" => self.extract_name(node, source_code)?.map(|name| {
+                if Self::is_constant_name(&name) {
+                    EntityKind::Constant
+                } else {
+                    EntityKind::Variable
+                }
+            }),
             _ => None,
         })
     }
@@ -151,15 +153,16 @@ impl PythonAdapter {
             "function_definition" | "class_definition" => {
                 extract_node_text(node, source_code, "name", &["identifier"])
             }
-            "assignment" => {
-                extract_node_text(node, source_code, "", &["identifier"])
-            }
+            "assignment" => extract_node_text(node, source_code, "", &["identifier"]),
             _ => Ok(None),
         }
     }
 
     /// Extract parameter names from a parameters node.
-    fn extract_parameters_from_node<'a>(node: &Node<'a>, source_code: &'a str) -> Result<Vec<&'a str>> {
+    fn extract_parameters_from_node<'a>(
+        node: &Node<'a>,
+        source_code: &'a str,
+    ) -> Result<Vec<&'a str>> {
         let mut parameters = Vec::new();
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -209,23 +212,31 @@ impl PythonAdapter {
         self.extract_function_calls_recursive(*node, source_code, &mut function_calls)?;
 
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
-        metadata.insert("has_decorators".to_string(), serde_json::Value::Bool(has_decorators));
+        metadata.insert(
+            "has_decorators".to_string(),
+            serde_json::Value::Bool(has_decorators),
+        );
         if let Some(return_type) = return_annotation {
-            metadata.insert("return_annotation".to_string(), serde_json::Value::String(return_type));
+            metadata.insert(
+                "return_annotation".to_string(),
+                serde_json::Value::String(return_type),
+            );
         }
         metadata.insert(
             "function_calls".to_string(),
-            serde_json::Value::Array(function_calls.into_iter().map(serde_json::Value::String).collect()),
+            serde_json::Value::Array(
+                function_calls
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
         );
 
         Ok(())
     }
 
     /// Extract base class names from an argument_list node.
-    fn extract_base_classes<'a>(
-        arg_list: &Node,
-        source_code: &'a str,
-    ) -> Vec<&'a str> {
+    fn extract_base_classes<'a>(arg_list: &Node, source_code: &'a str) -> Vec<&'a str> {
         let mut arg_cursor = arg_list.walk();
         arg_list
             .children(&mut arg_cursor)
@@ -506,7 +517,9 @@ impl PythonAdapter {
     fn check_import_pattern(node: &Node, source: &str) -> Option<String> {
         let name_node = node.child_by_field_name("name")?;
         let module_name = name_node.utf8_text(source.as_bytes()).ok()?;
-        Self::COMMON_MODULES.contains(&module_name).then(|| format!("import {}", module_name))
+        Self::COMMON_MODULES
+            .contains(&module_name)
+            .then(|| format!("import {}", module_name))
     }
 
     /// Check for typing import pattern.
@@ -785,7 +798,8 @@ impl EntityExtractor for PythonAdapter {
             None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?
+        let name = self
+            .extract_name(&node, source_code)?
             .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;

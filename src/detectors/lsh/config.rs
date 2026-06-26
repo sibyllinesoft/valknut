@@ -551,9 +551,18 @@ fn validate_positive(value: usize, name: &str) -> Result<()> {
 impl AdaptiveDenoiseConfig {
     fn validate(&self) -> Result<()> {
         validate_unit_range(self.stop_motif_percentile, "adaptive.stop_motif_percentile")?;
-        validate_unit_range(self.hub_suppression_threshold, "adaptive.hub_suppression_threshold")?;
-        validate_unit_range(self.quality_gate_percentage, "adaptive.quality_gate_percentage")?;
-        validate_unit_range(self.external_call_jaccard_threshold, "adaptive.external_call_jaccard_threshold")?;
+        validate_unit_range(
+            self.hub_suppression_threshold,
+            "adaptive.hub_suppression_threshold",
+        )?;
+        validate_unit_range(
+            self.quality_gate_percentage,
+            "adaptive.quality_gate_percentage",
+        )?;
+        validate_unit_range(
+            self.external_call_jaccard_threshold,
+            "adaptive.external_call_jaccard_threshold",
+        )?;
         self.validate_bounded_params()?;
         Ok(())
     }

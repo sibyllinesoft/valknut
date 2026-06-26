@@ -375,18 +375,44 @@ use anyhow::{Result, Context};
         // Check mod declarations
         assert!(modules.contains(&"config"), "Should find 'mod config'");
         assert!(modules.contains(&"utils"), "Should find 'pub mod utils'");
-        assert!(modules.contains(&"helpers"), "Should find 'pub(crate) mod helpers'");
+        assert!(
+            modules.contains(&"helpers"),
+            "Should find 'pub(crate) mod helpers'"
+        );
 
         // Check use statements
-        assert!(modules.contains(&"std::collections::HashMap"), "Should find HashMap use");
-        assert!(modules.contains(&"crate::core::"), "Should find crate::core use");
-        assert!(modules.contains(&"super::parent_module"), "Should find super:: use");
-        assert!(modules.contains(&"self::local_module"), "Should find self:: use");
+        assert!(
+            modules.contains(&"std::collections::HashMap"),
+            "Should find HashMap use"
+        );
+        assert!(
+            modules.contains(&"crate::core::"),
+            "Should find crate::core use"
+        );
+        assert!(
+            modules.contains(&"super::parent_module"),
+            "Should find super:: use"
+        );
+        assert!(
+            modules.contains(&"self::local_module"),
+            "Should find self:: use"
+        );
         assert!(modules.contains(&"anyhow::"), "Should find anyhow use");
 
         // Check named imports are extracted
-        let core_import = imports.iter().find(|i| i.module == "crate::core::").unwrap();
-        assert!(core_import.imports.as_ref().unwrap().contains(&"Config".to_string()));
-        assert!(core_import.imports.as_ref().unwrap().contains(&"Error".to_string()));
+        let core_import = imports
+            .iter()
+            .find(|i| i.module == "crate::core::")
+            .unwrap();
+        assert!(core_import
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"Config".to_string()));
+        assert!(core_import
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"Error".to_string()));
     }
 }

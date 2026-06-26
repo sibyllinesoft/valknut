@@ -194,7 +194,11 @@ impl CoverageExtractor {
         let content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(err) => {
-                warn!("Skipping coverage gaps for missing source file {}: {}", path.display(), err);
+                warn!(
+                    "Skipping coverage gaps for missing source file {}: {}",
+                    path.display(),
+                    err
+                );
                 return Ok(Vec::new());
             }
         };
@@ -204,7 +208,14 @@ impl CoverageExtractor {
 
         let mut gaps = Vec::new();
         for span in chunked {
-            if let Some(gap) = self.try_create_gap(path, &span, language, file_loc, &content, cached_tree.as_ref())? {
+            if let Some(gap) = self.try_create_gap(
+                path,
+                &span,
+                language,
+                file_loc,
+                &content,
+                cached_tree.as_ref(),
+            )? {
                 gaps.push(gap);
             }
         }
@@ -221,7 +232,11 @@ impl CoverageExtractor {
         if content.trim().is_empty() {
             return Ok(None);
         }
-        Ok(Some(self.ast_service.get_ast(&path.to_string_lossy(), content).await?))
+        Ok(Some(
+            self.ast_service
+                .get_ast(&path.to_string_lossy(), content)
+                .await?,
+        ))
     }
 
     /// Try to create a coverage gap from a span, returning None if span is invalid.
@@ -630,7 +645,11 @@ impl CoverageExtractor {
         }
 
         let rest = self.remove_span_from_content(content, gap.span.start, gap.span.end);
-        let fan_in: usize = gap.symbols.iter().map(|s| rest.matches(&s.name).count()).sum();
+        let fan_in: usize = gap
+            .symbols
+            .iter()
+            .map(|s| rest.matches(&s.name).count())
+            .sum();
         gap.features.fan_in_gap = fan_in.max(gap.symbols.len());
     }
 

@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use super::verification::clone_detection::{
-    compute_apted_limit, compute_apted_verification, filter_small_pairs, log_partition_stats,
-    ordered_pair_key, serialize_clone_pairs, should_skip_small_pair, CachedSimpleAst,
-    CloneDetectionStats, CloneEndpoint, ClonePairReport, CloneVerificationDetail,
-    LshDetectionParams, LshEntityCollection,
+use super::discovery::services::{StageOrchestrator, StageResultsBundle};
+use super::pipeline_config::AnalysisConfig;
+use super::results::pipeline_results::{
+    ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
+    LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
 };
 use super::stages::complexity_stage::ComplexityStage;
 use super::stages::coverage_stage::CoverageStage;
@@ -19,12 +19,12 @@ use super::stages::impact_stage::ImpactStage;
 use super::stages::lsh_stage::LshStage;
 use super::stages::refactoring_stage::RefactoringStage;
 use super::stages::structure_stage::StructureStage;
-use super::pipeline_config::AnalysisConfig;
-use super::results::pipeline_results::{
-    ComplexityAnalysisResults, CoverageAnalysisResults, CoverageFileInfo, ImpactAnalysisResults,
-    LshAnalysisResults, RefactoringAnalysisResults, StructureAnalysisResults,
+use super::verification::clone_detection::{
+    compute_apted_limit, compute_apted_verification, filter_small_pairs, log_partition_stats,
+    ordered_pair_key, serialize_clone_pairs, should_skip_small_pair, CachedSimpleAst,
+    CloneDetectionStats, CloneEndpoint, ClonePairReport, CloneVerificationDetail,
+    LshDetectionParams, LshEntityCollection,
 };
-use super::discovery::services::{StageOrchestrator, StageResultsBundle};
 use crate::core::arena_analysis::{ArenaAnalysisResult, ArenaBatchAnalyzer, ArenaFileAnalyzer};
 use crate::core::ast_service::{AstService, CachedTree};
 use crate::core::config::{CoverageConfig, ValknutConfig};
@@ -76,10 +76,15 @@ impl AnalysisStages {
             let mut cohesion_config = valknut_config.cohesion.clone();
             for pattern in &valknut_config.analysis.exclude_patterns {
                 if !cohesion_config.issues.exclude_patterns.contains(pattern) {
-                    cohesion_config.issues.exclude_patterns.push(pattern.clone());
+                    cohesion_config
+                        .issues
+                        .exclude_patterns
+                        .push(pattern.clone());
                 }
             }
-            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(cohesion_config)))
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(
+                cohesion_config,
+            )))
         } else {
             None
         };
@@ -119,10 +124,15 @@ impl AnalysisStages {
             let mut cohesion_config = valknut_config.cohesion.clone();
             for pattern in &valknut_config.analysis.exclude_patterns {
                 if !cohesion_config.issues.exclude_patterns.contains(pattern) {
-                    cohesion_config.issues.exclude_patterns.push(pattern.clone());
+                    cohesion_config
+                        .issues
+                        .exclude_patterns
+                        .push(pattern.clone());
                 }
             }
-            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(cohesion_config)))
+            Some(tokio::sync::Mutex::new(CohesionExtractor::with_config(
+                cohesion_config,
+            )))
         } else {
             None
         };
@@ -159,7 +169,9 @@ impl AnalysisStages {
         arena_results: &[crate::core::arena_analysis::ArenaAnalysisResult],
     ) -> Result<StructureAnalysisResults> {
         let structure_stage = StructureStage::new(&self.structure_extractor);
-        structure_stage.run_structure_analysis_with_arena_results(paths, arena_results).await
+        structure_stage
+            .run_structure_analysis_with_arena_results(paths, arena_results)
+            .await
     }
 
     /// Run cohesion analysis using pre-computed arena results (uses source code from arena)
@@ -174,7 +186,10 @@ impl AnalysisStages {
             None => return Ok(CohesionAnalysisResults::default()),
         };
 
-        info!("Running cohesion analysis with {} pre-computed sources", arena_results.len());
+        info!(
+            "Running cohesion analysis with {} pre-computed sources",
+            arena_results.len()
+        );
 
         // Build file sources from arena results (reusing already-read source code)
         let file_sources: Vec<(PathBuf, String)> = arena_results
@@ -186,7 +201,9 @@ impl AnalysisStages {
 
         // Run cohesion analysis with mutex lock
         let mut cohesion_extractor = cohesion_mutex.lock().await;
-        cohesion_extractor.analyze_with_sources(&file_sources, &root_path).await
+        cohesion_extractor
+            .analyze_with_sources(&file_sources, &root_path)
+            .await
     }
 
     /// Run complexity analysis from pre-extracted arena results (optimized path)
@@ -251,7 +268,9 @@ impl AnalysisStages {
         coverage_config: &CoverageConfig,
     ) -> Result<CoverageAnalysisResults> {
         let coverage_stage = CoverageStage::new(&self.coverage_extractor);
-        coverage_stage.run_coverage_analysis(root_path, coverage_config).await
+        coverage_stage
+            .run_coverage_analysis(root_path, coverage_config)
+            .await
     }
 
     // Entity extraction and collection methods have been moved to LshStage
@@ -421,7 +440,10 @@ impl AnalysisStages {
         config: &AnalysisConfig,
         paths: &[PathBuf],
         arena_results: &[ArenaAnalysisResult],
-    ) -> (Result<StructureAnalysisResults>, Result<CoverageAnalysisResults>) {
+    ) -> (
+        Result<StructureAnalysisResults>,
+        Result<CoverageAnalysisResults>,
+    ) {
         let structure_future = self.run_structure_stage(config, paths, arena_results);
         let coverage_future = self.run_coverage_stage(config, paths);
         future::join(structure_future, coverage_future).await
@@ -459,7 +481,9 @@ impl AnalysisStages {
             return Ok(StructureAnalysisResults::disabled());
         }
         info!("Starting structure analysis...");
-        let result = self.run_structure_analysis_with_arena_results(paths, arena_results).await;
+        let result = self
+            .run_structure_analysis_with_arena_results(paths, arena_results)
+            .await;
         info!("Structure analysis completed");
         result
     }
@@ -477,7 +501,9 @@ impl AnalysisStages {
         let coverage_config = self.valknut_config.coverage.clone();
         let default_path = PathBuf::from(".");
         let root_path = paths.first().unwrap_or(&default_path);
-        let result = self.run_coverage_analysis(root_path, &coverage_config).await;
+        let result = self
+            .run_coverage_analysis(root_path, &coverage_config)
+            .await;
         info!("Coverage analysis completed");
         result
     }
@@ -492,7 +518,9 @@ impl AnalysisStages {
             return Ok(ComplexityAnalysisResults::disabled());
         }
         info!("Starting complexity analysis...");
-        let result = self.run_complexity_analysis_from_arena_results(arena_results).await;
+        let result = self
+            .run_complexity_analysis_from_arena_results(arena_results)
+            .await;
         info!("Complexity analysis completed");
         result
     }
@@ -553,12 +581,13 @@ impl AnalysisStages {
             return Ok(CohesionAnalysisResults::default());
         }
         info!("Starting cohesion analysis...");
-        let result = self.run_cohesion_analysis_with_arena_results(paths, arena_results).await;
+        let result = self
+            .run_cohesion_analysis_with_arena_results(paths, arena_results)
+            .await;
         info!("Cohesion analysis completed");
         result
     }
 }
-
 
 #[cfg(test)]
 #[path = "pipeline_stages_tests.rs"]

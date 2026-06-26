@@ -8,17 +8,19 @@ use std::path::Path;
 use owo_colors::OwoColorize;
 use tabled::{settings::Style as TableStyle, Table, Tabled};
 
-use crate::cli::args::OutputFormat;
 use super::helpers::{
     format_location, format_refactoring_type, format_to_string, refactoring_type_emoji,
 };
+use crate::cli::args::OutputFormat;
 
 /// Display complexity recommendations for a single file.
 pub fn display_file_complexity_recommendations(file_result: &serde_json::Value) {
     let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) else {
         return;
     };
-    let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array())
+    let Some(recommendations) = file_result
+        .get("recommendations")
+        .and_then(|v| v.as_array())
     else {
         return;
     };
@@ -355,7 +357,10 @@ pub fn display_refactoring_suggestions(results: &serde_json::Value) {
         return;
     }
 
-    let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = refactoring
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return;
     };
 
@@ -419,7 +424,10 @@ fn display_single_file_recommendations(file_result: &serde_json::Value) -> bool 
         return false;
     };
 
-    let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) else {
+    let Some(recommendations) = file_result
+        .get("recommendations")
+        .and_then(|v| v.as_array())
+    else {
         return false;
     };
 
@@ -439,23 +447,48 @@ fn display_single_file_recommendations(file_result: &serde_json::Value) -> bool 
 }
 
 /// Sort recommendations by priority score descending.
-fn sort_recommendations_by_priority(recommendations: &[serde_json::Value]) -> Vec<&serde_json::Value> {
+fn sort_recommendations_by_priority(
+    recommendations: &[serde_json::Value],
+) -> Vec<&serde_json::Value> {
     let mut sorted: Vec<_> = recommendations.iter().collect();
     sorted.sort_by(|a, b| {
-        let priority_a = a.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let priority_b = b.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        priority_b.partial_cmp(&priority_a).unwrap_or(std::cmp::Ordering::Equal)
+        let priority_a = a
+            .get("priority_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let priority_b = b
+            .get("priority_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        priority_b
+            .partial_cmp(&priority_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     sorted
 }
 
 /// Display a single recommendation.
 fn display_single_recommendation(index: usize, recommendation: &serde_json::Value) {
-    let description = recommendation.get("description").and_then(|v| v.as_str()).unwrap_or("");
-    let refactoring_type = recommendation.get("refactoring_type").and_then(|v| v.as_str()).unwrap_or("");
-    let impact = recommendation.get("estimated_impact").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let effort = recommendation.get("estimated_effort").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let priority_score = recommendation.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let description = recommendation
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let refactoring_type = recommendation
+        .get("refactoring_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let impact = recommendation
+        .get("estimated_impact")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let effort = recommendation
+        .get("estimated_effort")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let priority_score = recommendation
+        .get("priority_score")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
     if description.is_empty() || refactoring_type.is_empty() {
         return;
@@ -512,7 +545,10 @@ pub fn display_complexity_recommendations(results: &serde_json::Value) {
         return;
     }
 
-    let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = complexity
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return;
     };
 

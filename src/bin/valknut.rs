@@ -36,7 +36,12 @@ fn init_logging(verbose: bool) {
 /// Runs the CLI with the parsed command and options.
 async fn run_cli(cli: Cli) -> anyhow::Result<()> {
     init_logging(cli.verbose);
-    let Cli { command, survey, survey_verbosity, verbose } = cli;
+    let Cli {
+        command,
+        survey,
+        survey_verbosity,
+        verbose,
+    } = cli;
 
     match command {
         // Analysis commands
@@ -51,9 +56,7 @@ async fn run_cli(cli: Cli) -> anyhow::Result<()> {
         Commands::ValidateConfig(args) => cli::validate_config(args).await,
 
         // MCP commands
-        Commands::McpStdio(args) => {
-            cli::mcp_stdio_command(args, survey, survey_verbosity).await
-        }
+        Commands::McpStdio(args) => cli::mcp_stdio_command(args, survey, survey_verbosity).await,
         Commands::McpManifest(args) => cli::mcp_manifest_command(args).await,
 
         // Info commands

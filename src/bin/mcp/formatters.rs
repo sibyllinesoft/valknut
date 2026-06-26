@@ -229,12 +229,24 @@ fn write_summary_section(md: &mut String, results: &AnalysisResults) {
     let s = &results.summary;
     md.push_str("## Summary\n\n");
     md.push_str(&format!("- **Files Processed**: {}\n", s.files_processed));
-    md.push_str(&format!("- **Entities Analyzed**: {}\n", s.entities_analyzed));
-    md.push_str(&format!("- **Refactoring Needed**: {}\n", s.refactoring_needed));
+    md.push_str(&format!(
+        "- **Entities Analyzed**: {}\n",
+        s.entities_analyzed
+    ));
+    md.push_str(&format!(
+        "- **Refactoring Needed**: {}\n",
+        s.refactoring_needed
+    ));
     md.push_str(&format!("- **High Priority**: {}\n", s.high_priority));
     md.push_str(&format!("- **Critical**: {}\n", s.critical));
-    md.push_str(&format!("- **Average Refactoring Score**: {:.2}\n", s.avg_refactoring_score));
-    md.push_str(&format!("- **Code Health Score**: {:.2}\n\n", s.code_health_score));
+    md.push_str(&format!(
+        "- **Average Refactoring Score**: {:.2}\n",
+        s.avg_refactoring_score
+    ));
+    md.push_str(&format!(
+        "- **Code Health Score**: {:.2}\n\n",
+        s.code_health_score
+    ));
 }
 
 fn write_candidates_section(md: &mut String, results: &AnalysisResults) {
@@ -247,12 +259,7 @@ fn write_candidates_section(md: &mut String, results: &AnalysisResults) {
     }
 }
 
-fn write_candidate(
-    md: &mut String,
-    num: usize,
-    c: &RefactoringCandidate,
-    dict: &CodeDictionary,
-) {
+fn write_candidate(md: &mut String, num: usize, c: &RefactoringCandidate, dict: &CodeDictionary) {
     md.push_str(&format!("### {}. {}\n\n", num, c.name));
     md.push_str(&format!("- **File**: `{}`\n", c.file_path));
     md.push_str(&format!("- **Priority**: {:?}\n", c.priority));
@@ -262,16 +269,30 @@ fn write_candidate(
     if !c.issues.is_empty() {
         md.push_str("- **Issues**:\n");
         for issue in &c.issues {
-            let title = dict.issues.get(&issue.code).map(|e| e.title.as_str()).unwrap_or(&issue.category);
-            md.push_str(&format!("  - {}: {} (severity {:.2})\n", issue.code, title, issue.severity));
+            let title = dict
+                .issues
+                .get(&issue.code)
+                .map(|e| e.title.as_str())
+                .unwrap_or(&issue.category);
+            md.push_str(&format!(
+                "  - {}: {} (severity {:.2})\n",
+                issue.code, title, issue.severity
+            ));
         }
     }
 
     if !c.suggestions.is_empty() {
         md.push_str("- **Suggestions**:\n");
         for sug in &c.suggestions {
-            let title = dict.suggestions.get(&sug.code).map(|e| e.title.as_str()).unwrap_or(&sug.refactoring_type);
-            md.push_str(&format!("  - {}: {} (Priority: {:.2}, Effort: {:.2})\n", sug.code, title, sug.priority, sug.effort));
+            let title = dict
+                .suggestions
+                .get(&sug.code)
+                .map(|e| e.title.as_str())
+                .unwrap_or(&sug.refactoring_type);
+            md.push_str(&format!(
+                "  - {}: {} (Priority: {:.2}, Effort: {:.2})\n",
+                sug.code, title, sug.priority, sug.effort
+            ));
         }
     }
     md.push('\n');
@@ -279,9 +300,18 @@ fn write_candidate(
 
 fn write_statistics_section(md: &mut String, results: &AnalysisResults) {
     md.push_str("## Statistics\n\n");
-    md.push_str(&format!("- **Total Duration**: {:.2} seconds\n", results.statistics.total_duration.as_secs_f64()));
-    md.push_str(&format!("- **Average File Processing Time**: {:.3} seconds\n", results.statistics.avg_file_processing_time.as_secs_f64()));
-    md.push_str(&format!("- **Average Entity Processing Time**: {:.3} seconds\n", results.statistics.avg_entity_processing_time.as_secs_f64()));
+    md.push_str(&format!(
+        "- **Total Duration**: {:.2} seconds\n",
+        results.statistics.total_duration.as_secs_f64()
+    ));
+    md.push_str(&format!(
+        "- **Average File Processing Time**: {:.3} seconds\n",
+        results.statistics.avg_file_processing_time.as_secs_f64()
+    ));
+    md.push_str(&format!(
+        "- **Average Entity Processing Time**: {:.3} seconds\n",
+        results.statistics.avg_entity_processing_time.as_secs_f64()
+    ));
 }
 
 fn write_warnings_section(md: &mut String, results: &AnalysisResults) {

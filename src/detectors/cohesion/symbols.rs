@@ -217,33 +217,218 @@ pub fn is_stop_token(token: &str) -> bool {
     // Common programming keywords and noise
     const STOP_TOKENS: &[&str] = &[
         // Common words
-        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-        "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "shall",
-        "can", "need", "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into",
-        "through", "during", "before", "after", "above", "below", "between", "under", "again",
-        "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "each",
-        "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same",
-        "so", "than", "too", "very", "just", "and", "but", "if", "or", "because", "until", "while",
-        "this", "that", "these", "those", "it", "its", // Common keywords
-        "self", "cls", "this", // Python/JS/Rust self references
-        "none", "null", "nil", "undefined", // Null values
-        "true", "false", // Booleans
-        "int", "str", "string", "bool", "float", "double", "char", "byte", "void", "i32", "i64",
-        "u32", "u64", "f32", "f64", "usize", "isize", // Primitive types
-        "let", "const", "var", "mut", "pub", "priv", "private", "public", "protected", "static",
-        "final", "abstract", "virtual", "override", "async", "await", "fn", "func", "function",
-        "def", "class", "struct", "enum", "trait", "impl", "interface", "type", "module", "import",
-        "export", "from", "use", "mod", "crate", "super", "where", // Language keywords
-        "return", "break", "continue", "yield", "throw", "raise", "try", "catch", "except",
-        "finally", "match", "case", "switch", "default", "loop", "for", "while", "if", "else",
-        "elif", "unless", // Control flow
-        "new", "delete", "sizeof", "typeof", "instanceof", // Operators
-        "get", "set", // Property accessors (too common)
-        "ok", "err", "error", "result", "option", "some", // Result/Option (too common in Rust)
-        "args", "kwargs", "arg", "param", "params", // Generic parameter names
-        "i", "j", "k", "n", "m", "x", "y", "z", // Single letter variables
-        "tmp", "temp", "val", "value", "data", "item", "items", "obj", "object",
-        "list", "array", "vec", "map", "dict", "set", "hash", // Generic container names
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "need",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "and",
+        "but",
+        "if",
+        "or",
+        "because",
+        "until",
+        "while",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its", // Common keywords
+        "self",
+        "cls",
+        "this", // Python/JS/Rust self references
+        "none",
+        "null",
+        "nil",
+        "undefined", // Null values
+        "true",
+        "false", // Booleans
+        "int",
+        "str",
+        "string",
+        "bool",
+        "float",
+        "double",
+        "char",
+        "byte",
+        "void",
+        "i32",
+        "i64",
+        "u32",
+        "u64",
+        "f32",
+        "f64",
+        "usize",
+        "isize", // Primitive types
+        "let",
+        "const",
+        "var",
+        "mut",
+        "pub",
+        "priv",
+        "private",
+        "public",
+        "protected",
+        "static",
+        "final",
+        "abstract",
+        "virtual",
+        "override",
+        "async",
+        "await",
+        "fn",
+        "func",
+        "function",
+        "def",
+        "class",
+        "struct",
+        "enum",
+        "trait",
+        "impl",
+        "interface",
+        "type",
+        "module",
+        "import",
+        "export",
+        "from",
+        "use",
+        "mod",
+        "crate",
+        "super",
+        "where", // Language keywords
+        "return",
+        "break",
+        "continue",
+        "yield",
+        "throw",
+        "raise",
+        "try",
+        "catch",
+        "except",
+        "finally",
+        "match",
+        "case",
+        "switch",
+        "default",
+        "loop",
+        "for",
+        "while",
+        "if",
+        "else",
+        "elif",
+        "unless", // Control flow
+        "new",
+        "delete",
+        "sizeof",
+        "typeof",
+        "instanceof", // Operators
+        "get",
+        "set", // Property accessors (too common)
+        "ok",
+        "err",
+        "error",
+        "result",
+        "option",
+        "some", // Result/Option (too common in Rust)
+        "args",
+        "kwargs",
+        "arg",
+        "param",
+        "params", // Generic parameter names
+        "i",
+        "j",
+        "k",
+        "n",
+        "m",
+        "x",
+        "y",
+        "z", // Single letter variables
+        "tmp",
+        "temp",
+        "val",
+        "value",
+        "data",
+        "item",
+        "items",
+        "obj",
+        "object",
+        "list",
+        "array",
+        "vec",
+        "map",
+        "dict",
+        "set",
+        "hash", // Generic container names
     ];
 
     let lower = token.to_lowercase();
@@ -272,11 +457,13 @@ pub fn tokenize_name(name: &str) -> Vec<String> {
     for ch in name.chars() {
         if is_separator(ch) {
             flush_token(&mut tokens, &mut current);
-        } else if ch.is_uppercase() && !current.is_empty() && !current.ends_with(char::is_uppercase) {
+        } else if ch.is_uppercase() && !current.is_empty() && !current.ends_with(char::is_uppercase)
+        {
             // camelCase boundary: lowercase -> uppercase
             flush_token(&mut tokens, &mut current);
             current.push(ch);
-        } else if ch.is_lowercase() && current.len() > 1 && current.chars().all(char::is_uppercase) {
+        } else if ch.is_lowercase() && current.len() > 1 && current.chars().all(char::is_uppercase)
+        {
             // ALLCAPS to lowercase (e.g., HTTPRequest -> HTTP, Request)
             let last = current.pop().unwrap();
             flush_token(&mut tokens, &mut current);
@@ -297,26 +484,17 @@ mod tests {
 
     #[test]
     fn tokenize_camel_case() {
-        assert_eq!(
-            tokenize_name("getUserName"),
-            vec!["get", "user", "name"]
-        );
+        assert_eq!(tokenize_name("getUserName"), vec!["get", "user", "name"]);
     }
 
     #[test]
     fn tokenize_pascal_case() {
-        assert_eq!(
-            tokenize_name("UserManager"),
-            vec!["user", "manager"]
-        );
+        assert_eq!(tokenize_name("UserManager"), vec!["user", "manager"]);
     }
 
     #[test]
     fn tokenize_snake_case() {
-        assert_eq!(
-            tokenize_name("get_user_name"),
-            vec!["get", "user", "name"]
-        );
+        assert_eq!(tokenize_name("get_user_name"), vec!["get", "user", "name"]);
     }
 
     #[test]
@@ -376,11 +554,7 @@ mod tests {
         calc.add_document(&["config".into(), "load".into()]);
 
         // Select from a document
-        let doc = vec![
-            "user".into(),
-            "create".into(),
-            "special_function".into(),
-        ];
+        let doc = vec!["user".into(), "create".into(), "special_function".into()];
         let selected = calc.select_top_symbols(&doc);
 
         // Should select some symbols

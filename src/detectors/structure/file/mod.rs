@@ -57,7 +57,12 @@ impl FileAnalyzer {
     }
 
     /// Calculate a lognormal distribution-based score for file size.
-    pub fn calculate_lognormal_score(&self, value: usize, optimal: usize, percentile_95: usize) -> f64 {
+    pub fn calculate_lognormal_score(
+        &self,
+        value: usize,
+        optimal: usize,
+        percentile_95: usize,
+    ) -> f64 {
         if value == 0 || optimal == 0 || percentile_95 <= optimal {
             return if value == optimal { 1.0 } else { 0.0 };
         }
@@ -75,7 +80,11 @@ impl FileAnalyzer {
 
         let sigma = (-1.645 + discriminant.sqrt()) / 2.0;
         if sigma <= 0.0 {
-            return if (value - optimal).abs() < 0.001 { 1.0 } else { 0.0 };
+            return if (value - optimal).abs() < 0.001 {
+                1.0
+            } else {
+                0.0
+            };
         }
 
         let mu = optimal.ln() + sigma * sigma;
@@ -83,7 +92,8 @@ impl FileAnalyzer {
         let log_value = value.ln();
         let log_value_centered = log_value - mu;
 
-        let exponent = -0.5 * (log_value_centered * log_value_centered - sigma.powi(4)) / (sigma * sigma);
+        let exponent =
+            -0.5 * (log_value_centered * log_value_centered - sigma.powi(4)) / (sigma * sigma);
         let score = (optimal / value) * exponent.exp();
 
         score.clamp(0.0, 1.0)
@@ -101,12 +111,12 @@ impl FileAnalyzer {
     /// Calculate file metrics including AST-based size scoring.
     pub fn calculate_file_metrics(&self, file_path: &Path) -> Result<FileMetrics> {
         let content = FileReader::read_to_string(file_path)?;
-        let loc = content.lines().filter(|line| !line.trim().is_empty()).count();
+        let loc = content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count();
 
-        let extension = file_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let extension = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let ast_nodes = match get_tree_sitter_language(extension) {
             Ok(language) => {
@@ -211,7 +221,9 @@ impl FileAnalyzer {
         let cohesion_graph = self.build_entity_cohesion_graph(file_path)?;
         let community_finder = CommunityFinder::new(&self.config);
         let communities = community_finder.find_communities(&cohesion_graph)?;
-        let dependency_metrics = self.import_resolver.collect_dependency_metrics(file_path, project_root)?;
+        let dependency_metrics = self
+            .import_resolver
+            .collect_dependency_metrics(file_path, project_root)?;
 
         let split_analyzer = SplitAnalyzer::new(&self.config);
         split_analyzer.build_split_pack(
@@ -233,10 +245,13 @@ impl FileAnalyzer {
         let file_path = &metrics.path;
         let loc = metrics.loc;
         let size_bytes = metrics.source.len();
-        let cohesion_graph = self.build_entity_cohesion_graph_from_source(file_path, &metrics.source)?;
+        let cohesion_graph =
+            self.build_entity_cohesion_graph_from_source(file_path, &metrics.source)?;
         let community_finder = CommunityFinder::new(&self.config);
         let communities = community_finder.find_communities(&cohesion_graph)?;
-        let dependency_metrics = self.import_resolver.collect_dependency_metrics(file_path, Some(project_root))?;
+        let dependency_metrics = self
+            .import_resolver
+            .collect_dependency_metrics(file_path, Some(project_root))?;
 
         let split_analyzer = SplitAnalyzer::new(&self.config);
         split_analyzer.build_split_pack(
@@ -424,10 +439,7 @@ impl FileAnalyzer {
     }
 
     /// Extract imports from a file
-    pub fn extract_imports(
-        &self,
-        file_path: &Path,
-    ) -> Result<Vec<super::config::ImportStatement>> {
+    pub fn extract_imports(&self, file_path: &Path) -> Result<Vec<super::config::ImportStatement>> {
         self.import_resolver.extract_imports(file_path)
     }
 
@@ -437,7 +449,8 @@ impl FileAnalyzer {
         import: &super::config::ImportStatement,
         dir_path: &Path,
     ) -> Option<PathBuf> {
-        self.import_resolver.resolve_import_to_local_file(import, dir_path)
+        self.import_resolver
+            .resolve_import_to_local_file(import, dir_path)
     }
 
     /// Discover large files to analyze
@@ -502,7 +515,8 @@ impl FileAnalyzer {
 
     /// Check if line has a keyword
     pub fn line_has_keyword(&self, content: &str, start_line: usize, keyword: &str) -> bool {
-        self.import_resolver.line_has_keyword(content, start_line, keyword)
+        self.import_resolver
+            .line_has_keyword(content, start_line, keyword)
     }
 
     /// Canonicalize a path for consistent comparison
@@ -517,7 +531,8 @@ impl FileAnalyzer {
         project_root: Option<&Path>,
         _cohesion_graph: &CohesionGraph,
     ) -> Result<FileDependencyMetrics> {
-        self.import_resolver.collect_dependency_metrics(file_path, project_root)
+        self.import_resolver
+            .collect_dependency_metrics(file_path, project_root)
     }
 
     /// Resolve candidate path to an existing file
@@ -547,10 +562,10 @@ impl FileAnalyzer {
         file_path: &Path,
         content: &str,
     ) -> bool {
-        self.import_resolver.is_entity_exported(entity, file_path, content)
+        self.import_resolver
+            .is_entity_exported(entity, file_path, content)
     }
 }
-
 
 #[cfg(test)]
 mod tests;

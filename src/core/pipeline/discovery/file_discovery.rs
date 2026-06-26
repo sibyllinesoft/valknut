@@ -33,7 +33,12 @@ pub fn discover_files(
     let (tracked_files, repo_root) = find_repository(&canonical_roots)?;
 
     let collected = if let Some(tracked) = tracked_files {
-        collect_from_git_tracked(tracked, &canonical_roots, repo_root.as_deref(), &filter_context)
+        collect_from_git_tracked(
+            tracked,
+            &canonical_roots,
+            repo_root.as_deref(),
+            &filter_context,
+        )
     } else {
         collect_from_filesystem_walk(&canonical_roots, &filter_context)
     };
@@ -46,7 +51,13 @@ pub fn discover_files(
 fn build_filter_context(
     pipeline_config: &PipelineAnalysisConfig,
     valknut_config: Option<&ValknutConfig>,
-) -> Result<(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64)> {
+) -> Result<(
+    Option<GlobSet>,
+    Option<GlobSet>,
+    Option<GlobSet>,
+    HashSet<String>,
+    u64,
+)> {
     let (include_patterns, mut exclude_patterns, ignore_patterns) =
         gather_patterns(pipeline_config, valknut_config);
     exclude_patterns.push("**/.git/**".to_string());
@@ -56,7 +67,13 @@ fn build_filter_context(
     let ignore_glob = compile_globset(&ignore_patterns)?;
     let allowed_extensions = allowed_extensions_from(pipeline_config, valknut_config);
 
-    Ok((include_glob, exclude_glob, ignore_glob, allowed_extensions, pipeline_config.max_file_size_bytes))
+    Ok((
+        include_glob,
+        exclude_glob,
+        ignore_glob,
+        allowed_extensions,
+        pipeline_config.max_file_size_bytes,
+    ))
 }
 
 /// Collect files from git-tracked file list.
@@ -64,13 +81,22 @@ fn collect_from_git_tracked(
     tracked: Vec<PathBuf>,
     canonical_roots: &[PathBuf],
     repo_root: Option<&Path>,
-    filter_context: &(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64),
+    filter_context: &(
+        Option<GlobSet>,
+        Option<GlobSet>,
+        Option<GlobSet>,
+        HashSet<String>,
+        u64,
+    ),
 ) -> Vec<PathBuf> {
-    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) = filter_context;
+    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) =
+        filter_context;
 
     info!(
         "Found git repository at '{}'. Using git index for file discovery.",
-        repo_root.map(|p| p.display().to_string()).unwrap_or_else(|| "unknown".to_string())
+        repo_root
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
     );
     info!("Discovered {} tracked files from git index", tracked.len());
 
@@ -83,7 +109,15 @@ fn collect_from_git_tracked(
         }
 
         let base = repo_root.unwrap_or_else(|| default_base_for(&file));
-        if should_keep(&file, base, include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, *max_file_size) {
+        if should_keep(
+            &file,
+            base,
+            include_glob.as_ref(),
+            exclude_glob.as_ref(),
+            ignore_glob.as_ref(),
+            allowed_extensions,
+            *max_file_size,
+        ) {
             add_unique(&mut unique, &mut collected, file);
         }
     }
@@ -95,9 +129,16 @@ fn collect_from_git_tracked(
 /// Collect files via filesystem walk when git metadata isn't available.
 fn collect_from_filesystem_walk(
     canonical_roots: &[PathBuf],
-    filter_context: &(Option<GlobSet>, Option<GlobSet>, Option<GlobSet>, HashSet<String>, u64),
+    filter_context: &(
+        Option<GlobSet>,
+        Option<GlobSet>,
+        Option<GlobSet>,
+        HashSet<String>,
+        u64,
+    ),
 ) -> Vec<PathBuf> {
-    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) = filter_context;
+    let (include_glob, exclude_glob, ignore_glob, allowed_extensions, max_file_size) =
+        filter_context;
 
     warn!(
         "No git repository found for paths: {:?}. Falling back to filesystem walk. This may be slower.",
@@ -110,13 +151,30 @@ fn collect_from_filesystem_walk(
 
     for root in canonical_roots {
         if root.is_file() {
-            if should_keep(root, default_base_for(root), include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, *max_file_size) {
+            if should_keep(
+                root,
+                default_base_for(root),
+                include_glob.as_ref(),
+                exclude_glob.as_ref(),
+                ignore_glob.as_ref(),
+                allowed_extensions,
+                *max_file_size,
+            ) {
                 add_unique(&mut unique, &mut collected, root.clone());
             }
             continue;
         }
 
-        walk_directory(root, &mut unique, &mut collected, include_glob, exclude_glob, ignore_glob, allowed_extensions, *max_file_size);
+        walk_directory(
+            root,
+            &mut unique,
+            &mut collected,
+            include_glob,
+            exclude_glob,
+            ignore_glob,
+            allowed_extensions,
+            *max_file_size,
+        );
     }
 
     collected.sort();
@@ -150,13 +208,24 @@ fn walk_directory(
             continue;
         };
 
-        let is_file = dir_entry.file_type().map(|ft| ft.is_file()).unwrap_or(false);
+        let is_file = dir_entry
+            .file_type()
+            .map(|ft| ft.is_file())
+            .unwrap_or(false);
         if !is_file {
             continue;
         }
 
         let path = dir_entry.path();
-        if should_keep(path, root, include_glob.as_ref(), exclude_glob.as_ref(), ignore_glob.as_ref(), allowed_extensions, max_file_size) {
+        if should_keep(
+            path,
+            root,
+            include_glob.as_ref(),
+            exclude_glob.as_ref(),
+            ignore_glob.as_ref(),
+            allowed_extensions,
+            max_file_size,
+        ) {
             add_unique(unique, collected, path.to_path_buf());
         }
     }
@@ -171,7 +240,10 @@ fn add_unique(unique: &mut HashSet<PathBuf>, collected: &mut Vec<PathBuf>, path:
 
 /// Log discovery completion results.
 fn log_discovery_results(collected: &[PathBuf]) {
-    info!("File discovery completed: {} files selected for analysis", collected.len());
+    info!(
+        "File discovery completed: {} files selected for analysis",
+        collected.len()
+    );
     if collected.len() > 100 {
         info!(
             "Large file set detected ({} files). Consider using more specific include/exclude patterns for better performance",

@@ -86,7 +86,12 @@ printf "## v%s\n\n%s\n" "$VERSION" "$CHANGELOG_SNIPPET" > "$NOTES_FILE"
 TAG="v$VERSION"
 
 echo "📝 Creating git tag $TAG"
-git add Cargo.toml Cargo.lock "$EXT_VERSION_FILE" "$UI_PACKAGE"
+git add Cargo.toml Cargo.lock
+for version_file in "$EXT_VERSION_FILE" "$UI_PACKAGE"; do
+  if [[ -f $version_file ]]; then
+    git add "$version_file"
+  fi
+done
 if ! git diff --cached --quiet; then
   git commit -m "Release $TAG"
 fi

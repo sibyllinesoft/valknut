@@ -377,12 +377,7 @@ fn should_ignore_dir(path: &Path, config: &DocAuditConfig, globset: &GlobSet) ->
 }
 
 /// Scan a file and collect documentation issues using the provided scanner function.
-fn scan_file_with<F>(
-    file_path: &Path,
-    root: &Path,
-    scanner: F,
-    issues: &mut Vec<DocIssue>,
-)
+fn scan_file_with<F>(file_path: &Path, root: &Path, scanner: F, issues: &mut Vec<DocIssue>)
 where
     F: FnOnce(&str, &Path, &Path) -> Vec<DocIssue>,
 {

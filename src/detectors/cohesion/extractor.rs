@@ -44,9 +44,9 @@ impl CohesionEntityExtractor {
     pub fn new(language_key: &str) -> Result<Self> {
         let mut parser = Parser::new();
         let language = get_tree_sitter_language(language_key)?;
-        parser
-            .set_language(&language)
-            .map_err(|e| ValknutError::parse(language_key, format!("Failed to set language: {}", e)))?;
+        parser.set_language(&language).map_err(|e| {
+            ValknutError::parse(language_key, format!("Failed to set language: {}", e))
+        })?;
 
         Ok(Self {
             parser,
@@ -55,20 +55,18 @@ impl CohesionEntityExtractor {
     }
 
     /// Extract all cohesion entities from source code.
-    pub fn extract_entities(&mut self, source: &str, file_path: &Path) -> Result<Vec<CohesionEntity>> {
+    pub fn extract_entities(
+        &mut self,
+        source: &str,
+        file_path: &Path,
+    ) -> Result<Vec<CohesionEntity>> {
         let tree = self
             .parser
             .parse(source, None)
             .ok_or_else(|| ValknutError::parse(&self.language_key, "Failed to parse source"))?;
 
         let mut entities = Vec::new();
-        self.extract_recursive(
-            tree.root_node(),
-            source,
-            file_path,
-            None,
-            &mut entities,
-        );
+        self.extract_recursive(tree.root_node(), source, file_path, None, &mut entities);
 
         Ok(entities)
     }
@@ -221,10 +219,9 @@ impl CohesionEntityExtractor {
                 let name = self.get_child_text(node, "name", source)?;
                 Some(("method".to_string(), name))
             }
-            "type_declaration" => {
-                self.get_go_type_spec_name(node, source)
-                    .map(|name| ("type".to_string(), name))
-            }
+            "type_declaration" => self
+                .get_go_type_spec_name(node, source)
+                .map(|name| ("type".to_string(), name)),
             _ => None,
         }
     }
@@ -367,15 +364,14 @@ impl CohesionEntityExtractor {
         let mut cursor = root.walk();
         let docs: Vec<String> = root
             .children(&mut cursor)
-            .take_while(|child| {
-                child.kind() == "line_comment" || child.kind() == "attribute_item"
-            })
+            .take_while(|child| child.kind() == "line_comment" || child.kind() == "attribute_item")
             .filter_map(|child| {
                 if child.kind() != "line_comment" {
                     return None;
                 }
                 let text = self.node_text(child, source);
-                text.starts_with("//!").then(|| text[3..].trim().to_string())
+                text.starts_with("//!")
+                    .then(|| text[3..].trim().to_string())
             })
             .collect();
 
@@ -465,12 +461,7 @@ impl CohesionEntityExtractor {
     }
 
     /// Extract a symbol from a single node based on its type.
-    fn extract_symbol_from_node(
-        &self,
-        node: Node,
-        source: &str,
-        symbols: &mut HashSet<String>,
-    ) {
+    fn extract_symbol_from_node(&self, node: Node, source: &str, symbols: &mut HashSet<String>) {
         match node.kind() {
             "call" | "call_expression" => self.extract_call_symbol(node, source, symbols),
             "type_identifier" | "type" | "primitive_type" | "generic_type" => {
@@ -638,12 +629,18 @@ def calculate_total(items, tax_rate):
     subtotal = sum(item.price for item in items)
     return subtotal * (1 + tax_rate)
 "#;
-        let entities = extractor.extract_entities(source, Path::new("test.py")).unwrap();
+        let entities = extractor
+            .extract_entities(source, Path::new("test.py"))
+            .unwrap();
 
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].name, "calculate_total");
         assert_eq!(entities[0].kind, "function");
-        assert!(entities[0].docstring.as_ref().unwrap().contains("Calculate the total"));
+        assert!(entities[0]
+            .docstring
+            .as_ref()
+            .unwrap()
+            .contains("Calculate the total"));
         assert!(!entities[0].symbols.name_tokens.is_empty());
     }
 
@@ -657,7 +654,9 @@ class UserManager:
     def create_user(self, name):
         return User(name)
 "#;
-        let entities = extractor.extract_entities(source, Path::new("test.py")).unwrap();
+        let entities = extractor
+            .extract_entities(source, Path::new("test.py"))
+            .unwrap();
 
         assert!(entities.iter().any(|e| e.name == "UserManager"));
         assert!(entities.iter().any(|e| e.name == "create_user"));
@@ -672,7 +671,9 @@ fn calculate_sum(values: &[i32]) -> i32 {
     values.iter().sum()
 }
 "#;
-        let entities = extractor.extract_entities(source, Path::new("test.rs")).unwrap();
+        let entities = extractor
+            .extract_entities(source, Path::new("test.rs"))
+            .unwrap();
 
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].name, "calculate_sum");
@@ -688,11 +689,15 @@ def process_data(data):
     validator.validate(result)
     return result
 "#;
-        let entities = extractor.extract_entities(source, Path::new("test.py")).unwrap();
+        let entities = extractor
+            .extract_entities(source, Path::new("test.py"))
+            .unwrap();
 
         assert_eq!(entities.len(), 1);
         let symbols = &entities[0].symbols.referenced_symbols;
         // Should contain tokenized versions of DataProcessor, transform, validator, validate
-        assert!(symbols.iter().any(|s| s.contains("data") || s.contains("processor")));
+        assert!(symbols
+            .iter()
+            .any(|s| s.contains("data") || s.contains("processor")));
     }
 }

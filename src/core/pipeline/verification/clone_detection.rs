@@ -172,7 +172,9 @@ pub fn compute_apted_limit(settings: &crate::core::config::LshConfig) -> Option<
     } else if settings.max_candidates == 0 {
         settings.apted_max_pairs_per_entity
     } else {
-        settings.apted_max_pairs_per_entity.min(settings.max_candidates)
+        settings
+            .apted_max_pairs_per_entity
+            .min(settings.max_candidates)
     };
     if limit == 0 {
         None
@@ -235,7 +237,10 @@ pub fn should_skip_small_pair(
 }
 
 /// Filter clone pairs below minimum AST node threshold.
-pub fn filter_small_pairs(mut pairs: Vec<ClonePairReport>, min_ast_nodes: usize) -> Vec<ClonePairReport> {
+pub fn filter_small_pairs(
+    mut pairs: Vec<ClonePairReport>,
+    min_ast_nodes: usize,
+) -> Vec<ClonePairReport> {
     use tracing::info;
     if min_ast_nodes == 0 {
         return pairs;
@@ -251,7 +256,10 @@ pub fn filter_small_pairs(mut pairs: Vec<ClonePairReport>, min_ast_nodes: usize)
     });
     let filtered = before.saturating_sub(pairs.len());
     if filtered > 0 {
-        info!(filtered, min_ast_nodes, "Filtered clone pairs below min_ast_nodes");
+        info!(
+            filtered,
+            min_ast_nodes, "Filtered clone pairs below min_ast_nodes"
+        );
     }
     pairs
 }
@@ -287,10 +295,7 @@ fn passes_ast_node_threshold(value: &serde_json::Value, min_ast_nodes: usize) ->
         return true;
     }
 
-    let Some(node_counts) = value
-        .get("verification")
-        .and_then(|v| v.get("node_counts"))
-    else {
+    let Some(node_counts) = value.get("verification").and_then(|v| v.get("node_counts")) else {
         return true; // No verification data, allow through
     };
 
@@ -302,4 +307,3 @@ fn passes_ast_node_threshold(value: &serde_json::Value, min_ast_nodes: usize) ->
         _ => true, // Incomplete counts, allow through
     }
 }
-

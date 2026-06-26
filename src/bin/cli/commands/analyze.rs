@@ -88,18 +88,27 @@ pub async fn analyze_command(
     let valid_paths = validate_input_paths(&args.paths)?;
     tokio::fs::create_dir_all(&args.out).await?;
 
-    display_pre_analysis_info(&valid_paths, &args, &valknut_config, quiet_mode, detail_mode).await?;
+    display_pre_analysis_info(
+        &valid_paths,
+        &args,
+        &valknut_config,
+        quiet_mode,
+        detail_mode,
+    )
+    .await?;
 
     let analysis_result =
         run_analysis_phase(&valid_paths, valknut_config, &args, quiet_mode, detail_mode).await?;
 
-    let quality_gate_result = evaluate_quality_gates_if_enabled(&analysis_result, &args, quiet_mode)?;
+    let quality_gate_result =
+        evaluate_quality_gates_if_enabled(&analysis_result, &args, quiet_mode)?;
 
     if !quiet_mode {
         display_comprehensive_results(&analysis_result, detail_mode);
     }
 
-    let oracle_response = run_oracle_if_enabled(&valid_paths, &analysis_result, &args, quiet_mode).await?;
+    let oracle_response =
+        run_oracle_if_enabled(&valid_paths, &analysis_result, &args, quiet_mode).await?;
 
     generate_reports_with_oracle(&analysis_result, &oracle_response, &args).await?;
 
@@ -171,7 +180,12 @@ async fn run_oracle_if_enabled(
 ) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
     if args.ai_features.oracle_dry_run {
         if !quiet_mode {
-            println!("{}", "🔍 Oracle Dry-Run: Showing slicing plan...".bright_blue().bold());
+            println!(
+                "{}",
+                "🔍 Oracle Dry-Run: Showing slicing plan..."
+                    .bright_blue()
+                    .bold()
+            );
         }
         run_oracle_dry_run(valid_paths, args)?;
         return Ok(None);
@@ -179,14 +193,18 @@ async fn run_oracle_if_enabled(
 
     if args.ai_features.oracle {
         if !quiet_mode {
-            println!("{}", "🧠 Running AI Refactoring Oracle Analysis...".bright_blue().bold());
+            println!(
+                "{}",
+                "🧠 Running AI Refactoring Oracle Analysis..."
+                    .bright_blue()
+                    .bold()
+            );
         }
         return run_oracle_analysis(valid_paths, result, args).await;
     }
 
     Ok(None)
 }
-
 
 /// Preview coverage file discovery to show what will be analyzed
 async fn preview_coverage_discovery(
@@ -356,7 +374,11 @@ fn print_run_overview(
     let format_display = if formats.len() == 1 {
         format_to_string(&formats[0]).to_string()
     } else {
-        formats.iter().map(|f| format_to_string(f)).collect::<Vec<_>>().join(", ")
+        formats
+            .iter()
+            .map(|f| format_to_string(f))
+            .collect::<Vec<_>>()
+            .join(", ")
     };
 
     println!(
@@ -451,10 +473,14 @@ async fn run_comprehensive_analysis(
         }
 
         let progress = main_progress.clone();
-        let results = run_analysis_core(&mut engine, paths, Some(|msg: &str, pct: f64| {
-            progress.set_position((pct * 100.0) as u64);
-            progress.set_message(msg.to_string());
-        }))
+        let results = run_analysis_core(
+            &mut engine,
+            paths,
+            Some(|msg: &str, pct: f64| {
+                progress.set_position((pct * 100.0) as u64);
+                progress.set_message(msg.to_string());
+            }),
+        )
         .await?;
 
         main_progress.finish_with_message("Analysis complete");
@@ -479,7 +505,6 @@ fn combine_analysis_results(results: Vec<AnalysisResults>) -> anyhow::Result<Ana
 
     Ok(combined)
 }
-
 
 // Re-export config commands for backward compatibility
 pub use super::config::{init_config, print_default_config, validate_config};
@@ -662,7 +687,6 @@ use super::oracle::{run_oracle_analysis, run_oracle_dry_run};
 async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
     generate_reports_with_oracle(result, &None, args).await
 }
-
 
 #[cfg(test)]
 #[path = "analyze_tests.rs"]

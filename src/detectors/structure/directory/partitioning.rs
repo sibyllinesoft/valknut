@@ -446,7 +446,8 @@ impl<'a> GraphPartitioner<'a> {
             }
 
             // Generate deterministic name for partition
-            let name = generate_partition_name(&files, i, &self.config.partitioning.naming_fallbacks);
+            let name =
+                generate_partition_name(&files, i, &self.config.partitioning.naming_fallbacks);
 
             partitions.push(DirectoryPartition {
                 name,
@@ -460,7 +461,11 @@ impl<'a> GraphPartitioner<'a> {
 }
 
 /// Generate deterministic partition name based on file paths
-pub fn generate_partition_name(files: &[PathBuf], index: usize, naming_fallbacks: &[String]) -> String {
+pub fn generate_partition_name(
+    files: &[PathBuf],
+    index: usize,
+    naming_fallbacks: &[String],
+) -> String {
     // Extract common tokens from file paths
     let mut token_counts: HashMap<String, usize> = HashMap::new();
 
@@ -479,9 +484,7 @@ pub fn generate_partition_name(files: &[PathBuf], index: usize, naming_fallbacks
     // Find most common meaningful token
     if let Some((best_token, _)) = token_counts
         .iter()
-        .filter(|(token, &count)| {
-            count > 1 && !["file", "test", "spec"].contains(&token.as_str())
-        })
+        .filter(|(token, &count)| count > 1 && !["file", "test", "spec"].contains(&token.as_str()))
         .max_by_key(|(_, &count)| count)
     {
         return best_token.clone();

@@ -140,8 +140,7 @@ fn test_feature_vector_feature_names() {
 
 #[test]
 fn test_refactoring_suggestion_with_location() {
-    let mut suggestion =
-        RefactoringSuggestion::new("extract_method", "Method too long", 0.8, 0.9);
+    let mut suggestion = RefactoringSuggestion::new("extract_method", "Method too long", 0.8, 0.9);
 
     let location_data = serde_json::json!({"start_line": 10, "end_line": 50});
     suggestion = suggestion.with_location(location_data.clone());
@@ -150,8 +149,7 @@ fn test_refactoring_suggestion_with_location() {
 
 #[test]
 fn test_refactoring_suggestion_with_context() {
-    let mut suggestion =
-        RefactoringSuggestion::new("extract_method", "Method too long", 0.8, 0.9);
+    let mut suggestion = RefactoringSuggestion::new("extract_method", "Method too long", 0.8, 0.9);
 
     suggestion = suggestion.with_context("fn process_data()");
     assert_eq!(suggestion.context, Some("fn process_data()".to_string()));
@@ -203,8 +201,7 @@ fn test_cosine_similarity_orthogonal() {
 #[test]
 fn test_feature_extractor_validate_features() {
     let mut extractor = BaseFeatureExtractor::new("test_extractor");
-    extractor
-        .add_feature(FeatureDefinition::new("valid_feature", "Valid").with_range(0.0, 100.0));
+    extractor.add_feature(FeatureDefinition::new("valid_feature", "Valid").with_range(0.0, 100.0));
 
     let mut vector = FeatureVector::new("test_entity");
     vector.add_feature("valid_feature", 50.0);

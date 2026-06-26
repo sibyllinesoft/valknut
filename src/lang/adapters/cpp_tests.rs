@@ -30,7 +30,11 @@ fn test_parse_void_function() {
     let source = "void doNothing() {}";
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
     assert_eq!(funcs[0].name, "doNothing");
 }
@@ -45,7 +49,11 @@ double third(int x) { return x * 1.5; }
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 3);
 }
 
@@ -152,7 +160,11 @@ enum class Status : uint8_t {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let enums: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Enum).collect();
+    let enums: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Enum)
+        .collect();
     assert_eq!(enums.len(), 1);
 }
 
@@ -317,7 +329,11 @@ void print(Args... args) {}
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
 }
 
@@ -333,7 +349,11 @@ class Map {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
 }
 
@@ -380,7 +400,11 @@ class C : public A, public B {};
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 3);
 }
 
@@ -398,7 +422,11 @@ struct Derived : Base {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let structs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Struct).collect();
+    let structs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Struct)
+        .collect();
     assert_eq!(structs.len(), 2);
 }
 
@@ -459,7 +487,11 @@ public:
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
 }
 
@@ -473,7 +505,11 @@ constexpr int factorial(int n) {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
 }
 
@@ -487,7 +523,11 @@ inline int square(int x) {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
 }
 
@@ -549,7 +589,11 @@ public:
 "#;
 
     let index = adapter.parse_source(source, "test.h").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
     assert_eq!(classes[0].name, "GuardedClass");
 }
@@ -566,7 +610,11 @@ struct PragmaStruct {
 "#;
 
     let index = adapter.parse_source(source, "test.h").unwrap();
-    let structs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Struct).collect();
+    let structs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Struct)
+        .collect();
     assert_eq!(structs.len(), 1);
 }
 
@@ -585,7 +633,11 @@ class CommonClass {};
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
     // Should find at least CommonClass and one of the platform classes
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert!(classes.len() >= 1);
 }
 
@@ -748,7 +800,11 @@ class Defined {
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
     // Should at least find the Defined class
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert!(classes.len() >= 1);
 }
 
@@ -792,7 +848,11 @@ auto getAuto() -> std::unique_ptr<Widget> {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 2);
 }
 
@@ -811,7 +871,11 @@ public:
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 2);
 }
 
@@ -828,7 +892,11 @@ private:
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
 }
 
@@ -846,7 +914,11 @@ public:
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
 }
 
@@ -860,7 +932,11 @@ void throwing() noexcept(false) {}
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 3);
 }
 
@@ -883,7 +959,11 @@ auto getRef() -> int& {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 2);
 }
 
@@ -897,7 +977,11 @@ void useStructuredBinding() {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
 }
 
@@ -931,7 +1015,11 @@ void modern() {
 "#;
 
     let index = adapter.parse_source(source, "test.cpp").unwrap();
-    let funcs: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Function).collect();
+    let funcs: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Function)
+        .collect();
     assert_eq!(funcs.len(), 1);
 }
 
@@ -1051,12 +1139,18 @@ private:
     let index = adapter.parse_source(source, "complex.hpp").unwrap();
 
     // Should find the class
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
     assert_eq!(classes[0].name, "ComplexContainer");
 
     // Should find multiple functions/methods
-    let funcs: Vec<_> = index.entities.values()
+    let funcs: Vec<_> = index
+        .entities
+        .values()
         .filter(|e| e.kind == EntityKind::Function || e.kind == EntityKind::Method)
         .collect();
     assert!(funcs.len() > 5);
@@ -1127,13 +1221,25 @@ private:
     let index = adapter.parse_source(source, "widget.h").unwrap();
 
     // Should find namespace, class, enum
-    let namespaces: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Module).collect();
+    let namespaces: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Module)
+        .collect();
     assert_eq!(namespaces.len(), 1);
 
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
 
-    let enums: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Enum).collect();
+    let enums: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Enum)
+        .collect();
     assert_eq!(enums.len(), 1);
 
     // Should find many methods
@@ -1165,7 +1271,11 @@ namespace detail {
     let index = adapter.parse_source(source, "guarded.h").unwrap();
 
     // Must find the class inside the guard
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert_eq!(classes.len(), 1);
     assert!(classes[0].name.contains("Hidden"));
 }
@@ -1190,6 +1300,10 @@ class AnotherValid {
     let index = adapter.parse_source(source, "partial.cpp").unwrap();
 
     // Should find at least some classes despite potential parse errors
-    let classes: Vec<_> = index.entities.values().filter(|e| e.kind == EntityKind::Class).collect();
+    let classes: Vec<_> = index
+        .entities
+        .values()
+        .filter(|e| e.kind == EntityKind::Class)
+        .collect();
     assert!(classes.len() >= 1);
 }

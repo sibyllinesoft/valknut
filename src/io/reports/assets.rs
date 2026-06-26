@@ -18,6 +18,8 @@ fn js_asset_roots() -> Vec<PathBuf> {
 
     roots.push(PathBuf::from("templates/assets/dist"));
     roots.push(PathBuf::from("./templates/assets/dist"));
+    roots.push(PathBuf::from("templates/dev/src/tree-component"));
+    roots.push(PathBuf::from("./templates/dev/src/tree-component"));
     roots.push(PathBuf::from("templates/assets/src"));
     roots.push(PathBuf::from("./templates/assets/src"));
     roots.push(PathBuf::from("templates/assets"));
@@ -39,6 +41,8 @@ fn webpage_asset_roots() -> Vec<PathBuf> {
     roots.push(PathBuf::from("./templates/assets"));
     roots.push(PathBuf::from("templates"));
     roots.push(PathBuf::from("./templates"));
+    roots.push(PathBuf::from("docs"));
+    roots.push(PathBuf::from("./docs"));
 
     roots
 }

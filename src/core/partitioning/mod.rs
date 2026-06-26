@@ -24,9 +24,9 @@ use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 use crate::lang::adapter_for_file;
 
-pub use types::{CodeSlice, PartitionConfig, PartitionResult, PartitionStats};
 use module_resolver::{build_module_map, resolve_import};
 use types::FileNode;
+pub use types::{CodeSlice, PartitionConfig, PartitionResult, PartitionStats};
 
 /// Helper for incrementally building a slice.
 struct SliceBuilder {
@@ -262,7 +262,8 @@ impl ImportGraphPartitioner {
 
             for import in &node.imports {
                 let Some(to_idx) = resolve_import(import, path, &module_map)
-                    .and_then(|target| index_map.get(&target).copied()) else {
+                    .and_then(|target| index_map.get(&target).copied())
+                else {
                     continue;
                 };
                 if from_idx != to_idx {
@@ -311,7 +312,11 @@ impl ImportGraphPartitioner {
 
     /// Calculate total tokens for a set of paths.
     fn calculate_tokens(paths: &[PathBuf], nodes: &HashMap<PathBuf, FileNode>) -> usize {
-        paths.iter().filter_map(|p| nodes.get(p)).map(|n| n.tokens).sum()
+        paths
+            .iter()
+            .filter_map(|p| nodes.get(p))
+            .map(|n| n.tokens)
+            .sum()
     }
 
     /// Partition files into slices respecting token budget
@@ -338,13 +343,26 @@ impl ImportGraphPartitioner {
 
             let scc_tokens = Self::calculate_tokens(&scc_paths, nodes);
             let added = self.try_add_to_connected_slice(
-                &scc_paths, scc_tokens, &mut slices, nodes, project_path, graph, index_map, &mut assigned
+                &scc_paths,
+                scc_tokens,
+                &mut slices,
+                nodes,
+                project_path,
+                graph,
+                index_map,
+                &mut assigned,
             ) || self.try_add_to_best_affinity_slice(
-                &scc_paths, scc_tokens, &mut slices, nodes, project_path, &mut assigned
+                &scc_paths,
+                scc_tokens,
+                &mut slices,
+                nodes,
+                project_path,
+                &mut assigned,
             );
 
             if !added {
-                let new_slices = self.create_slices_for_files(&scc_paths, nodes, project_path, &mut slice_id)?;
+                let new_slices =
+                    self.create_slices_for_files(&scc_paths, nodes, project_path, &mut slice_id)?;
                 assigned.extend(new_slices.iter().flat_map(|s| s.files.iter().cloned()));
                 slices.extend(new_slices);
             }
@@ -363,9 +381,18 @@ impl ImportGraphPartitioner {
         project_path: &Path,
         slice_id: &mut usize,
     ) -> Result<()> {
-        let unassigned: Vec<PathBuf> = nodes.keys().filter(|p| !assigned.contains(*p)).cloned().collect();
+        let unassigned: Vec<PathBuf> = nodes
+            .keys()
+            .filter(|p| !assigned.contains(*p))
+            .cloned()
+            .collect();
         if !unassigned.is_empty() {
-            slices.extend(self.create_slices_for_files(&unassigned, nodes, project_path, slice_id)?);
+            slices.extend(self.create_slices_for_files(
+                &unassigned,
+                nodes,
+                project_path,
+                slice_id,
+            )?);
         }
         for slice in slices.iter_mut() {
             slice.primary_module = self.determine_primary_module(&slice.files);
@@ -383,7 +410,9 @@ impl ImportGraphPartitioner {
         assigned: &mut HashSet<PathBuf>,
     ) {
         for path in paths {
-            let Some(node) = nodes.get(path) else { continue };
+            let Some(node) = nodes.get(path) else {
+                continue;
+            };
             self.add_file_to_slice(path, node, project_path, slice);
             assigned.insert(path.clone());
         }
@@ -406,7 +435,12 @@ impl ImportGraphPartitioner {
     }
 
     /// Check if an SCC can fit in a slice based on token budget and file count limits.
-    fn scc_fits_in_slice(&self, slice: &CodeSlice, scc_tokens: usize, scc_file_count: usize) -> bool {
+    fn scc_fits_in_slice(
+        &self,
+        slice: &CodeSlice,
+        scc_tokens: usize,
+        scc_file_count: usize,
+    ) -> bool {
         slice.token_count + scc_tokens <= self.config.slice_token_budget
             && slice.files.len() + scc_file_count <= self.config.max_files_per_slice
     }
@@ -428,9 +462,10 @@ impl ImportGraphPartitioner {
                 continue;
             }
             let has_connection = scc_paths.iter().any(|scc_path| {
-                slice.files.iter().any(|slice_path| {
-                    self.files_connected(scc_path, slice_path, graph, index_map)
-                })
+                slice
+                    .files
+                    .iter()
+                    .any(|slice_path| self.files_connected(scc_path, slice_path, graph, index_map))
             });
             if has_connection {
                 self.add_files_to_slice(scc_paths, nodes, project_path, slice, assigned);
@@ -558,12 +593,7 @@ impl ImportGraphPartitioner {
     }
 
     /// Compute a score based on shared imports between two files
-    fn shared_import_score(
-        &self,
-        a: &Path,
-        b: &Path,
-        nodes: &HashMap<PathBuf, FileNode>,
-    ) -> f64 {
+    fn shared_import_score(&self, a: &Path, b: &Path, nodes: &HashMap<PathBuf, FileNode>) -> f64 {
         let a_node = nodes.get(a);
         let b_node = nodes.get(b);
 

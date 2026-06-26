@@ -134,9 +134,9 @@ impl EmbeddingProvider {
             let mut model = self.model.write().map_err(|e| {
                 ValknutError::internal(format!("Failed to acquire model lock: {}", e))
             })?;
-            model
-                .embed(vec![text], None)
-                .map_err(|e| ValknutError::internal(format!("Embedding generation failed: {}", e)))?
+            model.embed(vec![text], None).map_err(|e| {
+                ValknutError::internal(format!("Embedding generation failed: {}", e))
+            })?
         };
 
         let embedding = embeddings.into_iter().next().ok_or_else(|| {
@@ -174,9 +174,10 @@ impl EmbeddingProvider {
         let mut results: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
         let mut uncached = UncachedTexts::default();
 
-        let mut cache = self.cache.write().map_err(|e| {
-            ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
-        })?;
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|e| ValknutError::internal(format!("Failed to acquire cache lock: {}", e)))?;
 
         for (i, text) in texts.iter().enumerate() {
             let hash = Self::hash_text(text);
@@ -209,9 +210,10 @@ impl EmbeddingProvider {
                 .map_err(|e| ValknutError::internal(format!("Batch embedding failed: {}", e)))?
         };
 
-        let mut cache = self.cache.write().map_err(|e| {
-            ValknutError::internal(format!("Failed to acquire cache lock: {}", e))
-        })?;
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|e| ValknutError::internal(format!("Failed to acquire cache lock: {}", e)))?;
 
         for (i, embedding) in uncached.indices.iter().zip(new_embeddings.into_iter()) {
             let hash = Self::hash_text(&original_texts[*i]);

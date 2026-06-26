@@ -442,10 +442,7 @@ pub fn parse_require_import(require_part: &str, line_number: usize) -> Option<Im
 /// Shared implementation for JavaScript and TypeScript adapters.
 /// The `strip_prefix` parameter specifies a prefix to strip from named imports
 /// (e.g., "default as " for JS, "type " for TS).
-pub fn extract_imports_common(
-    source: &str,
-    strip_prefix: &str,
-) -> Vec<ImportStatement> {
+pub fn extract_imports_common(source: &str, strip_prefix: &str) -> Vec<ImportStatement> {
     let mut imports = Vec::new();
 
     for (line_number, line) in source.lines().enumerate() {
@@ -579,9 +576,16 @@ pub fn extract_identifiers_by_kinds(root: Node, source: &str, kinds: &[&str]) ->
 ///
 /// This is a common utility used by Go and Python adapters for extracting names
 /// from AST nodes.
-pub fn extract_node_text(node: &Node, source_code: &str, field: &str, fallback_kinds: &[&str]) -> Result<Option<String>> {
+pub fn extract_node_text(
+    node: &Node,
+    source_code: &str,
+    field: &str,
+    fallback_kinds: &[&str],
+) -> Result<Option<String>> {
     if let Some(name_node) = node.child_by_field_name(field) {
-        return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+        return Ok(Some(
+            name_node.utf8_text(source_code.as_bytes())?.to_string(),
+        ));
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -631,9 +635,23 @@ pub trait EntityExtractor {
         )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
+            self.traverse_children(
+                node,
+                source_code,
+                file_path,
+                Some(entity_id),
+                index,
+                entity_id_counter,
+            )?;
         } else {
-            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
+            self.traverse_children(
+                node,
+                source_code,
+                file_path,
+                parent_id,
+                index,
+                entity_id_counter,
+            )?;
         }
         Ok(())
     }

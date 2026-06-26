@@ -7,9 +7,9 @@ use std::path::PathBuf;
 
 use tracing::{debug, warn};
 
-use crate::core::pipeline::results::pipeline_results::StructureAnalysisResults;
 use crate::core::arena_analysis::ArenaAnalysisResult;
 use crate::core::errors::Result;
+use crate::core::pipeline::results::pipeline_results::StructureAnalysisResults;
 use crate::detectors::structure::{PrecomputedFileMetrics, StructureExtractor};
 
 use crate::detectors::structure::StructureRecommendations;
@@ -43,7 +43,9 @@ pub struct StructureStage<'a> {
 impl<'a> StructureStage<'a> {
     /// Create a new structure stage with the given extractor.
     pub fn new(structure_extractor: &'a StructureExtractor) -> Self {
-        Self { structure_extractor }
+        Self {
+            structure_extractor,
+        }
     }
 
     /// Run structure analysis on the given paths.
@@ -57,8 +59,16 @@ impl<'a> StructureStage<'a> {
         let mut file_splitting_recommendations = Vec::new();
 
         for path in paths {
-            match self.structure_extractor.generate_recommendations(path).await {
-                Ok(recs) => collect_recommendations(recs, &mut all_recommendations, &mut file_splitting_recommendations),
+            match self
+                .structure_extractor
+                .generate_recommendations(path)
+                .await
+            {
+                Ok(recs) => collect_recommendations(
+                    recs,
+                    &mut all_recommendations,
+                    &mut file_splitting_recommendations,
+                ),
                 Err(e) => warn!("Structure analysis failed for {}: {}", path.display(), e),
             }
         }
@@ -93,8 +103,16 @@ impl<'a> StructureStage<'a> {
         let mut file_splitting_recommendations = Vec::new();
 
         for path in paths {
-            match self.structure_extractor.generate_recommendations_with_metrics(path, &metrics).await {
-                Ok(recs) => collect_recommendations(recs, &mut all_recommendations, &mut file_splitting_recommendations),
+            match self
+                .structure_extractor
+                .generate_recommendations_with_metrics(path, &metrics)
+                .await
+            {
+                Ok(recs) => collect_recommendations(
+                    recs,
+                    &mut all_recommendations,
+                    &mut file_splitting_recommendations,
+                ),
                 Err(e) => warn!("Structure analysis failed for {}: {}", path.display(), e),
             }
         }

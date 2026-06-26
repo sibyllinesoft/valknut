@@ -11,7 +11,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::future;
 
-use crate::core::pipeline::results::result_types::AnalysisSummary;
 use crate::core::arena_analysis::ArenaAnalysisResult;
 use crate::core::config::ValknutConfig;
 use crate::core::errors::{Result, ValknutError};
@@ -20,9 +19,10 @@ use crate::core::pipeline::results::pipeline_results::{
     ImpactAnalysisResults, LshAnalysisResults, RefactoringAnalysisResults,
     StructureAnalysisResults,
 };
+use crate::core::pipeline::results::result_types::AnalysisSummary;
+use crate::core::pipeline::{QualityGateResult, QualityGateViolation};
 use crate::detectors::bundled::{BundledDetectionConfig, BundledFileDetector};
 use crate::detectors::cohesion::CohesionAnalysisResults;
-use crate::core::pipeline::{QualityGateResult, QualityGateViolation};
 use serde::{Deserialize, Serialize};
 
 use super::file_discovery;
@@ -142,7 +142,8 @@ impl FileBatchReader for BatchedFileReader {
         let mut file_contents = Vec::with_capacity(files.len());
         for batch in files.chunks(self.effective_batch_size()) {
             let batch_results = self.read_batch(batch).await;
-            self.collect_batch_results(batch_results, &mut file_contents).await?;
+            self.collect_batch_results(batch_results, &mut file_contents)
+                .await?;
         }
         Ok(file_contents)
     }
@@ -150,17 +151,23 @@ impl FileBatchReader for BatchedFileReader {
 
 /// Private helper methods for [`BatchedFileReader`].
 impl BatchedFileReader {
-    async fn read_batch(&self, batch: &[PathBuf]) -> Vec<impl std::future::Future<Output = Result<(PathBuf, String)>>> {
-        batch.iter().map(|file_path| {
-            let path = file_path.clone();
-            async move { Self::read_single_file(path).await }
-        }).collect()
+    async fn read_batch(
+        &self,
+        batch: &[PathBuf],
+    ) -> Vec<impl std::future::Future<Output = Result<(PathBuf, String)>>> {
+        batch
+            .iter()
+            .map(|file_path| {
+                let path = file_path.clone();
+                async move { Self::read_single_file(path).await }
+            })
+            .collect()
     }
 
     async fn read_single_file(path: PathBuf) -> Result<(PathBuf, String)> {
-        let bytes = tokio::fs::read(&path).await.map_err(|e| {
-            ValknutError::io(format!("Failed to read file {}", path.display()), e)
-        })?;
+        let bytes = tokio::fs::read(&path)
+            .await
+            .map_err(|e| ValknutError::io(format!("Failed to read file {}", path.display()), e))?;
         let content = Self::bytes_to_string(&path, bytes);
         Ok((path, content))
     }
@@ -169,7 +176,10 @@ impl BatchedFileReader {
         match String::from_utf8(bytes) {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!("File {} contains invalid UTF-8, using lossy conversion", path.display());
+                tracing::warn!(
+                    "File {} contains invalid UTF-8, using lossy conversion",
+                    path.display()
+                );
                 String::from_utf8_lossy(e.as_bytes()).into_owned()
             }
         }
@@ -211,7 +221,9 @@ impl BatchedFileReader {
     }
 
     /// Returns a shared reference with bundled file detection enabled.
-    pub fn shared_with_bundled_detection(config: BundledDetectionConfig) -> Arc<dyn FileBatchReader> {
+    pub fn shared_with_bundled_detection(
+        config: BundledDetectionConfig,
+    ) -> Arc<dyn FileBatchReader> {
         Arc::new(Self::new(200).with_bundled_detection(config))
     }
 }

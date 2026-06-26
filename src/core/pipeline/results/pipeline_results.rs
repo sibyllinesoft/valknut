@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::core::pipeline::pipeline_config::AnalysisConfig;
 use super::result_types::AnalysisSummary;
 use crate::core::featureset::FeatureVector;
+use crate::core::pipeline::pipeline_config::AnalysisConfig;
 use crate::core::scoring::ScoringResult;
 use crate::detectors::cohesion::CohesionAnalysisResults;
 use crate::detectors::complexity::ComplexityAnalysisResult;

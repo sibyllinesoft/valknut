@@ -105,10 +105,8 @@ impl CohesionCalculator {
         }
 
         // Pass 2: Centroid from kept embeddings
-        let kept_embeddings: Vec<&Vec<f32>> = indices_to_keep
-            .iter()
-            .map(|&i| &embeddings[i])
-            .collect();
+        let kept_embeddings: Vec<&Vec<f32>> =
+            indices_to_keep.iter().map(|&i| &embeddings[i]).collect();
 
         self.simple_centroid_refs(&kept_embeddings)
     }
@@ -205,8 +203,7 @@ impl CohesionCalculator {
         similarities.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Find threshold at given percentile
-        let percentile_idx =
-            ((embeddings.len() as f64) * percentile_threshold).floor() as usize;
+        let percentile_idx = ((embeddings.len() as f64) * percentile_threshold).floor() as usize;
         let percentile_sim = similarities
             .get(percentile_idx)
             .map(|(_, s)| *s)
@@ -266,9 +263,21 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
         return 0.0;
     }
 
-    let dot: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| x as f64 * y as f64).sum();
-    let norm_a: f64 = a.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>().sqrt();
-    let norm_b: f64 = b.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>().sqrt();
+    let dot: f64 = a
+        .iter()
+        .zip(b.iter())
+        .map(|(&x, &y)| x as f64 * y as f64)
+        .sum();
+    let norm_a: f64 = a
+        .iter()
+        .map(|&x| (x as f64) * (x as f64))
+        .sum::<f64>()
+        .sqrt();
+    let norm_b: f64 = b
+        .iter()
+        .map(|&x| (x as f64) * (x as f64))
+        .sum::<f64>()
+        .sqrt();
 
     if norm_a < 1e-10 || norm_b < 1e-10 {
         0.0
@@ -370,7 +379,12 @@ impl RollupState {
             return 1.0;
         }
 
-        let norm: f64 = self.sum.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>().sqrt();
+        let norm: f64 = self
+            .sum
+            .iter()
+            .map(|&x| (x as f64) * (x as f64))
+            .sum::<f64>()
+            .sqrt();
         let cohesion = (norm / self.weight_sum).clamp(0.0, 1.0);
 
         cohesion

@@ -60,7 +60,10 @@ fn directory_health_tree_exposes_children_and_scores() {
     // src has only one candidate (score 2.0), utils has two (scores 1.4, 1.1)
     // With formula (100-avg)/100: src=0.98, utils=0.9875
     // So utils has higher health (better avg score) - this is expected!
-    assert!(utils_score > src_score, "src/utils has better average score than src");
+    assert!(
+        utils_score > src_score,
+        "src/utils has better average score than src"
+    );
 
     // Missing directories should fall back to root
     let missing_score = tree.get_health_score(Path::new("src/unknown"));

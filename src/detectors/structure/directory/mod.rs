@@ -59,10 +59,7 @@ impl DirectoryAnalyzer {
 
         let mut builder = GlobSetBuilder::new();
         for pattern in patterns {
-            if let Ok(glob) = GlobBuilder::new(pattern)
-                .literal_separator(false)
-                .build()
-            {
+            if let Ok(glob) = GlobBuilder::new(pattern).literal_separator(false).build() {
                 builder.add(glob);
             }
         }
@@ -288,12 +285,9 @@ impl DirectoryAnalyzer {
 
         // Calculate expected gains using reorganization planner
         let planner = ReorganizationPlanner::new(&self.config);
-        let gain = planner.calculate_reorganization_gain(
-            &metrics,
-            &partitions,
-            dir_path,
-            |p| self.build_dependency_graph(p),
-        )?;
+        let gain = planner.calculate_reorganization_gain(&metrics, &partitions, dir_path, |p| {
+            self.build_dependency_graph(p)
+        })?;
 
         if gain.imbalance_delta < self.config.fsdir.min_branch_recommendation_gain {
             return Ok(None);
@@ -361,12 +355,9 @@ impl DirectoryAnalyzer {
 
         // Calculate expected gains using reorganization planner
         let planner = ReorganizationPlanner::new(&self.config);
-        let gain = planner.calculate_reorganization_gain(
-            &metrics,
-            &partitions,
-            dir_path,
-            |p| self.build_dependency_graph(p),
-        )?;
+        let gain = planner.calculate_reorganization_gain(&metrics, &partitions, dir_path, |p| {
+            self.build_dependency_graph(p)
+        })?;
 
         if gain.imbalance_delta < self.config.fsdir.min_branch_recommendation_gain {
             return Ok(None);
@@ -563,7 +554,6 @@ impl DirectoryAnalyzer {
         false
     }
 }
-
 
 #[cfg(test)]
 mod tests;

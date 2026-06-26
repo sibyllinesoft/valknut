@@ -5,7 +5,9 @@ use petgraph::Graph;
 use std::collections::HashSet;
 
 use crate::core::errors::Result;
-use crate::detectors::structure::config::{CohesionEdge, CohesionGraph, EntityNode, StructureConfig};
+use crate::detectors::structure::config::{
+    CohesionEdge, CohesionGraph, EntityNode, StructureConfig,
+};
 
 /// Build entity cohesion graph from entities
 pub fn build_cohesion_graph(entities: Vec<EntityNode>) -> CohesionGraph {
@@ -32,7 +34,8 @@ pub fn build_cohesion_graph(entities: Vec<EntityNode>) -> CohesionGraph {
             let entity_a = &graph[entity_nodes[i]];
             let entity_b = &graph[entity_nodes[j]];
 
-            let jaccard_similarity = calculate_jaccard_similarity(&entity_a.symbols, &entity_b.symbols);
+            let jaccard_similarity =
+                calculate_jaccard_similarity(&entity_a.symbols, &entity_b.symbols);
 
             // Only add edges for significant cohesion
             if jaccard_similarity > 0.1 {
@@ -147,7 +150,11 @@ impl<'a> CommunityFinder<'a> {
     }
 
     /// Find which community a node belongs to
-    fn find_node_community(&self, communities: &[Vec<NodeIndex>], node: NodeIndex) -> Option<usize> {
+    fn find_node_community(
+        &self,
+        communities: &[Vec<NodeIndex>],
+        node: NodeIndex,
+    ) -> Option<usize> {
         communities.iter().position(|comm| comm.contains(&node))
     }
 

@@ -64,7 +64,8 @@ impl<'a> SplitAnalyzer<'a> {
         }
         reasons.push(format!("{} cohesion communities", communities.len()));
 
-        let suggested_splits = self.generate_split_suggestions(file_path, &communities, cohesion_graph)?;
+        let suggested_splits =
+            self.generate_split_suggestions(file_path, &communities, cohesion_graph)?;
         let value = self.calculate_split_value(loc, cohesion_graph, dependency_metrics)?;
         let effort = self.calculate_split_effort(dependency_metrics)?;
 
@@ -212,21 +213,21 @@ pub fn analyze_entity_names(entities: &[String]) -> String {
     const API_PATTERNS: &[&str] = &["api", "endpoint", "route", "handler", "controller"];
     const UTIL_PATTERNS: &[&str] = &["util", "helper", "tool"];
 
-    let (io_count, api_count, util_count, core_count) = entities.iter().fold(
-        (0, 0, 0, 0),
-        |(io, api, util, core), entity| {
-            let lower = entity.to_lowercase();
-            if matches_patterns(&lower, IO_PATTERNS) {
-                (io + 1, api, util, core)
-            } else if matches_patterns(&lower, API_PATTERNS) {
-                (io, api + 1, util, core)
-            } else if matches_patterns(&lower, UTIL_PATTERNS) {
-                (io, api, util + 1, core)
-            } else {
-                (io, api, util, core + 1)
-            }
-        },
-    );
+    let (io_count, api_count, util_count, core_count) =
+        entities
+            .iter()
+            .fold((0, 0, 0, 0), |(io, api, util, core), entity| {
+                let lower = entity.to_lowercase();
+                if matches_patterns(&lower, IO_PATTERNS) {
+                    (io + 1, api, util, core)
+                } else if matches_patterns(&lower, API_PATTERNS) {
+                    (io, api + 1, util, core)
+                } else if matches_patterns(&lower, UTIL_PATTERNS) {
+                    (io, api, util + 1, core)
+                } else {
+                    (io, api, util, core + 1)
+                }
+            });
 
     let counts = [
         (io_count, "_io"),

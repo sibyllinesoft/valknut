@@ -76,7 +76,12 @@ fn node_contains_range(node: &Node, start_byte: usize, end_byte: usize) -> bool 
 }
 
 /// Check if a node matches the criteria to become a candidate.
-fn is_candidate_node(node: &Node, target_kind: Option<&str>, start_byte: usize, end_byte: usize) -> bool {
+fn is_candidate_node(
+    node: &Node,
+    target_kind: Option<&str>,
+    start_byte: usize,
+    end_byte: usize,
+) -> bool {
     let matches_kind = target_kind.map_or(false, |expected| node.kind() == expected);
     let matches_exact_range = node.start_byte() == start_byte && node.end_byte() == end_byte;
     matches_kind || matches_exact_range
@@ -298,17 +303,13 @@ pub fn extract_parameter_names<'a>(params_node: &Node, source_code: &'a str) -> 
 ///
 /// This is used by JavaScript and TypeScript adapters to determine if a
 /// variable declaration uses the `const` keyword.
-pub fn is_const_declaration(
-    node: &Node,
-    source_code: &str,
-) -> crate::core::errors::Result<bool> {
+pub fn is_const_declaration(node: &Node, source_code: &str) -> crate::core::errors::Result<bool> {
     let mut cursor = node.walk();
 
     // Look for 'const' keyword
     for child in node.children(&mut cursor) {
         if child.kind() == "const"
-            || (child.kind() == "identifier"
-                && child.utf8_text(source_code.as_bytes())? == "const")
+            || (child.kind() == "identifier" && child.utf8_text(source_code.as_bytes())? == "const")
         {
             return Ok(true);
         }

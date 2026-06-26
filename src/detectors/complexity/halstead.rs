@@ -53,7 +53,8 @@ impl HalsteadCounts {
             self.operator_set.insert(kind.to_string());
             self.operator_total += 1.0;
         } else if is_halstead_operand_node(kind) {
-            self.operand_set.insert(operand_representation(node, source));
+            self.operand_set
+                .insert(operand_representation(node, source));
             self.operand_total += 1.0;
         }
     }
@@ -75,7 +76,12 @@ fn is_valid_node_range(node: &tree_sitter::Node<'_>, source_len: usize) -> bool 
     if start <= source_len && end <= source_len && start <= end {
         true
     } else {
-        debug!("Skipping invalid node {} with range {}-{}", node.kind(), start, end);
+        debug!(
+            "Skipping invalid node {} with range {}-{}",
+            node.kind(),
+            start,
+            end
+        );
         false
     }
 }

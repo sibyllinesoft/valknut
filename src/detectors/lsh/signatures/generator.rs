@@ -97,7 +97,9 @@ pub fn generate_minhash_signature<T: SignatureGenerator>(gen: &T, source_code: &
     let shingle_size = gen.shingle_size();
 
     // Check cache first
-    if let Some(cached_signature) = gen.cache().get_signature(source_code, num_hashes, shingle_size)
+    if let Some(cached_signature) = gen
+        .cache()
+        .get_signature(source_code, num_hashes, shingle_size)
     {
         let elapsed = start_time.elapsed();
         debug!("Signature cache hit, returned in {:?}", elapsed);
@@ -122,8 +124,12 @@ pub fn generate_minhash_signature<T: SignatureGenerator>(gen: &T, source_code: &
 
     // Cache the generated signature (clone before returning to pool)
     let signature_clone = signature.clone();
-    gen.cache()
-        .cache_signature(source_code, num_hashes, shingle_size, signature_clone.clone());
+    gen.cache().cache_signature(
+        source_code,
+        num_hashes,
+        shingle_size,
+        signature_clone.clone(),
+    );
 
     // Return signature vector to memory pool for reuse
     gen.memory_pools().return_signature_vec(signature);

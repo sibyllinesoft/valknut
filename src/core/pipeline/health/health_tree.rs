@@ -128,8 +128,7 @@ impl DirectoryHealthTree {
         let mut directories = HashMap::new();
 
         for candidate in candidates {
-            let path = PathBuf::from(&candidate.file_path);
-            let dir_path = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let dir_path = Self::directory_path_for_file(&candidate.file_path);
             let entry = directories
                 .entry(dir_path.clone())
                 .or_insert_with(|| Self::new_directory_score(dir_path, None));
@@ -138,8 +137,10 @@ impl DirectoryHealthTree {
             entry.entity_count += 1;
             entry.refactoring_needed += 1;
             entry.critical_issues += usize::from(matches!(candidate.priority, Priority::Critical));
-            entry.high_priority_issues +=
-                usize::from(matches!(candidate.priority, Priority::High | Priority::Critical));
+            entry.high_priority_issues += usize::from(matches!(
+                candidate.priority,
+                Priority::High | Priority::Critical
+            ));
             entry.avg_refactoring_score += candidate.score;
             entry.weight += 1.0;
         }
@@ -154,13 +155,7 @@ impl DirectoryHealthTree {
                 entry.health_score =
                     ((100.0 - entry.avg_refactoring_score) / 100.0).clamp(0.0, 1.0);
             }
-            entry.parent = Some(
-                entry
-                    .path
-                    .parent()
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|| PathBuf::from(".")),
-            );
+            entry.parent = Self::parent_for_directory(&entry.path);
         }
     }
 
@@ -220,8 +215,7 @@ impl DirectoryHealthTree {
         directories: &mut HashMap<PathBuf, DirectoryHealthScore>,
     ) {
         for (file_path, health_score) in file_health {
-            let path = PathBuf::from(file_path);
-            let dir_path = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let dir_path = Self::directory_path_for_file(file_path);
             let health = (*health_score / 100.0).clamp(0.0, 1.0);
 
             let entry = directories
@@ -244,13 +238,7 @@ impl DirectoryHealthTree {
             if entry.file_count > 0 {
                 entry.health_score /= entry.file_count as f64;
             }
-            entry.parent = Some(
-                entry
-                    .path
-                    .parent()
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|| PathBuf::from(".")),
-            );
+            entry.parent = Self::parent_for_directory(&entry.path);
         }
     }
 
@@ -258,19 +246,19 @@ impl DirectoryHealthTree {
     fn build_intermediate_directories(directories: &mut HashMap<PathBuf, DirectoryHealthScore>) {
         let leaf_dirs: Vec<PathBuf> = directories.keys().cloned().collect();
         for dir_path in leaf_dirs {
-            let mut current = dir_path.parent().map(|p| p.to_path_buf());
+            let mut current = Self::parent_for_directory(&dir_path);
             while let Some(parent_path) = current {
-                if parent_path.as_os_str().is_empty() || parent_path == PathBuf::from(".") {
+                if Self::is_root_path(&parent_path) {
                     break;
                 }
                 if !directories.contains_key(&parent_path) {
-                    let parent = parent_path.parent().map(|p| p.to_path_buf());
+                    let parent = Self::parent_for_directory(&parent_path);
                     directories.insert(
                         parent_path.clone(),
                         Self::new_directory_score(parent_path.clone(), parent),
                     );
                 }
-                current = parent_path.parent().map(|p| p.to_path_buf());
+                current = Self::parent_for_directory(&parent_path);
             }
         }
     }
@@ -282,14 +270,21 @@ impl DirectoryHealthTree {
     ) {
         let keys: Vec<PathBuf> = directories.keys().cloned().collect();
         for dir_path in &keys {
-            let parent_path = directories
-                .get(dir_path)
-                .and_then(|d| d.parent.clone())
-                .unwrap_or_else(|| PathBuf::from("."));
+            let parent_path = match directories.get(dir_path).and_then(|d| d.parent.clone()) {
+                Some(parent_path) => parent_path,
+                None => {
+                    if !Self::is_root_path(dir_path) {
+                        root.children.push(dir_path.clone());
+                    }
+                    continue;
+                }
+            };
 
-            if let Some(parent_dir) = directories.get_mut(&parent_path) {
+            if parent_path == *dir_path {
+                continue;
+            } else if let Some(parent_dir) = directories.get_mut(&parent_path) {
                 parent_dir.children.push(dir_path.clone());
-            } else if parent_path == PathBuf::from(".") || parent_path.as_os_str().is_empty() {
+            } else if Self::is_root_path(&parent_path) {
                 root.children.push(dir_path.clone());
             }
         }
@@ -332,6 +327,29 @@ impl DirectoryHealthTree {
                 health_by_depth: HashMap::new(),
             },
         }
+    }
+
+    fn directory_path_for_file(file_path: &str) -> PathBuf {
+        let path = Path::new(file_path);
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+
+    fn parent_for_directory(path: &Path) -> Option<PathBuf> {
+        if Self::is_root_path(path) {
+            return None;
+        }
+
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .or_else(|| Some(PathBuf::from(".")))
+    }
+
+    fn is_root_path(path: &Path) -> bool {
+        path.as_os_str().is_empty() || path == Path::new(".")
     }
 
     /// Get the health score for a directory path, defaulting to root.

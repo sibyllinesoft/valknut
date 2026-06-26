@@ -307,23 +307,32 @@ impl CoverageDiscovery {
 
     /// Fallback paths for common coverage file patterns.
     pub const COVERAGE_FALLBACKS: &[(&str, &[&str])] = &[
-        ("coverage.xml", &[
-            "coverage/coverage.xml",
-            "target/coverage/coverage.xml",
-            "target/tarpaulin/coverage.xml",
-            "test-results/coverage.xml",
-            "reports/coverage.xml",
-        ]),
-        ("lcov.info", &[
-            "coverage/lcov.info",
-            "coverage-reports/lcov.info",
-            "target/coverage/lcov.info",
-        ]),
-        ("coverage.json", &[
-            "coverage/coverage-final.json",
-            "coverage/coverage.json",
-            "reports/coverage.json",
-        ]),
+        (
+            "coverage.xml",
+            &[
+                "coverage/coverage.xml",
+                "target/coverage/coverage.xml",
+                "target/tarpaulin/coverage.xml",
+                "test-results/coverage.xml",
+                "reports/coverage.xml",
+            ],
+        ),
+        (
+            "lcov.info",
+            &[
+                "coverage/lcov.info",
+                "coverage-reports/lcov.info",
+                "target/coverage/lcov.info",
+            ],
+        ),
+        (
+            "coverage.json",
+            &[
+                "coverage/coverage-final.json",
+                "coverage/coverage.json",
+                "reports/coverage.json",
+            ],
+        ),
     ];
 
     /// Expand direct pattern into intelligent fallback paths

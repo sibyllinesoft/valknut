@@ -125,7 +125,10 @@ pub fn check_metric_violations(
             ),
             metrics.technical_debt_ratio,
             config.max_technical_debt_ratio,
-            severity_for_excess(metrics.technical_debt_ratio, config.max_technical_debt_ratio),
+            severity_for_excess(
+                metrics.technical_debt_ratio,
+                config.max_technical_debt_ratio,
+            ),
             high_priority_files(),
             vec![
                 "Triage the listed hotspots and schedule debt paydown work",
@@ -143,7 +146,10 @@ pub fn check_metric_violations(
             ),
             metrics.maintainability_score,
             config.min_maintainability_score,
-            severity_for_shortfall(metrics.maintainability_score, config.min_maintainability_score),
+            severity_for_shortfall(
+                metrics.maintainability_score,
+                config.min_maintainability_score,
+            ),
             high_priority_files(),
             vec![
                 "Refactor low-cohesion modules to improve readability",
@@ -375,22 +381,26 @@ pub fn display_quality_gate_violations(result: &QualityGateResult) {
     println!();
 
     // Group and display violations by severity
-    let (blockers, criticals, warnings): (Vec<_>, Vec<_>, Vec<_>) = result
-        .violations
-        .iter()
-        .fold((vec![], vec![], vec![]), |(mut b, mut c, mut w), v| {
-            match v.severity.as_str() {
-                "Blocker" => b.push(v),
-                "Critical" => c.push(v),
-                "Warning" | "High" => w.push(v),
-                _ => {}
-            }
-            (b, c, w)
-        });
+    let (blockers, criticals, warnings): (Vec<_>, Vec<_>, Vec<_>) =
+        result
+            .violations
+            .iter()
+            .fold((vec![], vec![], vec![]), |(mut b, mut c, mut w), v| {
+                match v.severity.as_str() {
+                    "Blocker" => b.push(v),
+                    "Critical" => c.push(v),
+                    "Warning" | "High" => w.push(v),
+                    _ => {}
+                }
+                (b, c, w)
+            });
 
     print_violation_group(&"🚫 BLOCKER Issues:".red().bold().to_string(), &blockers);
     print_violation_group(&"🔴 CRITICAL Issues:".red().bold().to_string(), &criticals);
-    print_violation_group(&"⚠️  WARNING Issues:".yellow().bold().to_string(), &warnings);
+    print_violation_group(
+        &"⚠️  WARNING Issues:".yellow().bold().to_string(),
+        &warnings,
+    );
 
     println!("{}", "To fix these issues:".bold());
     println!("  1. Reduce code complexity by refactoring large functions");

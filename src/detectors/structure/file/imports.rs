@@ -118,7 +118,12 @@ impl ImportResolver {
     }
 
     /// Check if an entity is exported based on language conventions
-    pub fn is_entity_exported(&self, entity: &ParsedEntity, file_path: &Path, content: &str) -> bool {
+    pub fn is_entity_exported(
+        &self,
+        entity: &ParsedEntity,
+        file_path: &Path,
+        content: &str,
+    ) -> bool {
         let ext = file_path
             .extension()
             .and_then(|ext| ext.to_str())

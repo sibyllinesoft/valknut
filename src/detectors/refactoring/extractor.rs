@@ -250,5 +250,3 @@ impl FeatureExtractor for RefactoringExtractor {
         Ok(features)
     }
 }
-
-

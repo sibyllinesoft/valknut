@@ -332,9 +332,23 @@ fn file_helpers_load_assets_and_fallback_gracefully() {
         "console.log('hello valknut');",
     )
     .unwrap();
+    fs::create_dir_all("templates/themes").unwrap();
+    fs::write(
+        "templates/themes/sibylline.css",
+        "body { background: black; } .hero-divider { display: none; }",
+    )
+    .unwrap();
+    fs::create_dir_all("templates/dev/src/tree-component").unwrap();
+    fs::write(
+        "templates/dev/src/tree-component/react-tree-bundle.js",
+        "window.ReactTreeBundle = {};",
+    )
+    .unwrap();
 
     fs::create_dir_all("assets").unwrap();
     fs::write("assets/logo.webp", &[0u8, 1, 2, 3]).unwrap();
+    fs::create_dir_all("docs/webpage_files").unwrap();
+    fs::write("docs/webpage_files/valknut-large.webp", &[4u8, 3, 2, 1]).unwrap();
 
     let mut handlebars = Handlebars::new();
     register_helpers(&mut handlebars);
@@ -359,7 +373,12 @@ fn file_helpers_load_assets_and_fallback_gracefully() {
     let fallback_css = handlebars
         .render_template("{{inline_css \"sibylline.css\"}}", &empty)
         .unwrap();
-    assert!(fallback_css.contains("font-family"));
+    assert!(fallback_css.contains("hero-divider"));
+
+    let tree_bundle = handlebars
+        .render_template("{{inline_js \"react-tree-bundle.js\"}}", &empty)
+        .unwrap();
+    assert!(tree_bundle.contains("ReactTreeBundle"));
 
     let missing_js = handlebars
         .render_template("{{inline_js \"missing.js\"}}", &empty)
@@ -367,6 +386,12 @@ fn file_helpers_load_assets_and_fallback_gracefully() {
     assert!(missing_js.is_empty());
 
     fs::remove_file("assets/logo.webp").unwrap();
+    let docs_logo = handlebars
+        .render_template("{{logo_data_url}}", &empty)
+        .unwrap();
+    assert!(docs_logo.starts_with("data:image/webp;base64"));
+
+    fs::remove_file("docs/webpage_files/valknut-large.webp").unwrap();
     let fallback_logo = handlebars
         .render_template("{{logo_data_url}}", &empty)
         .unwrap();

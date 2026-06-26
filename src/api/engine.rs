@@ -165,7 +165,10 @@ impl ValknutEngine {
 
         // Compute project root from common prefix of file paths
         let project_root = compute_common_root(&paths);
-        Ok(AnalysisResults::from_pipeline_results(pipeline_results, project_root))
+        Ok(AnalysisResults::from_pipeline_results(
+            pipeline_results,
+            project_root,
+        ))
     }
 
     /// Analyze pre-extracted feature vectors (for testing and advanced usage)
@@ -281,9 +284,16 @@ impl ValknutEngine {
 
     /// Check feature extractors availability.
     fn check_feature_extractors(&self) -> HealthCheck {
-        let count = self.pipeline.extractor_registry().get_all_extractors().count();
+        let count = self
+            .pipeline
+            .extractor_registry()
+            .get_all_extractors()
+            .count();
         if count > 0 {
-            HealthCheck::passed_with_message("Feature Extractors", format!("{} extractors available", count))
+            HealthCheck::passed_with_message(
+                "Feature Extractors",
+                format!("{} extractors available", count),
+            )
         } else {
             HealthCheck::warning("Feature Extractors", "No feature extractors registered")
         }
@@ -295,7 +305,10 @@ impl ValknutEngine {
         if languages.is_empty() {
             HealthCheck::warning("Language Support", "No languages enabled")
         } else {
-            HealthCheck::passed_with_message("Language Support", format!("Languages: {}", languages.join(", ")))
+            HealthCheck::passed_with_message(
+                "Language Support",
+                format!("Languages: {}", languages.join(", ")),
+            )
         }
     }
 }

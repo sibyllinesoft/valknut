@@ -5,12 +5,13 @@ use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::super::common::{
     create_base_metadata, extract_identifiers_by_kinds, extract_js_function_calls,
-    generate_entity_id, normalize_module_literal, parse_require_import, sort_and_dedup, EntityKind,
-    EntityExtractor, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation,
+    generate_entity_id, normalize_module_literal, parse_require_import, sort_and_dedup,
+    EntityExtractor, EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation,
 };
 use super::super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::ast_utils::{
-    extract_parameter_names, extract_variable_declarator_name, find_child_text, is_const_declaration,
+    extract_parameter_names, extract_variable_declarator_name, find_child_text,
+    is_const_declaration,
 };
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
@@ -80,7 +81,9 @@ impl JavaScriptAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
         Ok(match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => Some(EntityKind::Function),
+            "function_declaration" | "function_expression" | "arrow_function" => {
+                Some(EntityKind::Function)
+            }
             "method_definition" => Some(EntityKind::Method),
             "class_declaration" => Some(EntityKind::Class),
             "variable_declaration" | "lexical_declaration" => {
@@ -97,9 +100,10 @@ impl JavaScriptAdapter {
     /// Extract the name of an entity from its AST node
     fn extract_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         match node.kind() {
-            "function_declaration" | "class_declaration" | "function_expression" | "arrow_function" => {
-                find_child_text(node, source_code, &["identifier"])
-            }
+            "function_declaration"
+            | "class_declaration"
+            | "function_expression"
+            | "arrow_function" => find_child_text(node, source_code, &["identifier"]),
             "method_definition" => {
                 find_child_text(node, source_code, &["property_identifier", "identifier"])
             }
@@ -148,7 +152,10 @@ impl JavaScriptAdapter {
         let mut cursor = heritage_node.walk();
         for child in heritage_node.children(&mut cursor) {
             if child.kind() == "identifier" {
-                return child.utf8_text(source_code.as_bytes()).ok().map(String::from);
+                return child
+                    .utf8_text(source_code.as_bytes())
+                    .ok()
+                    .map(String::from);
             }
         }
         None
@@ -202,7 +209,11 @@ impl LanguageAdapter for JavaScriptAdapter {
         Ok(extract_identifiers_by_kinds(
             tree.root_node(),
             source,
-            &["identifier", "shorthand_property_identifier", "property_identifier"],
+            &[
+                "identifier",
+                "shorthand_property_identifier",
+                "property_identifier",
+            ],
         ))
     }
 
@@ -219,7 +230,10 @@ impl LanguageAdapter for JavaScriptAdapter {
 
     /// Extracts import and require statements from JavaScript source.
     fn extract_imports(&mut self, source: &str) -> Result<Vec<ImportStatement>> {
-        Ok(crate::lang::common::extract_imports_common(source, "default as "))
+        Ok(crate::lang::common::extract_imports_common(
+            source,
+            "default as ",
+        ))
     }
 
     /// Extracts code entities from JavaScript source code.
@@ -247,7 +261,8 @@ impl EntityExtractor for JavaScriptAdapter {
             None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?
+        let name = self
+            .extract_name(&node, source_code)?
             .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;

@@ -570,6 +570,6 @@ pub struct DirectoryHealthTree {
 
 // Normalized types for legacy report compatibility are in normalized_types.rs
 pub use super::normalized_types::{
-    NormalizedAnalysisResults, NormalizedEntity, NormalizedIssue, NormalizedIssues,
-    NormalizedIssueTotals, NormalizedMeta, NormalizedSuggestion, NormalizedSummary,
+    NormalizedAnalysisResults, NormalizedEntity, NormalizedIssue, NormalizedIssueTotals,
+    NormalizedIssues, NormalizedMeta, NormalizedSuggestion, NormalizedSummary,
 };

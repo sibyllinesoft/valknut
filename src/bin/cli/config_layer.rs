@@ -158,7 +158,9 @@ impl ConfigMerge<ValknutConfig> for ValknutConfig {
         if other.analysis.enable_lsh_analysis != default_analysis.enable_lsh_analysis {
             self.analysis.enable_lsh_analysis = other.analysis.enable_lsh_analysis;
         }
-        if other.analysis.enable_refactoring_analysis != default_analysis.enable_refactoring_analysis {
+        if other.analysis.enable_refactoring_analysis
+            != default_analysis.enable_refactoring_analysis
+        {
             self.analysis.enable_refactoring_analysis = other.analysis.enable_refactoring_analysis;
         }
         if other.analysis.enable_coverage_analysis != default_analysis.enable_coverage_analysis {
@@ -531,7 +533,8 @@ impl ConfigMerge<CoverageConfig> for CoverageConfig {
         if (other.weights.docs - default.weights.docs).abs() > f64::EPSILON {
             self.weights.docs = other.weights.docs;
         }
-        if !other.exclude_patterns.is_empty() && other.exclude_patterns != default.exclude_patterns {
+        if !other.exclude_patterns.is_empty() && other.exclude_patterns != default.exclude_patterns
+        {
             self.exclude_patterns = other.exclude_patterns;
         }
     }

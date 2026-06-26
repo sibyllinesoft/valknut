@@ -102,8 +102,7 @@ impl GoAdapter {
                 node.end_position().column,
             );
 
-            let metadata =
-                create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
+            let metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
             let entity = ParsedEntity {
                 id: entity_id,
@@ -118,7 +117,14 @@ impl GoAdapter {
             index.add_entity(entity);
         }
 
-        self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)
+        self.traverse_children(
+            node,
+            source_code,
+            file_path,
+            parent_id,
+            index,
+            entity_id_counter,
+        )
     }
 
     /// Iterative entity extraction for Go - avoids stack overflow on deeply nested code.
@@ -195,7 +201,12 @@ impl GoAdapter {
             if child.kind() == spec_kind {
                 self.collect_identifiers_from_spec(&child, source_code, &mut identifiers)?;
             } else if child.kind() == spec_list_kind {
-                self.collect_identifiers_from_spec_list(&child, source_code, spec_kind, &mut identifiers)?;
+                self.collect_identifiers_from_spec_list(
+                    &child,
+                    source_code,
+                    spec_kind,
+                    &mut identifiers,
+                )?;
             }
         }
 
@@ -240,15 +251,13 @@ impl GoAdapter {
         Ok(match node.kind() {
             "function_declaration" => Some(EntityKind::Function),
             "method_declaration" => Some(EntityKind::Method),
-            "type_declaration" => Some(
-                if self.is_struct_declaration(node, source_code)? {
-                    EntityKind::Struct
-                } else if self.is_interface_declaration(node, source_code)? {
-                    EntityKind::Interface
-                } else {
-                    EntityKind::Interface // Generic type alias
-                }
-            ),
+            "type_declaration" => Some(if self.is_struct_declaration(node, source_code)? {
+                EntityKind::Struct
+            } else if self.is_interface_declaration(node, source_code)? {
+                EntityKind::Interface
+            } else {
+                EntityKind::Interface // Generic type alias
+            }),
             _ => None,
         })
     }
@@ -288,12 +297,10 @@ impl GoAdapter {
             "function_declaration" | "method_declaration" => {
                 extract_node_text(node, source_code, "name", &["identifier"])
             }
-            "type_declaration" => {
-                match Self::find_type_spec(node) {
-                    Some(spec) => extract_node_text(&spec, source_code, "name", &["type_identifier"]),
-                    None => Ok(None),
-                }
-            }
+            "type_declaration" => match Self::find_type_spec(node) {
+                Some(spec) => extract_node_text(&spec, source_code, "name", &["type_identifier"]),
+                None => Ok(None),
+            },
             _ => Ok(None),
         }
     }
@@ -341,8 +348,15 @@ impl GoAdapter {
     fn extract_return_types<'a>(result_node: &Node, source_code: &'a str) -> Result<Vec<&'a str>> {
         const TYPE_KINDS: &[&str] = &["type_identifier", "pointer_type", "slice_type"];
         match result_node.kind() {
-            "parameter_list" => Self::extract_nested_identifiers(result_node, source_code, "parameter_declaration", "type_identifier"),
-            kind if TYPE_KINDS.contains(&kind) => Ok(vec![result_node.utf8_text(source_code.as_bytes())?]),
+            "parameter_list" => Self::extract_nested_identifiers(
+                result_node,
+                source_code,
+                "parameter_declaration",
+                "type_identifier",
+            ),
+            kind if TYPE_KINDS.contains(&kind) => {
+                Ok(vec![result_node.utf8_text(source_code.as_bytes())?])
+            }
             _ => Ok(vec![]),
         }
     }
@@ -356,7 +370,9 @@ impl GoAdapter {
         metadata: &mut HashMap<String, serde_json::Value>,
     ) -> Result<()> {
         match kind {
-            EntityKind::Function | EntityKind::Method => self.extract_function_metadata(node, source_code, metadata),
+            EntityKind::Function | EntityKind::Method => {
+                self.extract_function_metadata(node, source_code, metadata)
+            }
             EntityKind::Struct => self.extract_struct_metadata(node, source_code, metadata),
             EntityKind::Interface => self.extract_interface_metadata(node, source_code, metadata),
             _ => Ok(()),
@@ -370,12 +386,21 @@ impl GoAdapter {
         source_code: &str,
         metadata: &mut HashMap<String, serde_json::Value>,
     ) -> Result<()> {
-        let parameters = node.child_by_field_name("parameters")
-            .map(|p| Self::extract_nested_identifiers(&p, source_code, "parameter_declaration", "identifier"))
+        let parameters = node
+            .child_by_field_name("parameters")
+            .map(|p| {
+                Self::extract_nested_identifiers(
+                    &p,
+                    source_code,
+                    "parameter_declaration",
+                    "identifier",
+                )
+            })
             .transpose()?
             .unwrap_or_default();
 
-        let return_types = node.child_by_field_name("result")
+        let return_types = node
+            .child_by_field_name("result")
             .map(|r| Self::extract_return_types(&r, source_code))
             .transpose()?
             .unwrap_or_default();
@@ -393,7 +418,10 @@ impl GoAdapter {
             metadata.insert("return_types".to_string(), serde_json::json!(return_types));
         }
         if let Some(receiver) = receiver_type {
-            metadata.insert("receiver_type".to_string(), serde_json::Value::String(receiver));
+            metadata.insert(
+                "receiver_type".to_string(),
+                serde_json::Value::String(receiver),
+            );
         }
 
         Ok(())
@@ -414,7 +442,10 @@ impl GoAdapter {
 
         metadata.insert("fields".to_string(), serde_json::json!(fields));
         if !embedded_types.is_empty() {
-            metadata.insert("embedded_types".to_string(), serde_json::json!(embedded_types));
+            metadata.insert(
+                "embedded_types".to_string(),
+                serde_json::json!(embedded_types),
+            );
         }
 
         Ok(())
@@ -438,7 +469,12 @@ impl GoAdapter {
             if field_child.kind() != "field_declaration" {
                 continue;
             }
-            self.parse_field_declaration(&field_child, source_code, &mut fields, &mut embedded_types)?;
+            self.parse_field_declaration(
+                &field_child,
+                source_code,
+                &mut fields,
+                &mut embedded_types,
+            )?;
         }
 
         Ok((fields, embedded_types))
@@ -477,15 +513,20 @@ impl GoAdapter {
         source_code: &str,
         metadata: &mut HashMap<String, serde_json::Value>,
     ) -> Result<()> {
-        let Some(interface_type) = self.find_nested_child(node, &["type_spec", "interface_type"]) else {
+        let Some(interface_type) = self.find_nested_child(node, &["type_spec", "interface_type"])
+        else {
             return Ok(());
         };
 
-        let (methods, embedded_interfaces) = self.parse_interface_members(&interface_type, source_code)?;
+        let (methods, embedded_interfaces) =
+            self.parse_interface_members(&interface_type, source_code)?;
 
         metadata.insert("methods".to_string(), serde_json::json!(methods));
         if !embedded_interfaces.is_empty() {
-            metadata.insert("embedded_interfaces".to_string(), serde_json::json!(embedded_interfaces));
+            metadata.insert(
+                "embedded_interfaces".to_string(),
+                serde_json::json!(embedded_interfaces),
+            );
         }
 
         Ok(())
@@ -524,7 +565,11 @@ impl GoAdapter {
     }
 
     /// Extract method name from method_elem text
-    fn extract_method_name_from_text(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
+    fn extract_method_name_from_text(
+        &self,
+        node: &Node,
+        source_code: &str,
+    ) -> Result<Option<String>> {
         let text = node.utf8_text(source_code.as_bytes())?;
         if let Some(name) = text.split('(').next() {
             let name = name.trim();
@@ -536,7 +581,11 @@ impl GoAdapter {
     }
 
     /// Extract method name from method_spec node
-    fn extract_method_name_from_spec(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
+    fn extract_method_name_from_spec(
+        &self,
+        node: &Node,
+        source_code: &str,
+    ) -> Result<Option<String>> {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if child.kind() == "field_identifier" {
@@ -566,8 +615,7 @@ impl GoAdapter {
             return None;
         }
 
-        Self::extract_quoted_path(line, '"')
-            .or_else(|| Self::extract_quoted_path(line, '`'))
+        Self::extract_quoted_path(line, '"').or_else(|| Self::extract_quoted_path(line, '`'))
     }
 
     /// Extract a path from between matching quote characters
@@ -639,7 +687,12 @@ impl LanguageAdapter for GoAdapter {
         Ok(extract_identifiers_by_kinds(
             tree.root_node(),
             source,
-            &["identifier", "field_identifier", "type_identifier", "package_identifier"],
+            &[
+                "identifier",
+                "field_identifier",
+                "type_identifier",
+                "package_identifier",
+            ],
         ))
     }
 
@@ -730,7 +783,8 @@ impl EntityExtractor for GoAdapter {
             None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?
+        let name = self
+            .extract_name(&node, source_code)?
             .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;
@@ -762,15 +816,42 @@ impl EntityExtractor for GoAdapter {
         entity_id_counter: &mut usize,
     ) -> Result<()> {
         if node.kind() == "const_declaration" || node.kind() == "var_declaration" {
-            return self.handle_grouped_declaration(node, source_code, file_path, parent_id, index, entity_id_counter);
+            return self.handle_grouped_declaration(
+                node,
+                source_code,
+                file_path,
+                parent_id,
+                index,
+                entity_id_counter,
+            );
         }
 
-        if let Some(entity) = self.node_to_entity(node, source_code, file_path, parent_id.clone(), entity_id_counter)? {
+        if let Some(entity) = self.node_to_entity(
+            node,
+            source_code,
+            file_path,
+            parent_id.clone(),
+            entity_id_counter,
+        )? {
             let entity_id = entity.id.clone();
             index.add_entity(entity);
-            self.traverse_children(node, source_code, file_path, Some(entity_id), index, entity_id_counter)?;
+            self.traverse_children(
+                node,
+                source_code,
+                file_path,
+                Some(entity_id),
+                index,
+                entity_id_counter,
+            )?;
         } else {
-            self.traverse_children(node, source_code, file_path, parent_id, index, entity_id_counter)?;
+            self.traverse_children(
+                node,
+                source_code,
+                file_path,
+                parent_id,
+                index,
+                entity_id_counter,
+            )?;
         }
 
         Ok(())

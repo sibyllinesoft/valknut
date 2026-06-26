@@ -31,8 +31,8 @@ pub use result_conversions::*;
 // Re-export result_types but exclude MemoryStats to avoid conflict with pipeline_results::MemoryStats
 pub use result_types::{
     AnalysisResults, AnalysisStatistics, AnalysisSummary, CloneAnalysisPerformance,
-    CloneAnalysisResults, CodeDefinition, CodeDictionary, DepthHealthStats,
-    DirectoryHealthScore, DirectoryHealthTree, DirectoryHotspot, DirectoryIssueSummary,
-    DocumentationResults, FeatureContribution, FileRefactoringGroup, PhaseFilteringStats,
-    RefactoringCandidate, RefactoringIssue, RefactoringSuggestion, TreeStatistics,
+    CloneAnalysisResults, CodeDefinition, CodeDictionary, DepthHealthStats, DirectoryHealthScore,
+    DirectoryHealthTree, DirectoryHotspot, DirectoryIssueSummary, DocumentationResults,
+    FeatureContribution, FileRefactoringGroup, PhaseFilteringStats, RefactoringCandidate,
+    RefactoringIssue, RefactoringSuggestion, TreeStatistics,
 };

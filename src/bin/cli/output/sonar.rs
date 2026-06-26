@@ -35,7 +35,10 @@ pub async fn generate_sonar_report(result: &Value) -> anyhow::Result<String> {
 
 /// Extracts complexity issues and formats them as SonarQube issues.
 fn extract_complexity_sonar_issues(complexity: &Value) -> Vec<Value> {
-    let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = complexity
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return Vec::new();
     };
 
@@ -58,8 +61,14 @@ fn extract_complexity_sonar_issues(complexity: &Value) -> Vec<Value> {
 /// Builds a SonarQube issue from a complexity issue.
 fn build_sonar_issue_from_complexity(issue: &Value, file_path: &str) -> Value {
     let severity = map_severity_to_sonar(issue.get("severity").and_then(|v| v.as_str()));
-    let rule_key = issue.get("category").and_then(|v| v.as_str()).unwrap_or("complexity");
-    let description = issue.get("description").and_then(|v| v.as_str()).unwrap_or("Complexity issue");
+    let rule_key = issue
+        .get("category")
+        .and_then(|v| v.as_str())
+        .unwrap_or("complexity");
+    let description = issue
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Complexity issue");
     let line = issue.get("line").and_then(|v| v.as_u64()).unwrap_or(1);
 
     build_sonar_issue(rule_key, severity, description, file_path, line)
@@ -78,7 +87,10 @@ fn map_severity_to_sonar(severity: Option<&str>) -> &'static str {
 
 /// Extracts refactoring recommendations and formats them as SonarQube issues.
 fn extract_refactoring_sonar_issues(refactoring: &Value) -> Vec<Value> {
-    let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = refactoring
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return Vec::new();
     };
 
@@ -87,7 +99,10 @@ fn extract_refactoring_sonar_issues(refactoring: &Value) -> Vec<Value> {
         let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) else {
             continue;
         };
-        let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) else {
+        let Some(recommendations) = file_result
+            .get("recommendations")
+            .and_then(|v| v.as_array())
+        else {
             continue;
         };
 
@@ -100,7 +115,10 @@ fn extract_refactoring_sonar_issues(refactoring: &Value) -> Vec<Value> {
 
 /// Builds a SonarQube issue from a refactoring recommendation.
 fn build_sonar_issue_from_recommendation(rec: &Value, file_path: &str) -> Value {
-    let priority_score = rec.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let priority_score = rec
+        .get("priority_score")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let severity = if priority_score > 0.8 {
         "MAJOR"
     } else if priority_score > 0.5 {
@@ -109,8 +127,14 @@ fn build_sonar_issue_from_recommendation(rec: &Value, file_path: &str) -> Value 
         "INFO"
     };
 
-    let refactoring_type = rec.get("refactoring_type").and_then(|v| v.as_str()).unwrap_or("refactoring");
-    let description = rec.get("description").and_then(|v| v.as_str()).unwrap_or("Refactoring opportunity");
+    let refactoring_type = rec
+        .get("refactoring_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("refactoring");
+    let description = rec
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Refactoring opportunity");
     let line = rec
         .get("location")
         .and_then(|v| v.as_array())
@@ -118,11 +142,23 @@ fn build_sonar_issue_from_recommendation(rec: &Value, file_path: &str) -> Value 
         .and_then(|v| v.as_u64())
         .unwrap_or(1);
 
-    build_sonar_issue(&refactoring_type.to_lowercase(), severity, description, file_path, line)
+    build_sonar_issue(
+        &refactoring_type.to_lowercase(),
+        severity,
+        description,
+        file_path,
+        line,
+    )
 }
 
 /// Builds a SonarQube-formatted issue JSON object.
-fn build_sonar_issue(rule_key: &str, severity: &str, message: &str, file_path: &str, line: u64) -> Value {
+fn build_sonar_issue(
+    rule_key: &str,
+    severity: &str,
+    message: &str,
+    file_path: &str,
+    line: u64,
+) -> Value {
     serde_json::json!({
         "engineId": "valknut",
         "ruleId": format!("valknut:{}", rule_key),

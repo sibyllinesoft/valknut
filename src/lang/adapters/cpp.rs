@@ -352,7 +352,9 @@ impl CppAdapter {
                             return Ok(Some(format!("~{}", name)));
                         }
                     }
-                    return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+                    return Ok(Some(
+                        name_node.utf8_text(source_code.as_bytes())?.to_string(),
+                    ));
                 }
             }
 
@@ -396,7 +398,9 @@ impl CppAdapter {
     fn extract_type_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         // Try name field first
         if let Some(name_node) = node.child_by_field_name("name") {
-            return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+            return Ok(Some(
+                name_node.utf8_text(source_code.as_bytes())?.to_string(),
+            ));
         }
 
         // Look for type_identifier child
@@ -416,9 +420,13 @@ impl CppAdapter {
         if let Some(name_node) = node.child_by_field_name("name") {
             // Handle nested namespace (C++17 namespace A::B::C)
             if name_node.kind() == "namespace_identifier" {
-                return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+                return Ok(Some(
+                    name_node.utf8_text(source_code.as_bytes())?.to_string(),
+                ));
             }
-            return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+            return Ok(Some(
+                name_node.utf8_text(source_code.as_bytes())?.to_string(),
+            ));
         }
 
         // Look for identifier child
@@ -453,7 +461,9 @@ impl CppAdapter {
     /// Extract using alias name.
     fn extract_alias_name(&self, node: &Node, source_code: &str) -> Result<Option<String>> {
         if let Some(name_node) = node.child_by_field_name("name") {
-            return Ok(Some(name_node.utf8_text(source_code.as_bytes())?.to_string()));
+            return Ok(Some(
+                name_node.utf8_text(source_code.as_bytes())?.to_string(),
+            ));
         }
 
         // Look for type_identifier
@@ -534,10 +544,8 @@ impl CppAdapter {
                     if found_decl {
                         match sibling.kind() {
                             "const" | "type_qualifier" => {
-                                metadata.insert(
-                                    "is_const".to_string(),
-                                    serde_json::Value::Bool(true),
-                                );
+                                metadata
+                                    .insert("is_const".to_string(), serde_json::Value::Bool(true));
                             }
                             "noexcept" => {
                                 metadata.insert(
@@ -588,10 +596,7 @@ impl CppAdapter {
             metadata.insert("is_explicit".to_string(), serde_json::Value::Bool(true));
         }
         if is_pure_virtual {
-            metadata.insert(
-                "is_pure_virtual".to_string(),
-                serde_json::Value::Bool(true),
-            );
+            metadata.insert("is_pure_virtual".to_string(), serde_json::Value::Bool(true));
         }
 
         // Extract return type
@@ -653,8 +658,9 @@ impl CppAdapter {
                                     || inner.kind() == "reference_declarator"
                                 {
                                     if let Some(id) = find_child_by_kind(&inner, "identifier") {
-                                        params
-                                            .push(id.utf8_text(source_code.as_bytes())?.to_string());
+                                        params.push(
+                                            id.utf8_text(source_code.as_bytes())?.to_string(),
+                                        );
                                     }
                                 }
                             }
@@ -771,10 +777,7 @@ impl CppAdapter {
                 }
                 "variadic_type_parameter_declaration" => {
                     if let Some(id) = find_child_by_kind(&child, "type_identifier") {
-                        params.push(format!(
-                            "{}...",
-                            id.utf8_text(source_code.as_bytes())?
-                        ));
+                        params.push(format!("{}...", id.utf8_text(source_code.as_bytes())?));
                     }
                 }
                 _ => {}
@@ -793,7 +796,8 @@ impl CppAdapter {
     ) -> Result<()> {
         // Check if scoped enum (enum class/struct)
         let source_text = node.utf8_text(source_code.as_bytes())?;
-        let is_scoped = source_text.starts_with("enum class") || source_text.starts_with("enum struct");
+        let is_scoped =
+            source_text.starts_with("enum class") || source_text.starts_with("enum struct");
 
         if is_scoped {
             metadata.insert("is_scoped".to_string(), serde_json::Value::Bool(true));
@@ -874,7 +878,8 @@ impl LanguageAdapter for CppAdapter {
     fn extract_identifiers(&mut self, source: &str) -> Result<Vec<String>> {
         let tree = self.parse_tree(source)?;
         let identifier_kinds = &["identifier", "field_identifier", "type_identifier"];
-        let mut identifiers = extract_identifiers_by_kinds(tree.root_node(), source, identifier_kinds);
+        let mut identifiers =
+            extract_identifiers_by_kinds(tree.root_node(), source, identifier_kinds);
         sort_and_dedup(&mut identifiers);
         Ok(identifiers)
     }

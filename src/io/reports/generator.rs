@@ -22,7 +22,10 @@ use super::assets::{
 };
 use super::error::ReportError;
 use super::helpers::{register_helpers, safe_json_value};
-use super::hierarchy::{build_unified_hierarchy_with_health, create_file_groups_from_candidates, create_file_groups_from_health};
+use super::hierarchy::{
+    build_unified_hierarchy_with_health, create_file_groups_from_candidates,
+    create_file_groups_from_health,
+};
 use super::templates::{
     detect_templates_dir, load_templates_from_dir, register_fallback_template, CSV_TEMPLATE_NAME,
     FALLBACK_TEMPLATE_NAME, MARKDOWN_TEMPLATE_NAME, SONAR_TEMPLATE_NAME,
@@ -365,8 +368,14 @@ impl ReportGenerator {
         data.insert("cohesion", safe_json_value(&results.passes.cohesion));
 
         // Add precomputed health scores (same formula as project health)
-        data.insert("directory_health", safe_json_value(&results.directory_health));
-        data.insert("directoryHealth", safe_json_value(&results.directory_health));
+        data.insert(
+            "directory_health",
+            safe_json_value(&results.directory_health),
+        );
+        data.insert(
+            "directoryHealth",
+            safe_json_value(&results.directory_health),
+        );
         data.insert("file_health", safe_json_value(&results.file_health));
         data.insert("fileHealth", safe_json_value(&results.file_health));
         data.insert("entity_health", safe_json_value(&results.entity_health));
@@ -380,17 +389,22 @@ impl ReportGenerator {
 
         // Build unified_hierarchy at top level (template expects it here, not nested in tree_payload)
         if let Some(tree) = &directory_tree {
-            let mut file_groups = create_file_groups_from_candidates(&results.refactoring_candidates);
-            let candidate_paths: std::collections::HashSet<_> = file_groups.iter()
-                .map(|g| g.file_path.clone())
-                .collect();
+            let mut file_groups =
+                create_file_groups_from_candidates(&results.refactoring_candidates);
+            let candidate_paths: std::collections::HashSet<_> =
+                file_groups.iter().map(|g| g.file_path.clone()).collect();
             let health_only_groups: Vec<_> = create_file_groups_from_health(&results.file_health)
                 .into_iter()
                 .filter(|g| !candidate_paths.contains(&g.file_path))
                 .collect();
             file_groups.extend(health_only_groups);
 
-            let unified = build_unified_hierarchy_with_health(tree, &file_groups, &results.file_health, &results.directory_health);
+            let unified = build_unified_hierarchy_with_health(
+                tree,
+                &file_groups,
+                &results.file_health,
+                &results.directory_health,
+            );
             data.insert("unified_hierarchy", safe_json_value(&unified));
             data.insert("unifiedHierarchy", safe_json_value(&unified));
         }
@@ -546,10 +560,10 @@ impl ReportGenerator {
         // Build unified_hierarchy from directory tree and candidates
         if let Some(tree) = directory_tree {
             // Merge file groups from candidates with files from file_health
-            let mut file_groups = create_file_groups_from_candidates(&results.refactoring_candidates);
-            let candidate_paths: std::collections::HashSet<_> = file_groups.iter()
-                .map(|g| g.file_path.clone())
-                .collect();
+            let mut file_groups =
+                create_file_groups_from_candidates(&results.refactoring_candidates);
+            let candidate_paths: std::collections::HashSet<_> =
+                file_groups.iter().map(|g| g.file_path.clone()).collect();
             // Add files from file_health that don't have candidates
             let health_only_groups: Vec<_> = create_file_groups_from_health(&results.file_health)
                 .into_iter()
@@ -675,9 +689,7 @@ impl ReportGenerator {
             Some(DirectoryHealthTree::from_candidates(&candidates))
         }
     }
-
 }
-
 
 #[cfg(test)]
 #[path = "generator_tests.rs"]

@@ -42,7 +42,10 @@ fn escape_csv(s: &str) -> String {
 
 /// Extracts complexity issues and formats them as CSV rows.
 fn extract_complexity_csv_rows(complexity: &Value) -> Vec<String> {
-    let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = complexity
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return Vec::new();
     };
 
@@ -56,14 +59,27 @@ fn extract_complexity_csv_rows(complexity: &Value) -> Vec<String> {
         };
 
         for issue in file_issues {
-            let issue_type = issue.get("category").and_then(|v| v.as_str()).unwrap_or("Complexity");
-            let severity = issue.get("severity").and_then(|v| v.as_str()).unwrap_or("Medium");
-            let description = issue.get("description").and_then(|v| v.as_str()).unwrap_or("Complexity issue");
+            let issue_type = issue
+                .get("category")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Complexity");
+            let severity = issue
+                .get("severity")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Medium");
+            let description = issue
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Complexity issue");
             let line = issue.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
 
             rows.push(format!(
                 "\"{}\",\"{}\",\"{}\",\"{}\",{},\"\",\"\"\n",
-                escape_csv(file_path), issue_type, severity, escape_csv(description), line
+                escape_csv(file_path),
+                issue_type,
+                severity,
+                escape_csv(description),
+                line
             ));
         }
     }
@@ -72,7 +88,10 @@ fn extract_complexity_csv_rows(complexity: &Value) -> Vec<String> {
 
 /// Extracts refactoring recommendations and formats them as CSV rows.
 fn extract_refactoring_csv_rows(refactoring: &Value) -> Vec<String> {
-    let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = refactoring
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return Vec::new();
     };
 
@@ -81,7 +100,10 @@ fn extract_refactoring_csv_rows(refactoring: &Value) -> Vec<String> {
         let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) else {
             continue;
         };
-        let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) else {
+        let Some(recommendations) = file_result
+            .get("recommendations")
+            .and_then(|v| v.as_array())
+        else {
             continue;
         };
 
@@ -94,11 +116,26 @@ fn extract_refactoring_csv_rows(refactoring: &Value) -> Vec<String> {
 
 /// Builds a CSV row from a refactoring recommendation.
 fn build_refactoring_csv_row(rec: &Value, file_path: &str) -> String {
-    let refactoring_type = rec.get("refactoring_type").and_then(|v| v.as_str()).unwrap_or("Refactoring");
-    let description = rec.get("description").and_then(|v| v.as_str()).unwrap_or("Refactoring opportunity");
-    let priority_score = rec.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let impact = rec.get("estimated_impact").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let effort = rec.get("estimated_effort").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let refactoring_type = rec
+        .get("refactoring_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Refactoring");
+    let description = rec
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Refactoring opportunity");
+    let priority_score = rec
+        .get("priority_score")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let impact = rec
+        .get("estimated_impact")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let effort = rec
+        .get("estimated_effort")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
     let severity = if priority_score > 0.8 {
         "High"
@@ -117,7 +154,13 @@ fn build_refactoring_csv_row(rec: &Value, file_path: &str) -> String {
 
     format!(
         "\"{}\",\"{}\",\"{}\",\"{}\",{},\"{:.1}\",\"{:.1}\"\n",
-        escape_csv(file_path), refactoring_type, severity, escape_csv(description), line, impact, effort
+        escape_csv(file_path),
+        refactoring_type,
+        severity,
+        escape_csv(description),
+        line,
+        impact,
+        effort
     )
 }
 
@@ -130,7 +173,10 @@ fn extract_structure_csv_rows(structure: &Value) -> Vec<String> {
     packs
         .iter()
         .map(|pack| {
-            let kind = pack.get("kind").and_then(|v| v.as_str()).unwrap_or("Structure");
+            let kind = pack
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Structure");
             let file_or_dir = pack
                 .get("file")
                 .and_then(|v| v.as_str())
@@ -140,12 +186,19 @@ fn extract_structure_csv_rows(structure: &Value) -> Vec<String> {
             let reasons = pack
                 .get("reasons")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|r| r.as_str()).collect::<Vec<_>>().join("; "))
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|r| r.as_str())
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                })
                 .unwrap_or_else(|| "Structure issue".to_string());
 
             format!(
                 "\"{}\",\"{}\",\"Medium\",\"{}\",0,\"\",\"\"\n",
-                escape_csv(file_or_dir), kind, escape_csv(&reasons)
+                escape_csv(file_or_dir),
+                kind,
+                escape_csv(&reasons)
             )
         })
         .collect()

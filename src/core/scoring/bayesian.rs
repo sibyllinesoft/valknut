@@ -618,18 +618,26 @@ impl BayesianNormalizer {
         let feature_count = self.statistics.len();
 
         HashMap::from([
-            ("confidence_distribution".to_string(), self.confidence_distribution_value()),
-            ("total_features".to_string(), serde_json::json!(feature_count)),
-            ("average_prior_weight".to_string(), self.average_prior_weight_value(feature_count)),
+            (
+                "confidence_distribution".to_string(),
+                self.confidence_distribution_value(),
+            ),
+            (
+                "total_features".to_string(),
+                serde_json::json!(feature_count),
+            ),
+            (
+                "average_prior_weight".to_string(),
+                self.average_prior_weight_value(feature_count),
+            ),
         ])
     }
 
     /// Calculate confidence distribution as a JSON value.
     fn confidence_distribution_value(&self) -> serde_json::Value {
         let counts = self.count_confidence_levels();
-        serde_json::to_value(counts).unwrap_or_else(|e| {
-            serde_json::Value::String(format!("Serialization error: {}", e))
-        })
+        serde_json::to_value(counts)
+            .unwrap_or_else(|e| serde_json::Value::String(format!("Serialization error: {}", e)))
     }
 
     /// Count occurrences of each confidence level.
@@ -655,7 +663,11 @@ impl BayesianNormalizer {
         if feature_count == 0 {
             return 0.0;
         }
-        self.statistics.values().map(|s| s.prior_weight).sum::<f64>() / feature_count as f64
+        self.statistics
+            .values()
+            .map(|s| s.prior_weight)
+            .sum::<f64>()
+            / feature_count as f64
     }
 }
 

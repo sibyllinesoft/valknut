@@ -80,7 +80,11 @@ impl RustAdapter {
     fn determine_entity_kind(&self, node: Node) -> Option<EntityKind> {
         match node.kind() {
             "function_item" | "function_signature_item" => {
-                if self.is_inside_trait(node) { None } else { Some(EntityKind::Function) }
+                if self.is_inside_trait(node) {
+                    None
+                } else {
+                    Some(EntityKind::Function)
+                }
             }
             "impl_item" => None,
             "struct_item" => Some(EntityKind::Struct),
@@ -198,8 +202,11 @@ impl RustAdapter {
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "parameters" => parameters = Self::extract_parameters(&child, source_code)?,
-                "visibility_modifier" => visibility = child.utf8_text(source_code.as_bytes())?.to_string(),
-                "type_identifier" | "reference_type" | "tuple_type" | "array_type" | "generic_type" => {
+                "visibility_modifier" => {
+                    visibility = child.utf8_text(source_code.as_bytes())?.to_string()
+                }
+                "type_identifier" | "reference_type" | "tuple_type" | "array_type"
+                | "generic_type" => {
                     return_type = Some(child.utf8_text(source_code.as_bytes())?.to_string());
                 }
                 _ => {}
@@ -264,13 +271,23 @@ impl RustAdapter {
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "field_declaration_list" => {
-                    fields = Self::extract_nested_identifiers(&child, source_code, "field_declaration", "field_identifier")?;
+                    fields = Self::extract_nested_identifiers(
+                        &child,
+                        source_code,
+                        "field_declaration",
+                        "field_identifier",
+                    )?;
                 }
                 "visibility_modifier" => {
                     visibility = child.utf8_text(source_code.as_bytes())?.to_string();
                 }
                 "type_parameters" => {
-                    generic_params = Self::extract_nested_identifiers(&child, source_code, "type_parameter", "type_identifier")?;
+                    generic_params = Self::extract_nested_identifiers(
+                        &child,
+                        source_code,
+                        "type_parameter",
+                        "type_identifier",
+                    )?;
                 }
                 _ => {}
             }
@@ -279,7 +296,10 @@ impl RustAdapter {
         metadata.insert("fields".to_string(), serde_json::json!(fields));
         metadata.insert("visibility".to_string(), Value::String(visibility));
         if !generic_params.is_empty() {
-            metadata.insert("generic_parameters".to_string(), serde_json::json!(generic_params));
+            metadata.insert(
+                "generic_parameters".to_string(),
+                serde_json::json!(generic_params),
+            );
         }
 
         Ok(())
@@ -498,8 +518,12 @@ impl LanguageAdapter for RustAdapter {
                 _ => None,
             };
 
-            let Some(candidate) = target.or_else(|| node.child(0)) else { return };
-            let Ok(text) = node_text_normalized(&candidate, source) else { return };
+            let Some(candidate) = target.or_else(|| node.child(0)) else {
+                return;
+            };
+            let Ok(text) = node_text_normalized(&candidate, source) else {
+                return;
+            };
             let cleaned = text.trim();
             if !cleaned.is_empty() {
                 calls.push(cleaned.to_string());
@@ -655,7 +679,10 @@ impl RustAdapter {
     /// Parse a grouped use statement: use foo::{bar, baz};
     fn parse_grouped_use(use_part: &str, line_number: usize) -> Option<ImportStatement> {
         let brace_pos = use_part.find('{')?;
-        let module = use_part[..brace_pos].trim().trim_end_matches(':').to_string();
+        let module = use_part[..brace_pos]
+            .trim()
+            .trim_end_matches(':')
+            .to_string();
 
         if module.is_empty() {
             return None;

@@ -286,16 +286,30 @@ import numpy as np
         assert!(modules.contains(&"os"), "Should find 'import os'");
         assert!(modules.contains(&"sys"), "Should find 'import sys'");
         assert!(modules.contains(&"pathlib"), "Should find 'from pathlib'");
-        assert!(modules.contains(&"collections"), "Should find 'from collections'");
+        assert!(
+            modules.contains(&"collections"),
+            "Should find 'from collections'"
+        );
         assert!(modules.contains(&"typing"), "Should find 'from typing'");
         assert!(modules.contains(&"."), "Should find 'from .'");
         assert!(modules.contains(&".."), "Should find 'from ..'");
         assert!(modules.contains(&"..utils"), "Should find 'from ..utils'");
-        assert!(modules.contains(&"numpy"), "Should find 'import numpy as np'");
+        assert!(
+            modules.contains(&"numpy"),
+            "Should find 'import numpy as np'"
+        );
 
         // Check specific imports are captured
         let collections_import = imports.iter().find(|i| i.module == "collections").unwrap();
-        assert!(collections_import.imports.as_ref().unwrap().contains(&"defaultdict".to_string()));
-        assert!(collections_import.imports.as_ref().unwrap().contains(&"Counter".to_string()));
+        assert!(collections_import
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"defaultdict".to_string()));
+        assert!(collections_import
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"Counter".to_string()));
     }
 }

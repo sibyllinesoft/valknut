@@ -293,7 +293,10 @@ impl SimilarityCliquePartitioner {
         entities: &[CodeEntity],
         partitions: &mut CliquePartitions,
     ) {
-        let ids: Vec<String> = component.iter().map(|&idx| entities[idx].id.clone()).collect();
+        let ids: Vec<String> = component
+            .iter()
+            .map(|&idx| entities[idx].id.clone())
+            .collect();
 
         if component.len() > self.max_group_size {
             // Break large components into deterministic chunks so that the

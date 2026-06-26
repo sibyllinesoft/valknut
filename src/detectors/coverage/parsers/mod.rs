@@ -161,7 +161,11 @@ fn extract_line_from_tag(tag: &BytesStart<'_>) -> Option<LineCoverage> {
         }
     }
 
-    Some(LineCoverage { line_number, hits, is_covered })
+    Some(LineCoverage {
+        line_number,
+        hits,
+        is_covered,
+    })
 }
 
 /// Extract class file path from tag and package context.
@@ -194,7 +198,9 @@ fn parse_cobertura_like_xml(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
                     current_file = extract_class_path(&tag, current_package.as_deref());
                 }
                 b"line" => {
-                    if let Some((file, line)) = current_file.clone().zip(extract_line_from_tag(&tag)) {
+                    if let Some((file, line)) =
+                        current_file.clone().zip(extract_line_from_tag(&tag))
+                    {
                         insert_line(&mut files, file, line);
                     }
                 }
@@ -236,7 +242,11 @@ fn extract_jacoco_line(tag: &BytesStart<'_>) -> Option<LineCoverage> {
     let hits = covered_instr + covered_branches;
     let is_covered = hits > 0 && missed_instr == 0;
 
-    Some(LineCoverage { line_number, hits, is_covered })
+    Some(LineCoverage {
+        line_number,
+        hits,
+        is_covered,
+    })
 }
 
 /// Extract sourcefile path from tag and package context.
@@ -267,7 +277,8 @@ fn parse_jacoco_xml(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
                     current_file = extract_sourcefile_path(&tag, current_package.as_deref());
                 }
                 b"line" => {
-                    if let Some((file, line)) = current_file.clone().zip(extract_jacoco_line(&tag)) {
+                    if let Some((file, line)) = current_file.clone().zip(extract_jacoco_line(&tag))
+                    {
                         insert_line(&mut files, file, line);
                     }
                 }
@@ -320,8 +331,12 @@ fn parse_lcov(bytes: &[u8]) -> Result<Vec<FileCoverage>> {
             continue;
         }
         if let Some(rest) = line.strip_prefix("DA:") {
-            let Some(file) = current_file.clone() else { continue };
-            let Some(coverage) = parse_lcov_da_line(rest) else { continue };
+            let Some(file) = current_file.clone() else {
+                continue;
+            };
+            let Some(coverage) = parse_lcov_da_line(rest) else {
+                continue;
+            };
             insert_line(&mut files, file, coverage);
         }
     }
@@ -429,13 +444,23 @@ fn parse_istanbul_lines(
     match lines_value {
         Value::Object(map) => {
             for (line_str, hits_value) in map {
-                let Some(line_number) = line_str.parse::<usize>().ok() else { continue };
-                insert_line(files, path.clone(), line_coverage_from_hits(line_number, hits_value));
+                let Some(line_number) = line_str.parse::<usize>().ok() else {
+                    continue;
+                };
+                insert_line(
+                    files,
+                    path.clone(),
+                    line_coverage_from_hits(line_number, hits_value),
+                );
             }
         }
         Value::Array(list) => {
             for (idx, hits_value) in list.iter().enumerate() {
-                insert_line(files, path.clone(), line_coverage_from_hits(idx + 1, hits_value));
+                insert_line(
+                    files,
+                    path.clone(),
+                    line_coverage_from_hits(idx + 1, hits_value),
+                );
             }
         }
         _ => {}

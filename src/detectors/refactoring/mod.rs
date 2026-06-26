@@ -157,7 +157,10 @@ impl RefactoringAnalyzer {
 
     /// Analyze a single file for refactoring opportunities
     async fn analyze_file(&self, file_path: &Path) -> Result<RefactoringAnalysisResult> {
-        debug!("Analyzing refactoring opportunities for: {}", file_path.display());
+        debug!(
+            "Analyzing refactoring opportunities for: {}",
+            file_path.display()
+        );
 
         let content = FileReader::read_to_string(file_path)?;
         let file_path_str = file_path.to_string_lossy().to_string();
@@ -174,7 +177,9 @@ impl RefactoringAnalyzer {
 
         let parse_index = adapter.parse_source(&content, &file_path_str)?;
         let cached_tree = self.ast_service.get_ast(&file_path_str, &content).await?;
-        let ast_context = self.ast_service.create_context(&cached_tree, &file_path_str);
+        let ast_context = self
+            .ast_service
+            .create_context(&cached_tree, &file_path_str);
         let entity_summaries =
             self.collect_entity_summaries(&parse_index, &content, &complexity_by_id, &ast_context)?;
 
@@ -207,8 +212,15 @@ impl RefactoringAnalyzer {
         file_path: &str,
         content: &str,
     ) -> HashMap<String, ComplexityAnalysisResult> {
-        match self.complexity_analyzer.analyze_file_with_results(file_path, content).await {
-            Ok(results) => results.into_iter().map(|r| (r.entity_id.clone(), r)).collect(),
+        match self
+            .complexity_analyzer
+            .analyze_file_with_results(file_path, content)
+            .await
+        {
+            Ok(results) => results
+                .into_iter()
+                .map(|r| (r.entity_id.clone(), r))
+                .collect(),
             Err(err) => {
                 warn!("Complexity analysis failed for {}: {}", file_path, err);
                 HashMap::new()
@@ -222,8 +234,16 @@ impl RefactoringAnalyzer {
         entities: &[CodeEntity],
         _content: &str,
     ) -> Vec<RefactoringRecommendation> {
-        let functions: Vec<_> = entities.iter().filter(|e| Self::is_function_entity(e)).cloned().collect();
-        let types: Vec<_> = entities.iter().filter(|e| Self::is_type_entity(e)).cloned().collect();
+        let functions: Vec<_> = entities
+            .iter()
+            .filter(|e| Self::is_function_entity(e))
+            .cloned()
+            .collect();
+        let types: Vec<_> = entities
+            .iter()
+            .filter(|e| Self::is_type_entity(e))
+            .cloned()
+            .collect();
 
         let mut recs = Vec::new();
         recs.extend(self.detect_long_methods(&functions));
@@ -410,11 +430,32 @@ impl RefactoringAnalyzer {
 
     /// Mapping from node kinds to normalized token names.
     const TOKEN_MAPPINGS: [(&'static str, &'static [&'static str]); 6] = [
-        ("IDENT", &["identifier", "field_identifier", "property_identifier",
-                   "shorthand_property_identifier_pattern", "member_expression", "scoped_identifier"]),
+        (
+            "IDENT",
+            &[
+                "identifier",
+                "field_identifier",
+                "property_identifier",
+                "shorthand_property_identifier_pattern",
+                "member_expression",
+                "scoped_identifier",
+            ],
+        ),
         ("TYPE", &["type_identifier", "primitive_type"]),
-        ("STRING", &["string", "string_literal", "raw_string_literal"]),
-        ("NUMBER", &["number", "integer", "float", "decimal_literal", "float_literal"]),
+        (
+            "STRING",
+            &["string", "string_literal", "raw_string_literal"],
+        ),
+        (
+            "NUMBER",
+            &[
+                "number",
+                "integer",
+                "float",
+                "decimal_literal",
+                "float_literal",
+            ],
+        ),
         ("BOOL", &["true", "false"]),
         ("NULL", &["null", "nil"]),
     ];
@@ -470,7 +511,10 @@ impl RefactoringAnalyzer {
                 continue; // Comment node, skip children too
             }
 
-            if matches!(kind, "binary_expression" | "assignment_expression" | "logical_expression") {
+            if matches!(
+                kind,
+                "binary_expression" | "assignment_expression" | "logical_expression"
+            ) {
                 if let Some(op_text) = node
                     .child_by_field_name("operator")
                     .and_then(|op| node_text(op, source))

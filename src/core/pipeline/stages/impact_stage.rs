@@ -7,9 +7,9 @@ use std::path::PathBuf;
 
 use tracing::debug;
 
-use crate::core::pipeline::results::pipeline_results::ImpactAnalysisResults;
-use crate::core::errors::Result;
 use crate::core::dependency::ProjectDependencyAnalysis;
+use crate::core::errors::Result;
+use crate::core::pipeline::results::pipeline_results::ImpactAnalysisResults;
 
 /// Impact analysis stage implementation.
 pub struct ImpactStage;

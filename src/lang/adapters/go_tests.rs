@@ -289,14 +289,29 @@ import (
 
         // Check single-line imports
         assert!(modules.contains(&"fmt"), "Should find 'import \"fmt\"'");
-        assert!(modules.contains(&"path/to/pkg"), "Should find aliased import");
+        assert!(
+            modules.contains(&"path/to/pkg"),
+            "Should find aliased import"
+        );
 
         // Check block imports
         assert!(modules.contains(&"os"), "Should find 'os' in import block");
-        assert!(modules.contains(&"strings"), "Should find 'strings' in import block");
-        assert!(modules.contains(&"github.com/lib/pq"), "Should find blank import");
-        assert!(modules.contains(&"github.com/onsi/ginkgo"), "Should find dot import");
-        assert!(modules.contains(&"my/custom/package"), "Should find custom alias in block");
+        assert!(
+            modules.contains(&"strings"),
+            "Should find 'strings' in import block"
+        );
+        assert!(
+            modules.contains(&"github.com/lib/pq"),
+            "Should find blank import"
+        );
+        assert!(
+            modules.contains(&"github.com/onsi/ginkgo"),
+            "Should find dot import"
+        );
+        assert!(
+            modules.contains(&"my/custom/package"),
+            "Should find custom alias in block"
+        );
 
         // Verify count
         assert_eq!(imports.len(), 7, "Should have 7 imports total");

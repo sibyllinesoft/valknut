@@ -230,7 +230,9 @@ fn handle_attribute_line(trimmed: &str, pending_attrs: &mut Vec<String>) -> Opti
 
 /// Check if pending attributes include test-related markers
 fn has_test_attribute(pending_attrs: &[String]) -> bool {
-    pending_attrs.iter().any(|attr| attr.contains("cfg(test)") || attr.contains("test"))
+    pending_attrs
+        .iter()
+        .any(|attr| attr.contains("cfg(test)") || attr.contains("test"))
 }
 
 /// Process an item line and return the new index if handled
@@ -246,13 +248,30 @@ fn process_item_line(
 ) -> Option<usize> {
     if trimmed.starts_with("mod ") {
         pending_attrs.clear();
-        return Some(handle_module_item(trimmed, lines, index, has_test_attr, issues, path, root));
+        return Some(handle_module_item(
+            trimmed,
+            lines,
+            index,
+            has_test_attr,
+            issues,
+            path,
+            root,
+        ));
     }
 
     if let Some(name) = detect_function_name(trimmed) {
         pending_attrs.clear();
         if !has_test_attr {
-            check_item_docs(lines, index, &name, "undocumented_rust_fn", "Function", issues, path, root);
+            check_item_docs(
+                lines,
+                index,
+                &name,
+                "undocumented_rust_fn",
+                "Function",
+                issues,
+                path,
+                root,
+            );
         }
         return Some(index + 1);
     }
@@ -260,7 +279,16 @@ fn process_item_line(
     if let Some((kind, name)) = detect_type(trimmed) {
         pending_attrs.clear();
         if !has_test_attr {
-            check_item_docs(lines, index, &name, "undocumented_rust_item", kind, issues, path, root);
+            check_item_docs(
+                lines,
+                index,
+                &name,
+                "undocumented_rust_item",
+                kind,
+                issues,
+                path,
+                root,
+            );
         }
         return Some(index + 1);
     }
@@ -287,16 +315,24 @@ fn handle_module_item(
     root: &Path,
 ) -> usize {
     if has_test_attr {
-        return skip_block(lines, index).map(|end| end + 1).unwrap_or(index + 1);
+        return skip_block(lines, index)
+            .map(|end| end + 1)
+            .unwrap_or(index + 1);
     }
     if trimmed.ends_with(';') {
         return index + 1;
     }
     if let Some(name) = extract_identifier(trimmed, "mod") {
         if is_doc_missing(lines, index) {
-            push_issue(issues, path, root, index + 1, Some(&name),
+            push_issue(
+                issues,
+                path,
+                root,
+                index + 1,
+                Some(&name),
                 "undocumented_rust_module",
-                format!("Module '{}' lacks module-level docs", name));
+                format!("Module '{}' lacks module-level docs", name),
+            );
         }
     }
     index + 1
@@ -315,12 +351,26 @@ fn check_item_docs(
 ) {
     if let Some(doc) = extract_comment_text(lines, index) {
         if is_incomplete_doc(&doc) {
-            push_issue(issues, path, root, index + 1, Some(name), category,
-                format!("{} '{}' has incomplete rustdoc", kind, name));
+            push_issue(
+                issues,
+                path,
+                root,
+                index + 1,
+                Some(name),
+                category,
+                format!("{} '{}' has incomplete rustdoc", kind, name),
+            );
         }
     } else {
-        push_issue(issues, path, root, index + 1, Some(name), category,
-            format!("{} '{}' lacks rustdoc", kind, name));
+        push_issue(
+            issues,
+            path,
+            root,
+            index + 1,
+            Some(name),
+            category,
+            format!("{} '{}' lacks rustdoc", kind, name),
+        );
     }
 }
 
@@ -335,14 +385,26 @@ fn check_impl_docs(
 ) {
     if let Some(doc) = extract_comment_text(lines, index) {
         if is_incomplete_doc(&doc) {
-            push_issue(issues, path, root, index + 1, Some(target),
+            push_issue(
+                issues,
+                path,
+                root,
+                index + 1,
+                Some(target),
                 "undocumented_rust_impl",
-                format!("impl block for '{}' has incomplete docs", target));
+                format!("impl block for '{}' has incomplete docs", target),
+            );
         }
     } else {
-        push_issue(issues, path, root, index + 1, Some(target),
+        push_issue(
+            issues,
+            path,
+            root,
+            index + 1,
+            Some(target),
             "undocumented_rust_impl",
-            format!("impl block for '{}' lacks overview docs", target));
+            format!("impl block for '{}' lacks overview docs", target),
+        );
     }
 }
 

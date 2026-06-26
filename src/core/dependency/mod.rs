@@ -41,11 +41,11 @@ use crate::core::errors::Result;
 use crate::core::file_utils::FileReader;
 use crate::lang::{adapter_for_file, EntityKind, ParseIndex, ParsedEntity};
 
+use call_resolution::{select_target, CallIdentifier};
 pub use types::{
     Chokepoint, DependencyMetrics, EntityKey, FunctionNode, ModuleGraph, ModuleGraphEdge,
     ModuleGraphNode,
 };
-use call_resolution::{select_target, CallIdentifier};
 
 /// Results of dependency analysis for a project.
 ///
@@ -277,7 +277,9 @@ fn find_target_for_call<'a>(
         let Some(candidates) = name_lookup.get(candidate_name) else {
             continue;
         };
-        if let Some(target_key) = select_target(candidates.as_slice(), node, nodes, call_id, &candidate_keys) {
+        if let Some(target_key) =
+            select_target(candidates.as_slice(), node, nodes, call_id, &candidate_keys)
+        {
             return Some(target_key);
         }
     }
@@ -325,7 +327,13 @@ fn build_graph(nodes: &HashMap<EntityKey, FunctionNode>) -> (DependencyGraph, In
                 continue;
             };
             if let Some(target_key) = find_target_for_call(&call_id, &name_lookup, node, nodes) {
-                try_add_edge(&mut graph, &index_map, &mut seen_targets, from_index, target_key);
+                try_add_edge(
+                    &mut graph,
+                    &index_map,
+                    &mut seen_targets,
+                    from_index,
+                    target_key,
+                );
             }
         }
     }
@@ -449,7 +457,9 @@ fn extract_multi_node_cycle(
 ) -> Vec<FunctionNode> {
     let mut cycle_nodes = Vec::with_capacity(component.len());
     for &index in component {
-        let Some(key) = graph.node_weight(index) else { continue };
+        let Some(key) = graph.node_weight(index) else {
+            continue;
+        };
         let Some(node) = nodes.get(key) else { continue };
         cycle_nodes.push(node.clone());
         members.insert(key.clone());

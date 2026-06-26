@@ -40,13 +40,8 @@ pub fn compute_doc_health(
     let file_gaps = count_file_gaps(&result);
     let aggregation = aggregate_file_stats(&file_gaps, &audit_cfg, cfg);
     let readme_penalties = result.missing_readmes.len() + result.stale_readmes.len();
-    let (dir_scores, dir_score_map, dir_issue_map) =
-        compute_directory_scores(&aggregation, cfg);
-    let file_health_map = compute_file_health_scores(
-        &file_gaps,
-        analyzed_files,
-        &audit_cfg,
-    );
+    let (dir_scores, dir_score_map, dir_issue_map) = compute_directory_scores(&aggregation, cfg);
+    let file_health_map = compute_file_health_scores(&file_gaps, analyzed_files, &audit_cfg);
     let overall_score = compute_overall_score(
         &dir_scores,
         aggregation.eligible_files + readme_penalties,

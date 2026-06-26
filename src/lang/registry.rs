@@ -234,7 +234,14 @@ mod tests {
 
     #[test]
     fn test_adapter_creation_language_aliases() {
-        for alias in ["python", "javascript", "typescript", "rust", "golang", "cplusplus"] {
+        for alias in [
+            "python",
+            "javascript",
+            "typescript",
+            "rust",
+            "golang",
+            "cplusplus",
+        ] {
             let adapter = adapter_for_language(alias);
             assert!(
                 adapter.is_ok(),
@@ -246,7 +253,9 @@ mod tests {
 
     #[test]
     fn test_extension_support() {
-        for ext in ["py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go", "cpp", "hpp", "cc"] {
+        for ext in [
+            "py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go", "cpp", "hpp", "cc",
+        ] {
             assert!(
                 extension_is_supported(ext),
                 "extension {} should be supported",

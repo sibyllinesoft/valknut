@@ -12,18 +12,42 @@ mod tests;
 
 /// Directories considered part of the source tree
 const SOURCE_DIRECTORIES: &[&str] = &[
-    "src/", "src", "tests/", "tests", "benches/", "benches",
-    "examples/", "examples", "scripts/", "scripts",
-    "vscode-extension/", "vscode-extension",
+    "src/",
+    "src",
+    "tests/",
+    "tests",
+    "benches/",
+    "benches",
+    "examples/",
+    "examples",
+    "scripts/",
+    "scripts",
+    "vscode-extension/",
+    "vscode-extension",
 ];
 
 /// Path prefixes for CSS file lookup
-const CSS_PREFIXES: &[&str] = &["themes/", "./themes/", "templates/", "./templates/", ""];
+const CSS_PREFIXES: &[&str] = &[
+    "themes/",
+    "./themes/",
+    "templates/themes/",
+    "./templates/themes/",
+    "templates/",
+    "./templates/",
+    "",
+];
 
 /// Path prefixes for JavaScript file lookup
 const JS_PREFIXES: &[&str] = &[
-    "templates/assets/dist/", "./templates/assets/dist/",
-    "templates/assets/", "./templates/assets/", "",
+    "templates/dev/src/tree-component/",
+    "./templates/dev/src/tree-component/",
+    "templates/assets/dist/",
+    "./templates/assets/dist/",
+    "templates/assets/src/",
+    "./templates/assets/src/",
+    "templates/assets/",
+    "./templates/assets/",
+    "",
 ];
 
 /// Serialize a value to JSON for template consumption. Returns `Value::Null` on error.
@@ -124,26 +148,33 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
 
     // Helper: determine if a directory path likely belongs to the source tree
     register_string_transform_helper(handlebars, "is_source_directory", |dir_path| {
-        let is_source = SOURCE_DIRECTORIES.iter()
+        let is_source = SOURCE_DIRECTORIES
+            .iter()
             .any(|d| dir_path.starts_with(d) || dir_path == *d);
         is_source.to_string()
     });
 
     // Helper: inline CSS file content
-    register_inline_file_helper(handlebars, InlineFileConfig {
-        name: "inline_css",
-        prefixes: CSS_PREFIXES,
-        fallback: Some(("sibylline.css", super::assets::MINIMAL_SIBYLLINE_CSS)),
-        file_type: "CSS",
-    });
+    register_inline_file_helper(
+        handlebars,
+        InlineFileConfig {
+            name: "inline_css",
+            prefixes: CSS_PREFIXES,
+            fallback: Some(("sibylline.css", super::assets::MINIMAL_SIBYLLINE_CSS)),
+            file_type: "CSS",
+        },
+    );
 
     // Helper: inline JavaScript file content
-    register_inline_file_helper(handlebars, InlineFileConfig {
-        name: "inline_js",
-        prefixes: JS_PREFIXES,
-        fallback: None,
-        file_type: "JavaScript",
-    });
+    register_inline_file_helper(
+        handlebars,
+        InlineFileConfig {
+            name: "inline_js",
+            prefixes: JS_PREFIXES,
+            fallback: None,
+            file_type: "JavaScript",
+        },
+    );
 
     register_logo_data_url_helper(handlebars);
 }
@@ -310,6 +341,8 @@ const LOGO_RELATIVE_PATHS: &[&str] = &[
     "assets/logo.webp",
     "webpage_files/valknut-large.webp",
     "assets/webpage_files/valknut-large.webp",
+    "templates/assets/webpage_files/valknut-large.webp",
+    "docs/webpage_files/valknut-large.webp",
     ".valknut/webpage_files/valknut-large.webp",
 ];
 
@@ -395,8 +428,11 @@ where
 }
 
 /// Register a helper that transforms a single string parameter.
-fn register_string_transform_helper<F>(handlebars: &mut Handlebars<'static>, name: &str, transform: F)
-where
+fn register_string_transform_helper<F>(
+    handlebars: &mut Handlebars<'static>,
+    name: &str,
+    transform: F,
+) where
     F: Fn(&str) -> String + Send + Sync + 'static,
 {
     let helper_name = name.to_string();
@@ -410,7 +446,10 @@ where
                   out: &mut dyn handlebars::Output|
                   -> HelperResult {
                 let value = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new(&format!("{} helper requires a string parameter", helper_name))
+                    RenderError::new(&format!(
+                        "{} helper requires a string parameter",
+                        helper_name
+                    ))
                 })?;
                 out.write(&transform(value))?;
                 Ok(())
@@ -438,7 +477,10 @@ where
                     .param(0)
                     .and_then(|v| v.value().as_array())
                     .ok_or_else(|| {
-                        RenderError::new(&format!("{} helper requires an array parameter", helper_name))
+                        RenderError::new(&format!(
+                            "{} helper requires an array parameter",
+                            helper_name
+                        ))
                     })?;
                 out.write(&compute(array))?;
                 Ok(())
@@ -448,8 +490,11 @@ where
 }
 
 /// Register a helper that maps a numeric value to a string via thresholds.
-fn register_numeric_threshold_helper<F>(handlebars: &mut Handlebars<'static>, name: &str, classify: F)
-where
+fn register_numeric_threshold_helper<F>(
+    handlebars: &mut Handlebars<'static>,
+    name: &str,
+    classify: F,
+) where
     F: Fn(f64) -> &'static str + Send + Sync + 'static,
 {
     let helper_name = name.to_string();
@@ -463,7 +508,10 @@ where
                   out: &mut dyn handlebars::Output|
                   -> HelperResult {
                 let value = h.param(0).and_then(|v| v.value().as_f64()).ok_or_else(|| {
-                    RenderError::new(&format!("{} helper requires a numeric parameter", helper_name))
+                    RenderError::new(&format!(
+                        "{} helper requires a numeric parameter",
+                        helper_name
+                    ))
                 })?;
                 out.write(classify(value))?;
                 Ok(())
@@ -532,7 +580,10 @@ fn register_inline_file_helper(handlebars: &mut Handlebars<'static>, config: Inl
                   out: &mut dyn handlebars::Output|
                   -> HelperResult {
                 let file_path = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
-                    RenderError::new(&format!("{} helper requires a file path parameter", helper_name))
+                    RenderError::new(&format!(
+                        "{} helper requires a file path parameter",
+                        helper_name
+                    ))
                 })?;
 
                 let paths_to_try = build_search_paths(file_path, &prefixes);

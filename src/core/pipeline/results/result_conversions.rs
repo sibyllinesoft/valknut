@@ -4,16 +4,16 @@ use std::time::Duration;
 
 use serde_json::{self, json};
 
-use crate::core::featureset::FeatureVector;
 use super::pipeline_results::DocumentationAnalysisResults;
+use crate::core::featureset::FeatureVector;
 use crate::core::pipeline::{PipelineResults, ResultSummary, StageResultsBundle};
 use crate::core::scoring::{Priority, ScoringResult};
 
+use super::result_types::*;
 use crate::core::pipeline::discovery::code_dictionary::{
     issue_code_for_category, issue_definition_for_category, suggestion_code_for_kind,
     suggestion_definition_for_kind,
 };
-use super::result_types::*;
 use crate::core::pipeline::health::suggestion_generator::generate_suggestions;
 
 /// Hierarchy building and conversion methods for [`AnalysisResults`].
@@ -187,16 +187,28 @@ impl AnalysisResults {
     /// All file paths in the results will be stored relative to this root.
     pub fn from_pipeline_results(pipeline_results: PipelineResults, project_root: PathBuf) -> Self {
         let summary_stats = pipeline_results.summary();
-        let mut refactoring_candidates = Self::build_refactoring_candidates(&pipeline_results, &project_root);
+        let mut refactoring_candidates =
+            Self::build_refactoring_candidates(&pipeline_results, &project_root);
         let (priority_distribution, critical_count, high_priority_count) =
             Self::count_priorities(&pipeline_results.scoring_results.files);
-        let summary = Self::build_summary(&pipeline_results, &summary_stats, critical_count, high_priority_count);
-        let statistics = Self::build_statistics(&pipeline_results, &summary_stats, priority_distribution);
-        let warnings = pipeline_results.errors.iter().map(|e| e.to_string()).collect();
-        let clone_analysis = Self::convert_lsh_to_clone_analysis(&pipeline_results);
-        let coverage_packs = crate::core::pipeline::verification::coverage_mapping::convert_coverage_to_packs(
-            &pipeline_results.results.coverage,
+        let summary = Self::build_summary(
+            &pipeline_results,
+            &summary_stats,
+            critical_count,
+            high_priority_count,
         );
+        let statistics =
+            Self::build_statistics(&pipeline_results, &summary_stats, priority_distribution);
+        let warnings = pipeline_results
+            .errors
+            .iter()
+            .map(|e| e.to_string())
+            .collect();
+        let clone_analysis = Self::convert_lsh_to_clone_analysis(&pipeline_results);
+        let coverage_packs =
+            crate::core::pipeline::verification::coverage_mapping::convert_coverage_to_packs(
+                &pipeline_results.results.coverage,
+            );
 
         crate::core::pipeline::verification::coverage_mapping::annotate_candidates_with_coverage(
             &mut refactoring_candidates,
@@ -272,11 +284,19 @@ impl AnalysisResults {
             .files
             .iter()
             .filter(|r| r.needs_refactoring())
-            .map(|r| RefactoringCandidate::from_scoring_result(r, &pipeline_results.feature_vectors, project_root))
+            .map(|r| {
+                RefactoringCandidate::from_scoring_result(
+                    r,
+                    &pipeline_results.feature_vectors,
+                    project_root,
+                )
+            })
             .collect()
     }
 
-    fn count_priorities(files: &[crate::core::scoring::features::ScoringResult]) -> (HashMap<String, usize>, usize, usize) {
+    fn count_priorities(
+        files: &[crate::core::scoring::features::ScoringResult],
+    ) -> (HashMap<String, usize>, usize, usize) {
         let mut dist = HashMap::new();
         let mut critical = 0;
         let mut high = 0;
@@ -362,12 +382,15 @@ impl AnalysisResults {
             }
         }
         if !coverage_packs.is_empty() {
-            dict.suggestions.entry("ADDTEST".to_string()).or_insert_with(|| CodeDefinition {
-                code: "ADDTEST".to_string(),
-                title: "Add Test Coverage".to_string(),
-                summary: "Write tests to cover this untested code path and improve safety.".to_string(),
-                category: Some("coverage".to_string()),
-            });
+            dict.suggestions
+                .entry("ADDTEST".to_string())
+                .or_insert_with(|| CodeDefinition {
+                    code: "ADDTEST".to_string(),
+                    title: "Add Test Coverage".to_string(),
+                    summary: "Write tests to cover this untested code path and improve safety."
+                        .to_string(),
+                    category: Some("coverage".to_string()),
+                });
         }
         dict
     }
@@ -448,7 +471,6 @@ impl AnalysisResults {
             clone_pairs: lsh_results.clone_pairs.clone(),
         })
     }
-
 
     /// Get the number of files processed
     pub fn files_analyzed(&self) -> usize {
@@ -672,9 +694,7 @@ impl RefactoringCandidate {
         // Fallback to full entity_id
         entity_id.to_string()
     }
-
 }
-
 
 #[cfg(test)]
 #[path = "result_conversions_tests.rs"]

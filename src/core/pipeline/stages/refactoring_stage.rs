@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use futures::future;
 use tracing::{debug, warn};
 
-use crate::core::pipeline::results::pipeline_results::RefactoringAnalysisResults;
 use crate::core::errors::Result;
+use crate::core::pipeline::results::pipeline_results::RefactoringAnalysisResults;
 use crate::detectors::refactoring::RefactoringAnalyzer;
 
 /// Refactoring analysis stage implementation.
@@ -20,7 +20,9 @@ pub struct RefactoringStage<'a> {
 impl<'a> RefactoringStage<'a> {
     /// Create a new refactoring stage with the given analyzer.
     pub fn new(refactoring_analyzer: &'a RefactoringAnalyzer) -> Self {
-        Self { refactoring_analyzer }
+        Self {
+            refactoring_analyzer,
+        }
     }
 
     /// Run refactoring analysis on the given files.

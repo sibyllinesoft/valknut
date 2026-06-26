@@ -7,10 +7,10 @@ use std::path::Path;
 
 use tracing::{debug, info, warn};
 
-use crate::core::pipeline::results::pipeline_results::{CoverageAnalysisResults, CoverageFileInfo};
 use crate::core::config::CoverageConfig;
 use crate::core::errors::Result;
 use crate::core::file_utils::{CoverageDiscovery, CoverageFile, CoverageFormat};
+use crate::core::pipeline::results::pipeline_results::{CoverageAnalysisResults, CoverageFileInfo};
 use crate::detectors::coverage::CoverageExtractor;
 
 /// Coverage analysis stage implementation.
@@ -45,7 +45,8 @@ impl<'a> CoverageStage<'a> {
 
         let gaps_count = self.analyze_coverage_gaps(&discovered_files).await?;
         let coverage_packs = self.build_all_coverage_packs(&discovered_files).await?;
-        let overall_coverage_percentage = self.calculate_overall_coverage(&discovered_files).await?;
+        let overall_coverage_percentage =
+            self.calculate_overall_coverage(&discovered_files).await?;
 
         Ok(CoverageAnalysisResults {
             enabled: true,
@@ -284,9 +285,9 @@ impl<'a> CoverageStage<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::sync::Arc;
     use tempfile::tempdir;
-    use std::fs;
 
     use crate::core::ast_service::AstService;
     use crate::detectors::coverage::CoverageConfig as CoverageDetectorConfig;

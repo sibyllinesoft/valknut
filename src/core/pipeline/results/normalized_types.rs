@@ -6,8 +6,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::core::scoring::Priority;
 use super::result_types::CodeDictionary;
+use crate::core::scoring::Priority;
 
 /// Simplified normalized issue used for report compatibility
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

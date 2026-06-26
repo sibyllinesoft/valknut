@@ -22,13 +22,13 @@ use crate::cli::args::OutputFormat;
 use valknut_rs::api::results::AnalysisResults;
 
 // Re-export public items from submodules
+pub use csv_export::{generate_ci_summary_report, generate_csv_report};
 pub use display::{
     display_analysis_results, display_completion_summary, display_complexity_recommendations,
     display_file_complexity_recommendations, display_refactoring_suggestions,
     display_top_structure_issues, print_comprehensive_results_pretty, print_human_readable_results,
 };
 pub use helpers::format_to_string;
-pub use csv_export::{generate_ci_summary_report, generate_csv_report};
 pub use html_report::generate_html_report;
 pub use markdown_report::generate_markdown_report;
 pub use sonar::generate_sonar_report;
@@ -104,8 +104,12 @@ async fn write_data_format(
 
     match format {
         OutputFormat::Jsonl => write_jsonl(result, out_path).await,
-        OutputFormat::Json => write_json(&generator, analysis_results.as_ref(), result, out_path).await,
-        OutputFormat::Yaml => write_yaml(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Json => {
+            write_json(&generator, analysis_results.as_ref(), result, out_path).await
+        }
+        OutputFormat::Yaml => {
+            write_yaml(&generator, analysis_results.as_ref(), result, out_path).await
+        }
         _ => unreachable!(),
     }
 }
@@ -120,8 +124,12 @@ async fn write_rich_report(
     let generator = build_report_generator()?;
 
     match format {
-        OutputFormat::Markdown => write_markdown(&generator, analysis_results.as_ref(), result, out_path).await,
-        OutputFormat::Html => write_html(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Markdown => {
+            write_markdown(&generator, analysis_results.as_ref(), result, out_path).await
+        }
+        OutputFormat::Html => {
+            write_html(&generator, analysis_results.as_ref(), result, out_path).await
+        }
         _ => unreachable!(),
     }
 }
@@ -136,8 +144,12 @@ async fn write_integration_format(
     let generator = build_report_generator()?;
 
     match format {
-        OutputFormat::Sonar => write_sonar(&generator, analysis_results.as_ref(), result, out_path).await,
-        OutputFormat::Csv => write_csv(&generator, analysis_results.as_ref(), result, out_path).await,
+        OutputFormat::Sonar => {
+            write_sonar(&generator, analysis_results.as_ref(), result, out_path).await
+        }
+        OutputFormat::Csv => {
+            write_csv(&generator, analysis_results.as_ref(), result, out_path).await
+        }
         OutputFormat::CiSummary => write_ci_summary(result, out_path).await,
         _ => unreachable!(),
     }

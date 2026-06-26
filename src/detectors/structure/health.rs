@@ -166,7 +166,11 @@ mod tests {
     fn test_lognormal_cdf_at_mode() {
         // At the mode, CDF should be less than 0.5 (mode < median for lognormal)
         let cdf = lognormal_cdf(200, 200, 800);
-        assert!(cdf > 0.0 && cdf < 0.5, "CDF at mode should be < 0.5, got {}", cdf);
+        assert!(
+            cdf > 0.0 && cdf < 0.5,
+            "CDF at mode should be < 0.5, got {}",
+            cdf
+        );
     }
 
     #[test]
@@ -196,7 +200,11 @@ mod tests {
     fn test_logistic_health_shape() {
         // Below center: health should be high (close to 1)
         let health_low = logistic_health(0.5, 0.90, 0.05);
-        assert!(health_low > 0.95, "Health well below center should be ~1, got {}", health_low);
+        assert!(
+            health_low > 0.95,
+            "Health well below center should be ~1, got {}",
+            health_low
+        );
 
         // At center: health should be 0.5
         let health_center = logistic_health(0.90, 0.90, 0.05);
@@ -208,8 +216,15 @@ mod tests {
 
         // Above center: health should decrease
         let health_high = logistic_health(0.99, 0.90, 0.05);
-        assert!(health_high < 0.2, "Health above center should be low, got {}", health_high);
-        assert!(health_high > 0.0, "Health should still be positive in the tail");
+        assert!(
+            health_high < 0.2,
+            "Health above center should be low, got {}",
+            health_high
+        );
+        assert!(
+            health_high > 0.0,
+            "Health should still be positive in the tail"
+        );
 
         // Verify monotonic decrease
         let health_95 = logistic_health(0.95, 0.90, 0.05);
@@ -226,11 +241,19 @@ mod tests {
 
         // Small function should be healthy
         let health_small = scorer.score_function(100);
-        assert!(health_small.health > 0.9, "Small function should be healthy, got {}", health_small.health);
+        assert!(
+            health_small.health > 0.9,
+            "Small function should be healthy, got {}",
+            health_small.health
+        );
 
         // Large function should be unhealthy
         let health_large = scorer.score_function(2000);
-        assert!(health_large.health < 0.3, "Large function should be unhealthy, got {}", health_large.health);
+        assert!(
+            health_large.health < 0.3,
+            "Large function should be unhealthy, got {}",
+            health_large.health
+        );
 
         // Health should be between 0 and 1
         assert!(health_small.health >= 0.0 && health_small.health <= 1.0);
@@ -244,11 +267,19 @@ mod tests {
 
         // Small class should be healthy
         let health_small = scorer.score_class(300);
-        assert!(health_small.health > 0.9, "Small class should be healthy, got {}", health_small.health);
+        assert!(
+            health_small.health > 0.9,
+            "Small class should be healthy, got {}",
+            health_small.health
+        );
 
         // Large class should be unhealthy
         let health_large = scorer.score_class(5000);
-        assert!(health_large.health < 0.3, "Large class should be unhealthy, got {}", health_large.health);
+        assert!(
+            health_large.health < 0.3,
+            "Large class should be unhealthy, got {}",
+            health_large.health
+        );
     }
 
     #[test]
@@ -258,11 +289,19 @@ mod tests {
 
         // Small file should be healthy
         let health_small = scorer.score_file(1000);
-        assert!(health_small.health > 0.9, "Small file should be healthy, got {}", health_small.health);
+        assert!(
+            health_small.health > 0.9,
+            "Small file should be healthy, got {}",
+            health_small.health
+        );
 
         // Large file should be unhealthy
         let health_large = scorer.score_file(10000);
-        assert!(health_large.health < 0.3, "Large file should be unhealthy, got {}", health_large.health);
+        assert!(
+            health_large.health < 0.3,
+            "Large file should be unhealthy, got {}",
+            health_large.health
+        );
     }
 
     #[test]

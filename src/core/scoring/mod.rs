@@ -10,4 +10,6 @@ pub mod features;
 
 // Re-export main types
 pub use bayesian::{BayesianNormalizer, FeaturePrior, FeatureStatistics, VarianceConfidence};
-pub use features::{FeatureNormalizer, FeatureScorer, NormalizationStatistics, Priority, ScoringResult};
+pub use features::{
+    FeatureNormalizer, FeatureScorer, NormalizationStatistics, Priority, ScoringResult,
+};

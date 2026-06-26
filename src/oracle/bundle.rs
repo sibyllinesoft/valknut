@@ -11,8 +11,8 @@ use walkdir::WalkDir;
 
 use super::condense::{condense_analysis_results_with_budget, get_json_schema_instructions};
 use super::helpers::{
-    build_refactor_hints, calculate_file_priority, html_escape, is_test_file, normalize_path_for_key,
-    truncate_hint, FileCandidate,
+    build_refactor_hints, calculate_file_priority, html_escape, is_test_file,
+    normalize_path_for_key, truncate_hint, FileCandidate,
 };
 use super::types::OracleConfig;
 
@@ -21,7 +21,14 @@ pub const VALKNUT_OUTPUT_TOKEN_BUDGET: usize = 70_000;
 
 /// Directories to skip when walking the project tree
 pub const SKIP_DIRS: &[&str] = &[
-    "target", "node_modules", "__pycache__", "dist", "build", "coverage", "tmp", "temp",
+    "target",
+    "node_modules",
+    "__pycache__",
+    "dist",
+    "build",
+    "coverage",
+    "tmp",
+    "temp",
 ];
 
 /// Source file extensions to include in codebase bundles
@@ -59,7 +66,12 @@ impl<'a> BundleBuilder<'a> {
         let refactor_hints = build_refactor_hints(analysis_results, project_path);
 
         // First, find README at root level
-        self.include_readme(project_path, &mut xml_files, &mut total_tokens, &mut files_included);
+        self.include_readme(
+            project_path,
+            &mut xml_files,
+            &mut total_tokens,
+            &mut files_included,
+        );
 
         // Collect and prioritize source files
         let candidate_files = self.collect_candidate_files(project_path)?;
@@ -388,10 +400,7 @@ pub fn create_slice_bundle(
 }
 
 /// Condense analysis results for files in a specific slice.
-pub fn condense_analysis_for_slice(
-    results: &AnalysisResults,
-    slice: &CodeSlice,
-) -> Result<String> {
+pub fn condense_analysis_for_slice(results: &AnalysisResults, slice: &CodeSlice) -> Result<String> {
     let slice_files: HashSet<_> = slice
         .files
         .iter()
@@ -408,7 +417,8 @@ pub fn condense_analysis_for_slice(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            slice_files.contains(&c.file_path) || slice_files.iter().any(|sf| sf.ends_with(&relative))
+            slice_files.contains(&c.file_path)
+                || slice_files.iter().any(|sf| sf.ends_with(&relative))
         })
         .take(10)
         .collect();

@@ -363,7 +363,6 @@ impl DenoiseConfig {
     }
 }
 
-
 /// Ranking criteria for duplicates
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

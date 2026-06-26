@@ -9,16 +9,16 @@ use std::sync::Arc;
 
 use tracing::{debug, info, warn};
 
+use crate::core::ast_service::{AstService, CachedTree};
+use crate::core::config::ValknutConfig;
+use crate::core::errors::Result;
+use crate::core::featureset::{CodeEntity, ExtractionContext};
+use crate::core::pipeline::results::pipeline_results::LshAnalysisResults;
 use crate::core::pipeline::verification::clone_detection::{
     compute_apted_limit, compute_apted_verification, filter_small_pairs, log_partition_stats,
     ordered_pair_key, serialize_clone_pairs, should_skip_small_pair, CachedSimpleAst,
     CloneDetectionStats, CloneEndpoint, ClonePairReport, LshDetectionParams, LshEntityCollection,
 };
-use crate::core::pipeline::results::pipeline_results::LshAnalysisResults;
-use crate::core::ast_service::{AstService, CachedTree};
-use crate::core::config::ValknutConfig;
-use crate::core::errors::Result;
-use crate::core::featureset::{CodeEntity, ExtractionContext};
 use crate::detectors::graph::SimilarityCliquePartitioner;
 use crate::detectors::lsh::{LshExtractor, LshSimilarityContext};
 
@@ -62,11 +62,7 @@ impl<'a> LshStage<'a> {
         let apted_limit = compute_apted_limit(lsh_settings);
 
         let collection = self
-            .collect_entities_for_lsh(
-                files,
-                verify_with_apted,
-                MAX_ENTITIES_PER_FILE_FOR_LSH,
-            )
+            .collect_entities_for_lsh(files, verify_with_apted, MAX_ENTITIES_PER_FILE_FOR_LSH)
             .await;
 
         let LshEntityCollection {
@@ -99,7 +95,10 @@ impl<'a> LshStage<'a> {
 
         let candidate_limit = self.lsh_extractor.max_candidates();
         let min_ast_nodes = self.lsh_extractor.min_ast_nodes_threshold().unwrap_or(0);
-        info!(min_ast_nodes, "LSH clone pair filter min_ast_nodes threshold");
+        info!(
+            min_ast_nodes,
+            "LSH clone pair filter min_ast_nodes threshold"
+        );
 
         let lsh_threshold = self.lsh_extractor.similarity_threshold();
 
@@ -180,7 +179,9 @@ impl<'a> LshStage<'a> {
                 stats.record_similarity(similarity);
 
                 let apted_allowed = params.verify_with_apted
-                    && params.apted_limit.map_or(true, |limit| apted_evaluated < limit);
+                    && params
+                        .apted_limit
+                        .map_or(true, |limit| apted_evaluated < limit);
 
                 let verification_detail = if apted_allowed {
                     stats.apted_pairs_requested += 1;
@@ -198,7 +199,12 @@ impl<'a> LshStage<'a> {
                     None
                 };
 
-                if should_skip_small_pair(&verification_detail, params.min_ast_nodes, entity, candidate_entity) {
+                if should_skip_small_pair(
+                    &verification_detail,
+                    params.min_ast_nodes,
+                    entity,
+                    candidate_entity,
+                ) {
                     continue;
                 }
 
@@ -251,7 +257,9 @@ impl<'a> LshStage<'a> {
             }
 
             // Extract entities from the file
-            let Some(extracted_entities) = self.extract_entities_from_file(file_path, &content).await else {
+            let Some(extracted_entities) =
+                self.extract_entities_from_file(file_path, &content).await
+            else {
                 continue;
             };
 
@@ -266,7 +274,8 @@ impl<'a> LshStage<'a> {
 
             // Filter entities through LSH thresholds
             for entity in extracted_entities {
-                if !self.lsh_extractor
+                if !self
+                    .lsh_extractor
                     .entity_passes_thresholds(&entity)
                     .await
                     .unwrap_or(false)
@@ -274,7 +283,9 @@ impl<'a> LshStage<'a> {
                     continue;
                 }
 
-                collection.entity_index.insert(entity.id.clone(), entity.clone());
+                collection
+                    .entity_index
+                    .insert(entity.id.clone(), entity.clone());
                 collection.entities.push(entity);
             }
         }

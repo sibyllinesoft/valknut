@@ -29,8 +29,8 @@ pub mod metrics;
 pub mod symbols;
 
 pub use config::*;
-pub use extractor::CohesionEntity;
 use embeddings::EmbeddingProvider;
+pub use extractor::CohesionEntity;
 use metrics::CohesionCalculator;
 
 /// Results from cohesion analysis
@@ -233,7 +233,10 @@ impl CohesionExtractor {
             return Ok(CohesionAnalysisResults::default());
         }
 
-        info!("Starting cohesion analysis for {} files", file_sources.len());
+        info!(
+            "Starting cohesion analysis for {} files",
+            file_sources.len()
+        );
         self.ensure_embedding_provider()?;
 
         let embedding_provider = self.embedding_provider.as_ref().unwrap();
@@ -264,7 +267,13 @@ impl CohesionExtractor {
                 continue;
             };
 
-            self.aggregate_to_folders(path, &rollup, entities.len(), &mut folder_rollups, dimension);
+            self.aggregate_to_folders(
+                path,
+                &rollup,
+                entities.len(),
+                &mut folder_rollups,
+                dimension,
+            );
             file_scores.insert(path.clone(), score);
             all_issues.extend(issues);
         }
@@ -339,14 +348,15 @@ impl CohesionExtractor {
         // Calculate centroid of code embeddings
         let code_centroid = self.calculator.robust_centroid(code_embeddings)?;
 
-        Some(self.calculator.doc_alignment(&doc_embedding, &code_centroid))
+        Some(
+            self.calculator
+                .doc_alignment(&doc_embedding, &code_centroid),
+        )
     }
 
     /// Detect language from file extension
     fn detect_language(&self, path: &Path) -> Option<String> {
-        const SUPPORTED_LANGUAGES: &[&str] = &[
-            "python", "rust", "javascript", "typescript", "go",
-        ];
+        const SUPPORTED_LANGUAGES: &[&str] = &["python", "rust", "javascript", "typescript", "go"];
         let lang = detect_language_from_path(&path.to_string_lossy());
         if SUPPORTED_LANGUAGES.contains(&lang.as_str()) {
             Some(lang)
@@ -393,7 +403,10 @@ impl CohesionExtractor {
 
     /// Collect all symbols from an entity for TF-IDF processing.
     fn collect_entity_symbols(entity: &extractor::CohesionEntity) -> Vec<String> {
-        entity.symbols.name_tokens.iter()
+        entity
+            .symbols
+            .name_tokens
+            .iter()
             .chain(entity.symbols.signature_tokens.iter())
             .chain(entity.symbols.referenced_symbols.iter())
             .cloned()
@@ -432,14 +445,24 @@ impl CohesionExtractor {
     fn extract_entities_and_build_corpus(
         &self,
         file_sources: &[(PathBuf, String)],
-    ) -> (HashMap<PathBuf, Vec<extractor::CohesionEntity>>, symbols::TfIdfCalculator) {
+    ) -> (
+        HashMap<PathBuf, Vec<extractor::CohesionEntity>>,
+        symbols::TfIdfCalculator,
+    ) {
         let mut tfidf = symbols::TfIdfCalculator::new(self.config.symbols.clone());
-        let mut all_file_entities: HashMap<PathBuf, Vec<extractor::CohesionEntity>> = HashMap::new();
+        let mut all_file_entities: HashMap<PathBuf, Vec<extractor::CohesionEntity>> =
+            HashMap::new();
 
         for (path, source) in file_sources {
-            let Some(lang) = self.detect_language(path) else { continue };
-            let Ok(mut entity_extractor) = extractor::CohesionEntityExtractor::new(&lang) else { continue };
-            let Ok(entities) = entity_extractor.extract_entities(source, path) else { continue };
+            let Some(lang) = self.detect_language(path) else {
+                continue;
+            };
+            let Ok(mut entity_extractor) = extractor::CohesionEntityExtractor::new(&lang) else {
+                continue;
+            };
+            let Ok(entities) = entity_extractor.extract_entities(source, path) else {
+                continue;
+            };
 
             for entity in &entities {
                 tfidf.add_document(&Self::collect_entity_symbols(entity));

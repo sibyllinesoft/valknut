@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use futures::future;
 use tracing::{debug, warn};
 
-use crate::core::pipeline::results::pipeline_results::ComplexityAnalysisResults;
 use crate::core::arena_analysis::ArenaAnalysisResult;
 use crate::core::errors::Result;
+use crate::core::pipeline::results::pipeline_results::ComplexityAnalysisResults;
 use crate::detectors::complexity::{AstComplexityAnalyzer, ComplexityAnalysisResult};
 
 /// Complexity analysis stage implementation.
@@ -45,9 +45,11 @@ impl ComplexityStage {
 
             tokio::spawn(async move {
                 match tokio::fs::read_to_string(&file_path).await {
-                    Ok(source) => analyzer
-                        .analyze_file_with_results(&file_path_str, &source)
-                        .await,
+                    Ok(source) => {
+                        analyzer
+                            .analyze_file_with_results(&file_path_str, &source)
+                            .await
+                    }
                     Err(e) => {
                         warn!(
                             "Could not read file for complexity analysis {}: {}",

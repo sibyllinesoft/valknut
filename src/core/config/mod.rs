@@ -764,12 +764,24 @@ pub struct CoverageScoringWeights {
 }
 
 impl CoverageScoringWeights {
-    fn default_size() -> f64 { 0.40 }
-    fn default_complexity() -> f64 { 0.20 }
-    fn default_fan_in() -> f64 { 0.15 }
-    fn default_exports() -> f64 { 0.10 }
-    fn default_centrality() -> f64 { 0.10 }
-    fn default_docs() -> f64 { 0.05 }
+    fn default_size() -> f64 {
+        0.40
+    }
+    fn default_complexity() -> f64 {
+        0.20
+    }
+    fn default_fan_in() -> f64 {
+        0.15
+    }
+    fn default_exports() -> f64 {
+        0.10
+    }
+    fn default_centrality() -> f64 {
+        0.10
+    }
+    fn default_docs() -> f64 {
+        0.05
+    }
 }
 
 impl Default for CoverageScoringWeights {
@@ -848,11 +860,21 @@ pub struct CoverageConfig {
 
 /// Default value helpers for [`CoverageConfig`].
 impl CoverageConfig {
-    fn default_max_gaps_per_file() -> usize { 5 }
-    fn default_min_gap_loc() -> usize { 3 }
-    fn default_snippet_context_lines() -> usize { 5 }
-    fn default_long_gap_head_tail() -> usize { 2 }
-    fn default_target_repo_gain() -> f64 { 0.02 }
+    fn default_max_gaps_per_file() -> usize {
+        5
+    }
+    fn default_min_gap_loc() -> usize {
+        3
+    }
+    fn default_snippet_context_lines() -> usize {
+        5
+    }
+    fn default_long_gap_head_tail() -> usize {
+        2
+    }
+    fn default_target_repo_gain() -> f64 {
+        0.02
+    }
 }
 
 /// Default implementation for [`CoverageConfig`].

@@ -110,7 +110,8 @@ pub fn build_simple_ast_recursive(
             break;
         }
         if let Some(child) = node.named_child(i) {
-            let (child_ast, child_truncated) = build_simple_ast_recursive(child, max_nodes, counter);
+            let (child_ast, child_truncated) =
+                build_simple_ast_recursive(child, max_nodes, counter);
             simple.node_count += child_ast.node_count;
             simple.children.push(child_ast);
             if child_truncated {

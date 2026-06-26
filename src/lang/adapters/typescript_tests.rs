@@ -1,10 +1,7 @@
 use super::*;
 use serde_json::Value;
 
-fn find_node_by_kind<'a>(
-    node: tree_sitter::Node<'a>,
-    kind: &str,
-) -> Option<tree_sitter::Node<'a>> {
+fn find_node_by_kind<'a>(node: tree_sitter::Node<'a>, kind: &str) -> Option<tree_sitter::Node<'a>> {
     if node.kind() == kind {
         return Some(node);
     }

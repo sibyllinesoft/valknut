@@ -1,5 +1,5 @@
-use super::*;
 use super::module_resolver::path_to_rust_module;
+use super::*;
 use std::fs;
 use tempfile::TempDir;
 

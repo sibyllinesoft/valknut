@@ -19,8 +19,13 @@ pub const LOW_PRIORITY_PATTERNS: &[&str] = &["core", "engine"];
 
 /// Extension priority boosts (extension, boost amount)
 pub const EXTENSION_PRIORITIES: &[(&str, f32)] = &[
-    ("rs", 2.0), ("py", 1.5), ("js", 1.5), ("ts", 1.5),
-    ("go", 1.0), ("java", 1.0), ("cpp", 1.0),
+    ("rs", 2.0),
+    ("py", 1.5),
+    ("js", 1.5),
+    ("ts", 1.5),
+    ("go", 1.0),
+    ("java", 1.0),
+    ("cpp", 1.0),
 ];
 
 /// Penalty patterns for low-value files
@@ -120,7 +125,10 @@ pub fn calculate_file_priority(path: &str, extension: &str, size: usize) -> f32 
     }
 
     // Language-specific priority adjustments using const array
-    if let Some((_, boost)) = EXTENSION_PRIORITIES.iter().find(|(ext, _)| *ext == extension) {
+    if let Some((_, boost)) = EXTENSION_PRIORITIES
+        .iter()
+        .find(|(ext, _)| *ext == extension)
+    {
         priority += boost;
     }
 
@@ -164,7 +172,11 @@ pub fn task_priority_score(task: &RefactoringTask) -> f64 {
         _ => 0.75,
     };
 
-    let required_bonus = if task.required.unwrap_or(false) { 1.5 } else { 1.0 };
+    let required_bonus = if task.required.unwrap_or(false) {
+        1.5
+    } else {
+        1.0
+    };
 
     impact_score * effort_penalty * required_bonus
 }

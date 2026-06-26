@@ -3,14 +3,16 @@
 //! This module handles codebase partitioning and sliced analysis for large codebases.
 
 use crate::core::errors::{Result, ValknutError, ValknutResultExt};
-use crate::core::partitioning::{CodeSlice, ImportGraphPartitioner, PartitionConfig, PartitionResult};
+use crate::core::partitioning::{
+    CodeSlice, ImportGraphPartitioner, PartitionConfig, PartitionResult,
+};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use super::bundle::{SKIP_DIRS, SOURCE_EXTENSIONS};
+use super::gemini::SliceAnalysisResult;
 use super::helpers::{is_test_file, task_priority_score};
 use super::types::{CodebaseAssessment, OracleConfig, RefactoringOracleResponse, RefactoringTask};
-use super::gemini::SliceAnalysisResult;
 
 /// Dry-run mode: show slicing plan without calling the API.
 pub fn dry_run(config: &OracleConfig, project_path: &Path) -> Result<()> {
@@ -27,14 +29,8 @@ pub fn dry_run(config: &OracleConfig, project_path: &Path) -> Result<()> {
     println!("\n🔍 [ORACLE DRY-RUN] Codebase Analysis");
     println!("   📁 Total source files: {}", files.len());
     println!("   📊 Estimated tokens: {}", total_tokens);
-    println!(
-        "   🎯 Slicing threshold: {}",
-        config.slicing_threshold
-    );
-    println!(
-        "   💰 Slice token budget: {}",
-        config.slice_token_budget
-    );
+    println!("   🎯 Slicing threshold: {}", config.slicing_threshold);
+    println!("   💰 Slice token budget: {}", config.slice_token_budget);
 
     if !config.enable_slicing {
         println!("\n⚠️  Slicing is disabled. Would analyze as single bundle.");
@@ -49,8 +45,7 @@ pub fn dry_run(config: &OracleConfig, project_path: &Path) -> Result<()> {
     println!("\n✂️  Would use sliced analysis. Partitioning codebase...\n");
 
     // Partition the codebase
-    let partition_config = PartitionConfig::default()
-        .with_token_budget(config.slice_token_budget);
+    let partition_config = PartitionConfig::default().with_token_budget(config.slice_token_budget);
     let partitioner = ImportGraphPartitioner::new(partition_config);
     let partition_result = partitioner.partition(project_path, &files)?;
 
@@ -60,9 +55,7 @@ pub fn dry_run(config: &OracleConfig, project_path: &Path) -> Result<()> {
     // Print each slice
     print_slice_details(&partition_result);
 
-    println!(
-        "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    );
+    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!(
         "✅ Dry-run complete. {} slices would be sent to the API.",
         partition_result.slices.len()
@@ -78,9 +71,15 @@ fn print_partition_stats(partition_result: &PartitionResult) {
     println!("📊 Partition Statistics:");
     println!("   - Total files: {}", partition_result.stats.total_files);
     println!("   - Total tokens: {}", partition_result.stats.total_tokens);
-    println!("   - Slices created: {}", partition_result.stats.slice_count);
+    println!(
+        "   - Slices created: {}",
+        partition_result.stats.slice_count
+    );
     println!("   - SCCs found: {}", partition_result.stats.scc_count);
-    println!("   - Largest SCC: {} files", partition_result.stats.largest_scc);
+    println!(
+        "   - Largest SCC: {} files",
+        partition_result.stats.largest_scc
+    );
     println!(
         "   - Cross-slice imports: {}",
         partition_result.stats.cross_slice_imports
@@ -102,9 +101,7 @@ fn print_slice_details(partition_result: &PartitionResult) {
             .primary_module
             .clone()
             .unwrap_or_else(|| format!("slice_{}", slice.id));
-        println!(
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        );
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!(
             "📦 Slice {} - {} ({} files, ~{} tokens)",
             slice.id,
@@ -114,11 +111,7 @@ fn print_slice_details(partition_result: &PartitionResult) {
         );
         println!("   Files:");
         for (i, file) in slice.files.iter().enumerate() {
-            let tokens = slice
-                .contents
-                .get(file)
-                .map(|c| c.len() / 4)
-                .unwrap_or(0);
+            let tokens = slice.contents.get(file).map(|c| c.len() / 4).unwrap_or(0);
             if i < 20 {
                 println!("     - {} (~{} tokens)", file.display(), tokens);
             } else if i == 20 {
@@ -132,10 +125,7 @@ fn print_slice_details(partition_result: &PartitionResult) {
                 println!("     - {}", dep.display());
             }
             if slice.bridge_dependencies.len() > 5 {
-                println!(
-                    "     ... and {} more",
-                    slice.bridge_dependencies.len() - 5
-                );
+                println!("     ... and {} more", slice.bridge_dependencies.len() - 5);
             }
         }
     }
@@ -187,8 +177,7 @@ pub fn partition_codebase(
     project_path: &Path,
     files: &[PathBuf],
 ) -> Result<PartitionResult> {
-    let partition_config =
-        PartitionConfig::default().with_token_budget(config.slice_token_budget);
+    let partition_config = PartitionConfig::default().with_token_budget(config.slice_token_budget);
     let partitioner = ImportGraphPartitioner::new(partition_config);
 
     println!("\n🔪 [ORACLE] Partitioning codebase...");
@@ -197,10 +186,7 @@ pub fn partition_codebase(
     println!("   📊 Partition stats:");
     println!("      - Slices created: {}", result.stats.slice_count);
     println!("      - SCCs found: {}", result.stats.scc_count);
-    println!(
-        "      - Largest SCC: {} files",
-        result.stats.largest_scc
-    );
+    println!("      - Largest SCC: {} files", result.stats.largest_scc);
 
     Ok(result)
 }
@@ -221,18 +207,27 @@ pub fn print_slice_info(slice: &CodeSlice, current: usize, total: usize) {
 
 /// Get the module prefix for a slice result.
 fn get_module_prefix(result: &SliceAnalysisResult) -> String {
-    result.primary_module.clone().unwrap_or_else(|| format!("slice_{}", result.slice_id))
+    result
+        .primary_module
+        .clone()
+        .unwrap_or_else(|| format!("slice_{}", result.slice_id))
 }
 
 /// Aggregate assessment data from all slice results.
-fn aggregate_assessments(results: &[SliceAnalysisResult]) -> (Vec<String>, Vec<String>, Vec<String>) {
+fn aggregate_assessments(
+    results: &[SliceAnalysisResult],
+) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut summaries = Vec::new();
     let mut strengths = Vec::new();
     let mut issues = Vec::new();
 
     for result in results {
         let prefix = get_module_prefix(result);
-        summaries.push(format!("[{}] {}", prefix, result.response.assessment.get_summary()));
+        summaries.push(format!(
+            "[{}] {}",
+            prefix,
+            result.response.assessment.get_summary()
+        ));
 
         for s in &result.response.assessment.strengths {
             strengths.push(format!("[{}] {}", prefix, s));
@@ -278,7 +273,9 @@ pub fn aggregate_slice_results(
     _project_path: &Path,
 ) -> Result<RefactoringOracleResponse> {
     if slice_results.is_empty() {
-        return Err(ValknutError::internal("No slice results to aggregate".to_string()));
+        return Err(ValknutError::internal(
+            "No slice results to aggregate".to_string(),
+        ));
     }
 
     if slice_results.len() == 1 {
@@ -290,7 +287,11 @@ pub fn aggregate_slice_results(
 
     Ok(RefactoringOracleResponse {
         assessment: CodebaseAssessment {
-            summary: Some(format!("Aggregated from {} slices. {}", slice_results.len(), summaries.join(" "))),
+            summary: Some(format!(
+                "Aggregated from {} slices. {}",
+                slice_results.len(),
+                summaries.join(" ")
+            )),
             architectural_narrative: None,
             architectural_style: None,
             strengths: strengths.into_iter().take(5).collect(),

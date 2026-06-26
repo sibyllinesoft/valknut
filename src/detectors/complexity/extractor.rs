@@ -205,18 +205,20 @@ fn aggregate_metrics_into_features(
 
 /// Ensure a lines_of_code value exists, computing from entity if needed.
 fn ensure_loc_value(features: &mut HashMap<String, f64>, entity: &CodeEntity) {
-    features.entry("lines_of_code".to_string()).or_insert_with(|| {
-        entity
-            .line_range
-            .map(|(start, end)| {
-                if end >= start {
-                    (end - start + 1) as f64
-                } else {
-                    entity.line_count() as f64
-                }
-            })
-            .unwrap_or_else(|| entity.line_count() as f64)
-    });
+    features
+        .entry("lines_of_code".to_string())
+        .or_insert_with(|| {
+            entity
+                .line_range
+                .map(|(start, end)| {
+                    if end >= start {
+                        (end - start + 1) as f64
+                    } else {
+                        entity.line_count() as f64
+                    }
+                })
+                .unwrap_or_else(|| entity.line_count() as f64)
+        });
 }
 
 /// Compute line range from a complexity analysis result.
@@ -226,5 +228,3 @@ fn result_line_range(result: &ComplexityAnalysisResult) -> (usize, usize) {
     let end = start + span.saturating_sub(1);
     (start, end)
 }
-
-

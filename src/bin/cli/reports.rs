@@ -23,8 +23,8 @@ pub fn write_json_streaming(
     result: &AnalysisResults,
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
 ) -> anyhow::Result<()> {
-    let file = File::create(path)
-        .map_err(|e| anyhow::anyhow!("Failed to create JSON file: {}", e))?;
+    let file =
+        File::create(path).map_err(|e| anyhow::anyhow!("Failed to create JSON file: {}", e))?;
     let writer = BufWriter::new(file);
 
     let combined = match oracle_response {
@@ -48,14 +48,12 @@ pub fn generate_json_content(result: &AnalysisResults) -> anyhow::Result<String>
 
 /// Generate JSONL report content.
 pub fn generate_jsonl_content(result: &AnalysisResults) -> anyhow::Result<String> {
-    serde_json::to_string(result)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize JSONL: {}", e))
+    serde_json::to_string(result).map_err(|e| anyhow::anyhow!("Failed to serialize JSONL: {}", e))
 }
 
 /// Generate YAML report content.
 pub fn generate_yaml_content(result: &AnalysisResults) -> anyhow::Result<String> {
-    serde_yaml::to_string(result)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize YAML: {}", e))
+    serde_yaml::to_string(result).map_err(|e| anyhow::anyhow!("Failed to serialize YAML: {}", e))
 }
 
 /// Generate markdown report content.

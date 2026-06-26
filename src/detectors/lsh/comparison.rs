@@ -13,8 +13,8 @@ use wide::u64x4;
 use crate::core::featureset::{CodeEntity, EntityId, ExtractionContext};
 
 use super::config::LshConfig;
-use super::similarity_context::LshSimilarityContext;
 use super::signatures::weighted::{WeightedMinHashSignature, WeightedShingleAnalyzer};
+use super::similarity_context::LshSimilarityContext;
 
 /// Similarity comparator for LSH-based clone detection.
 pub struct SimilarityComparator<'a> {
@@ -84,8 +84,8 @@ impl<'a> SimilarityComparator<'a> {
         }
 
         if let Some(sim_context) = similarity_context {
-            let max_results = (self.lsh_config.max_candidates != 0)
-                .then_some(self.lsh_config.max_candidates);
+            let max_results =
+                (self.lsh_config.max_candidates != 0).then_some(self.lsh_config.max_candidates);
             let threshold = self.lsh_config.similarity_threshold;
 
             let mut similarities: Vec<f64> = sim_context

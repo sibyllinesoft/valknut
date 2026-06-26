@@ -29,9 +29,9 @@ pub mod file;
 pub mod health;
 
 pub use config::*;
-pub use health::{EntityHealth, HealthScorer};
 use directory::DirectoryAnalyzer;
 use file::FileAnalyzer;
+pub use health::{EntityHealth, HealthScorer};
 
 /// Combined recommendation output containing both branch reorg and file split packs
 #[derive(Debug, Serialize)]
@@ -270,10 +270,8 @@ impl StructureExtractor {
         metrics: &[PrecomputedFileMetrics],
     ) -> Result<StructureRecommendations> {
         // Build a lookup map for quick access
-        let metrics_map: HashMap<PathBuf, &PrecomputedFileMetrics> = metrics
-            .iter()
-            .map(|m| (m.path.clone(), m))
-            .collect();
+        let metrics_map: HashMap<PathBuf, &PrecomputedFileMetrics> =
+            metrics.iter().map(|m| (m.path.clone(), m)).collect();
 
         // Generate both types of packs using pre-computed metrics
         let (branch_packs, file_packs) = tokio::join!(

@@ -48,7 +48,14 @@ pub fn scan_python(source: &str, path: &Path, root: &Path) -> Vec<DocIssue> {
                 };
 
                 if let Some(message) = issue_message {
-                    issues.push(build_issue(path, root, index + 1, kind, &symbol_name, message));
+                    issues.push(build_issue(
+                        path,
+                        root,
+                        index + 1,
+                        kind,
+                        &symbol_name,
+                        message,
+                    ));
                 }
                 stack.push((indent, symbol));
             }
@@ -100,7 +107,11 @@ fn parse_symbol(line: &str) -> Option<(String, &'static str)> {
 }
 
 /// Extracts the symbol name from a definition line after the given prefix.
-fn extract_symbol_name(line: &str, prefix: &str, kind: &'static str) -> Option<(String, &'static str)> {
+fn extract_symbol_name(
+    line: &str,
+    prefix: &str,
+    kind: &'static str,
+) -> Option<(String, &'static str)> {
     let name = line[prefix.len()..]
         .split(|c: char| c == '(' || c == ':' || c.is_whitespace())
         .next()?;

@@ -296,7 +296,12 @@ impl FeatureNormalizer {
     }
 
     /// Return Bayesian fallback value if enabled, otherwise return default
-    fn fallback_or_default(&self, value: f64, stats: &NormalizationStatistics, default: f64) -> f64 {
+    fn fallback_or_default(
+        &self,
+        value: f64,
+        stats: &NormalizationStatistics,
+        default: f64,
+    ) -> f64 {
         if self.config.use_bayesian_fallbacks {
             self.bayesian_fallback_normalize(value, stats)
         } else {
@@ -453,7 +458,18 @@ impl FeatureScorer {
         const CATEGORY_PATTERNS: &[(&[&str], &str)] = &[
             (&["cyclomatic", "cognitive", "complexity"], "complexity"),
             (&["betweenness", "centrality", "fan_"], "graph"),
-            (&["structure", "class", "method", "function", "directory", "lines_of_code", "nesting"], "structure"),
+            (
+                &[
+                    "structure",
+                    "class",
+                    "method",
+                    "function",
+                    "directory",
+                    "lines_of_code",
+                    "nesting",
+                ],
+                "structure",
+            ),
             (&["style", "naming", "format"], "style"),
             (&["coverage", "test"], "coverage"),
         ];

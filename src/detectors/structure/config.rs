@@ -18,7 +18,15 @@ pub fn is_code_extension(extension: &str) -> bool {
 
 /// Directories to skip during structure analysis
 pub const SKIP_DIRECTORIES: &[&str] = &[
-    "node_modules", "target", ".git", "__pycache__", "dist", "build", ".next", "vendor", "venv",
+    "node_modules",
+    "target",
+    ".git",
+    "__pycache__",
+    "dist",
+    "build",
+    ".next",
+    "vendor",
+    "venv",
 ];
 
 /// Check if a path should be skipped during analysis.

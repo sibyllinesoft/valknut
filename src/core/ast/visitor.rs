@@ -97,7 +97,6 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use tree_sitter::Node;
 
-
 /// Trait for detectors that can participate in unified AST traversal
 #[async_trait]
 pub trait AstVisitable: Send + Sync {
@@ -281,25 +280,46 @@ impl UnifiedVisitor {
             return Ok(HashMap::new());
         }
 
-        debug!("Starting unified AST traversal for entity {} with {} detectors", entity.id, self.detectors.len());
+        debug!(
+            "Starting unified AST traversal for entity {} with {} detectors",
+            entity.id,
+            self.detectors.len()
+        );
 
         self.initialize_detectors(entity, context).await?;
 
         let file_content = Self::load_entity_content(entity).await;
-        let cached_tree = self.ast_service.get_ast(&entity.file_path, &file_content).await?;
-        let ast_context = self.ast_service.create_context(&cached_tree, &entity.file_path);
+        let cached_tree = self
+            .ast_service
+            .get_ast(&entity.file_path, &file_content)
+            .await?;
+        let ast_context = self
+            .ast_service
+            .create_context(&cached_tree, &entity.file_path);
 
         let mut combined_features = HashMap::new();
-        self.visit_tree_iterative(cached_tree.tree.root_node(), &ast_context, entity, context, &mut combined_features).await?;
+        self.visit_tree_iterative(
+            cached_tree.tree.root_node(),
+            &ast_context,
+            entity,
+            context,
+            &mut combined_features,
+        )
+        .await?;
 
-        self.finalize_detectors(entity, context, &mut combined_features).await?;
+        self.finalize_detectors(entity, context, &mut combined_features)
+            .await?;
         self.log_traversal_complete(entity, start_time.elapsed());
 
         Ok(combined_features)
     }
 
     /// Initialize all registered detectors for entity processing.
-    async fn initialize_detectors(&mut self, entity: &CodeEntity, context: &ExtractionContext) -> Result<()> {
+    async fn initialize_detectors(
+        &mut self,
+        entity: &CodeEntity,
+        context: &ExtractionContext,
+    ) -> Result<()> {
         for detector in &mut self.detectors {
             detector.begin_entity(entity, context).await?;
         }
@@ -308,7 +328,8 @@ impl UnifiedVisitor {
 
     /// Load file content, falling back to entity source code if file read fails.
     async fn load_entity_content(entity: &CodeEntity) -> String {
-        tokio::fs::read_to_string(&entity.file_path).await
+        tokio::fs::read_to_string(&entity.file_path)
+            .await
             .unwrap_or_else(|_| entity.source_code.clone())
     }
 

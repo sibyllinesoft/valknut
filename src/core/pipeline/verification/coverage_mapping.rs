@@ -141,7 +141,9 @@ pub fn annotate_candidates_with_coverage(
             }
 
             // Try fuzzy match
-            if let Some(cov_pct) = find_fuzzy_coverage(&candidate.file_path, start, end, &entity_coverage) {
+            if let Some(cov_pct) =
+                find_fuzzy_coverage(&candidate.file_path, start, end, &entity_coverage)
+            {
                 candidate.coverage_percentage = Some(cov_pct);
                 continue;
             }

@@ -126,8 +126,7 @@ fn render_helpers_format_output() -> Result<()> {
             path: PathBuf::from("README.md"),
             line: None,
             symbol: None,
-            detail: "5 commits touched '.' since README update on 2024-01-01T00:00:00+00:00"
-                .into(),
+            detail: "5 commits touched '.' since README update on 2024-01-01T00:00:00+00:00".into(),
         }],
     };
 

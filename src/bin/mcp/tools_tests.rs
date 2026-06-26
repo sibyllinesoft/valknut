@@ -1,7 +1,5 @@
 use super::*;
-use crate::mcp::formatters::{
-    create_markdown_report, format_analysis_results_with_temp_path,
-};
+use crate::mcp::formatters::{create_markdown_report, format_analysis_results_with_temp_path};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
@@ -385,9 +383,8 @@ fn format_analysis_results_supports_json_and_markdown() {
 fn format_analysis_results_supports_html() {
     let results = sample_results();
     let temp_file = tempfile::NamedTempFile::new().expect("temp file");
-    let html_output =
-        format_analysis_results_with_temp_path(&results, "html", temp_file.path())
-            .expect("html generation should succeed");
+    let html_output = format_analysis_results_with_temp_path(&results, "html", temp_file.path())
+        .expect("html generation should succeed");
     assert!(
         html_output.to_lowercase().contains("<html"),
         "html output should include root tag"

@@ -9,7 +9,9 @@ use crate::core::featureset::FeatureVector;
 use crate::core::scoring::{Priority, ScoringResult};
 use crate::detectors::complexity::ComplexitySeverity;
 
-use crate::core::pipeline::results::pipeline_results::{ComprehensiveAnalysisResult, HealthMetrics};
+use crate::core::pipeline::results::pipeline_results::{
+    ComprehensiveAnalysisResult, HealthMetrics,
+};
 
 /// Compute individual health metrics from an average absolute score.
 /// These are the component metrics used in the weighted health formula.
@@ -18,7 +20,12 @@ fn compute_health_metrics_from_avg_score(avg_abs_score: f64) -> (f64, f64, f64, 
     let technical_debt = (avg_abs_score * 25.0).clamp(0.0, 100.0);
     let complexity = (avg_abs_score * 30.0).clamp(0.0, 100.0);
     let structure_quality = (100.0 - avg_abs_score * 12.0).clamp(0.0, 100.0);
-    (maintainability, technical_debt, complexity, structure_quality)
+    (
+        maintainability,
+        technical_debt,
+        complexity,
+        structure_quality,
+    )
 }
 
 /// Compute overall health from component metrics using the weighted formula.
@@ -45,7 +52,13 @@ fn compute_health_from_avg_score(avg_abs_score: f64) -> f64 {
     let (maintainability, technical_debt, complexity, structure_quality) =
         compute_health_metrics_from_avg_score(avg_abs_score);
     // Use 100.0 for doc_health as we don't have doc info at this level
-    compute_weighted_health(maintainability, structure_quality, complexity, technical_debt, 100.0)
+    compute_weighted_health(
+        maintainability,
+        structure_quality,
+        complexity,
+        technical_debt,
+        100.0,
+    )
 }
 
 /// Per-directory health metrics (matching the project-level formula)
@@ -76,7 +89,11 @@ pub fn health_per_directory(
     for result in scoring {
         // Extract directory from entity_id (format: "file_path:type:name")
         let parts: Vec<&str> = result.entity_id.split(':').collect();
-        let file_path = if parts.len() >= 2 { parts[0] } else { "unknown" };
+        let file_path = if parts.len() >= 2 {
+            parts[0]
+        } else {
+            "unknown"
+        };
         // Make path relative to project root
         let relative_path = file_path
             .strip_prefix(&*root_str)
@@ -172,7 +189,11 @@ pub fn health_per_file(
     for result in scoring {
         // Extract file path from entity_id (format: "file_path:type:name")
         let parts: Vec<&str> = result.entity_id.split(':').collect();
-        let abs_path = if parts.len() >= 2 { parts[0] } else { "unknown" };
+        let abs_path = if parts.len() >= 2 {
+            parts[0]
+        } else {
+            "unknown"
+        };
         // Make path relative to project root
         let file_path = abs_path
             .strip_prefix(&*root_str)
@@ -386,7 +407,10 @@ use crate::detectors::refactoring::RefactoringAnalysisResult;
 
 /// Convert a single complexity result to a ScoringResult.
 fn complexity_to_scoring(result: &ComplexityAnalysisResult) -> ScoringResult {
-    let entity_id = format!("{}:{}:{}", result.file_path, result.entity_type, result.entity_name);
+    let entity_id = format!(
+        "{}:{}:{}",
+        result.file_path, result.entity_type, result.entity_name
+    );
     let metrics = &result.metrics;
 
     let cyclomatic_score = clamp_score((metrics.cyclomatic() / 10.0) * 40.0);
@@ -408,8 +432,14 @@ fn complexity_to_scoring(result: &ComplexityAnalysisResult) -> ScoringResult {
         ("cognitive_complexity".to_string(), metrics.cognitive()),
         ("max_nesting_depth".to_string(), metrics.max_nesting_depth),
         ("lines_of_code".to_string(), metrics.lines_of_code),
-        ("technical_debt_score".to_string(), metrics.technical_debt_score),
-        ("maintainability_index".to_string(), metrics.maintainability_index),
+        (
+            "technical_debt_score".to_string(),
+            metrics.technical_debt_score,
+        ),
+        (
+            "maintainability_index".to_string(),
+            metrics.maintainability_index,
+        ),
     ]);
 
     let weighted_overall = clamp_score(
@@ -444,7 +474,11 @@ fn complexity_to_scoring(result: &ComplexityAnalysisResult) -> ScoringResult {
 
 /// Convert a single refactoring result to a ScoringResult if priority is not None.
 fn refactoring_to_scoring(result: &RefactoringAnalysisResult) -> Option<ScoringResult> {
-    let entity_id = format!("{}:refactoring:{}", result.file_path, result.recommendations.len());
+    let entity_id = format!(
+        "{}:refactoring:{}",
+        result.file_path,
+        result.recommendations.len()
+    );
     let overall_score = clamp_score(result.refactoring_score);
     let priority = priority_from_score(overall_score);
 
@@ -455,7 +489,10 @@ fn refactoring_to_scoring(result: &RefactoringAnalysisResult) -> Option<ScoringR
     let category_scores = HashMap::from([("refactoring".to_string(), result.refactoring_score)]);
     let feature_contributions = HashMap::from([
         ("refactoring_score".to_string(), result.refactoring_score),
-        ("refactoring_recommendations".to_string(), result.recommendations.len() as f64),
+        (
+            "refactoring_recommendations".to_string(),
+            result.recommendations.len() as f64,
+        ),
     ]);
 
     Some(ScoringResult {
@@ -490,7 +527,9 @@ pub fn convert_to_scoring_results(results: &ComprehensiveAnalysisResult) -> Vec<
 }
 
 /// Create feature vectors from comprehensive analysis results.
-pub fn create_feature_vectors_from_results(results: &ComprehensiveAnalysisResult) -> Vec<FeatureVector> {
+pub fn create_feature_vectors_from_results(
+    results: &ComprehensiveAnalysisResult,
+) -> Vec<FeatureVector> {
     let mut feature_vectors = Vec::new();
 
     let file_aggregates = collect_file_aggregates(results);
@@ -531,17 +570,26 @@ fn collect_file_aggregates(results: &ComprehensiveAnalysisResult) -> FileAggrega
     let file_loc = collect_file_loc(&files);
     let files_per_dir = collect_files_per_dir(&files);
 
-    FileAggregates { files, func_counts, class_counts, file_loc, files_per_dir }
+    FileAggregates {
+        files,
+        func_counts,
+        class_counts,
+        file_loc,
+        files_per_dir,
+    }
 }
 
 /// Collect lines of code per file from disk.
 fn collect_file_loc(files: &HashSet<String>) -> HashMap<String, f64> {
-    files.iter().map(|file| {
-        let loc = std::fs::read_to_string(file)
-            .map(|c| c.lines().count() as f64)
-            .unwrap_or(0.0);
-        (file.clone(), loc)
-    }).collect()
+    files
+        .iter()
+        .map(|file| {
+            let loc = std::fs::read_to_string(file)
+                .map(|c| c.lines().count() as f64)
+                .unwrap_or(0.0);
+            (file.clone(), loc)
+        })
+        .collect()
 }
 
 /// Count files per directory.
@@ -559,79 +607,138 @@ fn collect_files_per_dir(files: &HashSet<String>) -> HashMap<String, usize> {
 
 /// Create per-file feature vectors with normalized structure metrics.
 fn create_file_feature_vectors(agg: &FileAggregates) -> Vec<FeatureVector> {
-    agg.files.iter().map(|file| {
-        let loc = *agg.file_loc.get(file).unwrap_or(&0.0);
-        let funcs = *agg.func_counts.get(file).unwrap_or(&0) as f64;
-        let classes = *agg.class_counts.get(file).unwrap_or(&0) as f64;
-        let dir = std::path::Path::new(file)
-            .parent()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| ".".to_string());
-        let dir_files = *agg.files_per_dir.get(&dir).unwrap_or(&1) as f64;
+    agg.files
+        .iter()
+        .map(|file| {
+            let loc = *agg.file_loc.get(file).unwrap_or(&0.0);
+            let funcs = *agg.func_counts.get(file).unwrap_or(&0) as f64;
+            let classes = *agg.class_counts.get(file).unwrap_or(&0) as f64;
+            let dir = std::path::Path::new(file)
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| ".".to_string());
+            let dir_files = *agg.files_per_dir.get(&dir).unwrap_or(&1) as f64;
 
-        let mut fv = FeatureVector::new(format!("{}:file", file));
-        fv.add_feature("lines_of_code", loc);
-        fv.add_feature("functions_per_file", funcs);
-        fv.add_feature("classes_per_file", classes);
-        fv.add_feature("files_per_directory", dir_files);
+            let mut fv = FeatureVector::new(format!("{}:file", file));
+            fv.add_feature("lines_of_code", loc);
+            fv.add_feature("functions_per_file", funcs);
+            fv.add_feature("classes_per_file", classes);
+            fv.add_feature("files_per_directory", dir_files);
 
-        fv.normalized_features.insert("lines_of_code".to_string(), logistic_over(loc, 300.0, 75.0));
-        fv.normalized_features.insert("functions_per_file".to_string(), logistic_over(funcs, 12.0, 4.0));
-        fv.normalized_features.insert("classes_per_file".to_string(), logistic_over(classes, 2.0, 1.0));
-        fv.normalized_features.insert("files_per_directory".to_string(), logistic_over(dir_files, 7.0, 2.0));
+            fv.normalized_features
+                .insert("lines_of_code".to_string(), logistic_over(loc, 300.0, 75.0));
+            fv.normalized_features.insert(
+                "functions_per_file".to_string(),
+                logistic_over(funcs, 12.0, 4.0),
+            );
+            fv.normalized_features.insert(
+                "classes_per_file".to_string(),
+                logistic_over(classes, 2.0, 1.0),
+            );
+            fv.normalized_features.insert(
+                "files_per_directory".to_string(),
+                logistic_over(dir_files, 7.0, 2.0),
+            );
 
-        fv.add_metadata("entity_type", serde_json::Value::String("file".to_string()));
-        fv.add_metadata("file_path", serde_json::Value::String(file.clone()));
-        fv
-    }).collect()
+            fv.add_metadata("entity_type", serde_json::Value::String("file".to_string()));
+            fv.add_metadata("file_path", serde_json::Value::String(file.clone()));
+            fv
+        })
+        .collect()
 }
 
 /// Create feature vectors from complexity analysis results.
 fn create_complexity_feature_vectors(results: &ComprehensiveAnalysisResult) -> Vec<FeatureVector> {
-    results.complexity.detailed_results.iter().map(|cr| {
-        let entity_id = format!("{}:{}:{}", cr.file_path, cr.entity_type, cr.entity_name);
-        let metrics = &cr.metrics;
+    results
+        .complexity
+        .detailed_results
+        .iter()
+        .map(|cr| {
+            let entity_id = format!("{}:{}:{}", cr.file_path, cr.entity_type, cr.entity_name);
+            let metrics = &cr.metrics;
 
-        let mut fv = FeatureVector::new(entity_id);
-        fv.add_feature("cyclomatic_complexity", metrics.cyclomatic());
-        fv.add_feature("cognitive_complexity", metrics.cognitive());
-        fv.add_feature("max_nesting_depth", metrics.max_nesting_depth);
-        fv.add_feature("lines_of_code", metrics.lines_of_code);
-        fv.add_feature("technical_debt_score", metrics.technical_debt_score);
-        fv.add_feature("maintainability_index", metrics.maintainability_index);
+            let mut fv = FeatureVector::new(entity_id);
+            fv.add_feature("cyclomatic_complexity", metrics.cyclomatic());
+            fv.add_feature("cognitive_complexity", metrics.cognitive());
+            fv.add_feature("max_nesting_depth", metrics.max_nesting_depth);
+            fv.add_feature("lines_of_code", metrics.lines_of_code);
+            fv.add_feature("technical_debt_score", metrics.technical_debt_score);
+            fv.add_feature("maintainability_index", metrics.maintainability_index);
 
-        fv.normalized_features.insert("cyclomatic_complexity".to_string(), (metrics.cyclomatic() / 10.0).min(1.0));
-        fv.normalized_features.insert("cognitive_complexity".to_string(), (metrics.cognitive() / 15.0).min(1.0));
-        fv.normalized_features.insert("max_nesting_depth".to_string(), (metrics.max_nesting_depth / 5.0).min(1.0));
-        fv.normalized_features.insert("lines_of_code".to_string(), (metrics.lines_of_code / 100.0).min(1.0));
-        fv.normalized_features.insert("technical_debt_score".to_string(), metrics.technical_debt_score / 100.0);
-        fv.normalized_features.insert("maintainability_index".to_string(), metrics.maintainability_index / 100.0);
+            fv.normalized_features.insert(
+                "cyclomatic_complexity".to_string(),
+                (metrics.cyclomatic() / 10.0).min(1.0),
+            );
+            fv.normalized_features.insert(
+                "cognitive_complexity".to_string(),
+                (metrics.cognitive() / 15.0).min(1.0),
+            );
+            fv.normalized_features.insert(
+                "max_nesting_depth".to_string(),
+                (metrics.max_nesting_depth / 5.0).min(1.0),
+            );
+            fv.normalized_features.insert(
+                "lines_of_code".to_string(),
+                (metrics.lines_of_code / 100.0).min(1.0),
+            );
+            fv.normalized_features.insert(
+                "technical_debt_score".to_string(),
+                metrics.technical_debt_score / 100.0,
+            );
+            fv.normalized_features.insert(
+                "maintainability_index".to_string(),
+                metrics.maintainability_index / 100.0,
+            );
 
-        fv.add_metadata("entity_type", serde_json::Value::String(cr.entity_type.clone()));
-        fv.add_metadata("file_path", serde_json::Value::String(cr.file_path.clone()));
-        fv.add_metadata("language", serde_json::Value::String("Python".to_string()));
-        fv.add_metadata("line_number", serde_json::Value::Number(cr.start_line.into()));
-        fv
-    }).collect()
+            fv.add_metadata(
+                "entity_type",
+                serde_json::Value::String(cr.entity_type.clone()),
+            );
+            fv.add_metadata("file_path", serde_json::Value::String(cr.file_path.clone()));
+            fv.add_metadata("language", serde_json::Value::String("Python".to_string()));
+            fv.add_metadata(
+                "line_number",
+                serde_json::Value::Number(cr.start_line.into()),
+            );
+            fv
+        })
+        .collect()
 }
 
 /// Create feature vectors from refactoring analysis results.
 fn create_refactoring_feature_vectors(results: &ComprehensiveAnalysisResult) -> Vec<FeatureVector> {
-    results.refactoring.detailed_results.iter().map(|rr| {
-        let entity_id = format!("{}:refactoring:{}", rr.file_path, rr.recommendations.len());
+    results
+        .refactoring
+        .detailed_results
+        .iter()
+        .map(|rr| {
+            let entity_id = format!("{}:refactoring:{}", rr.file_path, rr.recommendations.len());
 
-        let mut fv = FeatureVector::new(entity_id);
-        fv.add_feature("refactoring_score", rr.refactoring_score);
-        fv.add_feature("refactoring_recommendations", rr.recommendations.len() as f64);
+            let mut fv = FeatureVector::new(entity_id);
+            fv.add_feature("refactoring_score", rr.refactoring_score);
+            fv.add_feature(
+                "refactoring_recommendations",
+                rr.recommendations.len() as f64,
+            );
 
-        fv.normalized_features.insert("refactoring_score".to_string(), rr.refactoring_score / 100.0);
-        fv.normalized_features.insert("refactoring_recommendations".to_string(), (rr.recommendations.len() as f64 / 10.0).min(1.0));
+            fv.normalized_features.insert(
+                "refactoring_score".to_string(),
+                rr.refactoring_score / 100.0,
+            );
+            fv.normalized_features.insert(
+                "refactoring_recommendations".to_string(),
+                (rr.recommendations.len() as f64 / 10.0).min(1.0),
+            );
 
-        fv.add_metadata("entity_type", serde_json::Value::String("refactoring".to_string()));
-        fv.add_metadata("file_path", serde_json::Value::String(rr.file_path.clone()));
-        fv.add_metadata("language", serde_json::Value::String("Python".to_string()));
-        fv
-    }).collect()
+            fv.add_metadata(
+                "entity_type",
+                serde_json::Value::String("refactoring".to_string()),
+            );
+            fv.add_metadata("file_path", serde_json::Value::String(rr.file_path.clone()));
+            fv.add_metadata("language", serde_json::Value::String("Python".to_string()));
+            fv
+        })
+        .collect()
 }
 
 /// Logistic mapping that trends to 1.0 as value grows past mid.

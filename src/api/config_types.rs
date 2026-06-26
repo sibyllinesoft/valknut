@@ -638,7 +638,6 @@ impl CoverageSettings {
     }
 }
 
-
 #[cfg(test)]
 #[path = "config_types_tests.rs"]
 mod tests;

@@ -14,7 +14,7 @@ pub mod visitor;
 mod visitor_tests;
 
 // Re-export main types from service
-pub use service::{AstContext, AstService, CachedTree, CacheStats, DecisionKind};
+pub use service::{AstContext, AstService, CacheStats, CachedTree, DecisionKind};
 
 // Re-export utility functions
 pub use utils::{count_control_blocks, count_named_nodes, find_entity_node, node_text};

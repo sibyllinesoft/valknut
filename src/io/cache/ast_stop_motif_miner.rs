@@ -8,7 +8,9 @@ use super::language_adapters::{
     GoLanguageAdapter, JavaScriptLanguageAdapter, LanguageAdapter, PythonLanguageAdapter,
     RustLanguageAdapter, TypeScriptLanguageAdapter,
 };
-use super::types::{AstExtractionConfig, AstPattern, AstPatternExtractor, AstPatternType, PatternThresholds};
+use super::types::{
+    AstExtractionConfig, AstPattern, AstPatternExtractor, AstPatternType, PatternThresholds,
+};
 use super::{AstPatternCategory, AstStopMotifEntry, FunctionInfo};
 use crate::core::errors::Result;
 use crate::lang::registry::detect_language_from_path;
@@ -87,7 +89,10 @@ impl AstStopMotifMiner {
 
             match adapter.extract_ast_patterns(&parse_index, &function.source_code) {
                 Ok(patterns) => all_patterns.extend(patterns),
-                Err(e) => eprintln!("Failed to extract AST patterns from {}: {:?}", function.id, e),
+                Err(e) => eprintln!(
+                    "Failed to extract AST patterns from {}: {:?}",
+                    function.id, e
+                ),
             }
         }
 

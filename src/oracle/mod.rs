@@ -42,18 +42,19 @@ pub use helpers::{
 
 // Re-export bundle functions and constants
 pub use bundle::{
-    create_slice_bundle, BundleBuilder, SKIP_DIRS, SOURCE_EXTENSIONS,
-    VALKNUT_OUTPUT_TOKEN_BUDGET,
+    create_slice_bundle, BundleBuilder, SKIP_DIRS, SOURCE_EXTENSIONS, VALKNUT_OUTPUT_TOKEN_BUDGET,
 };
 
 // Re-export condense functions
 pub use condense::{
-    condense_analysis_results, condense_analysis_results_with_budget,
-    get_json_schema_instructions, ORACLE_CODEBOOK,
+    condense_analysis_results, condense_analysis_results_with_budget, get_json_schema_instructions,
+    ORACLE_CODEBOOK,
 };
 
 // Re-export slicing functions
-pub use slicing::{aggregate_slice_results, collect_source_files, partition_codebase, print_slice_info};
+pub use slicing::{
+    aggregate_slice_results, collect_source_files, partition_codebase, print_slice_info,
+};
 
 /// AI refactoring oracle that provides intelligent suggestions using Gemini 2.5 Pro
 pub struct RefactoringOracle {
@@ -91,10 +92,7 @@ impl RefactoringOracle {
         println!("\n🔍 [ORACLE] Codebase analysis");
         println!("   📁 Total files: {}", files.len());
         println!("   📊 Estimated tokens: {}", total_tokens);
-        println!(
-            "   🎯 Slicing threshold: {}",
-            self.config.slicing_threshold
-        );
+        println!("   🎯 Slicing threshold: {}", self.config.slicing_threshold);
 
         // Decide whether to use sliced analysis
         if self.config.enable_slicing && total_tokens > self.config.slicing_threshold {

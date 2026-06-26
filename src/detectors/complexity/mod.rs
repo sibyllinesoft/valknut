@@ -256,11 +256,15 @@ impl AstComplexityAnalyzer {
         initial_depth: usize,
     ) -> Result<()> {
         // Stack of (start_byte, end_byte, depth)
-        let mut stack: Vec<(usize, usize, usize)> = vec![(root.start_byte(), root.end_byte(), initial_depth)];
+        let mut stack: Vec<(usize, usize, usize)> =
+            vec![(root.start_byte(), root.end_byte(), initial_depth)];
         let tree = context.tree;
 
         while let Some((start_byte, end_byte, depth)) = stack.pop() {
-            let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) else {
+            let Some(node) = tree
+                .root_node()
+                .descendant_for_byte_range(start_byte, end_byte)
+            else {
                 continue;
             };
 
@@ -474,7 +478,10 @@ impl AstComplexityAnalyzer {
             return Ok(HalsteadMetrics::default());
         };
 
-        Ok(halstead::calculate_halstead_for_node(root_node, context.source))
+        Ok(halstead::calculate_halstead_for_node(
+            root_node,
+            context.source,
+        ))
     }
 
     /// Locates the parameters node for a function AST node.

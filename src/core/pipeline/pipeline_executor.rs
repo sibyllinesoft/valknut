@@ -20,23 +20,23 @@ use crate::detectors::structure::{StructureConfig, StructureExtractor};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::health::doc_health::compute_doc_health;
-use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
 use super::discovery::services::StageResultsBundle;
+use super::discovery::services::{
+    BatchedFileReader, DefaultResultAggregator, FileBatchReader, FileDiscoverer,
+    GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator,
+};
+use super::health::doc_health::compute_doc_health;
+use super::health::scoring_conversion::{
+    convert_to_scoring_results, create_feature_vectors_from_results, health_from_scores,
+};
+use super::pipeline_config::{AnalysisConfig, QualityGateConfig, QualityGateResult};
+use super::pipeline_stages::AnalysisStages;
 use super::results::pipeline_results::{
     ComprehensiveAnalysisResult, CoverageAnalysisResults, DocumentationAnalysisResults,
     HealthMetrics, MemoryStats, PipelineResults, PipelineStatistics, PipelineStatus,
     ScoringResults,
 };
 use super::results::result_types::AnalysisSummary;
-use super::pipeline_stages::AnalysisStages;
-use super::health::scoring_conversion::{
-    convert_to_scoring_results, create_feature_vectors_from_results, health_from_scores,
-};
-use super::discovery::services::{
-    BatchedFileReader, DefaultResultAggregator, FileBatchReader, FileDiscoverer,
-    GitAwareFileDiscoverer, ResultAggregator, StageOrchestrator,
-};
 use crate::detectors::cohesion::CohesionAnalysisResults;
 
 /// Progress callback function type
@@ -208,7 +208,11 @@ impl AnalysisPipeline {
     ) -> Result<ComprehensiveAnalysisResult> {
         let start_time = Instant::now();
         let analysis_id = Uuid::new_v4().to_string();
-        info!("Starting comprehensive analysis {} for {} paths", analysis_id, paths.len());
+        info!(
+            "Starting comprehensive analysis {} for {} paths",
+            analysis_id,
+            paths.len()
+        );
 
         let report = |msg: &str, pct: f64| {
             if let Some(ref cb) = progress_callback {
@@ -227,7 +231,10 @@ impl AnalysisPipeline {
 
         // Stage 2: Arena-based entity extraction
         report("Running arena-based entity extraction...", 7.5);
-        let arena_results = self.stage_runner.run_arena_analysis_with_content(&file_contents).await?;
+        let arena_results = self
+            .stage_runner
+            .run_arena_analysis_with_content(&file_contents)
+            .await?;
         info!(
             "Arena analysis completed: {} files processed with {:.2} KB total arena usage",
             arena_results.len(),
@@ -236,14 +243,16 @@ impl AnalysisPipeline {
 
         // Stage 3: Run all analysis stages
         report("Running parallel analysis stages...", 10.0);
-        let stages = self.stage_runner.run_all_stages(&self.config, paths, &files, &arena_results).await?;
+        let stages = self
+            .stage_runner
+            .run_all_stages(&self.config, paths, &files, &arena_results)
+            .await?;
 
         // Stage 4: Calculate health metrics
         report("Calculating health metrics...", 90.0);
         let (mut summary, mut health_metrics) = self.build_metrics(&files, &stages);
-        let documentation_results = self.compute_documentation_health(
-            paths, &files, &mut summary, &mut health_metrics
-        );
+        let documentation_results =
+            self.compute_documentation_health(paths, &files, &mut summary, &mut health_metrics);
 
         report("Analysis complete", 100.0);
         let processing_time = start_time.elapsed().as_secs_f64();
@@ -297,7 +306,8 @@ impl AnalysisPipeline {
         health_metrics: &mut HealthMetrics,
     ) -> DocumentationAnalysisResults {
         let default_doc_config = crate::core::config::DocHealthConfig::default();
-        let doc_config = self.valknut_config
+        let doc_config = self
+            .valknut_config
             .as_ref()
             .map(|c| &c.docs)
             .unwrap_or(&default_doc_config);
@@ -365,7 +375,10 @@ impl AnalysisPipeline {
     }
 
     /// Read multiple files in batches for optimal I/O performance
-    pub(crate) async fn read_files_batched(&self, files: &[PathBuf]) -> Result<Vec<(PathBuf, String)>> {
+    pub(crate) async fn read_files_batched(
+        &self,
+        files: &[PathBuf],
+    ) -> Result<Vec<(PathBuf, String)>> {
         let start_time = std::time::Instant::now();
         let file_contents = self.file_reader.read_files(files).await?;
         let read_time = start_time.elapsed();
@@ -638,7 +651,6 @@ impl AnalysisPipeline {
         self.result_aggregator
             .evaluate_quality_gates(config, results)
     }
-
 }
 
 /// Converts core coverage config into the detector-specific coverage config.
@@ -720,7 +732,6 @@ impl ExtractorRegistry {
         std::iter::empty()
     }
 }
-
 
 #[cfg(test)]
 #[path = "pipeline_executor_tests.rs"]

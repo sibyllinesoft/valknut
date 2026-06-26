@@ -249,12 +249,16 @@ impl<'a> ComplexityCalculator<'a> {
     fn traverse_node(&mut self, root: &Node, initial_nesting: u32) {
         // Use explicit stack: (node_id, start_byte, end_byte, nesting_level)
         // We store byte positions instead of Node references to work around lifetime issues
-        let mut stack: Vec<(usize, usize, u32)> = vec![(root.start_byte(), root.end_byte(), initial_nesting)];
+        let mut stack: Vec<(usize, usize, u32)> =
+            vec![(root.start_byte(), root.end_byte(), initial_nesting)];
         let tree = self.context.tree;
 
         while let Some((start_byte, end_byte, nesting_level)) = stack.pop() {
             // Find the node at this position
-            let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) else {
+            let Some(node) = tree
+                .root_node()
+                .descendant_for_byte_range(start_byte, end_byte)
+            else {
                 continue;
             };
 
@@ -308,11 +312,12 @@ impl<'a> ComplexityCalculator<'a> {
             "catch_clause" => Some(DecisionKind::Catch),
             "binary_expression" => {
                 // Check for logical operators
-                node.child_by_field_name("operator").and_then(|op| match op.kind() {
-                    "&&" | "and" => Some(DecisionKind::LogicalAnd),
-                    "||" | "or" => Some(DecisionKind::LogicalOr),
-                    _ => None,
-                })
+                node.child_by_field_name("operator")
+                    .and_then(|op| match op.kind() {
+                        "&&" | "and" => Some(DecisionKind::LogicalAnd),
+                        "||" | "or" => Some(DecisionKind::LogicalOr),
+                        _ => None,
+                    })
             }
             "conditional_expression" | "ternary_expression" => {
                 Some(DecisionKind::ConditionalExpression)

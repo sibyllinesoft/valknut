@@ -10,7 +10,9 @@ use tracing::debug;
 use tree_sitter::Node;
 
 use crate::core::ast_service::AstService;
-use crate::core::ast_utils::{count_control_blocks, count_named_nodes, find_entity_node, node_text};
+use crate::core::ast_utils::{
+    count_control_blocks, count_named_nodes, find_entity_node, node_text,
+};
 use crate::core::errors::Result;
 use crate::core::featureset::CodeEntity;
 use crate::lang::common::{EntityKind, ParseIndex};
@@ -235,7 +237,10 @@ mod tests {
 
     #[test]
     fn test_matches_all() {
-        assert!(matches_all("if __name__ == '__main__':", &["__name__", "__main__"]));
+        assert!(matches_all(
+            "if __name__ == '__main__':",
+            &["__name__", "__main__"]
+        ));
         assert!(!matches_all("if __name__:", &["__name__", "__main__"]));
     }
 }

@@ -35,8 +35,8 @@ pub use similarity_context::LshSimilarityContext;
 
 // Re-export from signatures submodule
 pub use signatures::{
-    count_tokens, MinHashSignature, ShingleGenerator, SignatureGenerator,
-    WeightedMinHashSignature, WeightedShingleAnalyzer, WeightedShingleStats,
+    count_tokens, MinHashSignature, ShingleGenerator, SignatureGenerator, WeightedMinHashSignature,
+    WeightedShingleAnalyzer, WeightedShingleStats,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -583,7 +583,8 @@ impl FeatureExtractor for LshExtractor {
         }
 
         // Generate MinHash signature for this entity using optimized interned version
-        let signature = signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
+        let signature =
+            signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
 
         // Compare with other entities in the context
         let (max_sim, avg_sim, dup_count) = self.compare_with_others(entity, context, &signature);
@@ -616,7 +617,10 @@ impl LshExtractor {
             .map(|entity| {
                 #[cfg(feature = "simd")]
                 {
-                    signatures::generator::generate_minhash_signature_simd(self, &entity.source_code)
+                    signatures::generator::generate_minhash_signature_simd(
+                        self,
+                        &entity.source_code,
+                    )
                 }
                 #[cfg(not(feature = "simd"))]
                 {
@@ -632,7 +636,9 @@ impl LshExtractor {
         entity: &CodeEntity,
         config: &DedupeConfig,
     ) -> Result<bool> {
-        self.ast_analyzer.meets_fragment_thresholds(entity, config).await
+        self.ast_analyzer
+            .meets_fragment_thresholds(entity, config)
+            .await
     }
 
     /// Build LSH index for all entities in the context for O(n) candidate search
@@ -647,8 +653,10 @@ impl LshExtractor {
 
         // Add all entities to the LSH index using optimized interned version
         for (entity_id, entity) in &context.entity_index {
-            let signature =
-                signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
+            let signature = signatures::generator::generate_minhash_signature_interned(
+                self,
+                &entity.source_code,
+            );
             let minhash_sig = MinHashSignature::new(signature, self.num_hashes, self.shingle_size);
             lsh_index.add_entity(entity_id.clone(), minhash_sig);
         }
@@ -680,8 +688,10 @@ impl LshExtractor {
 
         // Build index and store signatures using optimized interned version
         for entity in entities {
-            let signature =
-                signatures::generator::generate_minhash_signature_interned(self, &entity.source_code);
+            let signature = signatures::generator::generate_minhash_signature_interned(
+                self,
+                &entity.source_code,
+            );
             let minhash_sig =
                 MinHashSignature::new(signature.clone(), self.num_hashes, self.shingle_size);
             lsh_index.add_entity(entity.id.clone(), minhash_sig);
@@ -789,7 +799,13 @@ impl LshExtractor {
 
         // Fall back to basic minhash if weighted produced no results
         let similarities = if similarities.is_empty() {
-            self.fallback_minhash_comparison(entity, context, signature, candidate_filter, max_candidates)
+            self.fallback_minhash_comparison(
+                entity,
+                context,
+                signature,
+                candidate_filter,
+                max_candidates,
+            )
         } else {
             similarities
         };
@@ -881,7 +897,11 @@ impl LshExtractor {
             max_candidates,
             self.lsh_config.similarity_threshold,
             |source_code, entity_id| {
-                signatures::generator::generate_minhash_signature_cached(self, source_code, entity_id)
+                signatures::generator::generate_minhash_signature_cached(
+                    self,
+                    source_code,
+                    entity_id,
+                )
             },
         )
     }

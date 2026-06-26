@@ -98,7 +98,10 @@ impl McpServer {
         &self,
         params: AnalyzeCodeParams,
     ) -> Result<ToolResult, (i32, String)> {
-        info!("Executing analyze_code tool with caching for path: {}", params.path);
+        info!(
+            "Executing analyze_code tool with caching for path: {}",
+            params.path
+        );
 
         let (path, canonical_path) = Self::validate_and_canonicalize_path(&params.path)?;
 
@@ -146,12 +149,18 @@ impl McpServer {
             .await
             .map_err(|e| {
                 error!("Failed to create analysis engine: {}", e);
-                (error_codes::ANALYSIS_ERROR, format!("Failed to create analysis engine: {}", e))
+                (
+                    error_codes::ANALYSIS_ERROR,
+                    format!("Failed to create analysis engine: {}", e),
+                )
             })?;
 
         engine.analyze_directory(path).await.map_err(|e| {
             error!("Analysis failed: {}", e);
-            (error_codes::ANALYSIS_ERROR, format!("Analysis failed: {}", e))
+            (
+                error_codes::ANALYSIS_ERROR,
+                format!("Analysis failed: {}", e),
+            )
         })
     }
 
@@ -163,7 +172,10 @@ impl McpServer {
     ) -> Result<ToolResult, (i32, String)> {
         let formatted_output = self.format_analysis_results(results, format).map_err(|e| {
             error!("Failed to format results: {}", e);
-            (error_codes::INTERNAL_ERROR, format!("Failed to format results: {}", e))
+            (
+                error_codes::INTERNAL_ERROR,
+                format!("Failed to format results: {}", e),
+            )
         })?;
 
         Ok(ToolResult {
@@ -363,7 +375,9 @@ impl McpServer {
             Err(response) => return response.with_id(id),
         };
 
-        let tool_result = self.dispatch_tool(&tool_params.name, tool_params.arguments).await;
+        let tool_result = self
+            .dispatch_tool(&tool_params.name, tool_params.arguments)
+            .await;
 
         match tool_result {
             Ok(result) => JsonRpcResponse::success(id, serde_json::to_value(result).unwrap()),
@@ -372,9 +386,15 @@ impl McpServer {
     }
 
     /// Parse tool call parameters from JSON.
-    fn parse_tool_params(params: Option<serde_json::Value>) -> Result<ToolCallParams, JsonRpcResponse> {
+    fn parse_tool_params(
+        params: Option<serde_json::Value>,
+    ) -> Result<ToolCallParams, JsonRpcResponse> {
         let params = params.ok_or_else(|| {
-            JsonRpcResponse::error(None, error_codes::INVALID_PARAMS, "Missing parameters".to_string())
+            JsonRpcResponse::error(
+                None,
+                error_codes::INVALID_PARAMS,
+                "Missing parameters".to_string(),
+            )
         })?;
 
         serde_json::from_value(params).map_err(|e| {
@@ -394,38 +414,71 @@ impl McpServer {
     ) -> Result<ToolResult, (i32, String)> {
         match name {
             "analyze_code" => self.dispatch_analyze_code(arguments).await,
-            "get_refactoring_suggestions" => Self::dispatch_refactoring_suggestions(arguments).await,
+            "get_refactoring_suggestions" => {
+                Self::dispatch_refactoring_suggestions(arguments).await
+            }
             "validate_quality_gates" => Self::dispatch_validate_quality_gates(arguments).await,
             "analyze_file_quality" => Self::dispatch_analyze_file_quality(arguments).await,
-            _ => Err((error_codes::TOOL_NOT_FOUND, format!("Unknown tool: {}", name))),
+            _ => Err((
+                error_codes::TOOL_NOT_FOUND,
+                format!("Unknown tool: {}", name),
+            )),
         }
     }
 
     /// Dispatch analyze_code tool.
-    async fn dispatch_analyze_code(&self, arguments: serde_json::Value) -> Result<ToolResult, (i32, String)> {
-        let params = serde_json::from_value::<AnalyzeCodeParams>(arguments)
-            .map_err(|e| (error_codes::INVALID_PARAMS, format!("Invalid analyze_code parameters: {}", e)))?;
+    async fn dispatch_analyze_code(
+        &self,
+        arguments: serde_json::Value,
+    ) -> Result<ToolResult, (i32, String)> {
+        let params = serde_json::from_value::<AnalyzeCodeParams>(arguments).map_err(|e| {
+            (
+                error_codes::INVALID_PARAMS,
+                format!("Invalid analyze_code parameters: {}", e),
+            )
+        })?;
         self.execute_analyze_code_cached(params).await
     }
 
     /// Dispatch get_refactoring_suggestions tool.
-    async fn dispatch_refactoring_suggestions(arguments: serde_json::Value) -> Result<ToolResult, (i32, String)> {
-        let params = serde_json::from_value::<RefactoringSuggestionsParams>(arguments)
-            .map_err(|e| (error_codes::INVALID_PARAMS, format!("Invalid get_refactoring_suggestions parameters: {}", e)))?;
+    async fn dispatch_refactoring_suggestions(
+        arguments: serde_json::Value,
+    ) -> Result<ToolResult, (i32, String)> {
+        let params =
+            serde_json::from_value::<RefactoringSuggestionsParams>(arguments).map_err(|e| {
+                (
+                    error_codes::INVALID_PARAMS,
+                    format!("Invalid get_refactoring_suggestions parameters: {}", e),
+                )
+            })?;
         execute_refactoring_suggestions(params).await
     }
 
     /// Dispatch validate_quality_gates tool.
-    async fn dispatch_validate_quality_gates(arguments: serde_json::Value) -> Result<ToolResult, (i32, String)> {
-        let params = serde_json::from_value::<ValidateQualityGatesParams>(arguments)
-            .map_err(|e| (error_codes::INVALID_PARAMS, format!("Invalid validate_quality_gates parameters: {}", e)))?;
+    async fn dispatch_validate_quality_gates(
+        arguments: serde_json::Value,
+    ) -> Result<ToolResult, (i32, String)> {
+        let params =
+            serde_json::from_value::<ValidateQualityGatesParams>(arguments).map_err(|e| {
+                (
+                    error_codes::INVALID_PARAMS,
+                    format!("Invalid validate_quality_gates parameters: {}", e),
+                )
+            })?;
         execute_validate_quality_gates(params).await
     }
 
     /// Dispatch analyze_file_quality tool.
-    async fn dispatch_analyze_file_quality(arguments: serde_json::Value) -> Result<ToolResult, (i32, String)> {
-        let params = serde_json::from_value::<AnalyzeFileQualityParams>(arguments)
-            .map_err(|e| (error_codes::INVALID_PARAMS, format!("Invalid analyze_file_quality parameters: {}", e)))?;
+    async fn dispatch_analyze_file_quality(
+        arguments: serde_json::Value,
+    ) -> Result<ToolResult, (i32, String)> {
+        let params =
+            serde_json::from_value::<AnalyzeFileQualityParams>(arguments).map_err(|e| {
+                (
+                    error_codes::INVALID_PARAMS,
+                    format!("Invalid analyze_file_quality parameters: {}", e),
+                )
+            })?;
         execute_analyze_file_quality(params).await
     }
 }

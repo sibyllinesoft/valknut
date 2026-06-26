@@ -460,7 +460,9 @@ impl AnalyzeArgs {
     /// Used to determine quiet mode behavior.
     #[must_use]
     pub fn has_machine_readable_format(&self) -> bool {
-        self.effective_formats().iter().any(|f| f.is_machine_readable())
+        self.effective_formats()
+            .iter()
+            .any(|f| f.is_machine_readable())
     }
 }
 
@@ -569,10 +571,7 @@ impl OutputBundle {
                 OutputFormat::Sonar,
                 OutputFormat::CiSummary,
             ],
-            OutputBundle::Dev => vec![
-                OutputFormat::Html,
-                OutputFormat::Json,
-            ],
+            OutputBundle::Dev => vec![OutputFormat::Html, OutputFormat::Json],
             OutputBundle::Full => vec![
                 OutputFormat::Json,
                 OutputFormat::Jsonl,

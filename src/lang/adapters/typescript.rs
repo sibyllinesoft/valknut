@@ -5,12 +5,13 @@ use tree_sitter::{Language, Node, Parser, Tree};
 
 use super::super::common::{
     create_base_metadata, extract_identifiers_by_kinds, extract_js_function_calls,
-    generate_entity_id, normalize_module_literal, parse_require_import, sort_and_dedup, EntityKind,
-    EntityExtractor, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation,
+    generate_entity_id, normalize_module_literal, parse_require_import, sort_and_dedup,
+    EntityExtractor, EntityKind, LanguageAdapter, ParseIndex, ParsedEntity, SourceLocation,
 };
 use super::super::registry::{create_parser_for_language, get_tree_sitter_language};
 use crate::core::ast_utils::{
-    extract_parameter_names, extract_variable_declarator_name, find_child_text, is_const_declaration,
+    extract_parameter_names, extract_variable_declarator_name, find_child_text,
+    is_const_declaration,
 };
 use crate::core::errors::{Result, ValknutError};
 use crate::core::featureset::CodeEntity;
@@ -80,7 +81,9 @@ impl TypeScriptAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
         Ok(match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => Some(EntityKind::Function),
+            "function_declaration" | "function_expression" | "arrow_function" => {
+                Some(EntityKind::Function)
+            }
             "method_definition" => Some(EntityKind::Method),
             "class_declaration" => Some(EntityKind::Class),
             "interface_declaration" | "type_alias_declaration" => Some(EntityKind::Interface),
@@ -138,7 +141,10 @@ impl TypeScriptAdapter {
                 "async" => is_async = true,
                 "*" => is_generator = true,
                 "type_annotation" => {
-                    return_type = child.utf8_text(source_code.as_bytes()).ok().map(String::from);
+                    return_type = child
+                        .utf8_text(source_code.as_bytes())
+                        .ok()
+                        .map(String::from);
                 }
                 _ => {}
             }
@@ -190,7 +196,10 @@ impl TypeScriptAdapter {
         if !implements.is_empty() {
             metadata.insert("implements".to_string(), serde_json::json!(implements));
         }
-        metadata.insert("is_abstract".to_string(), serde_json::Value::Bool(is_abstract));
+        metadata.insert(
+            "is_abstract".to_string(),
+            serde_json::Value::Bool(is_abstract),
+        );
 
         Ok(())
     }
@@ -221,7 +230,11 @@ impl TypeScriptAdapter {
     }
 
     /// Extract the first type identifier from a clause node
-    fn extract_first_type_identifier(&self, clause: &Node, source_code: &str) -> Result<Option<String>> {
+    fn extract_first_type_identifier(
+        &self,
+        clause: &Node,
+        source_code: &str,
+    ) -> Result<Option<String>> {
         let mut cursor = clause.walk();
         for child in clause.children(&mut cursor) {
             if child.kind() == "type_identifier" || child.kind() == "identifier" {
@@ -386,7 +399,8 @@ impl EntityExtractor for TypeScriptAdapter {
             None => return Ok(None),
         };
 
-        let name = self.extract_name(&node, source_code)?
+        let name = self
+            .extract_name(&node, source_code)?
             .unwrap_or_else(|| entity_kind.fallback_name(*entity_id_counter));
 
         *entity_id_counter += 1;
@@ -481,18 +495,44 @@ import { foo, bar, baz } from '@/components';
 const legacy = require('./legacy');
 "#;
         let imports = adapter.extract_imports(source).unwrap();
-        
+
         let modules: Vec<&str> = imports.iter().map(|i| i.module.as_str()).collect();
-        
-        assert!(modules.contains(&"react"), "Should find default import from 'react'");
-        assert!(modules.contains(&"./utils"), "Should find star import from './utils'");
-        assert!(modules.contains(&"../types"), "Should find type import from '../types'");
-        assert!(modules.contains(&"@/components"), "Should find named import from '@/components'");
-        assert!(modules.contains(&"./legacy"), "Should find require('./legacy')");
-        
+
+        assert!(
+            modules.contains(&"react"),
+            "Should find default import from 'react'"
+        );
+        assert!(
+            modules.contains(&"./utils"),
+            "Should find star import from './utils'"
+        );
+        assert!(
+            modules.contains(&"../types"),
+            "Should find type import from '../types'"
+        );
+        assert!(
+            modules.contains(&"@/components"),
+            "Should find named import from '@/components'"
+        );
+        assert!(
+            modules.contains(&"./legacy"),
+            "Should find require('./legacy')"
+        );
+
         // Check named imports
-        let react_named = imports.iter().find(|i| i.module == "react" && i.import_type == "named").unwrap();
-        assert!(react_named.imports.as_ref().unwrap().contains(&"useState".to_string()));
-        assert!(react_named.imports.as_ref().unwrap().contains(&"useEffect".to_string()));
+        let react_named = imports
+            .iter()
+            .find(|i| i.module == "react" && i.import_type == "named")
+            .unwrap();
+        assert!(react_named
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"useState".to_string()));
+        assert!(react_named
+            .imports
+            .as_ref()
+            .unwrap()
+            .contains(&"useEffect".to_string()));
     }
 }

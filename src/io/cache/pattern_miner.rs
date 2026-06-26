@@ -189,7 +189,10 @@ impl PatternMiner {
     }
 
     /// Extract PDG motifs from a single function
-    pub(crate) fn extract_function_motifs(&self, func: &FunctionInfo) -> Result<HashMap<String, usize>> {
+    pub(crate) fn extract_function_motifs(
+        &self,
+        func: &FunctionInfo,
+    ) -> Result<HashMap<String, usize>> {
         let mut motif_freq = HashMap::new();
 
         // Use a simplified motif extractor (in practice, would integrate with PdgMotifAnalyzer)
@@ -293,7 +296,10 @@ impl PatternMiner {
     }
 
     /// Select stop-motifs based on frequency (top percentile)
-    pub(crate) fn select_stop_motifs(&self, idf_scores: &HashMap<String, f64>) -> Result<Vec<StopMotifEntry>> {
+    pub(crate) fn select_stop_motifs(
+        &self,
+        idf_scores: &HashMap<String, f64>,
+    ) -> Result<Vec<StopMotifEntry>> {
         let mut all_patterns: Vec<PatternCandidate> = Vec::new();
 
         // Collect k-gram candidates
@@ -359,11 +365,41 @@ impl PatternMiner {
     fn is_preserved_keyword(token: &str) -> bool {
         matches!(
             token,
-            "if" | "else" | "for" | "while" | "loop" | "match" | "switch" | "case" | "break"
-            | "continue" | "return" | "yield" | "await" | "try" | "catch" | "finally" | "throw"
-            | "with" | "fn" | "function" | "def" | "class" | "struct" | "enum" | "trait"
-            | "interface" | "type" | "let" | "var" | "const" | "mut" | "pub" | "public"
-            | "private" | "protected" | "static"
+            "if" | "else"
+                | "for"
+                | "while"
+                | "loop"
+                | "match"
+                | "switch"
+                | "case"
+                | "break"
+                | "continue"
+                | "return"
+                | "yield"
+                | "await"
+                | "try"
+                | "catch"
+                | "finally"
+                | "throw"
+                | "with"
+                | "fn"
+                | "function"
+                | "def"
+                | "class"
+                | "struct"
+                | "enum"
+                | "trait"
+                | "interface"
+                | "type"
+                | "let"
+                | "var"
+                | "const"
+                | "mut"
+                | "pub"
+                | "public"
+                | "private"
+                | "protected"
+                | "static"
         )
     }
 
@@ -371,15 +407,41 @@ impl PatternMiner {
     fn is_preserved_operator(token: &str) -> bool {
         matches!(
             token,
-            "==" | "!=" | "<=" | ">=" | "&&" | "||" | "+=" | "-=" | "*=" | "/=" | "=>" | "->"
-            | "::" | "." | ";" | "," | "(" | ")" | "{" | "}" | "[" | "]" | "<" | ">"
+            "==" | "!="
+                | "<="
+                | ">="
+                | "&&"
+                | "||"
+                | "+="
+                | "-="
+                | "*="
+                | "/="
+                | "=>"
+                | "->"
+                | "::"
+                | "."
+                | ";"
+                | ","
+                | "("
+                | ")"
+                | "{"
+                | "}"
+                | "["
+                | "]"
+                | "<"
+                | ">"
         )
     }
 
     /// Normalize a literal or identifier token.
     fn normalize_literal_or_identifier(token: &str) -> String {
         if token.parse::<f64>().is_ok() {
-            return if token.contains('.') { "FLOAT_LIT" } else { "INT_LIT" }.to_string();
+            return if token.contains('.') {
+                "FLOAT_LIT"
+            } else {
+                "INT_LIT"
+            }
+            .to_string();
         }
         if Self::is_string_literal(token) {
             return "STR_LIT".to_string();

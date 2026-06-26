@@ -4,7 +4,9 @@
 //! with embedded CSS styling.
 
 use super::helpers::{format_refactoring_type, refactoring_type_emoji};
-use super::report_helpers::{metric_class, render_issues_html, render_metric_card, render_recommendations_html};
+use super::report_helpers::{
+    metric_class, render_issues_html, render_metric_card, render_recommendations_html,
+};
 
 /// Build the main report details HTML.
 fn build_report_details(result: &serde_json::Value) -> String {
@@ -35,7 +37,9 @@ fn build_report_details(result: &serde_json::Value) -> String {
     html.push_str("<ol class='recommendations-list'>");
     html.push_str("<li><strong>Start with Critical Issues</strong>: Focus on files with critical and high-severity issues first</li>");
     html.push_str("<li><strong>Reduce Complexity</strong>: Break down large functions and simplify complex conditionals</li>");
-    html.push_str("<li><strong>Improve Maintainability</strong>: Address technical debt systematically</li>");
+    html.push_str(
+        "<li><strong>Improve Maintainability</strong>: Address technical debt systematically</li>",
+    );
     html.push_str("<li><strong>Regular Monitoring</strong>: Run analysis regularly to track improvements</li>");
     html.push_str("</ol>");
 
@@ -47,16 +51,48 @@ fn build_health_metrics_section(health_metrics: &serde_json::Value) -> String {
     let mut html = String::from("<h2>📊 Health Metrics</h2><div class='metrics-grid'>");
 
     let metrics: &[(&str, &str, f64, f64, bool, Option<&str>)] = &[
-        ("overall_health_score", "Overall Health", 80.0, 60.0, true, None),
-        ("complexity_score", "Complexity Score", 25.0, 50.0, false, Some("lower is better")),
-        ("technical_debt_ratio", "Technical Debt", 20.0, 40.0, false, Some("lower is better")),
-        ("maintainability_score", "Maintainability", 60.0, 40.0, true, None),
+        (
+            "overall_health_score",
+            "Overall Health",
+            80.0,
+            60.0,
+            true,
+            None,
+        ),
+        (
+            "complexity_score",
+            "Complexity Score",
+            25.0,
+            50.0,
+            false,
+            Some("lower is better"),
+        ),
+        (
+            "technical_debt_ratio",
+            "Technical Debt",
+            20.0,
+            40.0,
+            false,
+            Some("lower is better"),
+        ),
+        (
+            "maintainability_score",
+            "Maintainability",
+            60.0,
+            40.0,
+            true,
+            None,
+        ),
     ];
 
     for (key, label, good, warn, higher_is_better, hint) in metrics {
         if let Some(v) = health_metrics.get(*key).and_then(|v| v.as_f64()) {
             let class = metric_class(v, *good, *warn, *higher_is_better);
-            let suffix = if *key == "technical_debt_ratio" { "%" } else { "/100" };
+            let suffix = if *key == "technical_debt_ratio" {
+                "%"
+            } else {
+                "/100"
+            };
             html.push_str(&render_metric_card(label, v, class, suffix, *hint));
         }
     }
@@ -67,7 +103,10 @@ fn build_health_metrics_section(health_metrics: &serde_json::Value) -> String {
 
 /// Build the high priority files section.
 fn build_high_priority_files_section(complexity: &serde_json::Value) -> String {
-    let Some(detailed_results) = complexity.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = complexity
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return String::new();
     };
 
@@ -101,7 +140,10 @@ fn build_high_priority_files_section(complexity: &serde_json::Value) -> String {
         if let Some(issues) = file_result.get("issues").and_then(|v| v.as_array()) {
             html.push_str(&render_issues_html(issues, 5));
         }
-        if let Some(recs) = file_result.get("recommendations").and_then(|v| v.as_array()) {
+        if let Some(recs) = file_result
+            .get("recommendations")
+            .and_then(|v| v.as_array())
+        {
             html.push_str(&render_recommendations_html(recs, 3));
         }
         html.push_str("</div>");
@@ -127,7 +169,10 @@ fn build_refactoring_section(refactoring: &serde_json::Value) -> String {
         opportunities_count
     ));
 
-    let Some(detailed_results) = refactoring.get("detailed_results").and_then(|v| v.as_array()) else {
+    let Some(detailed_results) = refactoring
+        .get("detailed_results")
+        .and_then(|v| v.as_array())
+    else {
         return html;
     };
 
@@ -145,7 +190,10 @@ fn render_refactoring_file(file_result: &serde_json::Value) -> String {
     let Some(file_path) = file_result.get("file_path").and_then(|v| v.as_str()) else {
         return String::new();
     };
-    let Some(recommendations) = file_result.get("recommendations").and_then(|v| v.as_array()) else {
+    let Some(recommendations) = file_result
+        .get("recommendations")
+        .and_then(|v| v.as_array())
+    else {
         return String::new();
     };
     if recommendations.is_empty() {
@@ -178,7 +226,10 @@ fn render_refactoring_item(rec: &serde_json::Value) -> String {
 
     let type_emoji = refactoring_type_emoji(refactoring_type);
     let display_type = format_refactoring_type(refactoring_type);
-    let priority_score = rec.get("priority_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let priority_score = rec
+        .get("priority_score")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
     format!(
         "<div class='refactoring-item'>\
@@ -195,9 +246,18 @@ fn build_summary_stats_section(complexity: &serde_json::Value) -> String {
     let mut html = String::from("<h2>📈 Summary Statistics</h2><div class='stats-grid'>");
 
     let stats: &[(&str, &str)] = &[
-        ("average_cyclomatic_complexity", "Average Cyclomatic Complexity"),
-        ("average_cognitive_complexity", "Average Cognitive Complexity"),
-        ("average_technical_debt_score", "Average Technical Debt Score"),
+        (
+            "average_cyclomatic_complexity",
+            "Average Cyclomatic Complexity",
+        ),
+        (
+            "average_cognitive_complexity",
+            "Average Cognitive Complexity",
+        ),
+        (
+            "average_technical_debt_score",
+            "Average Technical Debt Score",
+        ),
     ];
 
     for (key, label) in stats {

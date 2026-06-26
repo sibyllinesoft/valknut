@@ -81,7 +81,10 @@ fn benchmark_fmt() {
 
     let (total, success, entities, errors) = evaluate_repo(repo_path);
     println!("\n=== fmt ===");
-    println!("Files: {}, Parsed: {}, Entities: {}", total, success, entities);
+    println!(
+        "Files: {}, Parsed: {}, Entities: {}",
+        total, success, entities
+    );
 
     if !errors.is_empty() {
         println!("Errors ({}):", errors.len());
@@ -105,7 +108,10 @@ fn benchmark_json() {
 
     let (total, success, entities, errors) = evaluate_repo(repo_path);
     println!("\n=== nlohmann/json ===");
-    println!("Files: {}, Parsed: {}, Entities: {}", total, success, entities);
+    println!(
+        "Files: {}, Parsed: {}, Entities: {}",
+        total, success, entities
+    );
 
     if !errors.is_empty() {
         println!("Errors ({}):", errors.len());
@@ -129,7 +135,10 @@ fn benchmark_spdlog() {
 
     let (total, success, entities, errors) = evaluate_repo(repo_path);
     println!("\n=== spdlog ===");
-    println!("Files: {}, Parsed: {}, Entities: {}", total, success, entities);
+    println!(
+        "Files: {}, Parsed: {}, Entities: {}",
+        total, success, entities
+    );
 
     if !errors.is_empty() {
         println!("Errors ({}):", errors.len());
@@ -153,7 +162,10 @@ fn benchmark_googletest() {
 
     let (total, success, entities, errors) = evaluate_repo(repo_path);
     println!("\n=== googletest ===");
-    println!("Files: {}, Parsed: {}, Entities: {}", total, success, entities);
+    println!(
+        "Files: {}, Parsed: {}, Entities: {}",
+        total, success, entities
+    );
 
     if !errors.is_empty() {
         println!("Errors ({}):", errors.len());
@@ -177,7 +189,10 @@ fn benchmark_cpr() {
 
     let (total, success, entities, errors) = evaluate_repo(repo_path);
     println!("\n=== cpr ===");
-    println!("Files: {}, Parsed: {}, Entities: {}", total, success, entities);
+    println!(
+        "Files: {}, Parsed: {}, Entities: {}",
+        total, success, entities
+    );
 
     if !errors.is_empty() {
         println!("Errors ({}):", errors.len());
