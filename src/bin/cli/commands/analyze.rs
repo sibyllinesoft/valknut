@@ -29,6 +29,7 @@ pub use crate::cli::quality_gates::{
 };
 use crate::cli::reports::is_quiet;
 // Re-export report generation functions for tests (they use `super::*`)
+use crate::cli::reports::generate_reports_with_oracle_and_config;
 pub use crate::cli::reports::{
     format_file_info, format_to_string, generate_default_content, generate_html_file,
     generate_json_content, generate_jsonl_content, generate_reports_with_oracle,
@@ -97,6 +98,7 @@ pub async fn analyze_command(
     )
     .await?;
 
+    let report_config = valknut_config.clone();
     let analysis_result =
         run_analysis_phase(&valid_paths, valknut_config, &args, quiet_mode, detail_mode).await?;
 
@@ -110,7 +112,13 @@ pub async fn analyze_command(
     let oracle_response =
         run_oracle_if_enabled(&valid_paths, &analysis_result, &args, quiet_mode).await?;
 
-    generate_reports_with_oracle(&analysis_result, &oracle_response, &args).await?;
+    generate_reports_with_oracle_and_config(
+        &analysis_result,
+        &oracle_response,
+        &args,
+        Some(&report_config),
+    )
+    .await?;
 
     handle_quality_gate_result(quality_gate_result, quiet_mode, detail_mode)?;
 

@@ -142,6 +142,13 @@ valknut analyze src crates --format html --semantic-clones --denoise --coverage-
 ```
 
 ## Output Fields (JSON / HTML)
+- `schema_version`: version of the agent-first report contract.
+- `run.timestamp`, `run.config_hash`, `run.config`: report time plus the
+  canonical effective configuration and the SHA-256 hash of its exact JSON.
+- `analysis_status`: `complete`, `disabled`, or `unavailable` state per module.
+- `catalog`: concise Valknut-specific metric nomenclature.
+- `entities`, `metrics`, `findings`: flat collections intended for direct `jq`
+  queries. `threshold_difference` is always `value - configured threshold`.
 - `documentation.file_doc_health`: per-file doc health (0-100); Treemap “Docs” color uses severity = 100 - score.
 - `documentation.file_doc_issues`, `directory_doc_health`, `directory_doc_issues`: granular doc gap counts and directory health.
 - `clone_analysis.clone_pairs` & `coverage_packs`: remain unchanged; shown in Clones and Coverage tabs.
@@ -233,6 +240,9 @@ Doc audits ship with sensible defaults that skip common test paths (e.g., `**/te
 #### `mcp-stdio` - MCP Server for IDE Integration
 
 Run MCP server over stdio for Claude Code integration.
+
+For agents and automation, prefer `valknut analyze --format json`. MCP is an
+optional integration surface and may expose a narrower capability set.
 
 ```bash
 valknut mcp-stdio [OPTIONS]

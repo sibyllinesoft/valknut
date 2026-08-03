@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::errors::{Result, ValknutError};
 use crate::detectors::bundled::BundledDetectionConfig;
 use crate::detectors::cohesion::CohesionConfig;
+use crate::detectors::complexity::ComplexityConfig;
 use crate::detectors::structure::StructureConfig;
 
 // Re-export types from submodules
@@ -83,6 +84,10 @@ pub struct ValknutConfig {
 
     /// Scoring and normalization settings
     pub scoring: ScoringConfig,
+
+    /// Complexity metric thresholds used by the AST detector
+    #[serde(default)]
+    pub complexity: ComplexityConfig,
 
     /// Graph analysis configuration
     pub graph: GraphConfig,
@@ -154,6 +159,7 @@ impl ValknutConfig {
         Self {
             analysis: AnalysisConfig::default(),
             scoring: ScoringConfig::default(),
+            complexity: ComplexityConfig::default(),
             graph: GraphConfig::default(),
             lsh: LshConfig::default(),
             dedupe: DedupeConfig::default(),
@@ -286,6 +292,9 @@ impl ValknutConfig {
     pub fn validate(&self) -> Result<()> {
         self.analysis.validate()?;
         self.scoring.validate()?;
+        self.complexity
+            .validate()
+            .map_err(ValknutError::validation)?;
         self.graph.validate()?;
         self.lsh.validate()?;
         self.performance.validate()?;

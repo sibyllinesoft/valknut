@@ -130,6 +130,7 @@ pub mod lang;
 pub mod io {
     //! I/O operations, caching, and report generation.
 
+    pub mod agent_report;
     pub mod cache;
     pub mod reports;
 }

@@ -61,6 +61,7 @@ fn merge_language_settings(
 /// Copy advanced tuning sections from file config back into the merged config.
 fn apply_advanced_sections_from_file(target: &mut ValknutConfig, source: &ValknutConfig) {
     target.scoring = source.scoring.clone();
+    target.complexity = source.complexity.clone();
     target.graph = source.graph.clone();
     target.lsh = source.lsh.clone();
     target.dedupe = source.dedupe.clone();

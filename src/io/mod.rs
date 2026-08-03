@@ -32,4 +32,5 @@
 //! ```
 
 pub mod cache;
+pub mod agent_report;
 pub mod reports;

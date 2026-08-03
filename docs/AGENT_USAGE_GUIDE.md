@@ -1,27 +1,38 @@
-# 🤖 Agent Usage Guide for Valknut
+# Agent Usage Guide for Valknut
 
-## ⚠️ Important for AI Agents
+## Preferred interface
 
-**Always use the pipx-installed version of valknut, NOT the system Python module.**
-
-### ✅ Correct Usage for Agents:
+Use the Valknut CLI and its versioned JSON artifact for agent workflows. The
+JSON output is self-describing, includes the effective analysis configuration,
+and is designed for direct `jq` queries without a Valknut-specific client.
 
 ```bash
-# Use the pipx-installed binary directly
+valknut analyze /path/to/code --format json --out .valknut
+jq '.analysis_status' .valknut/analysis-results.json
+jq '.metrics[] | select(.threshold_difference > 0)' .valknut/analysis-results.json
+```
+
+The MCP server is an optional, less stable integration surface. Prefer the CLI
+unless the host environment specifically requires MCP.
+
+## Installation note
+
+Use an installed `valknut` binary rather than invoking a Python module. Current
+releases are distributed through npm, Homebrew, and Cargo.
+
+### Correct usage
+
+```bash
 valknut analyze /path/to/code --format json --out results/
 
 # Check language support first
 valknut list-languages
 ```
 
-### ❌ Avoid These Commands:
+### Avoid
 
 ```bash
-# DON'T use system Python module - parsers may not be available
 python3 -m valknut analyze ...
-
-# DON'T assume parsers are installed in system Python
-pip install tree-sitter-python  # May fail with externally-managed-environment
 ```
 
 ## 🔍 Troubleshooting for Agents

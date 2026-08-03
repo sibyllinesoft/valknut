@@ -1,5 +1,9 @@
 # MCP Implementation Roadmap for Valknut
 
+> **Interface status:** Valknut's CLI and versioned JSON analysis artifact are
+> the preferred interfaces for agents and automation. MCP is an optional future
+> integration surface and should remain a projection of the CLI report model.
+
 ## Executive Summary
 
 The MCP (Model Control Protocol) integration for Valknut is **85% complete** with comprehensive test coverage validating all components. Only the MCP protocol layer requires implementation to enable full Claude Code integration.

@@ -46,6 +46,43 @@ pub struct ComplexityThresholds {
     pub very_high: f64,
 }
 
+impl ComplexityConfig {
+    /// Validate every threshold band used by the detector.
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, thresholds) in [
+            ("cyclomatic", &self.cyclomatic_thresholds),
+            ("cognitive", &self.cognitive_thresholds),
+            ("nesting", &self.nesting_thresholds),
+            ("parameters", &self.parameter_thresholds),
+            ("file_length", &self.file_length_thresholds),
+            ("function_length", &self.function_length_thresholds),
+        ] {
+            thresholds.validate(name)?;
+        }
+        Ok(())
+    }
+}
+
+impl ComplexityThresholds {
+    fn validate(&self, name: &str) -> Result<(), String> {
+        let values = [self.low, self.medium, self.high, self.very_high];
+        if values
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0)
+        {
+            return Err(format!(
+                "{name} complexity thresholds must be finite and non-negative"
+            ));
+        }
+        if !(self.low < self.medium && self.medium < self.high && self.high < self.very_high) {
+            return Err(format!(
+                "{name} complexity thresholds must increase from low through very_high"
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Factory methods for standard complexity thresholds.
 impl ComplexityThresholds {
     /// Returns default thresholds for cyclomatic complexity.

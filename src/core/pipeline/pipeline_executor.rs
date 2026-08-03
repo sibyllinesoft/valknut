@@ -112,7 +112,7 @@ impl AnalysisPipeline {
         // Create common analyzers once
         let structure_extractor = StructureExtractor::with_config(structure_config);
         let complexity_analyzer =
-            ComplexityAnalyzer::new(ComplexityConfig::default(), ast_service.clone());
+            ComplexityAnalyzer::new(valknut_config.complexity.clone(), ast_service.clone());
         let refactoring_analyzer =
             RefactoringAnalyzer::new(RefactoringConfig::default(), ast_service.clone());
         let coverage_extractor =

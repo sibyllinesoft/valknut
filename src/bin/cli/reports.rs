@@ -6,6 +6,8 @@ use std::path::Path;
 
 use valknut_rs::api::results::AnalysisResults;
 use valknut_rs::core::config::ReportFormat;
+use valknut_rs::core::config::ValknutConfig;
+use valknut_rs::io::agent_report::build_agent_report;
 use valknut_rs::io::reports::ReportGenerator;
 
 use crate::cli::args::{AnalyzeArgs, OutputFormat};
@@ -46,6 +48,24 @@ pub fn generate_json_content(result: &AnalysisResults) -> anyhow::Result<String>
         .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))
 }
 
+/// Generate the canonical agent-first JSON artifact.
+pub fn generate_agent_json_content(
+    result: &AnalysisResults,
+    config: &ValknutConfig,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
+) -> anyhow::Result<String> {
+    let mut report = build_agent_report(result, config, timestamp)?;
+    if let (Some(root), Some(oracle)) = (report.as_object_mut(), oracle_response) {
+        root.insert(
+            "oracle_refactoring_plan".into(),
+            serde_json::to_value(oracle)?,
+        );
+    }
+    serde_json::to_string_pretty(&report)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize agent report: {}", e))
+}
+
 /// Generate JSONL report content.
 pub fn generate_jsonl_content(result: &AnalysisResults) -> anyhow::Result<String> {
     serde_json::to_string(result).map_err(|e| anyhow::anyhow!("Failed to serialize JSONL: {}", e))
@@ -69,6 +89,8 @@ pub fn generate_html_file(
     result: &AnalysisResults,
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     file_path: &Path,
+    config: Option<&ValknutConfig>,
+    timestamp: chrono::DateTime<chrono::Utc>,
 ) -> anyhow::Result<()> {
     let default_config = valknut_rs::api::config_types::AnalysisConfig::default();
     let generator = ReportGenerator::new().with_config(default_config);
@@ -80,7 +102,32 @@ pub fn generate_html_file(
         None => generator
             .generate_report(result, file_path, ReportFormat::Html)
             .map_err(|e| anyhow::anyhow!("Failed to generate HTML report: {}", e)),
+    }?;
+
+    if let Some(config) = config {
+        embed_agent_report(file_path, result, config, timestamp)?;
     }
+    Ok(())
+}
+
+fn embed_agent_report(
+    file_path: &Path,
+    result: &AnalysisResults,
+    config: &ValknutConfig,
+    timestamp: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<()> {
+    let report = build_agent_report(result, config, timestamp)?;
+    let payload = serde_json::to_string(&report)?.replace("</", "<\\/");
+    let script =
+        format!("<script id=\"valknut-agent-report\" type=\"application/json\">{payload}</script>");
+    let html = std::fs::read_to_string(file_path)?;
+    let updated = if let Some(position) = html.rfind("</body>") {
+        format!("{}{}{}", &html[..position], script, &html[position..])
+    } else {
+        format!("{html}{script}")
+    };
+    std::fs::write(file_path, updated)?;
+    Ok(())
 }
 
 /// Generate SonarQube report content.
@@ -157,18 +204,26 @@ async fn generate_single_report(
     result: &AnalysisResults,
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     out_dir: &std::path::Path,
+    config: Option<&ValknutConfig>,
+    timestamp: chrono::DateTime<chrono::Utc>,
 ) -> anyhow::Result<std::path::PathBuf> {
     let path = match format {
         OutputFormat::Html => {
-            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-            let path = out_dir.join(format!("report_{}.html", timestamp));
-            generate_html_file(result, oracle_response, &path)?;
+            let filename_timestamp = timestamp.format("%Y%m%d_%H%M%S");
+            let path = out_dir.join(format!("report_{}.html", filename_timestamp));
+            generate_html_file(result, oracle_response, &path, config, timestamp)?;
             path
         }
         OutputFormat::Json => {
             let (filename, _) = format_file_info(format);
             let path = out_dir.join(filename);
-            write_json_streaming(&path, result, oracle_response)?;
+            if let Some(config) = config {
+                let content =
+                    generate_agent_json_content(result, config, timestamp, oracle_response)?;
+                std::fs::write(&path, content)?;
+            } else {
+                write_json_streaming(&path, result, oracle_response)?;
+            }
             path
         }
         OutputFormat::CiSummary => {
@@ -224,8 +279,19 @@ pub async fn generate_reports_with_oracle(
     oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     args: &AnalyzeArgs,
 ) -> anyhow::Result<()> {
+    generate_reports_with_oracle_and_config(result, oracle_response, args, None).await
+}
+
+/// Generate reports with the resolved configuration embedded in machine-readable artifacts.
+pub async fn generate_reports_with_oracle_and_config(
+    result: &AnalysisResults,
+    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
+    args: &AnalyzeArgs,
+    config: Option<&ValknutConfig>,
+) -> anyhow::Result<()> {
     let quiet_mode = is_quiet(args);
     let formats = args.effective_formats();
+    let timestamp = chrono::Utc::now();
 
     if !quiet_mode {
         if formats.len() == 1 {
@@ -238,7 +304,15 @@ pub async fn generate_reports_with_oracle(
     let mut output_files = Vec::new();
 
     for format in &formats {
-        let path = generate_single_report(format, result, oracle_response, &args.out).await?;
+        let path = generate_single_report(
+            format,
+            result,
+            oracle_response,
+            &args.out,
+            config,
+            timestamp,
+        )
+        .await?;
         output_files.push((format.clone(), path));
     }
 
