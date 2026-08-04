@@ -207,7 +207,7 @@ impl ValknutConfig {
             "python".to_string(),
             LanguageConfig {
                 enabled: true,
-                file_extensions: vec![".py".to_string(), ".pyi".to_string()],
+                file_extensions: vec![".py".to_string(), ".pyi".to_string(), ".pyw".to_string()],
                 tree_sitter_language: "python".to_string(),
                 max_file_size_mb: 10.0,
                 complexity_threshold: 10.0,
@@ -219,7 +219,12 @@ impl ValknutConfig {
             "javascript".to_string(),
             LanguageConfig {
                 enabled: true,
-                file_extensions: vec![".js".to_string(), ".mjs".to_string(), ".jsx".to_string()],
+                file_extensions: vec![
+                    ".js".to_string(),
+                    ".mjs".to_string(),
+                    ".cjs".to_string(),
+                    ".jsx".to_string(),
+                ],
                 tree_sitter_language: "javascript".to_string(),
                 max_file_size_mb: 5.0,
                 complexity_threshold: 10.0,
@@ -231,7 +236,13 @@ impl ValknutConfig {
             "typescript".to_string(),
             LanguageConfig {
                 enabled: true,
-                file_extensions: vec![".ts".to_string(), ".tsx".to_string(), ".d.ts".to_string()],
+                file_extensions: vec![
+                    ".ts".to_string(),
+                    ".tsx".to_string(),
+                    ".cts".to_string(),
+                    ".mts".to_string(),
+                    ".d.ts".to_string(),
+                ],
                 tree_sitter_language: "typescript".to_string(),
                 max_file_size_mb: 5.0,
                 complexity_threshold: 10.0,
@@ -279,6 +290,18 @@ impl ValknutConfig {
                     ".h".to_string(),
                 ],
                 tree_sitter_language: "cpp".to_string(),
+                max_file_size_mb: 10.0,
+                complexity_threshold: 15.0,
+                additional_settings: HashMap::new(),
+            },
+        );
+
+        languages.insert(
+            "csharp".to_string(),
+            LanguageConfig {
+                enabled: true,
+                file_extensions: vec![".cs".to_string()],
+                tree_sitter_language: "csharp".to_string(),
                 max_file_size_mb: 10.0,
                 complexity_threshold: 15.0,
                 additional_settings: HashMap::new(),

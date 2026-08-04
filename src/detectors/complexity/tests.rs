@@ -329,7 +329,10 @@ fn test_ast_complexity_metrics_creation() {
 
 #[tokio::test]
 async fn test_analyze_multiple_files() {
-    let config = ComplexityConfig::default();
+    let mut config = ComplexityConfig::default();
+    // This test verifies file-qualified issue attribution, so use a threshold
+    // below the deliberately modest sample instead of relying on production defaults.
+    config.cyclomatic_thresholds.high = 4.0;
     let ast_service = Arc::new(AstService::new());
     let analyzer = AstComplexityAnalyzer::new(config, ast_service);
 

@@ -92,6 +92,12 @@ impl ParsedEntity {
         for (key, value) in &self.metadata {
             code_entity.add_property(key.clone(), value.clone());
         }
+        if let Some(parent) = &self.parent {
+            code_entity.add_property("parent_id", serde_json::json!(parent));
+        }
+        if !self.children.is_empty() {
+            code_entity.add_property("child_ids", serde_json::json!(self.children));
+        }
 
         code_entity
     }
@@ -158,9 +164,35 @@ impl ParseIndex {
     }
 
     /// Add an entity to the index
-    pub fn add_entity(&mut self, entity: ParsedEntity) {
+    pub fn add_entity(&mut self, mut entity: ParsedEntity) {
         let file_path = entity.location.file_path.clone();
         let entity_id = entity.id.clone();
+        let parent_id = entity.parent.clone();
+        if let Some(parent_id) = &parent_id {
+            if let Some(parent) = self.entities.get(parent_id) {
+                entity
+                    .metadata
+                    .insert("parent_name".to_string(), serde_json::json!(parent.name));
+                entity.metadata.insert(
+                    "parent_kind".to_string(),
+                    serde_json::json!(format!("{:?}", parent.kind)),
+                );
+                let owner_path = parent
+                    .metadata
+                    .get("owner_path")
+                    .and_then(|value| value.as_str())
+                    .map(|path| format!("{path}.{}", parent.name))
+                    .unwrap_or_else(|| parent.name.clone());
+                entity
+                    .metadata
+                    .insert("owner_path".to_string(), serde_json::json!(owner_path));
+                if let Some(modifiers) = parent.metadata.get("modifiers") {
+                    entity
+                        .metadata
+                        .insert("parent_modifiers".to_string(), modifiers.clone());
+                }
+            }
+        }
 
         // Add to entities by file
         self.entities_by_file
@@ -169,7 +201,15 @@ impl ParseIndex {
             .push(entity_id.clone());
 
         // Add to main index
-        self.entities.insert(entity_id, entity);
+        self.entities.insert(entity_id.clone(), entity);
+
+        if let Some(parent_id) = parent_id {
+            if let Some(parent) = self.entities.get_mut(&parent_id) {
+                if !parent.children.contains(&entity_id) {
+                    parent.children.push(entity_id);
+                }
+            }
+        }
     }
 
     /// Get an entity by ID
@@ -444,10 +484,28 @@ pub fn parse_require_import(require_part: &str, line_number: usize) -> Option<Im
 /// (e.g., "default as " for JS, "type " for TS).
 pub fn extract_imports_common(source: &str, strip_prefix: &str) -> Vec<ImportStatement> {
     let mut imports = Vec::new();
+    let mut pending_import: Option<(usize, String)> = None;
 
     for (line_number, line) in source.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            continue;
+        }
+
+        if let Some((start_line, statement)) = &mut pending_import {
+            statement.push(' ');
+            statement.push_str(trimmed);
+            if trimmed.ends_with(';') {
+                if let Some(stmt) = parse_es_import_line(statement, *start_line, strip_prefix) {
+                    imports.push(stmt);
+                }
+                pending_import = None;
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("import ") && !trimmed.ends_with(';') {
+            pending_import = Some((line_number + 1, trimmed.to_string()));
             continue;
         }
 
@@ -468,6 +526,15 @@ pub fn parse_es_import_line(
     strip_prefix: &str,
 ) -> Option<ImportStatement> {
     if let Some(import_part) = trimmed.strip_prefix("import ") {
+        let literal = normalize_module_literal(import_part);
+        if !import_part.contains(" from ") && (import_part.trim_start().starts_with(['\'', '"'])) {
+            return Some(ImportStatement {
+                module: literal,
+                imports: None,
+                import_type: "side_effect".to_string(),
+                line_number,
+            });
+        }
         return parse_es_import(import_part, line_number, strip_prefix);
     }
 

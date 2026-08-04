@@ -133,18 +133,37 @@ impl PythonAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
         Ok(match node.kind() {
-            "function_definition" => Some(EntityKind::Function),
+            "function_definition" => Some(if Self::is_class_method(*node) {
+                EntityKind::Method
+            } else {
+                EntityKind::Function
+            }),
+            "lambda" => Some(EntityKind::Function),
             "class_definition" => Some(EntityKind::Class),
             "module" => None,
-            "assignment" => self.extract_name(node, source_code)?.map(|name| {
-                if Self::is_constant_name(&name) {
-                    EntityKind::Constant
-                } else {
-                    EntityKind::Variable
-                }
-            }),
+            "identifier" if Self::is_assignment_target(*node) => {
+                self.extract_name(node, source_code)?.map(|name| {
+                    if Self::is_constant_name(&name) {
+                        EntityKind::Constant
+                    } else {
+                        EntityKind::Variable
+                    }
+                })
+            }
             _ => None,
         })
+    }
+
+    fn is_class_method(node: Node) -> bool {
+        let mut parent = node.parent();
+        while let Some(candidate) = parent {
+            match candidate.kind() {
+                "function_definition" | "lambda" => return false,
+                "class_definition" => return true,
+                _ => parent = candidate.parent(),
+            }
+        }
+        false
     }
 
     /// Extract the name of an entity from its AST node
@@ -153,31 +172,56 @@ impl PythonAdapter {
             "function_definition" | "class_definition" => {
                 extract_node_text(node, source_code, "name", &["identifier"])
             }
-            "assignment" => extract_node_text(node, source_code, "", &["identifier"]),
+            "lambda" => Ok(Some(format!("lambda@{}", node.start_position().row + 1))),
+            "identifier" if Self::is_assignment_target(*node) => {
+                Ok(Some(node.utf8_text(source_code.as_bytes())?.to_string()))
+            }
             _ => Ok(None),
         }
     }
 
+    fn is_assignment_target(node: Node) -> bool {
+        let mut candidate = node;
+        while let Some(parent) = candidate.parent() {
+            if matches!(parent.kind(), "attribute" | "subscript") {
+                return false;
+            }
+            if parent.kind() == "assignment" {
+                return parent
+                    .child_by_field_name("left")
+                    .map(|left| {
+                        node.start_byte() >= left.start_byte() && node.end_byte() <= left.end_byte()
+                    })
+                    .unwrap_or(false);
+            }
+            if !matches!(
+                parent.kind(),
+                "pattern_list" | "tuple_pattern" | "list_pattern" | "parenthesized_expression"
+            ) {
+                return false;
+            }
+            candidate = parent;
+        }
+        false
+    }
+
     /// Extract parameter names from a parameters node.
-    fn extract_parameters_from_node<'a>(
-        node: &Node<'a>,
-        source_code: &'a str,
-    ) -> Result<Vec<&'a str>> {
+    fn extract_parameters_from_node(node: &Node<'_>, source_code: &str) -> Result<Vec<String>> {
         let mut parameters = Vec::new();
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" {
-                parameters.push(child.utf8_text(source_code.as_bytes())?);
+            if child.is_named() && child.kind() != "comment" {
+                parameters.push(child.utf8_text(source_code.as_bytes())?.trim().to_string());
             }
         }
         Ok(parameters)
     }
 
     /// Scan function children for parameters, decorators, and return annotation.
-    fn scan_function_children<'a>(
-        node: &Node<'a>,
-        source_code: &'a str,
-    ) -> Result<(Vec<&'a str>, bool, Option<String>)> {
+    fn scan_function_children(
+        node: &Node<'_>,
+        source_code: &str,
+    ) -> Result<(Vec<String>, bool, Option<String>)> {
         let mut parameters = Vec::new();
         let mut has_decorators = false;
         let mut return_annotation = None;
@@ -756,7 +800,28 @@ impl LanguageAdapter for PythonAdapter {
                 continue;
             }
 
-            if let Some(stmt) = Self::parse_import_line(trimmed, line_number + 1) {
+            if let Some(import_part) = trimmed.strip_prefix("import ") {
+                for item in import_part.split(',') {
+                    let item = item.trim();
+                    let (module, alias) = item
+                        .split_once(" as ")
+                        .map(|(module, alias)| (module.trim(), Some(alias.trim().to_string())))
+                        .unwrap_or((item, None));
+                    if !module.is_empty() {
+                        imports.push(ImportStatement {
+                            module: module.to_string(),
+                            imports: alias.clone().map(|alias| vec![alias]),
+                            import_type: if alias.is_some() {
+                                "aliased_import"
+                            } else {
+                                "import"
+                            }
+                            .to_string(),
+                            line_number: line_number + 1,
+                        });
+                    }
+                }
+            } else if let Some(stmt) = Self::parse_import_line(trimmed, line_number + 1) {
                 imports.push(stmt);
             }
         }
@@ -779,7 +844,12 @@ impl LanguageAdapter for PythonAdapter {
         source: &str,
         file_path: &str,
     ) -> Result<Vec<crate::core::interned_entities::InternedCodeEntity>> {
-        PythonAdapter::extract_code_entities_interned(self, source, file_path)
+        Ok(
+            PythonAdapter::extract_code_entities(self, source, file_path)?
+                .iter()
+                .map(crate::core::interned_entities::InternedCodeEntity::from_code_entity)
+                .collect(),
+        )
     }
 }
 
@@ -816,7 +886,7 @@ impl EntityExtractor for PythonAdapter {
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
         match entity_kind {
-            EntityKind::Function => {
+            EntityKind::Function | EntityKind::Method => {
                 self.extract_function_metadata(&node, source_code, &mut metadata)?;
             }
             EntityKind::Class => {

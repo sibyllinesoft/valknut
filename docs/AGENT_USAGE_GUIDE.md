@@ -62,7 +62,7 @@ When working properly, `valknut list-languages` should show:
 
 ```
 🔤 Supported Programming Languages
-   Found 6 supported languages
+   Found 7 supported languages
 
 ╭─────────────────┬──────────────┬─────────────────┬───────────────────────────╮
 │ Language        │ Extension    │     Status      │ Features                  │
@@ -70,6 +70,7 @@ When working properly, `valknut list-languages` should show:
 │ Javascript      │ .js, .jsx    │ ✅ Full Support │ Full analysis, complexity │
 │ Python          │ .py          │ ✅ Full Support │ Full analysis, refactor   │
 │ Rust            │ .rs          │ ✅ Full Support │ Full analysis, memory     │
+│ C#              │ .cs          │ 🚧 Beta         │ Types, calls, dependencies│
 │ Typescript      │ .ts, .tsx    │ ✅ Full Support │ Full analysis, type check │
 │ Go              │ .go          │ ✅ Full Support │ Full analysis, patterns   │
 │ Bash            │ .sh          │ ✅ Full Support │ Shell script analysis     │

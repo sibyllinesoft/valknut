@@ -32,6 +32,8 @@ struct AgentEntity {
     kind: String,
     file_path: String,
     start_line: usize,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    context: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +53,16 @@ struct FindingRow {
     metric: &'static str,
     value: f64,
     threshold_difference: f64,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+struct DependencyRow {
+    source: String,
+    module: String,
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    symbols: Option<Vec<String>>,
+    line: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,7 +104,7 @@ pub fn build_agent_report(
         "analysis_status".into(),
         serde_json::to_value(analysis_status(results))?,
     );
-    report.insert("catalog".into(), serde_json::to_value(metric_catalog())?);
+    report.insert("catalog".into(), report_catalog());
 
     let complexity = &results.passes.complexity.detailed_results;
     report.insert(
@@ -107,8 +119,53 @@ pub fn build_agent_report(
         "findings".into(),
         serde_json::to_value(finding_rows(complexity, &results.project_root))?,
     );
+    report.insert(
+        "dependencies".into(),
+        serde_json::to_value(dependency_rows(&results.project_root))?,
+    );
 
     Ok(Value::Object(report))
+}
+
+fn dependency_rows(project_root: &std::path::Path) -> Vec<DependencyRow> {
+    if !project_root.is_dir() {
+        return Vec::new();
+    }
+    let mut rows = Vec::new();
+    let walker = ignore::WalkBuilder::new(project_root)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+    for entry in walker.filter_map(Result::ok) {
+        let path = entry.path();
+        if !entry.file_type().is_some_and(|kind| kind.is_file())
+            || crate::lang::language_key_for_path(path).is_none()
+        {
+            continue;
+        }
+        let Ok(source) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok(mut adapter) = crate::lang::adapter_for_file(path) else {
+            continue;
+        };
+        let Ok(imports) = adapter.extract_imports(&source) else {
+            continue;
+        };
+        let source_path = project_relative(&path.to_string_lossy(), project_root);
+        rows.extend(imports.into_iter().map(|import| DependencyRow {
+            source: source_path.clone(),
+            module: import.module,
+            kind: import.import_type,
+            symbols: import.imports,
+            line: import.line_number,
+        }));
+    }
+    rows.sort();
+    rows.dedup();
+    rows
 }
 
 fn canonical_json(value: Value) -> Value {
@@ -136,9 +193,14 @@ fn agent_entities(
         .map(|entity| AgentEntity {
             id: agent_entity_id(entity, project_root),
             name: entity.entity_name.clone(),
-            kind: entity.entity_type.clone(),
+            kind: entity.entity_type.to_ascii_lowercase(),
             file_path: project_relative(&entity.file_path, project_root),
             start_line: entity.start_line,
+            context: entity
+                .semantic_context
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
         })
         .collect()
 }
@@ -308,6 +370,27 @@ fn metric_catalog() -> BTreeMap<&'static str, MetricDefinition> {
     ])
 }
 
+fn report_catalog() -> Value {
+    serde_json::json!({
+        "metrics": metric_catalog(),
+        "dependency_kinds": {
+            "import": "Direct module/package import.",
+            "aliased_import": "Import bound to a local alias.",
+            "named": "Selected symbols imported from a module.",
+            "star": "All exported symbols imported.",
+            "side_effect": "Module loaded without local bindings.",
+            "require": "CommonJS require dependency.",
+            "include": "C/C++ preprocessor include.",
+            "module_import": "C++20 module import.",
+            "export_import": "Re-exported C++20 module import.",
+            "using": "C# namespace import.",
+            "using_alias": "C# namespace/type alias.",
+            "using_static": "C# static member import.",
+            "module": "Language module path dependency."
+        }
+    })
+}
+
 fn metric(unit: &'static str, description: Option<&'static str>) -> MetricDefinition {
     MetricDefinition {
         unit,
@@ -387,6 +470,10 @@ mod tests {
             start_line: 10,
             entity_name: "work".into(),
             entity_type: "function".into(),
+            semantic_context: std::collections::HashMap::from([
+                ("parent_id".into(), serde_json::json!("parent")),
+                ("parameters".into(), serde_json::json!(["value"])),
+            ]),
             metrics: ComplexityMetrics {
                 cyclomatic_complexity: 7.0,
                 cognitive_complexity: 33.0,
@@ -404,7 +491,7 @@ mod tests {
             recommendations: Vec::new(),
         };
         let rows = metric_rows(
-            &[entity],
+            std::slice::from_ref(&entity),
             &ValknutConfig::default(),
             std::path::Path::new("/repo"),
         );
@@ -420,5 +507,31 @@ mod tests {
         assert_eq!(cyclomatic.subject_id, "src/lib.rs:work:10");
         assert_eq!(cyclomatic.threshold_difference, Some(-8.0));
         assert_eq!(cognitive.threshold_difference, Some(8.0));
+        let entities = agent_entities(&[entity], std::path::Path::new("/repo"));
+        assert_eq!(entities[0].context["parent_id"], "parent");
+        assert_eq!(
+            entities[0].context["parameters"],
+            serde_json::json!(["value"])
+        );
+    }
+
+    #[test]
+    fn report_exposes_flat_dependency_rows() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(
+            directory.path().join("main.py"),
+            "import os\nfrom pathlib import Path\n",
+        )
+        .unwrap();
+        let mut results = AnalysisResults::empty();
+        results.project_root = directory.path().to_path_buf();
+        let report = build_agent_report(&results, &ValknutConfig::default(), Utc::now()).unwrap();
+        assert_eq!(report["dependencies"].as_array().unwrap().len(), 2);
+        assert_eq!(report["dependencies"][0]["source"], "main.py");
+        assert!(report["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["module"] == "pathlib"));
     }
 }

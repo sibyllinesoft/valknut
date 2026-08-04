@@ -182,11 +182,12 @@ const arrow = () => alias;
     let generator_entity = code_entities
         .iter()
         .find(|entity| {
-            entity
-                .properties
-                .get("is_generator")
-                .map(|value| value == &Value::Bool(true))
-                .unwrap_or(false)
+            entity.name == "items"
+                && entity
+                    .properties
+                    .get("is_generator")
+                    .map(|value| value == &Value::Bool(true))
+                    .unwrap_or(false)
         })
         .expect("generator entity missing");
     assert_eq!(generator_entity.name, "items");

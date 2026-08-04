@@ -277,6 +277,13 @@ pub fn extract_variable_declarator_name(
     node: &Node,
     source_code: &str,
 ) -> crate::core::errors::Result<Option<String>> {
+    if node.kind() == "variable_declarator" {
+        return find_child_text(
+            node,
+            source_code,
+            &["identifier", "shorthand_property_identifier_pattern"],
+        );
+    }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "variable_declarator" {
@@ -290,12 +297,14 @@ pub fn extract_variable_declarator_name(
 ///
 /// This is used by JavaScript and TypeScript adapters to extract function
 /// parameter names.
-pub fn extract_parameter_names<'a>(params_node: &Node, source_code: &'a str) -> Vec<&'a str> {
+pub fn extract_parameter_names(params_node: &Node, source_code: &str) -> Vec<String> {
     let mut cursor = params_node.walk();
     params_node
         .children(&mut cursor)
-        .filter(|child| child.kind() == "identifier")
-        .filter_map(|child| child.utf8_text(source_code.as_bytes()).ok())
+        .filter(|child| child.is_named() && child.kind() != "comment")
+        .filter_map(|child| child.utf8_text(source_code.as_bytes()).ok().map(str::trim))
+        .filter(|text| !text.is_empty())
+        .map(String::from)
         .collect()
 }
 
@@ -304,6 +313,11 @@ pub fn extract_parameter_names<'a>(params_node: &Node, source_code: &'a str) -> 
 /// This is used by JavaScript and TypeScript adapters to determine if a
 /// variable declaration uses the `const` keyword.
 pub fn is_const_declaration(node: &Node, source_code: &str) -> crate::core::errors::Result<bool> {
+    if node.kind() == "variable_declarator" {
+        if let Some(parent) = node.parent() {
+            return is_const_declaration(&parent, source_code);
+        }
+    }
     let mut cursor = node.walk();
 
     // Look for 'const' keyword

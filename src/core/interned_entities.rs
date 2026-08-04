@@ -371,6 +371,7 @@ impl InternedParseIndex {
     pub fn add_entity(&mut self, entity: InternedParsedEntity) {
         let file_path = entity.location.file_path;
         let entity_id = entity.id;
+        let parent_id = entity.parent;
 
         // Add to entities by file
         self.entities_by_file
@@ -380,6 +381,12 @@ impl InternedParseIndex {
 
         // Add to main index
         self.entities.insert(entity_id, entity);
+
+        if let Some(parent_id) = parent_id {
+            if let Some(parent) = self.entities.get_mut(&parent_id) {
+                parent.add_child(entity_id);
+            }
+        }
     }
 
     /// Get an entity by interned ID

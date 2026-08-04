@@ -187,6 +187,25 @@ impl CppAdapter {
 
         // Extract kind-specific metadata
         self.extract_entity_metadata(kind.clone(), &node, source_code, &mut metadata)?;
+        if matches!(kind, EntityKind::Function | EntityKind::Method) {
+            let mut calls = Vec::new();
+            walk_tree(node, &mut |candidate| {
+                let target = match candidate.kind() {
+                    "call_expression" => candidate
+                        .child_by_field_name("function")
+                        .or_else(|| candidate.child(0)),
+                    "new_expression" => candidate.child_by_field_name("type"),
+                    _ => None,
+                };
+                if let Some(target) = target {
+                    if let Ok(text) = node_text_normalized(&target, source_code) {
+                        calls.push(text.trim().to_string());
+                    }
+                }
+            });
+            sort_and_dedup(&mut calls);
+            metadata.insert("function_calls".to_string(), serde_json::json!(calls));
+        }
 
         Ok(Some(ParsedEntity {
             id: entity_id,
@@ -211,6 +230,7 @@ impl CppAdapter {
                     Some(EntityKind::Function)
                 }
             }
+            "lambda_expression" => Some(EntityKind::Function),
 
             // Classes and structs - only if they have a body (not forward declarations)
             "class_specifier" => {
@@ -311,6 +331,7 @@ impl CppAdapter {
     ) -> Result<Option<String>> {
         match node.kind() {
             "function_definition" => self.extract_function_name(node, source_code),
+            "lambda_expression" => Ok(Some(format!("lambda@{}", node.start_position().row + 1))),
             "class_specifier" | "struct_specifier" | "enum_specifier" => {
                 self.extract_type_name(node, source_code)
             }
@@ -935,6 +956,29 @@ impl LanguageAdapter for CppAdapter {
                 }
             }
         });
+
+        for (line_number, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+            let declaration = trimmed
+                .strip_prefix("export import ")
+                .map(|module| ("export_import", module))
+                .or_else(|| {
+                    trimmed
+                        .strip_prefix("import ")
+                        .map(|module| ("module_import", module))
+                });
+            if let Some((import_type, module)) = declaration {
+                let module = module.trim_end_matches(';').trim();
+                if !module.is_empty() && !module.starts_with('<') && !module.starts_with('"') {
+                    imports.push(ImportStatement {
+                        module: module.to_string(),
+                        imports: None,
+                        import_type: import_type.to_string(),
+                        line_number: line_number + 1,
+                    });
+                }
+            }
+        }
 
         Ok(imports)
     }

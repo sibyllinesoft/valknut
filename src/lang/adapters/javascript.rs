@@ -81,18 +81,18 @@ impl JavaScriptAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
         Ok(match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => {
-                Some(EntityKind::Function)
-            }
+            "function_declaration"
+            | "function_expression"
+            | "arrow_function"
+            | "generator_function"
+            | "generator_function_declaration" => Some(EntityKind::Function),
             "method_definition" => Some(EntityKind::Method),
             "class_declaration" => Some(EntityKind::Class),
-            "variable_declaration" | "lexical_declaration" => {
-                Some(if is_const_declaration(node, source_code)? {
-                    EntityKind::Constant
-                } else {
-                    EntityKind::Variable
-                })
-            }
+            "variable_declarator" => Some(if is_const_declaration(node, source_code)? {
+                EntityKind::Constant
+            } else {
+                EntityKind::Variable
+            }),
             _ => None,
         })
     }
@@ -103,13 +103,15 @@ impl JavaScriptAdapter {
             "function_declaration"
             | "class_declaration"
             | "function_expression"
-            | "arrow_function" => find_child_text(node, source_code, &["identifier"]),
+            | "arrow_function"
+            | "generator_function"
+            | "generator_function_declaration" => {
+                find_child_text(node, source_code, &["identifier"])
+            }
             "method_definition" => {
                 find_child_text(node, source_code, &["property_identifier", "identifier"])
             }
-            "variable_declaration" | "lexical_declaration" => {
-                extract_variable_declarator_name(node, source_code)
-            }
+            "variable_declarator" => extract_variable_declarator_name(node, source_code),
             _ => find_child_text(node, source_code, &["identifier", "property_identifier"]),
         }
     }
@@ -142,6 +144,10 @@ impl JavaScriptAdapter {
         metadata.insert(
             "is_generator".to_string(),
             serde_json::Value::Bool(is_generator),
+        );
+        metadata.insert(
+            "function_calls".to_string(),
+            serde_json::json!(extract_js_function_calls(*node, source_code)),
         );
 
         Ok(())

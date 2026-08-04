@@ -244,9 +244,9 @@ export default () => ({ status: Flags.None });
         .and_then(Value::as_array)
         .expect("method parameters metadata");
     assert!(
-        parameters
-            .iter()
-            .any(|value| value.as_str() == Some("limit"))
+        parameters.iter().any(|value| value
+            .as_str()
+            .is_some_and(|value| value.starts_with("limit")))
             || parameters.is_empty()
     );
 
@@ -280,7 +280,7 @@ export default () => ({ status: Flags.None });
     assert!(
         code_entities
             .iter()
-            .any(|entity| entity.name == "<anonymous>"),
+            .any(|entity| entity.name.starts_with("anonymous@")),
         "expected anonymous default export entity"
     );
 }

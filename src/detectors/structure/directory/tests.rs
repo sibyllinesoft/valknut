@@ -330,7 +330,7 @@ from collections import OrderedDict, defaultdict
     assert_eq!(imports.len(), 4);
 
     assert_eq!(imports[0].module, "os");
-    assert_eq!(imports[0].import_type, "module");
+    assert_eq!(imports[0].import_type, "import");
 
     assert_eq!(imports[2].module, "pathlib");
     assert_eq!(imports[2].import_type, "named");
@@ -382,7 +382,7 @@ use serde::{Serialize, Deserialize};
     assert_eq!(imports[0].module, "std::collections::HashMap");
     assert_eq!(imports[0].import_type, "module");
 
-    assert_eq!(imports[1].module, "std::fs::");
+    assert_eq!(imports[1].module, "std::fs");
     assert_eq!(imports[1].import_type, "named");
     assert!(imports[1]
         .imports

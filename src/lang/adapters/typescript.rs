@@ -40,6 +40,13 @@ impl TypeScriptAdapter {
         Ok(Self { parser, language })
     }
 
+    /// Create an adapter using the TSX grammar variant.
+    pub fn new_tsx() -> Result<Self> {
+        let language = get_tree_sitter_language("tsx")?;
+        let parser = create_parser_for_language("tsx")?;
+        Ok(Self { parser, language })
+    }
+
     /// Parse TypeScript source code and extract entities
     pub fn parse_source(&mut self, source_code: &str, file_path: &str) -> Result<ParseIndex> {
         let tree = self.parser.parse(source_code, None).ok_or_else(|| {
@@ -57,8 +64,45 @@ impl TypeScriptAdapter {
             &mut index,
             &mut entity_id_counter,
         )?;
+        Self::link_overloads(&mut index);
 
         Ok(index)
+    }
+
+    fn link_overloads(index: &mut ParseIndex) {
+        let mut groups: HashMap<(Option<String>, String), Vec<String>> = HashMap::new();
+        for entity in index.entities.values() {
+            if matches!(entity.kind, EntityKind::Function | EntityKind::Method) {
+                groups
+                    .entry((entity.parent.clone(), entity.name.clone()))
+                    .or_default()
+                    .push(entity.id.clone());
+            }
+        }
+        for ((parent, name), ids) in groups.into_iter().filter(|(_, ids)| ids.len() > 1) {
+            let group = format!("{}:{name}", parent.as_deref().unwrap_or("module"));
+            let signatures: Vec<_> = ids
+                .iter()
+                .filter_map(|id| index.entities.get(id))
+                .map(|entity| {
+                    serde_json::json!({
+                        "parameters": entity.metadata.get("parameters").cloned().unwrap_or_else(|| serde_json::json!([])),
+                        "return_type": entity.metadata.get("return_type").cloned(),
+                        "declaration_only": entity.metadata.get("declaration_only").and_then(|value| value.as_bool()).unwrap_or(false),
+                    })
+                })
+                .collect();
+            for id in ids {
+                if let Some(entity) = index.entities.get_mut(&id) {
+                    entity
+                        .metadata
+                        .insert("overload_group".to_string(), serde_json::json!(group));
+                    entity
+                        .metadata
+                        .insert("overloads".to_string(), serde_json::json!(signatures));
+                }
+            }
+        }
     }
 
     /// Extract entities from TypeScript code and convert to CodeEntity format
@@ -81,20 +125,22 @@ impl TypeScriptAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: &Node, source_code: &str) -> Result<Option<EntityKind>> {
         Ok(match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => {
-                Some(EntityKind::Function)
-            }
+            "function_declaration"
+            | "function_expression"
+            | "arrow_function"
+            | "generator_function"
+            | "generator_function_declaration" => Some(EntityKind::Function),
             "method_definition" => Some(EntityKind::Method),
+            "method_signature" | "abstract_method_signature" => Some(EntityKind::Method),
+            "function_signature" => Some(EntityKind::Function),
             "class_declaration" => Some(EntityKind::Class),
             "interface_declaration" | "type_alias_declaration" => Some(EntityKind::Interface),
             "enum_declaration" => Some(EntityKind::Enum),
-            "variable_declaration" | "lexical_declaration" => {
-                Some(if is_const_declaration(node, source_code)? {
-                    EntityKind::Constant
-                } else {
-                    EntityKind::Variable
-                })
-            }
+            "variable_declarator" => Some(if is_const_declaration(node, source_code)? {
+                EntityKind::Constant
+            } else {
+                EntityKind::Variable
+            }),
             _ => None,
         })
     }
@@ -112,10 +158,14 @@ impl TypeScriptAdapter {
             "method_definition" => {
                 find_child_text(node, source_code, &["property_identifier", "identifier"])
             }
-            "function_expression" | "arrow_function" => Ok(Some("<anonymous>".to_string())),
-            "variable_declaration" | "lexical_declaration" => {
-                extract_variable_declarator_name(node, source_code)
+            "method_signature" | "abstract_method_signature" | "function_signature" => {
+                find_child_text(node, source_code, &["property_identifier", "identifier"])
             }
+            "function_expression" | "arrow_function" | "generator_function" => {
+                Ok(Some(format!("anonymous@{}", node.start_position().row + 1)))
+            }
+            "generator_function_declaration" => find_child_text(node, source_code, &["identifier"]),
+            "variable_declarator" => extract_variable_declarator_name(node, source_code),
             _ => Ok(None),
         }
     }
@@ -155,6 +205,10 @@ impl TypeScriptAdapter {
         metadata.insert(
             "is_generator".to_string(),
             serde_json::Value::Bool(is_generator),
+        );
+        metadata.insert(
+            "function_calls".to_string(),
+            serde_json::json!(extract_js_function_calls(*node, source_code)),
         );
         if let Some(ret_type) = return_type {
             metadata.insert(
@@ -409,6 +463,12 @@ impl EntityExtractor for TypeScriptAdapter {
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
         self.extract_entity_metadata(entity_kind, &node, source_code, &mut metadata)?;
+        if matches!(
+            node.kind(),
+            "method_signature" | "abstract_method_signature" | "function_signature"
+        ) {
+            metadata.insert("declaration_only".to_string(), serde_json::json!(true));
+        }
 
         Ok(Some(ParsedEntity {
             id: entity_id,

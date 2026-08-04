@@ -305,11 +305,16 @@ impl<'a> ComplexityCalculator<'a> {
         match node.kind() {
             "if_statement" => Some(DecisionKind::If),
             "else_if_clause" => Some(DecisionKind::ElseIf),
-            "while_statement" | "while_expression" => Some(DecisionKind::While),
-            "for_statement" | "for_expression" => Some(DecisionKind::For),
-            "match_statement" | "match_expression" => Some(DecisionKind::Match),
+            "while_statement" | "while_expression" | "do_statement" => Some(DecisionKind::While),
+            "for_statement" | "for_expression" | "for_in_statement" | "foreach_statement" => {
+                Some(DecisionKind::For)
+            }
+            "match_statement" | "match_expression" | "switch_statement" | "switch_expression"
+            | "switch_section" | "switch_case" | "case_statement" | "match_arm" => {
+                Some(DecisionKind::Match)
+            }
             "try_statement" | "try_expression" => Some(DecisionKind::Try),
-            "catch_clause" => Some(DecisionKind::Catch),
+            "catch_clause" | "except_clause" => Some(DecisionKind::Catch),
             "binary_expression" => {
                 // Check for logical operators
                 node.child_by_field_name("operator")
@@ -332,11 +337,20 @@ impl<'a> ComplexityCalculator<'a> {
             node.kind(),
             "if_statement"
                 | "while_statement"
+                | "do_statement"
                 | "for_statement"
+                | "for_in_statement"
+                | "foreach_statement"
                 | "match_statement"
+                | "match_expression"
+                | "switch_statement"
+                | "switch_expression"
                 | "try_statement"
                 | "function_definition"
                 | "method_definition"
+                | "method_declaration"
+                | "function_item"
+                | "function_declaration"
                 | "block"
                 | "compound_statement"
         )
@@ -420,6 +434,27 @@ def complex_function(x):
         // Should have multiple decision points
         assert!(metrics.cyclomatic_complexity > 1);
         assert!(metrics.decision_points.len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_csharp_complexity_calculation() {
+        let service = AstService::new();
+        let source = r#"
+class Example {
+    int Score(int[] values) {
+        var total = 0;
+        foreach (var value in values) {
+            if (value > 0 && value < 100) total += value;
+        }
+        return total > 10 ? total : 0;
+    }
+}
+"#;
+        let cached_tree = service.get_ast("Example.cs", source).await.unwrap();
+        let context = service.create_context(&cached_tree, "Example.cs");
+        let metrics = service.calculate_complexity(&context).unwrap();
+        assert!(metrics.cyclomatic_complexity >= 5);
+        assert!(metrics.nesting_depth >= 2);
     }
 
     #[test]

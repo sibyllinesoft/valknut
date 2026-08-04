@@ -6,6 +6,7 @@ use tree_sitter::Language;
 use crate::core::errors::{Result, ValknutError};
 use crate::lang::common::LanguageAdapter;
 use crate::lang::cpp::CppAdapter;
+use crate::lang::csharp::CSharpAdapter;
 use crate::lang::go::GoAdapter;
 use crate::lang::javascript::JavaScriptAdapter;
 use crate::lang::python::PythonAdapter;
@@ -38,7 +39,7 @@ const REGISTERED_LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo {
         key: "py",
         name: "Python",
-        extensions: &["py", "pyi"],
+        extensions: &["py", "pyi", "pyw"],
         status: LanguageStability::Stable,
         notes: "Full analysis & refactoring",
     },
@@ -77,6 +78,13 @@ const REGISTERED_LANGUAGES: &[LanguageInfo] = &[
         status: LanguageStability::Beta,
         notes: "Classes, namespaces, templates",
     },
+    LanguageInfo {
+        key: "cs",
+        name: "C#",
+        extensions: &["cs"],
+        status: LanguageStability::Beta,
+        notes: "Types, members, calls, and using directives",
+    },
 ];
 
 /// Return the languages that are compiled into this build.
@@ -96,6 +104,13 @@ pub fn language_key_for_path(path: &Path) -> Option<String> {
 
 /// Create a language adapter suitable for analysing the provided file.
 pub fn adapter_for_file(path: &Path) -> Result<Box<dyn LanguageAdapter>> {
+    if path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("tsx"))
+    {
+        return Ok(Box::new(TypeScriptAdapter::new_tsx()?));
+    }
     let key = language_key_for_path(path).ok_or_else(|| {
         ValknutError::unsupported(format!(
             "Could not determine language for file: {}",
@@ -108,6 +123,9 @@ pub fn adapter_for_file(path: &Path) -> Result<Box<dyn LanguageAdapter>> {
 
 /// Create a language adapter for a specific language key (usually an extension).
 pub fn adapter_for_language(language: &str) -> Result<Box<dyn LanguageAdapter>> {
+    if language.trim_start_matches('.').eq_ignore_ascii_case("tsx") {
+        return Ok(Box::new(TypeScriptAdapter::new_tsx()?));
+    }
     match normalize_language_key(language) {
         Some("py") => Ok(Box::new(PythonAdapter::new()?)),
         Some("js") => Ok(Box::new(JavaScriptAdapter::new()?)),
@@ -115,6 +133,7 @@ pub fn adapter_for_language(language: &str) -> Result<Box<dyn LanguageAdapter>> 
         Some("rs") => Ok(Box::new(RustAdapter::new()?)),
         Some("go") => Ok(Box::new(GoAdapter::new()?)),
         Some("cpp") => Ok(Box::new(CppAdapter::new()?)),
+        Some("cs") => Ok(Box::new(CSharpAdapter::new()?)),
         _ => Err(ValknutError::unsupported(format!(
             "Language adapter for '{}' is not yet implemented",
             language
@@ -124,6 +143,12 @@ pub fn adapter_for_language(language: &str) -> Result<Box<dyn LanguageAdapter>> 
 
 /// Get tree-sitter language for a given language key
 pub fn get_tree_sitter_language(language_key: &str) -> Result<Language> {
+    if language_key
+        .trim_start_matches('.')
+        .eq_ignore_ascii_case("tsx")
+    {
+        return Ok(tree_sitter_typescript::LANGUAGE_TSX.into());
+    }
     match normalize_language_key(language_key) {
         Some("py") => Ok(tree_sitter_python::LANGUAGE.into()),
         Some("rs") => Ok(tree_sitter_rust::LANGUAGE.into()),
@@ -131,6 +156,7 @@ pub fn get_tree_sitter_language(language_key: &str) -> Result<Language> {
         Some("ts") => Ok(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
         Some("go") => Ok(tree_sitter_go::LANGUAGE.into()),
         Some("cpp") => Ok(tree_sitter_cpp::LANGUAGE.into()),
+        Some("cs") => Ok(tree_sitter_c_sharp::LANGUAGE.into()),
         _ => Err(ValknutError::unsupported(format!(
             "No tree-sitter grammar for: {}",
             language_key
@@ -188,6 +214,7 @@ fn normalize_language_key(language: &str) -> Option<&'static str> {
         "cpp" | "cxx" | "cc" | "c++" | "hpp" | "hxx" | "hh" | "h++" | "h" | "cplusplus" => {
             Some("cpp")
         }
+        "cs" | "c#" | "csharp" => Some("cs"),
         other => registered_languages()
             .iter()
             .find(|info| info.key == other)
@@ -221,12 +248,16 @@ mod tests {
             language_key_for_path(Path::new("src/component.tsx")),
             Some("ts".to_string())
         );
+        assert_eq!(
+            language_key_for_path(Path::new("src/Program.cs")),
+            Some("cs".to_string())
+        );
         assert_eq!(language_key_for_path(Path::new("README")), None);
     }
 
     #[test]
     fn test_adapter_creation_supported_languages() {
-        for lang in ["py", "js", "ts", "rs", "go", "cpp"] {
+        for lang in ["py", "js", "ts", "rs", "go", "cpp", "cs"] {
             let adapter = adapter_for_language(lang);
             assert!(adapter.is_ok(), "adapter for {} should be available", lang);
         }
@@ -241,6 +272,8 @@ mod tests {
             "rust",
             "golang",
             "cplusplus",
+            "csharp",
+            "c#",
         ] {
             let adapter = adapter_for_language(alias);
             assert!(
@@ -254,7 +287,7 @@ mod tests {
     #[test]
     fn test_extension_support() {
         for ext in [
-            "py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go", "cpp", "hpp", "cc",
+            "py", ".pyi", "JSX", "mjs", "TS", "tsx", "rs", "go", "cpp", "hpp", "cc", "cs",
         ] {
             assert!(
                 extension_is_supported(ext),
@@ -268,13 +301,13 @@ mod tests {
     #[test]
     fn test_tree_sitter_functions() {
         // Test get_tree_sitter_language
-        for lang in ["py", "rs", "js", "ts", "go", "cpp"] {
+        for lang in ["py", "rs", "js", "ts", "go", "cpp", "cs"] {
             let result = get_tree_sitter_language(lang);
             assert!(result.is_ok(), "Language {} should be supported", lang);
         }
 
         // Test create_parser_for_language
-        for lang in ["py", "rs", "js", "ts", "go", "cpp"] {
+        for lang in ["py", "rs", "js", "ts", "go", "cpp", "cs"] {
             let result = create_parser_for_language(lang);
             assert!(result.is_ok(), "Should create parser for {}", lang);
         }

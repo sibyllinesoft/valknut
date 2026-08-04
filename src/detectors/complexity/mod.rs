@@ -89,10 +89,14 @@ impl AstComplexityAnalyzer {
         let cached_tree = self.ast_service.get_ast(file_path, source).await?;
         let context = self.ast_service.create_context(&cached_tree, file_path);
         let ast_metrics = self.ast_service.calculate_complexity(&context)?;
-        let entities = self.extract_entities_from_ast(&context)?;
+        let mut adapter = crate::lang::adapter_for_file(Path::new(file_path))?;
+        let entities = adapter.extract_code_entities(source, file_path)?;
 
         let mut results = Vec::new();
         for entity in entities {
+            if !is_callable_entity(&entity) {
+                continue;
+            }
             let metrics = self.calculate_entity_ast_metrics(&entity, &ast_metrics, &context)?;
             let result = self.build_analysis_result(&entity, file_path, metrics);
             results.push(result);
@@ -110,11 +114,18 @@ impl AstComplexityAnalyzer {
     ) -> ComplexityAnalysisResult {
         let issues = self.generate_issues_from_metrics(&entity.id, &metrics);
         let start_line = entity.line_range.map(|(start, _)| start).unwrap_or(1);
+        let semantic_context = entity
+            .properties
+            .iter()
+            .filter(|(key, _)| is_agent_semantic_property(key))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
 
         ComplexityAnalysisResult {
             entity_id: entity.id.clone(),
             entity_name: entity.name.clone(),
             entity_type: entity.entity_type.clone(),
+            semantic_context,
             file_path: file_path.to_string(),
             line_number: start_line,
             start_line,
@@ -216,10 +227,14 @@ impl AstComplexityAnalyzer {
         let ast_metrics = self.ast_service.calculate_complexity(&context)?;
 
         // Extract entities and calculate per-entity metrics
-        let entities = self.extract_entities_from_ast(&context)?;
+        let mut adapter = crate::lang::adapter_for_file(Path::new(file_path))?;
+        let entities = adapter.extract_code_entities(source, file_path)?;
         let mut issues = Vec::new();
 
         for entity in entities {
+            if !is_callable_entity(&entity) {
+                continue;
+            }
             let metrics = self.calculate_entity_ast_metrics(&entity, &ast_metrics, &context)?;
             let entity_issues = self.generate_issues_from_metrics(&entity.id, &metrics);
             issues.extend(entity_issues);
@@ -436,7 +451,9 @@ impl AstComplexityAnalyzer {
         entity: &CodeEntity,
         context: &crate::core::ast_service::AstContext<'_>,
     ) -> Result<f64> {
-        if entity.entity_type != "function" && entity.entity_type != "method" {
+        if !entity.entity_type.eq_ignore_ascii_case("function")
+            && !entity.entity_type.eq_ignore_ascii_case("method")
+        {
             return Ok(0.0);
         }
 
@@ -760,6 +777,49 @@ impl AstComplexityAnalyzer {
             "low".to_string()
         }
     }
+}
+
+fn is_agent_semantic_property(key: &str) -> bool {
+    matches!(
+        key,
+        "parent_id"
+            | "parent_name"
+            | "parent_kind"
+            | "parent_modifiers"
+            | "owner_path"
+            | "child_ids"
+            | "parameters"
+            | "return_type"
+            | "return_types"
+            | "return_annotation"
+            | "visibility"
+            | "modifiers"
+            | "base_classes"
+            | "base_types"
+            | "extends"
+            | "implements"
+            | "generic_parameters"
+            | "owner_type"
+            | "overload_group"
+            | "overloads"
+            | "declaration_only"
+            | "receiver_type"
+            | "function_calls"
+            | "fields"
+            | "members"
+            | "variants"
+            | "methods"
+    ) || key.starts_with("is_")
+}
+
+fn is_callable_entity(entity: &CodeEntity) -> bool {
+    (entity.entity_type.eq_ignore_ascii_case("function")
+        || entity.entity_type.eq_ignore_ascii_case("method"))
+        && entity
+            .properties
+            .get("declaration_only")
+            .and_then(|value| value.as_bool())
+            != Some(true)
 }
 
 #[cfg(test)]

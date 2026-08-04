@@ -146,7 +146,9 @@ valknut analyze src crates --format html --semantic-clones --denoise --coverage-
 - `run.timestamp`, `run.config_hash`, `run.config`: report time plus the
   canonical effective configuration and the SHA-256 hash of its exact JSON.
 - `analysis_status`: `complete`, `disabled`, or `unavailable` state per module.
-- `catalog`: concise Valknut-specific metric nomenclature.
+- `catalog.metrics`: concise Valknut-specific metric nomenclature.
+- `catalog.dependency_kinds`: only the import-kind distinctions needed to interpret dependency rows.
+- `dependencies`: flat, sorted source-to-module rows with kind, imported symbols, and source line.
 - `entities`, `metrics`, `findings`: flat collections intended for direct `jq`
   queries. `threshold_difference` is always `value - configured threshold`.
 - `documentation.file_doc_health`: per-file doc health (0-100); Treemap “Docs” color uses severity = 100 - score.

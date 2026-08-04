@@ -51,8 +51,51 @@ impl GoAdapter {
             &mut index,
             &mut entity_id_counter,
         )?;
+        Self::link_package_ownership(&mut index);
 
         Ok(index)
+    }
+
+    fn link_package_ownership(index: &mut ParseIndex) {
+        let Some(package) = index
+            .entities
+            .values()
+            .find(|entity| {
+                entity
+                    .metadata
+                    .get("node_kind")
+                    .and_then(|value| value.as_str())
+                    == Some("package_clause")
+            })
+            .map(|entity| (entity.id.clone(), entity.name.clone()))
+        else {
+            return;
+        };
+        let child_ids: Vec<_> = index
+            .entities
+            .values()
+            .filter(|entity| entity.id != package.0 && entity.parent.is_none())
+            .map(|entity| entity.id.clone())
+            .collect();
+        for child_id in child_ids {
+            if let Some(child) = index.entities.get_mut(&child_id) {
+                child.parent = Some(package.0.clone());
+                child
+                    .metadata
+                    .insert("parent_name".to_string(), serde_json::json!(package.1));
+                child
+                    .metadata
+                    .insert("parent_kind".to_string(), serde_json::json!("Module"));
+                child
+                    .metadata
+                    .insert("owner_path".to_string(), serde_json::json!(package.1));
+            }
+            if let Some(package_entity) = index.entities.get_mut(&package.0) {
+                if !package_entity.children.contains(&child_id) {
+                    package_entity.children.push(child_id);
+                }
+            }
+        }
     }
 
     /// Extract entities from Go code and convert to CodeEntity format
@@ -251,6 +294,8 @@ impl GoAdapter {
         Ok(match node.kind() {
             "function_declaration" => Some(EntityKind::Function),
             "method_declaration" => Some(EntityKind::Method),
+            "func_literal" => Some(EntityKind::Function),
+            "package_clause" => Some(EntityKind::Module),
             "type_declaration" => Some(if self.is_struct_declaration(node, source_code)? {
                 EntityKind::Struct
             } else if self.is_interface_declaration(node, source_code)? {
@@ -296,6 +341,10 @@ impl GoAdapter {
         match node.kind() {
             "function_declaration" | "method_declaration" => {
                 extract_node_text(node, source_code, "name", &["identifier"])
+            }
+            "func_literal" => Ok(Some(format!("closure@{}", node.start_position().row + 1))),
+            "package_clause" => {
+                extract_node_text(node, source_code, "name", &["package_identifier"])
             }
             "type_declaration" => match Self::find_type_spec(node) {
                 Some(spec) => extract_node_text(&spec, source_code, "name", &["type_identifier"]),
@@ -414,6 +463,12 @@ impl GoAdapter {
         };
 
         metadata.insert("parameters".to_string(), serde_json::json!(parameters));
+        if let Some(type_parameters) = node.child_by_field_name("type_parameters") {
+            metadata.insert(
+                "generic_parameters".to_string(),
+                serde_json::json!(type_parameters.utf8_text(source_code.as_bytes())?),
+            );
+        }
         if !return_types.is_empty() {
             metadata.insert("return_types".to_string(), serde_json::json!(return_types));
         }
@@ -609,13 +664,20 @@ impl GoAdapter {
 
     /// Parse a Go import line and extract the import path
     /// Handles: "path/to/pkg", alias "path/to/pkg", . "path/to/pkg", _ "path/to/pkg"
-    fn parse_go_import_line(line: &str) -> Option<String> {
+    fn parse_go_import_line(line: &str) -> Option<(String, Option<String>)> {
         let line = line.trim();
         if line.is_empty() {
             return None;
         }
 
-        Self::extract_quoted_path(line, '"').or_else(|| Self::extract_quoted_path(line, '`'))
+        let path = Self::extract_quoted_path(line, '"')
+            .or_else(|| Self::extract_quoted_path(line, '`'))?;
+        let prefix = line
+            .split_once(['"', '`'])
+            .map(|(prefix, _)| prefix.trim())
+            .unwrap_or("");
+        let alias = (!prefix.is_empty()).then(|| prefix.to_string());
+        Some((path, alias))
     }
 
     /// Extract a path from between matching quote characters
@@ -631,11 +693,21 @@ impl GoAdapter {
     }
 
     /// Create an ImportStatement from a module path and line number
-    fn create_import_statement(module: String, line_number: usize) -> ImportStatement {
+    fn create_import_statement(
+        module: String,
+        alias: Option<String>,
+        line_number: usize,
+    ) -> ImportStatement {
         ImportStatement {
             module,
-            imports: None,
-            import_type: "import".to_string(),
+            imports: alias.clone().map(|alias| vec![alias]),
+            import_type: match alias.as_deref() {
+                Some(".") => "dot_import",
+                Some("_") => "blank_import",
+                Some(_) => "aliased_import",
+                None => "import",
+            }
+            .to_string(),
             line_number,
         }
     }
@@ -737,8 +809,8 @@ impl LanguageAdapter for GoAdapter {
             };
 
             if let Some(text) = import_text {
-                if let Some(path) = Self::parse_go_import_line(text) {
-                    imports.push(Self::create_import_statement(path, line_number + 1));
+                if let Some((path, alias)) = Self::parse_go_import_line(text) {
+                    imports.push(Self::create_import_statement(path, alias, line_number + 1));
                 }
             }
         }
@@ -793,6 +865,23 @@ impl EntityExtractor for GoAdapter {
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
 
         self.extract_entity_metadata(entity_kind, &node, source_code, &mut metadata)?;
+        if matches!(entity_kind, EntityKind::Function | EntityKind::Method) {
+            let mut calls = Vec::new();
+            walk_tree(node, &mut |candidate| {
+                if candidate.kind() == "call_expression" {
+                    if let Some(target) = candidate
+                        .child_by_field_name("function")
+                        .or_else(|| candidate.child(0))
+                    {
+                        if let Ok(text) = node_text_normalized(&target, source_code) {
+                            calls.push(text.trim().to_string());
+                        }
+                    }
+                }
+            });
+            sort_and_dedup(&mut calls);
+            metadata.insert("function_calls".to_string(), serde_json::json!(calls));
+        }
 
         Ok(Some(ParsedEntity {
             id: entity_id,

@@ -184,6 +184,8 @@ pub struct ComplexityAnalysisResult {
     pub start_line: usize,
     pub entity_name: String,
     pub entity_type: String,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub semantic_context: std::collections::HashMap<String, serde_json::Value>,
     pub metrics: ComplexityMetrics,
     pub issues: Vec<ComplexityIssue>,
     pub severity: ComplexitySeverity,

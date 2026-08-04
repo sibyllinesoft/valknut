@@ -6,6 +6,7 @@ pub mod registry;
 
 // Re-export adapters for backward compatibility
 pub use adapters::cpp;
+pub use adapters::csharp;
 pub use adapters::go;
 pub use adapters::javascript;
 pub use adapters::python;
@@ -22,5 +23,6 @@ pub use registry::{
 
 // Re-export individual adapters
 pub use adapters::{
-    CppAdapter, GoAdapter, JavaScriptAdapter, PythonAdapter, RustAdapter, TypeScriptAdapter,
+    CSharpAdapter, CppAdapter, GoAdapter, JavaScriptAdapter, PythonAdapter, RustAdapter,
+    TypeScriptAdapter,
 };

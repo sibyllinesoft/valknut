@@ -243,7 +243,7 @@ fn test_is_code_file() {
     assert!(analyzer.is_code_file("ts"));
     assert!(analyzer.is_code_file("rs"));
     assert!(analyzer.is_code_file("go"));
-    assert!(analyzer.is_code_file("java"));
+    assert!(!analyzer.is_code_file("java"));
     assert!(analyzer.is_code_file("cpp"));
     assert!(!analyzer.is_code_file("txt"));
     assert!(!analyzer.is_code_file("md"));
@@ -737,7 +737,7 @@ from collections import OrderedDict, defaultdict
 
     assert_eq!(imports.len(), 4);
     assert_eq!(imports[0].module, "os");
-    assert_eq!(imports[0].import_type, "module");
+    assert_eq!(imports[0].import_type, "import");
     assert_eq!(imports[2].module, "pathlib");
     assert_eq!(imports[2].import_type, "named");
 }
@@ -1208,7 +1208,7 @@ fn test_supported_extensions_includes_major_languages() {
     assert!(extensions.contains(&"ts"));
     assert!(extensions.contains(&"rs"));
     assert!(extensions.contains(&"go"));
-    assert!(extensions.contains(&"java"));
+    assert!(extensions.contains(&"cs"));
 }
 
 #[test]

@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 /// Code file extensions recognized for structure analysis
 pub const CODE_EXTENSIONS: &[&str] = &[
-    "py", "pyi", "js", "mjs", "ts", "jsx", "tsx", "rs", "go", "java", "cpp", "c", "h", "hpp",
+    "py", "pyi", "pyw", "js", "jsx", "mjs", "cjs", "ts", "tsx", "cts", "mts", "rs", "go", "cpp",
+    "cxx", "cc", "c++", "hpp", "hxx", "hh", "h++", "h", "cs",
 ];
 
 /// Check if an extension is a recognized code file extension

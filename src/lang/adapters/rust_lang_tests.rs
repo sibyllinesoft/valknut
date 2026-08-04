@@ -275,9 +275,12 @@ pub trait Display: Debug + Clone {
         let entities = adapter
             .extract_code_entities(source_code, "test.rs")
             .unwrap();
-        assert_eq!(entities.len(), 1);
+        assert_eq!(entities.len(), 3);
 
-        let trait_entity = &entities[0];
+        let trait_entity = entities
+            .iter()
+            .find(|entity| entity.entity_type == "Interface")
+            .unwrap();
         assert_eq!(trait_entity.entity_type, "Interface");
         assert_eq!(trait_entity.name, "Display");
         assert_eq!(
@@ -287,6 +290,13 @@ pub trait Display: Debug + Clone {
 
         let methods = trait_entity.properties.get("methods");
         assert!(methods.is_some());
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.entity_type == "Method")
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -386,7 +396,7 @@ use anyhow::{Result, Context};
             "Should find HashMap use"
         );
         assert!(
-            modules.contains(&"crate::core::"),
+            modules.contains(&"crate::core"),
             "Should find crate::core use"
         );
         assert!(
@@ -397,13 +407,10 @@ use anyhow::{Result, Context};
             modules.contains(&"self::local_module"),
             "Should find self:: use"
         );
-        assert!(modules.contains(&"anyhow::"), "Should find anyhow use");
+        assert!(modules.contains(&"anyhow"), "Should find anyhow use");
 
         // Check named imports are extracted
-        let core_import = imports
-            .iter()
-            .find(|i| i.module == "crate::core::")
-            .unwrap();
+        let core_import = imports.iter().find(|i| i.module == "crate::core").unwrap();
         assert!(core_import
             .imports
             .as_ref()

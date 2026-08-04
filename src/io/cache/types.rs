@@ -144,10 +144,18 @@ impl Default for AstExtractionConfig {
             min_support: 3,
             max_subtree_depth: 4,
             token_sequence_length: 5,
-            enabled_languages: ["python", "javascript", "typescript", "rust", "go"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            enabled_languages: [
+                "python",
+                "javascript",
+                "typescript",
+                "rust",
+                "go",
+                "cpp",
+                "csharp",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         }
     }
 }

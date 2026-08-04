@@ -56,7 +56,36 @@ impl RustAdapter {
             &mut entity_id_counter,
         )?;
 
+        self.reconcile_impl_ownership(&mut index);
+
         Ok(index)
+    }
+
+    fn reconcile_impl_ownership(&self, index: &mut ParseIndex) {
+        let owners: HashMap<String, String> = index
+            .entities
+            .values()
+            .filter(|entity| matches!(entity.kind, EntityKind::Struct | EntityKind::Enum))
+            .map(|entity| (entity.name.clone(), entity.id.clone()))
+            .collect();
+        let reparents: Vec<(String, String)> = index
+            .entities
+            .values()
+            .filter_map(|entity| {
+                let owner = entity.metadata.get("owner_type")?.as_str()?;
+                Some((entity.id.clone(), owners.get(owner)?.clone()))
+            })
+            .collect();
+        for (child_id, owner_id) in reparents {
+            if let Some(entity) = index.entities.get_mut(&child_id) {
+                entity.parent = Some(owner_id.clone());
+            }
+            if let Some(owner) = index.entities.get_mut(&owner_id) {
+                if !owner.children.contains(&child_id) {
+                    owner.children.push(child_id);
+                }
+            }
+        }
     }
 
     /// Extract entities from Rust code and convert to CodeEntity format
@@ -79,13 +108,14 @@ impl RustAdapter {
     /// Determine entity kind from node kind, returning None for non-entity nodes.
     fn determine_entity_kind(&self, node: Node) -> Option<EntityKind> {
         match node.kind() {
-            "function_item" | "function_signature_item" => {
-                if self.is_inside_trait(node) {
-                    None
+            "function_item" | "function_signature_item" => Some(
+                if self.is_inside_trait(node) || Self::impl_owner(node).is_some() {
+                    EntityKind::Method
                 } else {
-                    Some(EntityKind::Function)
-                }
-            }
+                    EntityKind::Function
+                },
+            ),
+            "closure_expression" => Some(EntityKind::Function),
             "impl_item" => None,
             "struct_item" => Some(EntityKind::Struct),
             "enum_item" => Some(EntityKind::Enum),
@@ -94,6 +124,23 @@ impl RustAdapter {
             "const_item" | "static_item" => Some(EntityKind::Constant),
             _ => None,
         }
+    }
+
+    fn impl_owner(node: Node) -> Option<Node> {
+        let mut parent = node.parent();
+        while let Some(candidate) = parent {
+            if candidate.kind() == "impl_item" {
+                return candidate.child_by_field_name("type");
+            }
+            if matches!(
+                candidate.kind(),
+                "function_item" | "trait_item" | "mod_item"
+            ) {
+                return None;
+            }
+            parent = candidate.parent();
+        }
+        None
     }
 
     /// Extract the name of an entity from its AST node
@@ -115,6 +162,9 @@ impl RustAdapter {
                         return Ok(Some(child.utf8_text(source_code.as_bytes())?.to_string()));
                     }
                 }
+            }
+            "closure_expression" => {
+                return Ok(Some(format!("closure@{}", node.start_position().row + 1)))
             }
             _ => {}
         }
@@ -174,7 +224,9 @@ impl RustAdapter {
         metadata: &mut HashMap<String, Value>,
     ) -> Result<()> {
         match entity_kind {
-            EntityKind::Function => self.extract_function_metadata(node, source_code, metadata),
+            EntityKind::Function | EntityKind::Method => {
+                self.extract_function_metadata(node, source_code, metadata)
+            }
             EntityKind::Struct => self.extract_struct_metadata(node, source_code, metadata),
             EntityKind::Enum => self.extract_enum_metadata(node, source_code, metadata),
             EntityKind::Interface => self.extract_trait_metadata(node, source_code, metadata),
@@ -571,6 +623,25 @@ impl LanguageAdapter for RustAdapter {
     fn extract_imports(&mut self, source: &str) -> Result<Vec<ImportStatement>> {
         let mut imports = Vec::new();
 
+        let tree = self.parse_tree(source)?;
+        walk_tree(tree.root_node(), &mut |node| {
+            if node.kind() == "use_declaration" {
+                if let Ok(raw) = node_text_normalized(&node, source) {
+                    if let Some(use_part) = raw
+                        .trim()
+                        .strip_prefix("use ")
+                        .map(|value| value.trim_end_matches(';').trim())
+                    {
+                        Self::parse_use_statement(
+                            use_part,
+                            node.start_position().row + 1,
+                            &mut imports,
+                        );
+                    }
+                }
+            }
+        });
+
         for (line_number, line) in source.lines().enumerate() {
             let trimmed = line.trim();
 
@@ -581,12 +652,6 @@ impl LanguageAdapter for RustAdapter {
             // Handle mod declarations
             if let Some(mod_name) = Self::try_parse_mod_declaration(trimmed) {
                 imports.push(Self::create_mod_import(mod_name, line_number + 1));
-            }
-
-            // Handle use statements
-            if let Some(use_part) = trimmed.strip_prefix("use ") {
-                let use_part = use_part.trim_end_matches(';');
-                Self::parse_use_statement(use_part, line_number + 1, &mut imports);
             }
         }
 
@@ -635,6 +700,28 @@ impl EntityExtractor for RustAdapter {
 
         let mut metadata = create_base_metadata(node.kind(), node.start_byte(), node.end_byte());
         self.extract_entity_metadata(&entity_kind, &node, source_code, &mut metadata)?;
+        if matches!(entity_kind, EntityKind::Function | EntityKind::Method) {
+            let mut calls = Vec::new();
+            walk_tree(node, &mut |candidate| {
+                let target = match candidate.kind() {
+                    "call_expression" => candidate.child_by_field_name("function"),
+                    "macro_invocation" => candidate.child_by_field_name("macro"),
+                    _ => None,
+                };
+                if let Some(target) = target {
+                    if let Ok(text) = node_text_normalized(&target, source_code) {
+                        calls.push(text.trim().to_string());
+                    }
+                }
+            });
+            sort_and_dedup(&mut calls);
+            metadata.insert("function_calls".to_string(), serde_json::json!(calls));
+        }
+        if let Some(owner) = Self::impl_owner(node) {
+            let owner_name = owner.utf8_text(source_code.as_bytes())?;
+            metadata.insert("owner_type".to_string(), serde_json::json!(owner_name));
+            metadata.insert("owner_path".to_string(), serde_json::json!(owner_name));
+        }
 
         Ok(Some(ParsedEntity {
             id: entity_id,
@@ -699,7 +786,7 @@ impl RustAdapter {
             .collect();
 
         Some(ImportStatement {
-            module: format!("{}::", module),
+            module,
             imports: Some(specific_imports),
             import_type: "named".to_string(),
             line_number,

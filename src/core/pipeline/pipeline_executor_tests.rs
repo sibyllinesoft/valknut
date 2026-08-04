@@ -42,6 +42,7 @@ fn sample_complexity_result(
         start_line: 1,
         entity_name: "sample_fn".to_string(),
         entity_type: "function".to_string(),
+        semantic_context: HashMap::new(),
         metrics: ComplexityMetrics {
             cyclomatic_complexity: cyclomatic,
             cognitive_complexity: cyclomatic + 5.0,
