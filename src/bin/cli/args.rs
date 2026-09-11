@@ -349,34 +349,6 @@ pub struct CohesionArgs {
     pub cohesion_outlier_percentile: Option<f64>,
 }
 
-/// AI-powered analysis features
-#[derive(Args)]
-pub struct AIFeaturesArgs {
-    /// Enable AI refactoring oracle using Gemini 3 Flash (requires GEMINI_API_KEY env var)
-    #[arg(long)]
-    pub oracle: bool,
-
-    /// Maximum tokens to send to refactoring oracle (default: 400000)
-    #[arg(long)]
-    pub oracle_max_tokens: Option<usize>,
-
-    /// Token budget per slice for import-graph partitioning (default: 200000)
-    #[arg(long)]
-    pub oracle_slice_budget: Option<usize>,
-
-    /// Disable oracle slicing (analyze entire codebase as single bundle)
-    #[arg(long)]
-    pub no_oracle_slicing: bool,
-
-    /// Token threshold above which to enable slicing (default: 300000)
-    #[arg(long)]
-    pub oracle_slicing_threshold: Option<usize>,
-
-    /// Dry-run mode for oracle: show slicing plan without calling API
-    #[arg(long)]
-    pub oracle_dry_run: bool,
-}
-
 /// Arguments for the primary `analyze` command
 #[derive(Args)]
 pub struct AnalyzeArgs {
@@ -427,9 +399,6 @@ pub struct AnalyzeArgs {
 
     #[command(flatten)]
     pub cohesion: CohesionArgs,
-
-    #[command(flatten)]
-    pub ai_features: AIFeaturesArgs,
 }
 
 impl AnalyzeArgs {

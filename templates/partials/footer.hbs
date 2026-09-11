@@ -403,21 +403,6 @@
         });
     }
 
-    // Oracle phase toggle functionality
-    function togglePhase(element) {
-        const phaseCard = element.closest('.phase-card');
-        const phaseContent = phaseCard.querySelector('.phase-content');
-        const chevron = element.querySelector('[data-lucide="chevron-right"]');
-        
-        if (phaseContent.style.display === 'none') {
-            phaseContent.style.display = 'block';
-            chevron.setAttribute('data-expanded', 'true');
-        } else {
-            phaseContent.style.display = 'none';
-            chevron.setAttribute('data-expanded', 'false');
-        }
-    }
-
     document.addEventListener('DOMContentLoaded', initTabs);
 
     // Helper function to capitalize strings (for Handlebars templates that might need it)

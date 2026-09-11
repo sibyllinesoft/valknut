@@ -19,7 +19,6 @@ export const InteractiveTabs = () => {
 
   const tabs = [
     { id: 'summary', title: 'Summary' },
-    { id: 'oracle', title: 'Oracle' },
     { id: 'files', title: 'Files' },
     { id: 'dashboard', title: 'Dashboard' },
     { id: 'clones', title: 'Clones' },
@@ -33,13 +32,6 @@ export const InteractiveTabs = () => {
         <div style={{ padding: '1rem', color: '#e5e7eb' }}>
           <h3 style={{ margin: '0 0 1rem 0', color: 'var(--accent, #20d4c0)' }}>Summary Content</h3>
           <p>Analysis summary with health gauges and metrics.</p>
-        </div>
-      </TabPanel>
-
-      <TabPanel id="oracle" title="Oracle" active={activeTab === 'oracle'}>
-        <div style={{ padding: '1rem', color: '#e5e7eb' }}>
-          <h3 style={{ margin: '0 0 1rem 0', color: 'var(--accent, #20d4c0)' }}>Oracle Content</h3>
-          <p>AI-generated refactoring recommendations.</p>
         </div>
       </TabPanel>
 

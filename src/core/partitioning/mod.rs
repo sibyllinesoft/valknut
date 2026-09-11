@@ -2,7 +2,7 @@
 //!
 //! This module provides functionality to partition a codebase into coherent slices
 //! based on import relationships, respecting token budget constraints. This enables
-//! tools like the Oracle to scale to arbitrary codebase sizes by processing one
+//! analysis tools to scale to arbitrary codebase sizes by processing one
 //! slice at a time.
 //!
 //! Key features:

@@ -11,7 +11,7 @@ This directory contains the Handlebars templates for generating HTML reports, al
 
 - **partials/**: Reusable Handlebars partials
   - `head.hbs`, `header.hbs`, `footer.hbs`: Layout components
-  - `summary.hbs`, `oracle.hbs`, `coverage.hbs`, `tree.hbs`: Content sections
+  - `summary.hbs`, `coverage.hbs`, `tree.hbs`: Content sections
 
 - **assets/**: Built JavaScript bundles for interactive components
   - `react-tree-bundle.js`: Production bundle for the code analysis tree

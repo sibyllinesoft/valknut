@@ -8,8 +8,8 @@ use crate::cli::analysis_display::{
     log_analysis_completion, priority_label,
 };
 use crate::cli::args::{
-    AIFeaturesArgs, AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs,
-    CohesionArgs, CoverageArgs, InitConfigArgs, OutputFormat, PerformanceProfile, QualityGateArgs,
+    AdvancedCloneArgs, AnalysisControlArgs, AnalyzeArgs, CloneDetectionArgs, CohesionArgs,
+    CoverageArgs, InitConfigArgs, OutputFormat, PerformanceProfile, QualityGateArgs,
     SurveyVerbosity, ValidateConfigArgs,
 };
 use crate::cli::config_builder::{
@@ -29,11 +29,10 @@ pub use crate::cli::quality_gates::{
 };
 use crate::cli::reports::is_quiet;
 // Re-export report generation functions for tests (they use `super::*`)
-use crate::cli::reports::generate_reports_with_oracle_and_config;
+use crate::cli::reports::generate_reports_with_config;
 pub use crate::cli::reports::{
-    format_file_info, format_to_string, generate_default_content, generate_html_file,
-    generate_json_content, generate_jsonl_content, generate_reports_with_oracle,
-    generate_yaml_content,
+    format_file_info, format_to_string, generate_html_file, generate_json_content,
+    generate_jsonl_content, generate_reports, generate_yaml_content,
 };
 // Re-export display functions for tests
 pub use crate::cli::analysis_display::{
@@ -109,16 +108,7 @@ pub async fn analyze_command(
         display_comprehensive_results(&analysis_result, detail_mode);
     }
 
-    let oracle_response =
-        run_oracle_if_enabled(&valid_paths, &analysis_result, &args, quiet_mode).await?;
-
-    generate_reports_with_oracle_and_config(
-        &analysis_result,
-        &oracle_response,
-        &args,
-        Some(&report_config),
-    )
-    .await?;
+    generate_reports_with_config(&analysis_result, &args, Some(&report_config)).await?;
 
     handle_quality_gate_result(quality_gate_result, quiet_mode, detail_mode)?;
 
@@ -177,41 +167,6 @@ async fn run_analysis_phase(
     }
 
     run_comprehensive_analysis(valid_paths, config, !quiet_mode).await
-}
-
-/// Run Oracle analysis if enabled.
-async fn run_oracle_if_enabled(
-    valid_paths: &[PathBuf],
-    result: &AnalysisResults,
-    args: &AnalyzeArgs,
-    quiet_mode: bool,
-) -> anyhow::Result<Option<valknut_rs::oracle::RefactoringOracleResponse>> {
-    if args.ai_features.oracle_dry_run {
-        if !quiet_mode {
-            println!(
-                "{}",
-                "🔍 Oracle Dry-Run: Showing slicing plan..."
-                    .bright_blue()
-                    .bold()
-            );
-        }
-        run_oracle_dry_run(valid_paths, args)?;
-        return Ok(None);
-    }
-
-    if args.ai_features.oracle {
-        if !quiet_mode {
-            println!(
-                "{}",
-                "🧠 Running AI Refactoring Oracle Analysis..."
-                    .bright_blue()
-                    .bold()
-            );
-        }
-        return run_oracle_analysis(valid_paths, result, args).await;
-    }
-
-    Ok(None)
 }
 
 /// Preview coverage file discovery to show what will be analyzed
@@ -685,15 +640,6 @@ fn warn_for_unsupported_languages(config: &ValknutConfig, quiet_mode: bool) {
     } else {
         println!("warn: {}", message);
     }
-}
-
-// Import Oracle functions from the dedicated module
-use super::oracle::{run_oracle_analysis, run_oracle_dry_run};
-
-#[allow(dead_code)]
-/// Generate output reports in various formats (legacy version for compatibility).
-async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
-    generate_reports_with_oracle(result, &None, args).await
 }
 
 #[cfg(test)]

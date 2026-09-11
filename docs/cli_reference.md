@@ -52,11 +52,6 @@ Advanced (rare): `--no-auto`, `--loose-sweep`, `--rarity-weighting`, `--structur
 
 `--no-complexity`, `--no-structure`, `--no-refactoring`, `--no-impact`, `--no-lsh`.
 
-### AI features
-
-`--oracle` – enable Gemini-powered refactoring oracle (requires `GEMINI_API_KEY`).  
-`--oracle-max-tokens <int>` – cap token budget.
-
 ## doc-audit command – key flags
 
 - `--root <PATH>` (default `.`)

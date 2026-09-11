@@ -20,25 +20,12 @@ pub async fn write_report(path: &Path, content: &str, format_name: &str) -> anyh
 }
 
 /// Write JSON report directly to file (streaming, avoids building string in memory).
-pub fn write_json_streaming(
-    path: &Path,
-    result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
-) -> anyhow::Result<()> {
+pub fn write_json_streaming(path: &Path, result: &AnalysisResults) -> anyhow::Result<()> {
     let file =
         File::create(path).map_err(|e| anyhow::anyhow!("Failed to create JSON file: {}", e))?;
     let writer = BufWriter::new(file);
 
-    let combined = match oracle_response {
-        Some(oracle) => serde_json::json!({
-            "oracle_refactoring_plan": oracle,
-            "analysis_results": result
-        }),
-        None => serde_json::to_value(result)
-            .map_err(|e| anyhow::anyhow!("Failed to convert analysis to JSON: {}", e))?,
-    };
-
-    serde_json::to_writer_pretty(writer, &combined)
+    serde_json::to_writer_pretty(writer, result)
         .map_err(|e| anyhow::anyhow!("Failed to write JSON: {}", e))
 }
 
@@ -53,15 +40,8 @@ pub fn generate_agent_json_content(
     result: &AnalysisResults,
     config: &ValknutConfig,
     timestamp: chrono::DateTime<chrono::Utc>,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
 ) -> anyhow::Result<String> {
-    let mut report = build_agent_report(result, config, timestamp)?;
-    if let (Some(root), Some(oracle)) = (report.as_object_mut(), oracle_response) {
-        root.insert(
-            "oracle_refactoring_plan".into(),
-            serde_json::to_value(oracle)?,
-        );
-    }
+    let report = build_agent_report(result, config, timestamp)?;
     serde_json::to_string_pretty(&report)
         .map_err(|e| anyhow::anyhow!("Failed to serialize agent report: {}", e))
 }
@@ -87,7 +67,6 @@ pub async fn generate_markdown_content(result: &AnalysisResults) -> anyhow::Resu
 /// Generate HTML report file.
 pub fn generate_html_file(
     result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     file_path: &Path,
     config: Option<&ValknutConfig>,
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -95,14 +74,9 @@ pub fn generate_html_file(
     let default_config = valknut_rs::api::config_types::AnalysisConfig::default();
     let generator = ReportGenerator::new().with_config(default_config);
 
-    match oracle_response {
-        Some(oracle) => generator
-            .generate_report_with_oracle(result, oracle, file_path, ReportFormat::Html)
-            .map_err(|e| anyhow::anyhow!("Failed to generate HTML report with oracle: {}", e)),
-        None => generator
-            .generate_report(result, file_path, ReportFormat::Html)
-            .map_err(|e| anyhow::anyhow!("Failed to generate HTML report: {}", e)),
-    }?;
+    generator
+        .generate_report(result, file_path, ReportFormat::Html)
+        .map_err(|e| anyhow::anyhow!("Failed to generate HTML report: {}", e))?;
 
     if let Some(config) = config {
         embed_agent_report(file_path, result, config, timestamp)?;
@@ -146,23 +120,6 @@ pub async fn generate_csv_content(result: &AnalysisResults) -> anyhow::Result<St
         .map_err(|e| anyhow::anyhow!("Failed to generate CSV report: {}", e))
 }
 
-/// Generate default JSON report with optional oracle data.
-pub fn generate_default_content(
-    result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
-) -> anyhow::Result<String> {
-    let combined = match oracle_response {
-        Some(oracle) => serde_json::json!({
-            "oracle_refactoring_plan": oracle,
-            "analysis_results": result
-        }),
-        None => serde_json::to_value(result)
-            .map_err(|e| anyhow::anyhow!("Failed to convert analysis to JSON: {}", e))?,
-    };
-    serde_json::to_string_pretty(&combined)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))
-}
-
 /// Returns the (filename, format_label) for a given output format.
 pub fn format_file_info(format: &OutputFormat) -> (&'static str, &'static str) {
     match format {
@@ -180,7 +137,6 @@ pub fn format_file_info(format: &OutputFormat) -> (&'static str, &'static str) {
 pub async fn generate_format_content(
     format: &OutputFormat,
     result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
 ) -> anyhow::Result<String> {
     match format {
         OutputFormat::Json => generate_json_content(result),
@@ -189,7 +145,7 @@ pub async fn generate_format_content(
         OutputFormat::Markdown => generate_markdown_content(result).await,
         OutputFormat::Sonar => generate_sonar_content(result).await,
         OutputFormat::Csv => generate_csv_content(result).await,
-        _ => generate_default_content(result, oracle_response),
+        _ => generate_json_content(result),
     }
 }
 
@@ -202,7 +158,6 @@ pub fn is_quiet(args: &AnalyzeArgs) -> bool {
 async fn generate_single_report(
     format: &OutputFormat,
     result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     out_dir: &std::path::Path,
     config: Option<&ValknutConfig>,
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -211,24 +166,23 @@ async fn generate_single_report(
         OutputFormat::Html => {
             let filename_timestamp = timestamp.format("%Y%m%d_%H%M%S");
             let path = out_dir.join(format!("report_{}.html", filename_timestamp));
-            generate_html_file(result, oracle_response, &path, config, timestamp)?;
+            generate_html_file(result, &path, config, timestamp)?;
             path
         }
         OutputFormat::Json => {
             let (filename, _) = format_file_info(format);
             let path = out_dir.join(filename);
             if let Some(config) = config {
-                let content =
-                    generate_agent_json_content(result, config, timestamp, oracle_response)?;
+                let content = generate_agent_json_content(result, config, timestamp)?;
                 std::fs::write(&path, content)?;
             } else {
-                write_json_streaming(&path, result, oracle_response)?;
+                write_json_streaming(&path, result)?;
             }
             path
         }
         OutputFormat::CiSummary => {
             let path = out_dir.join("ci-summary.json");
-            let content = generate_ci_summary_content(result, oracle_response)?;
+            let content = generate_ci_summary_content(result)?;
             write_report(&path, &content, "CI Summary").await?;
             path
         }
@@ -240,7 +194,7 @@ async fn generate_single_report(
         _ => {
             let (filename, format_label) = format_file_info(format);
             let path = out_dir.join(filename);
-            let content = generate_format_content(format, result, oracle_response).await?;
+            let content = generate_format_content(format, result).await?;
             write_report(&path, &content, format_label).await?;
             path
         }
@@ -249,10 +203,7 @@ async fn generate_single_report(
 }
 
 /// Generate CI summary content (concise JSON for automated systems).
-fn generate_ci_summary_content(
-    result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
-) -> anyhow::Result<String> {
+fn generate_ci_summary_content(result: &AnalysisResults) -> anyhow::Result<String> {
     let summary = serde_json::json!({
         "status": if result.summary.critical > 0 { "critical" }
                   else if result.summary.high_priority > 0 { "warning" }
@@ -266,26 +217,20 @@ fn generate_ci_summary_content(
         },
         "code_health_score": result.summary.code_health_score,
         "refactoring_candidates": result.refactoring_candidates.len(),
-        "has_oracle_analysis": oracle_response.is_some(),
     });
     serde_json::to_string_pretty(&summary)
         .map_err(|e| anyhow::anyhow!("Failed to serialize CI summary: {}", e))
 }
 
-/// Generate reports with optional oracle data.
+/// Generate reports in the requested formats.
 /// Supports multiple output formats via --format (repeatable) and --output-bundle.
-pub async fn generate_reports_with_oracle(
-    result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
-    args: &AnalyzeArgs,
-) -> anyhow::Result<()> {
-    generate_reports_with_oracle_and_config(result, oracle_response, args, None).await
+pub async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
+    generate_reports_with_config(result, args, None).await
 }
 
 /// Generate reports with the resolved configuration embedded in machine-readable artifacts.
-pub async fn generate_reports_with_oracle_and_config(
+pub async fn generate_reports_with_config(
     result: &AnalysisResults,
-    oracle_response: &Option<valknut_rs::oracle::RefactoringOracleResponse>,
     args: &AnalyzeArgs,
     config: Option<&ValknutConfig>,
 ) -> anyhow::Result<()> {
@@ -304,15 +249,7 @@ pub async fn generate_reports_with_oracle_and_config(
     let mut output_files = Vec::new();
 
     for format in &formats {
-        let path = generate_single_report(
-            format,
-            result,
-            oracle_response,
-            &args.out,
-            config,
-            timestamp,
-        )
-        .await?;
+        let path = generate_single_report(format, result, &args.out, config, timestamp).await?;
         output_files.push((format.clone(), path));
     }
 
@@ -328,12 +265,6 @@ pub async fn generate_reports_with_oracle_and_config(
         }
     }
     Ok(())
-}
-
-/// Generate output reports in various formats (legacy version for compatibility).
-#[allow(dead_code)]
-pub async fn generate_reports(result: &AnalysisResults, args: &AnalyzeArgs) -> anyhow::Result<()> {
-    generate_reports_with_oracle(result, &None, args).await
 }
 
 // Re-export format_to_string from output module for backwards compatibility

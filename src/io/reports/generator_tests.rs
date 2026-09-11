@@ -15,9 +15,6 @@ use crate::io::reports::hierarchy::{
 use crate::core::pipeline::results::result_types::MemoryStats;
 use crate::core::scoring::{Priority, ScoringResult};
 use crate::io::reports::templates;
-use crate::oracle::{
-    CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap, RefactoringTask,
-};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -323,6 +320,7 @@ fn test_generate_html_report_default_template() {
     assert!(content.contains("Analysis Report"));
     assert!(content.contains("Valknut"));
     assert!(content.contains("Files Analyzed"));
+    assert!(!content.contains("oracle"));
 }
 
 #[test]
@@ -383,96 +381,6 @@ fn test_prepare_template_data() {
     );
 
     assert!(obj.contains_key("tree_payload"));
-}
-
-fn sample_oracle_response() -> RefactoringOracleResponse {
-    RefactoringOracleResponse {
-            assessment: CodebaseAssessment {
-                summary: Some("The codebase has well-structured modules with good separation of concerns. Documentation could use some cleanup.".into()),
-                architectural_narrative: None,
-                architectural_style: Some("Modular Architecture".into()),
-                strengths: vec!["Good separation of concerns".into()],
-                issues: vec!["Large util file".into(), "Documentation gaps".into()],
-            },
-            tasks: vec![RefactoringTask {
-                id: "T1".into(),
-                title: "Refresh README".into(),
-                description: "Update overview and usage sections".into(),
-                category: "C6".into(),
-                files: vec!["README.md".into()],
-                risk: Some("R1".into()),
-                risk_level: None,
-                impact: Some("I2".into()),
-                effort: Some("E1".into()),
-                mitigation: None,
-                required: Some(false),
-                depends_on: vec![],
-                benefits: vec!["Improved onboarding".into()],
-            }],
-            refactoring_roadmap: None,
-        }
-}
-
-#[test]
-fn test_prepare_template_data_marks_oracle_presence() {
-    let generator = ReportGenerator::new();
-    let results = create_test_results();
-    let oracle = sample_oracle_response();
-
-    let data = generator.prepare_template_data_with_oracle(&results, &Some(oracle.clone()));
-    let obj = data.as_object().expect("template data should be object");
-    assert_eq!(obj["has_oracle_data"], serde_json::Value::Bool(true));
-    assert!(obj.contains_key("oracle_refactoring_plan"));
-
-    let without_oracle = generator.prepare_template_data(&results);
-    let without_obj = without_oracle
-        .as_object()
-        .expect("template data should be object");
-    assert_eq!(
-        without_obj["has_oracle_data"],
-        serde_json::Value::Bool(false)
-    );
-}
-
-#[test]
-fn test_generate_report_with_oracle_all_formats() {
-    let temp_dir = TempDir::new().unwrap();
-    let generator = ReportGenerator::new();
-    let results = create_test_results();
-    let oracle = sample_oracle_response();
-
-    let json_path = temp_dir.path().join("report.json");
-    generator
-        .generate_report_with_oracle(&results, &oracle, &json_path, ReportFormat::Json)
-        .expect("json report should succeed");
-    let json_content = fs::read_to_string(&json_path).unwrap();
-    assert!(json_content.contains("oracle_refactoring_plan"));
-
-    let html_path = temp_dir.path().join("report.html");
-    generator
-        .generate_report_with_oracle(&results, &oracle, &html_path, ReportFormat::Html)
-        .expect("html report should succeed");
-    let html_content = fs::read_to_string(&html_path).unwrap();
-    assert!(html_content.contains("Analysis Report"));
-    let assets_dir = temp_dir.path().join("webpage_files");
-    assert!(
-        assets_dir.exists(),
-        "expected webpage assets directory to be created"
-    );
-
-    let yaml_path = temp_dir.path().join("report.yaml");
-    generator
-        .generate_report_with_oracle(&results, &oracle, &yaml_path, ReportFormat::Yaml)
-        .expect("yaml report should succeed");
-    let yaml_content = fs::read_to_string(&yaml_path).unwrap();
-    assert!(yaml_content.contains("oracle_refactoring_plan"));
-
-    let csv_path = temp_dir.path().join("report.csv");
-    generator
-        .generate_report_with_oracle(&results, &oracle, &csv_path, ReportFormat::Csv)
-        .expect("csv report should succeed");
-    let csv_content = fs::read_to_string(&csv_path).unwrap();
-    assert!(csv_content.contains("complex_function"));
 }
 
 #[test]

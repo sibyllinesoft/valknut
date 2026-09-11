@@ -390,7 +390,6 @@ const manyCoveragePacksData = [
 
 const tabs = [
   { id: 'summary', title: 'Summary' },
-  { id: 'oracle', title: 'Oracle' },
   { id: 'coverage', title: 'Coverage' },
   { id: 'files', title: 'Files' },
   { id: 'dashboard', title: 'Dashboard' },
@@ -408,12 +407,6 @@ const InteractiveTemplate = ({ coverageData }) => {
       <TabPanel id="summary" title="Summary" active={activeTab === 'summary'}>
         <div style={{ padding: '1rem', color: '#e5e7eb', maxHeight: 'calc(100vh - 128px)', overflow: 'auto' }}>
           <p>Summary content would go here.</p>
-        </div>
-      </TabPanel>
-
-      <TabPanel id="oracle" title="Oracle" active={activeTab === 'oracle'}>
-        <div style={{ padding: '1rem', color: '#e5e7eb', maxHeight: 'calc(100vh - 128px)', overflow: 'auto' }}>
-          <p>Oracle content would go here.</p>
         </div>
       </TabPanel>
 

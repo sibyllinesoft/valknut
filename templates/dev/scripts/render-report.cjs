@@ -1003,7 +1003,6 @@ function buildTemplateData(results) {
       version: 'dev',
       theme_css_url: 'sibylline.css',
       enable_animation: true,
-      has_oracle_data: false,
       summary: buildSummary({}),
       results: {},
       refactoring_candidates: [],
@@ -1092,8 +1091,6 @@ function buildTemplateData(results) {
     code_dictionary: dictionary,
     codeDictionary: dictionary,
     warnings: results.warnings || [],
-    oracle_refactoring_plan: results.oracle_refactoring_plan || null,
-    has_oracle_data: Boolean(results.oracle_refactoring_plan),
     health_metrics: results.health_metrics || null,
     clone_analysis: cloneAnalysis,
     clone_pairs: clonePairs,
@@ -1182,16 +1179,6 @@ function registerHelpers() {
     const limit = Number(len) || 80;
     if (value.length <= limit) return value;
     return `${value.slice(0, limit - 1)}…`;
-  });
-
-  handlebars.registerHelper('count_required', (tasks = []) => {
-    if (!Array.isArray(tasks)) return 0;
-    return tasks.filter((t) => t && (t.required === true || String(t.required || '').toLowerCase() === 'true')).length;
-  });
-
-  handlebars.registerHelper('count_optional', (tasks = []) => {
-    if (!Array.isArray(tasks)) return 0;
-    return tasks.filter((t) => !(t && (t.required === true || String(t.required || '').toLowerCase() === 'true'))).length;
   });
 
 handlebars.registerHelper('basename', (value = '') => {

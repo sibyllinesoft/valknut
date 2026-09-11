@@ -20,9 +20,6 @@ use valknut_rs::core::config::{CoverageConfig, ValknutConfig};
 use valknut_rs::core::pipeline::{
     CodeDictionary, HealthMetrics, QualityGateConfig, QualityGateResult, QualityGateViolation,
 };
-use valknut_rs::oracle::{
-    CodebaseAssessment, RefactoringOracleResponse, RefactoringRoadmap, RefactoringTask,
-};
 
 /// Handle quality gate evaluation for JSON results (test helper).
 async fn handle_quality_gates(
@@ -300,14 +297,6 @@ fn create_default_analyze_args() -> AnalyzeArgs {
             cohesion_min_doc_alignment: None,
             cohesion_outlier_percentile: None,
         },
-        ai_features: AIFeaturesArgs {
-            oracle: false,
-            oracle_max_tokens: None,
-            oracle_slice_budget: None,
-            no_oracle_slicing: false,
-            oracle_slicing_threshold: None,
-            oracle_dry_run: false,
-        },
     }
 }
 
@@ -459,37 +448,6 @@ fn sample_analysis_results() -> AnalysisResults {
     }
 }
 
-fn sample_oracle_response() -> RefactoringOracleResponse {
-    RefactoringOracleResponse {
-        assessment: CodebaseAssessment {
-            summary: Some(
-                "The codebase follows a modular design with room for improvement in clone density."
-                    .to_string(),
-            ),
-            architectural_narrative: None,
-            architectural_style: Some("Modular Architecture".to_string()),
-            strengths: vec!["Good separation of concerns".to_string()],
-            issues: vec!["Clone density".to_string()],
-        },
-        tasks: vec![RefactoringTask {
-            id: "T1".to_string(),
-            title: "Extract helper utilities".to_string(),
-            description: "Split monolithic helper into focused modules.".to_string(),
-            category: "C2".to_string(),
-            files: vec!["src/lib.rs".to_string()],
-            risk: Some("R1".to_string()),
-            risk_level: None,
-            impact: Some("I3".to_string()),
-            effort: Some("E2".to_string()),
-            mitigation: None,
-            required: Some(true),
-            depends_on: vec![],
-            benefits: vec!["Improved readability".to_string()],
-        }],
-        refactoring_roadmap: None,
-    }
-}
-
 #[test]
 fn output_format_machine_readable_detection() {
     assert!(OutputFormat::Json.is_machine_readable());
@@ -504,7 +462,7 @@ fn output_format_machine_readable_detection() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_respects_quiet_mode() {
+async fn generate_reports_respects_quiet_mode() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -512,7 +470,7 @@ async fn generate_reports_with_oracle_respects_quiet_mode() {
     args.format = vec![OutputFormat::Json];
 
     let result = sample_analysis_results();
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("json report generation should succeed");
 
@@ -520,7 +478,7 @@ async fn generate_reports_with_oracle_respects_quiet_mode() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_html_with_ai_data() {
+async fn generate_reports_writes_html() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -528,9 +486,8 @@ async fn generate_reports_with_oracle_writes_html_with_ai_data() {
     args.format = vec![OutputFormat::Html];
 
     let result = sample_analysis_results();
-    let oracle = sample_oracle_response();
 
-    generate_reports_with_oracle(&result, &Some(oracle), &args)
+    generate_reports(&result, &args)
         .await
         .expect("html report generation should succeed");
 
@@ -553,7 +510,7 @@ async fn generate_reports_with_oracle_writes_html_with_ai_data() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_markdown() {
+async fn generate_reports_writes_markdown() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -562,7 +519,7 @@ async fn generate_reports_with_oracle_writes_markdown() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("markdown report generation should succeed");
 
@@ -570,7 +527,7 @@ async fn generate_reports_with_oracle_writes_markdown() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_csv() {
+async fn generate_reports_writes_csv() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -579,7 +536,7 @@ async fn generate_reports_with_oracle_writes_csv() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("csv report generation should succeed");
 
@@ -587,7 +544,7 @@ async fn generate_reports_with_oracle_writes_csv() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_yaml() {
+async fn generate_reports_writes_yaml() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -596,7 +553,7 @@ async fn generate_reports_with_oracle_writes_yaml() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("yaml report generation should succeed");
 
@@ -604,7 +561,7 @@ async fn generate_reports_with_oracle_writes_yaml() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_jsonl() {
+async fn generate_reports_writes_jsonl() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -613,7 +570,7 @@ async fn generate_reports_with_oracle_writes_jsonl() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("jsonl report generation should succeed");
 
@@ -621,7 +578,7 @@ async fn generate_reports_with_oracle_writes_jsonl() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_writes_sonar() {
+async fn generate_reports_writes_sonar() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
@@ -630,7 +587,7 @@ async fn generate_reports_with_oracle_writes_sonar() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("sonar report generation should succeed");
 
@@ -647,7 +604,7 @@ async fn generate_reports_with_multiple_formats() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("multi-format report generation should succeed");
 
@@ -670,7 +627,7 @@ async fn generate_reports_with_output_bundle_ci() {
 
     let result = sample_analysis_results();
 
-    generate_reports_with_oracle(&result, &None, &args)
+    generate_reports(&result, &args)
         .await
         .expect("bundle report generation should succeed");
 
@@ -724,32 +681,25 @@ fn effective_formats_defaults_to_jsonl() {
 }
 
 #[tokio::test]
-async fn generate_reports_with_oracle_combines_for_ci_summary() {
+async fn generate_reports_writes_ci_summary() {
     let temp = TempDir::new().expect("temp dir");
     let mut args = create_default_analyze_args();
     args.out = temp.path().to_path_buf();
     args.quiet = false;
     args.format = vec![OutputFormat::CiSummary];
-    args.ai_features.oracle = true;
 
     let result = sample_analysis_results();
-    let oracle = sample_oracle_response();
 
-    generate_reports_with_oracle(&result, &Some(oracle), &args)
+    generate_reports(&result, &args)
         .await
         .expect("ci summary generation should succeed");
 
     let ci_summary_path = temp.path().join("ci-summary.json");
     assert!(ci_summary_path.exists());
     let contents = fs::read_to_string(ci_summary_path).expect("read ci summary output");
-    assert!(
-        contents.contains("has_oracle_analysis"),
-        "ci summary should include oracle indicator"
-    );
-    assert!(
-        contents.contains("\"has_oracle_analysis\": true"),
-        "ci summary should indicate oracle data present"
-    );
+    let summary: serde_json::Value = serde_json::from_str(&contents).unwrap();
+    assert_eq!(summary["files_analyzed"], result.summary.files_processed);
+    assert_eq!(summary["issues"]["total"], result.summary.total_issues);
 }
 
 #[test]
@@ -845,59 +795,6 @@ fn evaluate_quality_gates_handles_missing_metrics_when_verbose() {
     assert!(gate.passed);
     assert!(gate.violations.is_empty());
     assert!((gate.overall_score - (result.summary.code_health_score * 100.0)).abs() < f64::EPSILON);
-}
-
-#[tokio::test]
-#[serial]
-async fn run_oracle_analysis_returns_none_without_api_key() {
-    // Ensure GEMINI_API_KEY is unset for this test
-    std::env::remove_var("GEMINI_API_KEY");
-
-    let project = create_sample_analysis_project();
-    let mut args = create_default_analyze_args();
-    args.paths = vec![project.path().to_path_buf()];
-    args.ai_features.oracle = true;
-
-    let result = run_oracle_analysis(
-        &[project.path().to_path_buf()],
-        &sample_analysis_results(),
-        &args,
-    )
-    .await
-    .expect("oracle analysis should not error when key missing");
-
-    assert!(
-        result.is_none(),
-        "Oracle should be skipped when GEMINI_API_KEY is absent"
-    );
-}
-
-#[tokio::test]
-#[serial]
-async fn run_oracle_analysis_handles_generation_error() {
-    // Provide a dummy API key to exercise request failure path
-    std::env::set_var("GEMINI_API_KEY", "test-api-key");
-
-    let project = create_sample_analysis_project();
-    let mut args = create_default_analyze_args();
-    args.paths = vec![project.path().to_path_buf()];
-    args.ai_features.oracle = true;
-    args.ai_features.oracle_max_tokens = Some(256);
-
-    let oracle_result = run_oracle_analysis(
-        &[project.path().to_path_buf()],
-        &sample_analysis_results(),
-        &args,
-    )
-    .await
-    .expect("oracle analysis should gracefully handle request failures");
-
-    assert!(
-        oracle_result.is_none(),
-        "Oracle failures should not propagate fatal errors"
-    );
-
-    std::env::remove_var("GEMINI_API_KEY");
 }
 
 #[test]
@@ -1923,4 +1820,29 @@ fn combine_analysis_results_merges_runs() {
 fn combine_analysis_results_errors_on_empty() {
     let err = combine_analysis_results(vec![]);
     assert!(err.is_err());
+}
+
+#[test]
+fn analyze_rejects_removed_oracle_flags() {
+    use crate::cli::args::Cli;
+    use clap::Parser;
+
+    for flag in [
+        "--oracle",
+        "--oracle-max-tokens",
+        "--oracle-slice-budget",
+        "--no-oracle-slicing",
+        "--oracle-slicing-threshold",
+        "--oracle-dry-run",
+    ] {
+        let error = match Cli::try_parse_from(["valknut", "analyze", ".", flag]) {
+            Ok(_) => panic!("removed flag {flag} should be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::UnknownArgument,
+            "{flag}"
+        );
+    }
 }

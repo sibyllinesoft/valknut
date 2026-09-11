@@ -125,42 +125,9 @@ impl ReportGenerator {
         self.render_template_to_path(SONAR_TEMPLATE_NAME, results, output_path)
     }
 
-    pub fn generate_report_with_oracle<P: AsRef<Path>>(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &crate::oracle::RefactoringOracleResponse,
-        output_path: P,
-        format: ReportFormat,
-    ) -> Result<(), ReportError> {
-        let oracle_option = Some(oracle_response.clone());
-        match format {
-            ReportFormat::Html => {
-                self.generate_html_report_with_oracle(results, &oracle_option, output_path)
-            }
-            ReportFormat::Json => {
-                self.generate_json_report_with_oracle(results, &oracle_option, output_path)
-            }
-            ReportFormat::Yaml => {
-                self.generate_yaml_report_with_oracle(results, &oracle_option, output_path)
-            }
-            ReportFormat::Csv => {
-                self.generate_csv_report_with_oracle(results, &oracle_option, output_path)
-            }
-        }
-    }
-
     fn generate_html_report<P: AsRef<Path>>(
         &self,
         results: &AnalysisResults,
-        output_path: P,
-    ) -> Result<(), ReportError> {
-        self.generate_html_report_with_oracle(results, &None, output_path)
-    }
-
-    fn generate_html_report_with_oracle<P: AsRef<Path>>(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
         output_path: P,
     ) -> Result<(), ReportError> {
         let output_path = output_path.as_ref();
@@ -170,7 +137,7 @@ impl ReportGenerator {
         // Note: CSS and JavaScript are now inlined in templates
         copy_webpage_assets_to_output(output_dir)?;
 
-        let template_data = self.prepare_template_data_with_oracle(results, oracle_response);
+        let template_data = self.prepare_template_data(results);
 
         // Prefer external template over fallback
         let template_name = if self.handlebars.get_templates().contains_key("report") {
@@ -190,27 +157,10 @@ impl ReportGenerator {
         results: &AnalysisResults,
         output_path: P,
     ) -> Result<(), ReportError> {
-        self.generate_json_report_with_oracle(results, &None, output_path)
-    }
-
-    fn generate_json_report_with_oracle<P: AsRef<Path>>(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
-        output_path: P,
-    ) -> Result<(), ReportError> {
-        let combined_result = if let Some(oracle) = oracle_response {
-            serde_json::json!({
-                "oracle_refactoring_plan": oracle,
-                "analysis_results": results
-            })
-        } else {
-            serde_json::to_value(results)?
-        };
         // Stream directly to file to avoid building large string in memory
         let file = File::create(output_path)?;
         let writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, &combined_result)?;
+        serde_json::to_writer_pretty(writer, results)?;
         Ok(())
     }
 
@@ -219,24 +169,7 @@ impl ReportGenerator {
         results: &AnalysisResults,
         output_path: P,
     ) -> Result<(), ReportError> {
-        self.generate_yaml_report_with_oracle(results, &None, output_path)
-    }
-
-    fn generate_yaml_report_with_oracle<P: AsRef<Path>>(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
-        output_path: P,
-    ) -> Result<(), ReportError> {
-        let combined_result = if let Some(oracle) = oracle_response {
-            serde_json::json!({
-                "oracle_refactoring_plan": oracle,
-                "analysis_results": results
-            })
-        } else {
-            serde_json::to_value(results)?
-        };
-        let yaml_content = serde_yaml::to_string(&combined_result)
+        let yaml_content = serde_yaml::to_string(results)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
         fs::write(output_path, yaml_content)?;
         Ok(())
@@ -247,16 +180,7 @@ impl ReportGenerator {
         results: &AnalysisResults,
         output_path: P,
     ) -> Result<(), ReportError> {
-        self.generate_csv_report_with_oracle(results, &None, output_path)
-    }
-
-    fn generate_csv_report_with_oracle<P: AsRef<Path>>(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
-        output_path: P,
-    ) -> Result<(), ReportError> {
-        let data = self.prepare_template_data_with_oracle(results, oracle_response);
+        let data = self.prepare_template_data(results);
         let rendered = self.render_template(CSV_TEMPLATE_NAME, &data)?;
         fs::write(output_path, rendered)?;
         Ok(())
@@ -280,14 +204,6 @@ impl ReportGenerator {
     }
 
     fn prepare_template_data(&self, results: &AnalysisResults) -> Value {
-        self.prepare_template_data_with_oracle(results, &None)
-    }
-
-    fn prepare_template_data_with_oracle(
-        &self,
-        results: &AnalysisResults,
-        oracle_response: &Option<crate::oracle::RefactoringOracleResponse>,
-    ) -> Value {
         let mut data = HashMap::new();
 
         // Add metadata
@@ -307,14 +223,6 @@ impl ReportGenerator {
         // Add animation config
         let enable_animation = true; // Always enable animation for now
         data.insert("enable_animation", safe_json_value(enable_animation));
-
-        // Add Oracle refactoring plan at the TOP for user requirement
-        if let Some(oracle) = oracle_response {
-            data.insert("oracle_refactoring_plan", safe_json_value(oracle));
-            data.insert("has_oracle_data", safe_json_value(true));
-        } else {
-            data.insert("has_oracle_data", safe_json_value(false));
-        }
 
         // Add analysis results
         data.insert("results", safe_json_value(results));

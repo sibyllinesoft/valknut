@@ -84,33 +84,6 @@ pub fn register_helpers(handlebars: &mut Handlebars<'static>) {
     // Helper: greater-than comparison
     register_simple_numeric_helper(handlebars, "gt", |a, b| (a > b) as i32 as f64);
 
-    // Helper: count required tasks in an array (where required == true)
-    register_array_helper(handlebars, "count_required", |array| {
-        array
-            .iter()
-            .filter(|item| {
-                item.get("required")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
-            })
-            .count()
-            .to_string()
-    });
-
-    // Helper: count optional tasks in an array (where required == false or missing)
-    register_array_helper(handlebars, "count_optional", |array| {
-        array
-            .iter()
-            .filter(|item| {
-                !item
-                    .get("required")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
-            })
-            .count()
-            .to_string()
-    });
-
     // Helper: array length
     register_array_helper(handlebars, "length", |array| array.len().to_string());
 

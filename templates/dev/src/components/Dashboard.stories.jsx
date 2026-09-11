@@ -302,7 +302,6 @@ const largeDashboardData = {
 const Template = (args) => {
   const tabs = [
     { id: 'summary', title: 'Summary' },
-    { id: 'oracle', title: 'Oracle' },
     { id: 'files', title: 'Files' },
     { id: 'dashboard', title: 'Dashboard' },
     { id: 'clones', title: 'Clones' },
@@ -374,7 +373,6 @@ Empty.args = {
 export const Interactive = () => {
   const tabs = [
     { id: 'summary', title: 'Summary' },
-    { id: 'oracle', title: 'Oracle' },
     { id: 'files', title: 'Files' },
     { id: 'dashboard', title: 'Dashboard' },
     { id: 'clones', title: 'Clones' },

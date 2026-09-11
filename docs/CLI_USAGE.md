@@ -75,11 +75,9 @@ valknut analyze [OPTIONS] <PATHS>...
 | `--coverage-file <PATH>` | PATH | auto-discover | Force a specific coverage file (lcov/xml/json) |
 | `--no-coverage-auto-discover` | FLAG | false | Skip searching for coverage files |
 
-#### Oracle & Documentation
+#### Documentation
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--oracle` | FLAG | off | Run Gemini-powered refactoring oracle (needs `GEMINI_API_KEY`) |
-| `--oracle-max-tokens <N>` | INT | 500000 | Cap tokens sent to the oracle |
 | `doc-audit --root <PATH>` | PATH | `.` | Standalone documentation audit; same engine powers doc health in `analyze` |
 
 #### Clone Detection Options

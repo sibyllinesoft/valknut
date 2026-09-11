@@ -144,11 +144,6 @@ run_benchmark "large_full" "src" "--all-features" "Large project: Full Valknut s
 # Performance intensive - with clone detection
 run_benchmark "intensive_clones" "src" "--all-features --semantic-clones" "Performance intensive: Full analysis with clone detection"
 
-# Memory intensive - with oracle if available
-if [ -n "${GEMINI_API_KEY:-}" ]; then
-    run_benchmark "memory_oracle" "src/core" "--all-features --oracle" "Memory intensive: Analysis with AI oracle"
-fi
-
 # Compile results into final JSON
 echo "📊 Compiling benchmark results..."
 

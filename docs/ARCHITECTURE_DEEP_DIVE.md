@@ -12,7 +12,7 @@
 - **Core pipeline** (`src/core/pipeline`) handles file discovery, batched I/O, arena entity extraction, detector orchestration, scoring, and report shaping.
 - **Detectors** (`src/detectors`) implement structure analysis, complexity, dependency graph metrics, LSH clone detection, coverage ingestion, and refactoring heuristics.
 - **Language adapters** (`src/lang`) provide Tree-sitter based parsing for Python, JS/TS, Rust, and Go. Everything else should fall back to “unsupported”.
-- **Auxiliary subsystems** include `AstService` (central parsing/cache), `ArenaFileAnalyzer` (allocation-friendly entity extraction), report generators, and the AI oracle (Gemini 2.5 Pro via `reqwest`).
+- **Auxiliary subsystems** include `AstService` (central parsing/cache), `ArenaFileAnalyzer` (allocation-friendly entity extraction), and report generators.
 
 ## Key Findings & Recommendations
 | # | Area | Risk | Recommendation |
@@ -62,7 +62,7 @@
 - **Recommendation:** Fix the module list immediately (either add the missing module or drop the export). When constructing `AnalysisStages`, pass `valknut_config.structure.clone()` / `valknut_config.coverage.clone()` to the respective extractors so YAML edits work. Add regression tests covering custom structure thresholds and coverage search paths.
 
 ### 7. Reporting & CLI layering opportunities
-- The CLI already supports doc audits, MCP servers, and the Gemini-based refactoring oracle, but these are only loosely mentioned in docs. Aligning the documentation with the actual commands will reduce surprises and help developers discover the tooling ecosystem baked into the repo.
+- The CLI already supports doc audits and MCP servers, but these are only loosely mentioned in docs. Aligning the documentation with the actual commands will reduce surprises and help developers discover the tooling ecosystem baked into the repo.
 - Consider extracting a shared “command metadata” table so new commands automatically appear in README/help text.
 
 ## Quick Wins (1–2 sprints)

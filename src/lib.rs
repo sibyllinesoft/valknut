@@ -135,9 +135,6 @@ pub mod io {
     pub mod reports;
 }
 
-// AI refactoring oracle
-pub mod oracle;
-
 // Documentation audit utilities
 pub mod doc_audit;
 

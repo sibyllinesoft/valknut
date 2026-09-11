@@ -1,6 +1,6 @@
 # Valknut – Fast, Multi-Layer Code Intelligence for Real Teams
 
-Valknut is a Rust-native analysis platform that combines structural heuristics, AST-driven complexity metrics, documentation audits, and optional AI guidance. The CLI ships with CI-friendly output, a documentation linter, MCP endpoints for IDE automation, and optional refactoring oracle.
+Valknut is a Rust-native analysis platform that combines structural heuristics, AST-driven complexity metrics, and documentation audits. The CLI ships with CI-friendly output, a documentation linter, and MCP endpoints for IDE automation.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,7 +12,7 @@ Valknut is a Rust-native analysis platform that combines structural heuristics, 
 ## At a Glance
 - **Comprehensive analysis pipeline** – structure, complexity, dependency graph, coverage, LSH clone detection, semantic cohesion, refactoring scoring, and health metrics driven by `AnalysisPipeline`.
 - **Documentation awareness** – the bundled `doc-audit` command finds missing/dated READMEs, TODO clusters, and style regressions with language-specific scanners for Rust, Python, and TypeScript.
-- **AI & MCP integration** – run `valknut mcp-stdio` to expose a Model Context Protocol server or enable the Gemini-powered refactoring oracle with `--oracle`.
+- **MCP integration** – run `valknut mcp-stdio` to expose a Model Context Protocol server.
 - **High-performance internals** – arena allocation, shared AST caches, SIMD-accelerated similarity, and git-aware file discovery keep large repos manageable.
 - **Modular architecture** – cleanly separated detector modules (LSH, complexity, structure, cohesion) with dedicated submodules for metrics, configuration, and analysis stages.
 - **Battle-tested reports** – export JSONL/JSON/YAML/CSV/Markdown/HTML/Sonar/CI-summary formats plus colorized console summaries.
@@ -141,8 +141,7 @@ valknut doc-audit --root . --complexity-threshold 10 --max-readme-commits 8 --st
 ```
 Use `--ignore-dir` / `--ignore-suffix` to skip generated assets. The audit exits non-zero in `--strict` mode when gaps exist, making it ideal for CI.
 
-## AI Oracle & MCP
-- **Refactoring Oracle**: `valknut analyze ... --oracle` streams the analysis summary plus curated code bundles to Gemini 2.5 Pro. Set `GEMINI_API_KEY` (and optionally `--oracle-max-tokens`) before enabling this opt-in path.
+## MCP
 - **Model Context Protocol**: `valknut mcp-stdio` exposes the analyze/list/gate abilities to IDE agents. Use `valknut mcp-manifest --output manifest.json` to publish the schema from `src/bin/cli/commands.rs`.
 
 ## Configuration & Layering
@@ -169,7 +168,6 @@ cargo test
 The codebase follows a modular architecture with clear separation of concerns:
 - `src/core/` – pipeline orchestration, AST services, dependency analysis
 - `src/detectors/` – analysis modules (complexity, structure, lsh, cohesion, coverage)
-- `src/oracle/` – AI-powered refactoring guidance (bundle building, Gemini integration)
 - `src/doc_audit/` – documentation gap detection with language-specific scanners
 - `src/bin/cli/` – command handling, quality gates, config building, report generation
 
