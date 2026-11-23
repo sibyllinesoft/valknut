@@ -1,9 +1,5 @@
 [advisories]
-# Ignore RSA vulnerability in sqlx-mysql dependency
-# This is a transitive dependency through sqlx-mysql that we don't directly use
-# and has no available fix. The vulnerability affects RSA PKCS#1 v1.5 decryption
-# which is not used in our SQLite-focused database features.
-ignore = ["RUSTSEC-2023-0071"]
+ignore = []
 
 # Note: Unmaintained crate warnings are noted but not blocking CI
 # These are transitive dependencies:
